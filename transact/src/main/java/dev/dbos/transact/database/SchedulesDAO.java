@@ -20,17 +20,13 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.UUID;
 
-import javax.sql.DataSource;
-
 class SchedulesDAO {
 
   private SchedulesDAO() {}
 
-  static void createSchedule(
-      DataSource dataSource, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
-      throws SQLException {
-    try (Connection conn = dataSource.getConnection()) {
-      createSchedule(conn, schema, serializer, schedule);
+  static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
+    try (Connection conn = ctx.getConnection()) {
+      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule);
     }
   }
 
@@ -85,14 +81,13 @@ class SchedulesDAO {
   }
 
   static List<WorkflowSchedule> listSchedules(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       List<ScheduleStatus> statuses,
       List<String> workflowNames,
       List<String> scheduleNamePrefixes)
       throws SQLException {
 
+    DBOSSerializer serializer = ctx.serializer();
     StringBuilder sql =
         new StringBuilder(
             """
@@ -102,7 +97,7 @@ class SchedulesDAO {
             FROM "%s".workflow_schedules
             WHERE TRUE
             """
-                .formatted(schema));
+                .formatted(ctx.schema()));
 
     List<Object> params = new ArrayList<>();
 
@@ -124,7 +119,7 @@ class SchedulesDAO {
       sql.append(orClauses).append(")");
     }
 
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql.toString())) {
       List<Array> arrays = new ArrayList<>();
       try {
@@ -153,9 +148,8 @@ class SchedulesDAO {
     }
   }
 
-  static Optional<WorkflowSchedule> getSchedule(
-      DataSource dataSource, String schema, DBOSSerializer serializer, String name)
-      throws SQLException {
+  static Optional<WorkflowSchedule> getSchedule(DbContext ctx, String name) throws SQLException {
+    DBOSSerializer serializer = ctx.serializer();
     String sql =
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
@@ -164,9 +158,9 @@ class SchedulesDAO {
         FROM "%s".workflow_schedules
         WHERE schedule_name = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, name);
       try (ResultSet rs = ps.executeQuery()) {
@@ -178,25 +172,23 @@ class SchedulesDAO {
     }
   }
 
-  static void pauseSchedule(DataSource dataSource, String schema, String name) throws SQLException {
-    setScheduleStatus(dataSource, schema, name, ScheduleStatus.PAUSED);
+  static void pauseSchedule(DbContext ctx, String name) throws SQLException {
+    setScheduleStatus(ctx, name, ScheduleStatus.PAUSED);
   }
 
-  static void resumeSchedule(DataSource dataSource, String schema, String name)
-      throws SQLException {
-    setScheduleStatus(dataSource, schema, name, ScheduleStatus.ACTIVE);
+  static void resumeSchedule(DbContext ctx, String name) throws SQLException {
+    setScheduleStatus(ctx, name, ScheduleStatus.ACTIVE);
   }
 
-  private static void setScheduleStatus(
-      DataSource dataSource, String schema, String name, ScheduleStatus status)
+  private static void setScheduleStatus(DbContext ctx, String name, ScheduleStatus status)
       throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, status.name());
       ps.setString(2, name);
@@ -204,15 +196,15 @@ class SchedulesDAO {
     }
   }
 
-  static void updateScheduleLastFiredAt(
-      DataSource dataSource, String schema, String name, Instant lastFiredAt) throws SQLException {
+  static void updateScheduleLastFiredAt(DbContext ctx, String name, Instant lastFiredAt)
+      throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET last_fired_at = ? WHERE schedule_name = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, lastFiredAt != null ? lastFiredAt.toString() : null);
       ps.setString(2, name);
@@ -220,10 +212,9 @@ class SchedulesDAO {
     }
   }
 
-  static void deleteSchedule(DataSource dataSource, String schema, String name)
-      throws SQLException {
-    try (Connection conn = dataSource.getConnection()) {
-      deleteSchedule(conn, schema, name);
+  static void deleteSchedule(DbContext ctx, String name) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      deleteSchedule(conn, ctx.schema(), name);
     }
   }
 
@@ -234,27 +225,22 @@ class SchedulesDAO {
         """
             .formatted(schema);
 
-    try (PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, name);
-      ps.executeUpdate();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, name);
+      stmt.executeUpdate();
     }
   }
 
-  static void applySchedules(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
-      List<WorkflowSchedule> schedules)
-      throws SQLException {
-    try (Connection conn = dataSource.getConnection()) {
+  static void applySchedules(DbContext ctx, List<WorkflowSchedule> schedules) throws SQLException {
+    try (var conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
       try {
         for (WorkflowSchedule schedule : schedules) {
-          deleteSchedule(conn, schema, schedule.scheduleName());
+          deleteSchedule(conn, ctx.schema(), schedule.scheduleName());
           createSchedule(
               conn,
-              schema,
-              serializer,
+              ctx.schema(),
+              ctx.serializer(),
               schedule
                   .withScheduleId(UUID.randomUUID().toString())
                   .withStatus(ScheduleStatus.ACTIVE)
@@ -264,8 +250,6 @@ class SchedulesDAO {
       } catch (SQLException e) {
         conn.rollback();
         throw e;
-      } finally {
-        conn.setAutoCommit(true);
       }
     }
   }

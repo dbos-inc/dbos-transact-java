@@ -6,22 +6,19 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
-import javax.sql.DataSource;
-
 class ExternalStateDAO {
 
   private ExternalStateDAO() {}
 
   static Optional<ExternalState> getExternalState(
-      DataSource dataSource, String schema, String service, String workflowName, String key)
-      throws SQLException {
+      DbContext ctx, String service, String workflowName, String key) throws SQLException {
     final String sql =
         """
           SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (var conn = dataSource.getConnection();
+    try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, Objects.requireNonNull(service, "service must not be null"));
       stmt.setString(2, Objects.requireNonNull(workflowName, "workflowName must not be null"));
@@ -41,8 +38,7 @@ class ExternalStateDAO {
     }
   }
 
-  static ExternalState upsertExternalState(
-      DataSource dataSource, String schema, ExternalState state) throws SQLException {
+  static ExternalState upsertExternalState(DbContext ctx, ExternalState state) throws SQLException {
     final var sql =
         """
           INSERT INTO "%s".event_dispatch_kv (
@@ -58,9 +54,9 @@ class ExternalStateDAO {
             ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
           RETURNING value, update_time, update_seq
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (var conn = dataSource.getConnection();
+    try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, Objects.requireNonNull(state.service(), "service must not be null"));
       stmt.setString(

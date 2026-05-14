@@ -24,6 +24,7 @@ import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.sql.DataSource;
 
@@ -40,11 +41,10 @@ public class SystemDatabase implements AutoCloseable {
     return Objects.requireNonNullElse(schema, Constants.DB_SCHEMA).replace("\0", "");
   }
 
-  private final DataSource dataSource;
-  private final String schema;
+  private final DbContext ctx;
   private final boolean created;
-  private final DBOSSerializer serializer;
 
+  private final AtomicBoolean closed = new AtomicBoolean(false);
   private final NotificationService notificationService;
   private Duration dbPollingInterval = Duration.ofSeconds(1);
 
@@ -69,10 +69,8 @@ public class SystemDatabase implements AutoCloseable {
       throw new IllegalArgumentException("Schema name must not contain double quotes");
     }
 
-    this.schema = schema;
-    this.dataSource = dataSource;
+    this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get);
     this.created = created;
-    this.serializer = serializer;
 
     notificationService = new NotificationService(dataSource);
   }
@@ -108,7 +106,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   Optional<HikariConfig> getConfig() {
-    if (dataSource instanceof HikariDataSource hds) {
+    if (ctx.dataSource() instanceof HikariDataSource hds) {
       return Optional.of(hds);
     }
     return Optional.empty();
@@ -142,8 +140,9 @@ public class SystemDatabase implements AutoCloseable {
 
   @Override
   public void close() {
+    closed.set(true);
     notificationService.stop();
-    if (created && dataSource instanceof HikariDataSource hikariDataSource) {
+    if (created && ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
       hikariDataSource.close();
     }
   }
@@ -198,6 +197,9 @@ public class SystemDatabase implements AutoCloseable {
     final int MAX_RETRIES = 20;
     int attempt = 0;
     while (true) {
+      if (closed.get()) {
+        throw new IllegalStateException("SystemDatabase is closed");
+      }
       try {
         return supplier.get();
       } catch (SQLException e) {
@@ -207,7 +209,7 @@ public class SystemDatabase implements AutoCloseable {
         }
         if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
           logger.warn("Recoverable connection error. Resetting client pool.", e);
-          if (dataSource instanceof HikariDataSource hikariDataSource) {
+          if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
             hikariDataSource.getHikariPoolMXBean().softEvictConnections();
           }
           waitForRecovery(attempt, 2000);
@@ -256,14 +258,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
-                dataSource,
-                schema,
-                serializer,
-                initStatus,
-                maxRetries,
-                isRecoveryRequest,
-                isDequeuedRequest,
-                ownerXid));
+                ctx, initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid));
   }
 
   /**
@@ -273,7 +268,7 @@ public class SystemDatabase implements AutoCloseable {
    * @param result output serialized as json
    */
   public void recordWorkflowOutput(String workflowId, String result) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowOutput(dataSource, schema, workflowId, result));
+    dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
   }
 
   /**
@@ -283,77 +278,67 @@ public class SystemDatabase implements AutoCloseable {
    * @param error output serialized as json
    */
   public void recordWorkflowError(String workflowId, String error) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowError(dataSource, schema, workflowId, error));
+    dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
   }
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowStatus(dataSource, schema, serializer, workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowStatus(ctx, workflowId));
   }
 
   public String getWorkflowSerialization(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowSerialization(dataSource, schema, workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowSerialization(ctx, workflowId));
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    return dbRetry(() -> WorkflowDAO.listWorkflows(dataSource, schema, serializer, input));
+    return dbRetry(() -> WorkflowDAO.listWorkflows(ctx, input));
   }
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(dataSource, schema, serializer, input));
+    return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }
 
   public List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion) {
-    return dbRetry(
-        () ->
-            WorkflowDAO.getPendingWorkflows(
-                dataSource, schema, serializer, executorIds, appVersion));
+    return dbRetry(() -> WorkflowDAO.getPendingWorkflows(ctx, executorIds, appVersion));
   }
 
   public boolean clearQueueAssignment(String workflowId) {
-    return dbRetry(() -> QueuesDAO.clearQueueAssignment(dataSource, schema, workflowId));
+    return dbRetry(() -> QueuesDAO.clearQueueAssignment(ctx, workflowId));
   }
 
   public List<String> getQueuePartitions(String queueName) {
-    return dbRetry(() -> QueuesDAO.getQueuePartitions(dataSource, schema, queueName));
+    return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
     return dbRetry(
         () -> {
-          try (Connection connection = dataSource.getConnection()) {
+          try (Connection connection = ctx.getConnection()) {
             return StepsDAO.checkStepExecutionTxn(
-                workflowId, functionId, functionName, connection, this.schema);
+                connection, ctx.schema(), workflowId, functionId, functionName);
           }
         });
   }
 
   public void recordStepResultTxn(StepResult result, long startTime) {
     var et = System.currentTimeMillis();
-    dbRetry(() -> StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema));
+    dbRetry(() -> StepsDAO.recordStepResultTxn(ctx, result, startTime, et));
   }
 
   public List<StepInfo> listWorkflowSteps(
       String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return dbRetry(
-        () ->
-            StepsDAO.listWorkflowSteps(
-                dataSource, workflowId, loadOutput, limit, offset, this.schema, this.serializer));
+    return dbRetry(() -> StepsDAO.listWorkflowSteps(ctx, workflowId, loadOutput, limit, offset));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(
-        () ->
-            WorkflowDAO.<T>awaitWorkflowResult(
-                dataSource, schema, serializer, dbPollingInterval, workflowId));
+    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
   }
 
   public List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) {
     return dbRetry(
         () ->
-            QueuesDAO.getAndStartQueuedWorkflows(
-                dataSource, schema, queue, executorId, appVersion, partitionKey));
+            QueuesDAO.getAndStartQueuedWorkflows(ctx, queue, executorId, appVersion, partitionKey));
   }
 
   public void recordChildWorkflow(
@@ -365,12 +350,11 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             WorkflowDAO.recordChildWorkflow(
-                dataSource, schema, parentId, childId, functionId, functionName, startTime));
+                ctx, parentId, childId, functionId, functionName, startTime));
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-    return dbRetry(
-        () -> WorkflowDAO.checkChildWorkflow(dataSource, schema, workflowUuid, functionId));
+    return dbRetry(() -> WorkflowDAO.checkChildWorkflow(ctx, workflowUuid, functionId));
   }
 
   public void send(
@@ -384,16 +368,7 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             NotificationsDAO.send(
-                dataSource,
-                schema,
-                serializer,
-                workflowId,
-                stepId,
-                destinationId,
-                message,
-                topic,
-                messageId,
-                serialization));
+                ctx, workflowId, stepId, destinationId, message, topic, messageId, serialization));
   }
 
   public void sendDirect(
@@ -401,14 +376,7 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             NotificationsDAO.sendDirect(
-                dataSource,
-                schema,
-                serializer,
-                destinationId,
-                message,
-                topic,
-                messageId,
-                serialization));
+                ctx, destinationId, message, topic, messageId, serialization));
   }
 
   public Object recv(
@@ -416,9 +384,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             NotificationsDAO.recv(
-                dataSource,
-                schema,
-                serializer,
+                ctx,
                 notificationService,
                 dbPollingInterval,
                 workflowId,
@@ -439,15 +405,7 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             NotificationsDAO.setEvent(
-                dataSource,
-                schema,
-                serializer,
-                workflowId,
-                functionId,
-                key,
-                message,
-                asStep,
-                serialization));
+                ctx, workflowId, functionId, key, message, asStep, serialization));
   }
 
   public Object getEvent(
@@ -456,77 +414,66 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                dataSource,
-                schema,
-                serializer,
-                notificationService,
-                dbPollingInterval,
-                targetId,
-                key,
-                timeout,
-                callerCtx));
+                ctx, notificationService, dbPollingInterval, targetId, key, timeout, callerCtx));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
-    dbRetry(() -> StepsDAO.sleep(dataSource, workflowId, functionId, duration, schema, serializer));
+    dbRetry(() -> StepsDAO.sleep(ctx, workflowId, functionId, duration));
   }
 
   public void cancelWorkflows(List<String> workflowIds) {
-    dbRetry(() -> WorkflowDAO.cancelWorkflows(dataSource, schema, workflowIds));
+    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {
-    dbRetry(() -> WorkflowDAO.resumeWorkflows(dataSource, schema, workflowIds, queueName));
+    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName));
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetry(() -> WorkflowDAO.deleteWorkflows(dataSource, schema, workflowIds, deleteChildren));
+    dbRetry(() -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetry(
-        () ->
-            WorkflowDAO.forkWorkflow(
-                dataSource, schema, serializer, originalWorkflowId, startStep, options));
+    return dbRetry(() -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
   }
 
   public void createApplicationVersion(String versionName) {
-    dbRetry(() -> ApplicationVersionDAO.createApplicationVersion(dataSource, schema, versionName));
+    dbRetry(() -> ApplicationVersionDAO.createApplicationVersion(ctx, versionName));
   }
 
   public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
     dbRetry(
         () ->
             ApplicationVersionDAO.updateApplicationVersionTimestamp(
-                dataSource, schema, versionName, newTimestamp));
+                ctx, versionName, newTimestamp));
   }
 
   public List<VersionInfo> listApplicationVersions() {
-    return dbRetry(() -> ApplicationVersionDAO.listApplicationVersions(dataSource, schema));
+    return dbRetry(() -> ApplicationVersionDAO.listApplicationVersions(ctx));
   }
 
   public VersionInfo getLatestApplicationVersion() {
-    return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(dataSource, schema));
+    return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(ctx));
   }
 
   public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    dbRetry(() -> WorkflowDAO.garbageCollect(dataSource, schema, cutoff, rowsThreshold));
+    dbRetry(() -> WorkflowDAO.garbageCollect(ctx, cutoff, rowsThreshold));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
-    dbRetry(() -> WorkflowDAO.setWorkflowDelay(dataSource, schema, workflowId, delay));
+    dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delay));
   }
 
   public void transitionDelayedWorkflows() {
-    dbRetry(() -> WorkflowDAO.transitionDelayedWorkflows(dataSource, schema));
+    dbRetry(() -> WorkflowDAO.transitionDelayedWorkflows(ctx));
   }
 
   public void createSchedule(WorkflowSchedule schedule) {
-    dbRetry(() -> SchedulesDAO.createSchedule(dataSource, schema, serializer, schedule));
+    dbRetry(() -> SchedulesDAO.createSchedule(ctx, schedule));
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
-    return dbRetry(() -> SchedulesDAO.getSchedule(dataSource, schema, serializer, name));
+    return dbRetry(() -> SchedulesDAO.getSchedule(ctx, name));
   }
 
   public List<WorkflowSchedule> listSchedules(
@@ -534,74 +481,67 @@ public class SystemDatabase implements AutoCloseable {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes) {
     return dbRetry(
-        () ->
-            SchedulesDAO.listSchedules(
-                dataSource, schema, serializer, statuses, workflowNames, scheduleNamePrefixes));
+        () -> SchedulesDAO.listSchedules(ctx, statuses, workflowNames, scheduleNamePrefixes));
   }
 
   public void pauseSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.pauseSchedule(dataSource, schema, name));
+    dbRetry(() -> SchedulesDAO.pauseSchedule(ctx, name));
   }
 
   public void resumeSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.resumeSchedule(dataSource, schema, name));
+    dbRetry(() -> SchedulesDAO.resumeSchedule(ctx, name));
   }
 
   public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
-    dbRetry(() -> SchedulesDAO.updateScheduleLastFiredAt(dataSource, schema, name, lastFiredAt));
+    dbRetry(() -> SchedulesDAO.updateScheduleLastFiredAt(ctx, name, lastFiredAt));
   }
 
   public void deleteSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.deleteSchedule(dataSource, schema, name));
+    dbRetry(() -> SchedulesDAO.deleteSchedule(ctx, name));
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
-    dbRetry(() -> SchedulesDAO.applySchedules(dataSource, schema, serializer, schedules));
+    dbRetry(() -> SchedulesDAO.applySchedules(ctx, schedules));
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return dbRetry(
-        () -> ExternalStateDAO.getExternalState(dataSource, schema, service, workflowName, key));
+    return dbRetry(() -> ExternalStateDAO.getExternalState(ctx, service, workflowName, key));
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
-    return dbRetry(() -> ExternalStateDAO.upsertExternalState(dataSource, schema, state));
+    return dbRetry(() -> ExternalStateDAO.upsertExternalState(ctx, state));
   }
 
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
-    return dbRetry(() -> WorkflowDAO.getMetrics(dataSource, schema, startTime, endTime));
+    return dbRetry(() -> WorkflowDAO.getMetrics(ctx, startTime, endTime));
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
-    return dbRetry(() -> StepsDAO.patch(dataSource, workflowId, functionId, patchName, schema));
+    return dbRetry(() -> StepsDAO.patch(ctx, workflowId, functionId, patchName));
   }
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
-    return dbRetry(
-        () -> StepsDAO.deprecatePatch(dataSource, workflowId, functionId, patchName, schema));
+    return dbRetry(() -> StepsDAO.deprecatePatch(ctx, workflowId, functionId, patchName));
   }
 
   public Set<String> getWorkflowChildren(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowChildren(dataSource, schema, workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowChildren(ctx, workflowId));
   }
 
   public Map<String, Object> getAllEvents(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.getAllEvents(dataSource, schema, serializer, workflowId));
+    return dbRetry(() -> WorkflowDAO.getAllEvents(ctx, workflowId));
   }
 
   public List<NotificationInfo> getAllNotifications(String workflowId) {
-    return dbRetry(
-        () -> NotificationsDAO.getAllNotifications(dataSource, schema, serializer, workflowId));
+    return dbRetry(() -> NotificationsDAO.getAllNotifications(ctx, workflowId));
   }
 
   public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
-    return dbRetry(
-        () ->
-            WorkflowDAO.exportWorkflow(dataSource, schema, serializer, workflowId, exportChildren));
+    return dbRetry(() -> WorkflowDAO.exportWorkflow(ctx, workflowId, exportChildren));
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
-    dbRetry(() -> WorkflowDAO.importWorkflow(dataSource, schema, serializer, workflows));
+    dbRetry(() -> WorkflowDAO.importWorkflow(ctx, workflows));
   }
 
   public void writeStreamFromStep(
@@ -609,7 +549,7 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             StreamsDAO.writeStreamFromStep(
-                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
+                ctx, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void writeStreamFromWorkflow(
@@ -617,18 +557,18 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () ->
             StreamsDAO.writeStreamFromWorkflow(
-                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
+                ctx, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(() -> StreamsDAO.closeStream(dataSource, schema, workflowId, functionId, key));
+    dbRetry(() -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
   }
 
   public Object readStream(String workflowId, String key, int offset) {
-    return dbRetry(() -> StreamsDAO.readStream(dataSource, schema, workflowId, key, offset));
+    return dbRetry(() -> StreamsDAO.readStream(ctx, workflowId, key, offset));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
-    return dbRetry(() -> StreamsDAO.getAllStreamEntries(dataSource, schema, workflowId));
+    return dbRetry(() -> StreamsDAO.getAllStreamEntries(ctx, workflowId));
   }
 }

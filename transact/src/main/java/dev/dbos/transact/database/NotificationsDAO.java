@@ -20,8 +20,6 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import javax.sql.DataSource;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,9 +30,7 @@ class NotificationsDAO {
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
   static void send(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       String workflowId,
       int stepId,
       String destinationId,
@@ -44,16 +40,17 @@ class NotificationsDAO {
       String serialization)
       throws SQLException {
 
+    DBOSSerializer serializer = ctx.serializer();
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
-    try (Connection conn = dataSource.getConnection()) {
+    try (Connection conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, conn, schema);
+            StepsDAO.checkStepExecutionTxn(conn, ctx.schema(), workflowId, stepId, functionName);
 
         if (recordedOutput != null) {
           logger.debug(
@@ -81,7 +78,7 @@ class NotificationsDAO {
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT (message_uuid) DO NOTHING
             """
-                .formatted(schema);
+                .formatted(ctx.schema());
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, destinationId);
@@ -98,7 +95,8 @@ class NotificationsDAO {
         }
 
         var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-        StepsDAO.recordStepResultTxn(output, startTime, System.currentTimeMillis(), conn, schema);
+        StepsDAO.recordStepResultTxn(
+            conn, ctx.schema(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
 
@@ -114,15 +112,14 @@ class NotificationsDAO {
   }
 
   static void sendDirect(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       String destinationId,
       Object message,
       String topic,
       String messageId,
       String serialization)
       throws SQLException {
+    DBOSSerializer serializer = ctx.serializer();
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
     String finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
     var serializedMsg = SerializationUtil.serializeValue(message, serialization, serializer);
@@ -134,9 +131,9 @@ class NotificationsDAO {
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT (message_uuid) DO NOTHING
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (var conn = dataSource.getConnection();
+    try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, destinationId);
       stmt.setString(2, finalTopic);
@@ -153,9 +150,7 @@ class NotificationsDAO {
   }
 
   static Object recv(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       NotificationService notificationService,
       Duration dbPollingInterval,
       String workflowId,
@@ -165,13 +160,15 @@ class NotificationsDAO {
       Duration timeout)
       throws SQLException {
 
+    DBOSSerializer serializer = ctx.serializer();
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.recv";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
     StepResult recordedOutput;
-    try (Connection c = dataSource.getConnection()) {
-      recordedOutput = StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, c, schema);
+    try (Connection c = ctx.getConnection()) {
+      recordedOutput =
+          StepsDAO.checkStepExecutionTxn(c, ctx.schema(), workflowId, stepId, functionName);
     }
 
     if (recordedOutput != null) {
@@ -201,14 +198,15 @@ class NotificationsDAO {
       }
 
       while (true) {
+        if (ctx.isClosed()) throw new IllegalStateException("SystemDatabase is closed");
         boolean hasExistingNotification;
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = ctx.getConnection()) {
           final String sql =
               """
               SELECT topic FROM "%s".notifications
               WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
               """
-                  .formatted(schema);
+                  .formatted(ctx.schema());
 
           try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, workflowId);
@@ -225,9 +223,7 @@ class NotificationsDAO {
 
         if (!checkedDBForSleep) {
           actualTimeout =
-              StepsDAO.durableSleepDuration(
-                      dataSource, workflowId, timeoutFunctionId, timeout, schema, serializer)
-                  .toMillis();
+              StepsDAO.durableSleepDuration(ctx, workflowId, timeoutFunctionId, timeout).toMillis();
           checkedDBForSleep = true;
           targetTime = nowTime + actualTimeout;
         }
@@ -246,7 +242,7 @@ class NotificationsDAO {
       notificationService.unregisterNotificationCondition(payload);
     }
 
-    try (Connection conn = dataSource.getConnection()) {
+    try (Connection conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
@@ -267,7 +263,7 @@ class NotificationsDAO {
               )
             RETURNING message, serialization
             """
-                .formatted(schema);
+                .formatted(ctx.schema());
 
         String serializedMessage = null;
         String serialization = null;
@@ -291,7 +287,8 @@ class NotificationsDAO {
         StepResult output =
             new StepResult(
                 workflowId, stepId, functionName, serializedMessage, null, null, serialization);
-        StepsDAO.recordStepResultTxn(output, startTime, System.currentTimeMillis(), conn, schema);
+        StepsDAO.recordStepResultTxn(
+            conn, ctx.schema(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
         return recvdMessage;
@@ -321,7 +318,7 @@ class NotificationsDAO {
         """
             .formatted(schema);
 
-    try (PreparedStatement stmt = conn.prepareStatement(eventSql)) {
+    try (var stmt = conn.prepareStatement(eventSql)) {
       stmt.setString(1, workflowId);
       stmt.setString(2, key);
       stmt.setString(3, message);
@@ -338,7 +335,7 @@ class NotificationsDAO {
         """
             .formatted(schema);
 
-    try (PreparedStatement stmt = conn.prepareStatement(eventHistorySql)) {
+    try (var stmt = conn.prepareStatement(eventHistorySql)) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, functionId);
       stmt.setString(3, key);
@@ -349,9 +346,7 @@ class NotificationsDAO {
   }
 
   static void setEvent(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       String workflowId,
       int functionId,
       String key,
@@ -360,18 +355,20 @@ class NotificationsDAO {
       String serialization)
       throws SQLException {
 
+    DBOSSerializer serializer = ctx.serializer();
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
 
     SerializationUtil.SerializedResult serializedResult =
         SerializationUtil.serializeValue(message, serialization, serializer);
 
-    try (Connection conn = dataSource.getConnection()) {
+    try (var conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
       try {
         if (asStep) {
           var recordedOutput =
-              StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, conn, schema);
+              StepsDAO.checkStepExecutionTxn(
+                  conn, ctx.schema(), workflowId, functionId, functionName);
           if (recordedOutput != null) {
             logger.debug(
                 "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
@@ -385,7 +382,7 @@ class NotificationsDAO {
 
         setEvent(
             conn,
-            schema,
+            ctx.schema(),
             workflowId,
             functionId,
             key,
@@ -395,7 +392,8 @@ class NotificationsDAO {
         if (asStep) {
           StepResult output =
               new StepResult(workflowId, functionId, functionName, null, null, null, null);
-          StepsDAO.recordStepResultTxn(output, startTime, System.currentTimeMillis(), conn, schema);
+          StepsDAO.recordStepResultTxn(
+              conn, ctx.schema(), output, startTime, System.currentTimeMillis());
         }
 
         conn.commit();
@@ -409,9 +407,7 @@ class NotificationsDAO {
   }
 
   static Object getEvent(
-      DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer,
+      DbContext ctx,
       NotificationService notificationService,
       Duration dbPollingInterval,
       String targetUuid,
@@ -420,15 +416,16 @@ class NotificationsDAO {
       GetWorkflowEventContext callerCtx)
       throws SQLException {
 
+    DBOSSerializer serializer = ctx.serializer();
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.getEvent";
 
     if (callerCtx != null) {
       StepResult recordedOutput;
-      try (Connection conn = dataSource.getConnection()) {
+      try (Connection conn = ctx.getConnection()) {
         recordedOutput =
             StepsDAO.checkStepExecutionTxn(
-                callerCtx.workflowId(), callerCtx.functionId(), functionName, conn, schema);
+                conn, ctx.schema(), callerCtx.workflowId(), callerCtx.functionId(), functionName);
       }
 
       if (recordedOutput != null) {
@@ -455,7 +452,7 @@ class NotificationsDAO {
           """
             SELECT value, serialization FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
           """
-              .formatted(schema);
+              .formatted(ctx.schema());
 
       double actualTimeout =
           Objects.requireNonNull(timeout, "getEvent timeout cannot be null").toMillis();
@@ -464,7 +461,8 @@ class NotificationsDAO {
       var hasExistingNotification = false;
 
       while (true) {
-        try (Connection conn = dataSource.getConnection();
+        if (ctx.isClosed()) throw new IllegalStateException("SystemDatabase is closed");
+        try (Connection conn = ctx.getConnection();
             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
           stmt.setString(1, targetUuid);
@@ -488,12 +486,7 @@ class NotificationsDAO {
         if (callerCtx != null && !checkedDBForSleep) {
           actualTimeout =
               StepsDAO.durableSleepDuration(
-                      dataSource,
-                      callerCtx.workflowId(),
-                      callerCtx.timeoutFunctionId(),
-                      timeout,
-                      schema,
-                      serializer)
+                      ctx, callerCtx.workflowId(), callerCtx.timeoutFunctionId(), timeout)
                   .toMillis();
           targetTime = System.currentTimeMillis() + actualTimeout;
           checkedDBForSleep = true;
@@ -523,8 +516,7 @@ class NotificationsDAO {
                     null,
                     toSaveSer.serialization())
                 .withOutput(toSaveSer.serializedValue());
-        StepsDAO.recordStepResultTxn(
-            dataSource, output, startTime, System.currentTimeMillis(), schema);
+        StepsDAO.recordStepResultTxn(ctx, output, startTime, System.currentTimeMillis());
       }
 
       return value;
@@ -535,9 +527,9 @@ class NotificationsDAO {
     }
   }
 
-  static List<NotificationInfo> getAllNotifications(
-      DataSource dataSource, String schema, DBOSSerializer serializer, String workflowId)
+  static List<NotificationInfo> getAllNotifications(DbContext ctx, String workflowId)
       throws SQLException {
+    DBOSSerializer serializer = ctx.serializer();
     var sql =
         """
         SELECT topic, message, serialization, created_at_epoch_ms, consumed
@@ -545,10 +537,10 @@ class NotificationsDAO {
         WHERE destination_uuid = ?
         ORDER BY created_at_epoch_ms
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
     var notifications = new ArrayList<NotificationInfo>();
-    try (var conn = dataSource.getConnection();
+    try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {

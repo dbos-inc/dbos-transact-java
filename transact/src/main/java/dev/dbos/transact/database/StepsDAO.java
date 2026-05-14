@@ -16,8 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import javax.sql.DataSource;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,24 +26,16 @@ class StepsDAO {
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
   static void recordStepResultTxn(
-      DataSource dataSource,
-      StepResult result,
-      long startTimeEpochMs,
-      long endTimeEpochMs,
-      String schema)
+      DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
       throws SQLException {
-    try (Connection connection = dataSource.getConnection()) {
-      recordStepResultTxn(result, startTimeEpochMs, endTimeEpochMs, connection, schema);
+    try (var conn = ctx.getConnection()) {
+      recordStepResultTxn(conn, ctx.schema(), result, startTimeEpochMs, endTimeEpochMs);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
   static void recordStepResultTxn(
-      StepResult result,
-      Long startTimeEpochMs,
-      Long endTimeEpochMs,
-      Connection connection,
-      String schema)
+      Connection conn, String schema, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -58,33 +48,33 @@ class StepsDAO {
         """
             .formatted(schema);
 
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-      pstmt.setString(1, result.workflowId());
-      pstmt.setInt(2, result.stepId());
-      pstmt.setString(3, result.stepName());
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, result.workflowId());
+      stmt.setInt(2, result.stepId());
+      stmt.setString(3, result.stepName());
 
       if (result.output() != null) {
-        pstmt.setString(4, result.output());
+        stmt.setString(4, result.output());
       } else {
-        pstmt.setNull(4, Types.LONGVARCHAR);
+        stmt.setNull(4, Types.LONGVARCHAR);
       }
 
       if (result.error() != null) {
-        pstmt.setString(5, result.error());
+        stmt.setString(5, result.error());
       } else {
-        pstmt.setNull(5, Types.LONGVARCHAR);
+        stmt.setNull(5, Types.LONGVARCHAR);
       }
 
       if (result.childWorkflowId() != null) {
-        pstmt.setString(6, result.childWorkflowId());
+        stmt.setString(6, result.childWorkflowId());
       } else {
-        pstmt.setNull(6, Types.VARCHAR);
+        stmt.setNull(6, Types.VARCHAR);
       }
 
-      pstmt.setObject(7, startTimeEpochMs);
-      pstmt.setObject(8, endTimeEpochMs);
+      stmt.setObject(7, startTimeEpochMs);
+      stmt.setObject(8, endTimeEpochMs);
 
-      try (ResultSet rs = pstmt.executeQuery()) {
+      try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next() && endTimeEpochMs != null) {
           long completedAt = rs.getLong("completed_at_epoch_ms");
           if (completedAt != endTimeEpochMs) {
@@ -107,7 +97,7 @@ class StepsDAO {
   }
 
   static StepResult checkStepExecutionTxn(
-      String workflowId, int functionId, String functionName, Connection connection, String schema)
+      Connection conn, String schema, String workflowId, int functionId, String functionName)
       throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
     Objects.requireNonNull(schema);
@@ -118,7 +108,7 @@ class StepsDAO {
             .formatted(schema);
 
     String workflowStatus = null;
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+    try (var pstmt = conn.prepareStatement(sql)) {
       pstmt.setString(1, workflowId);
       try (ResultSet rs = pstmt.executeQuery()) {
         if (rs.next()) {
@@ -147,7 +137,7 @@ class StepsDAO {
     StepResult recordedResult = null;
     String recordedFunctionName = null;
 
-    try (PreparedStatement pstmt = connection.prepareStatement(operationOutputSql)) {
+    try (var pstmt = conn.prepareStatement(operationOutputSql)) {
       pstmt.setString(1, workflowId);
       pstmt.setInt(2, functionId);
       try (ResultSet rs = pstmt.executeQuery()) {
@@ -176,28 +166,22 @@ class StepsDAO {
   }
 
   static List<StepInfo> listWorkflowSteps(
-      DataSource dataSource,
-      String workflowId,
-      Boolean loadOutput,
-      Integer limit,
-      Integer offset,
-      String schema,
-      DBOSSerializer serializer)
+      DbContext ctx, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
       throws SQLException {
-    try (Connection connection = dataSource.getConnection()) {
+    try (var conn = ctx.getConnection()) {
       return listWorkflowSteps(
-          connection, workflowId, loadOutput, limit, offset, schema, serializer);
+          conn, ctx.schema(), ctx.serializer(), workflowId, loadOutput, limit, offset);
     }
   }
 
   static List<StepInfo> listWorkflowSteps(
-      Connection connection,
+      Connection conn,
+      String schema,
+      DBOSSerializer serializer,
       String workflowId,
       Boolean loadOutput,
       Integer limit,
-      Integer offset,
-      String schema,
-      DBOSSerializer serializer)
+      Integer offset)
       throws SQLException {
 
     StringBuilder sqlBuilder =
@@ -221,7 +205,7 @@ class StepsDAO {
 
     List<StepInfo> steps = new ArrayList<>();
 
-    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(sql)) {
 
       int paramIndex = 1;
       stmt.setString(paramIndex++, workflowId);
@@ -277,16 +261,9 @@ class StepsDAO {
     return steps;
   }
 
-  static void sleep(
-      DataSource dataSource,
-      String workflowUuid,
-      int functionId,
-      Duration duration,
-      String schema,
-      DBOSSerializer serializer)
+  static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
       throws SQLException {
-    var sleepDuration =
-        durableSleepDuration(dataSource, workflowUuid, functionId, duration, schema, serializer);
+    var sleepDuration = durableSleepDuration(ctx, workflowUuid, functionId, duration);
     logger.debug("Sleeping for duration {}", sleepDuration);
     try {
       Thread.sleep(sleepDuration.toMillis());
@@ -296,7 +273,7 @@ class StepsDAO {
     }
   }
 
-  static String getCheckpointName(Connection conn, String workflowId, int functionId, String schema)
+  static String getCheckpointName(Connection conn, String schema, String workflowId, int functionId)
       throws SQLException {
     var sql =
         """
@@ -306,10 +283,10 @@ class StepsDAO {
         """
             .formatted(schema);
 
-    try (var ps = conn.prepareStatement(sql)) {
-      ps.setString(1, workflowId);
-      ps.setInt(2, functionId);
-      try (var rs = ps.executeQuery()) {
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
           return rs.getString("function_name");
         } else {
@@ -319,15 +296,14 @@ class StepsDAO {
     }
   }
 
-  static boolean patch(
-      DataSource dataSource, String workflowId, int functionId, String patchName, String schema)
+  static boolean patch(DbContext ctx, String workflowId, int functionId, String patchName)
       throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
-    try (Connection conn = dataSource.getConnection()) {
-      var checkpointName = getCheckpointName(conn, workflowId, functionId, schema);
+    try (var conn = ctx.getConnection()) {
+      var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
       if (checkpointName == null) {
         var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
-        recordStepResultTxn(output, System.currentTimeMillis(), null, conn, schema);
+        recordStepResultTxn(conn, ctx.schema(), output, System.currentTimeMillis(), null);
         return true;
       } else {
         return patchName.equals(checkpointName);
@@ -335,34 +311,28 @@ class StepsDAO {
     }
   }
 
-  static boolean deprecatePatch(
-      DataSource dataSource, String workflowId, int functionId, String patchName, String schema)
+  static boolean deprecatePatch(DbContext ctx, String workflowId, int functionId, String patchName)
       throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
-    try (Connection conn = dataSource.getConnection()) {
-      var checkpointName = getCheckpointName(conn, workflowId, functionId, schema);
+    try (var conn = ctx.getConnection()) {
+      var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
       return patchName.equals(checkpointName);
     }
   }
 
   static Duration durableSleepDuration(
-      DataSource dataSource,
-      String workflowUuid,
-      int functionId,
-      Duration duration,
-      String schema,
-      DBOSSerializer serializer)
-      throws SQLException {
+      DbContext ctx, String workflowUuid, int functionId, Duration duration) throws SQLException {
 
-    Objects.requireNonNull(schema);
+    DBOSSerializer serializer = ctx.serializer();
+    Objects.requireNonNull(ctx.schema());
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.sleep";
 
     StepResult recordedOutput;
 
-    try (Connection connection = dataSource.getConnection()) {
+    try (var conn = ctx.getConnection()) {
       recordedOutput =
-          checkStepExecutionTxn(workflowUuid, functionId, functionName, connection, schema);
+          checkStepExecutionTxn(conn, ctx.schema(), workflowUuid, functionId, functionName);
     }
 
     long endTime;
@@ -398,7 +368,7 @@ class StepsDAO {
                 null,
                 null,
                 serializedValue.serialization());
-        recordStepResultTxn(dataSource, output, startTime, (long) endTime, schema);
+        recordStepResultTxn(ctx, output, startTime, (long) endTime);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }
