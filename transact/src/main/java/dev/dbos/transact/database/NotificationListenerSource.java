@@ -1,13 +1,11 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.database.SystemDatabase.NotificationSource;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 import javax.sql.DataSource;
 
@@ -16,35 +14,31 @@ import org.postgresql.PGNotification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class NotificationService {
+class NotificationListenerSource implements NotificationSource {
 
-  public static class LockConditionPair {
-    public final ReentrantLock lock = new ReentrantLock();
-    public final Condition condition = lock.newCondition();
-  }
+  private static final Logger logger = LoggerFactory.getLogger(NotificationListenerSource.class);
 
-  private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
-
-  private final Map<String, LockConditionPair> notificationsMap = new ConcurrentHashMap<>();
-  private final AtomicReference<Thread> notificationListenerThread = new AtomicReference<>(null);
   private final DataSource dataSource;
+  private final AtomicReference<Thread> notificationListenerThread = new AtomicReference<>(null);
+  private final SignalMap<String> signalMap = new SignalMap<>();
 
-  public NotificationService(DataSource dataSource) {
+  public NotificationListenerSource(DataSource dataSource) {
     this.dataSource = dataSource;
   }
 
-  public boolean registerNotificationCondition(String key, LockConditionPair pair) {
-    return notificationsMap.putIfAbsent(key, pair) == null;
+  @Override
+  public Subscription subscribe(SignalKey.Message key) {
+    var strKey = "m::%s::%s".formatted(key.workflowId(), key.topic());
+    return signalMap.subscribe(strKey, key.wakeReason());
   }
 
-  public LockConditionPair getOrCreateNotificationCondition(String key) {
-    return notificationsMap.computeIfAbsent(key, k -> new LockConditionPair());
+  @Override
+  public Subscription subscribe(SignalKey.Event key) {
+    var strKey = "e::%s::%s".formatted(key.workflowId(), key.key());
+    return signalMap.subscribe(strKey, key.wakeReason());
   }
 
-  public void unregisterNotificationCondition(String key) {
-    notificationsMap.remove(key);
-  }
-
+  @Override
   public void start() {
     Thread t = new Thread(this::notificationListener, "NotificationListener");
     t.setDaemon(true);
@@ -54,7 +48,8 @@ public class NotificationService {
     }
   }
 
-  public void stop() {
+  @Override
+  public void close() {
     Thread t = notificationListenerThread.getAndSet(null);
     if (t != null) {
       t.interrupt();
@@ -65,7 +60,6 @@ public class NotificationService {
       }
     }
 
-    notificationsMap.clear();
     logger.debug("Notification listener stopped");
   }
 
@@ -103,9 +97,8 @@ public class NotificationService {
                 logger.error("Received notification with null channel. Payload: {}", payload);
               } else
                 switch (channel) {
-                  case "dbos_notifications_channel" -> handleNotification(payload, "notifications");
-                  case "dbos_workflow_events_channel" ->
-                      handleNotification(payload, "workflow_events");
+                  case "dbos_notifications_channel" -> signalMap.signal("m::" + payload);
+                  case "dbos_workflow_events_channel" -> signalMap.signal("e::" + payload);
                   default -> logger.error("Unknown NOTIFY channel: {}", channel);
                 }
             }
@@ -135,26 +128,5 @@ public class NotificationService {
       }
     }
     logger.debug("Notification listener thread exiting");
-  }
-
-  private void handleNotification(String payload, String mapType) {
-
-    logger.debug("Received notification for {}", payload);
-
-    if (payload != null && !payload.isEmpty()) {
-      LockConditionPair pair = notificationsMap.get(payload);
-      if (pair != null) {
-        pair.lock.lock();
-        try {
-          pair.condition.signalAll();
-        } finally {
-          pair.lock.unlock();
-        }
-        logger.debug("Signaled {} condition for {}", mapType, payload);
-      } else {
-        logger.debug("ConditionMap has no entry for {}", payload);
-      }
-      // If no condition found, we simply ignore the notification
-    }
   }
 }

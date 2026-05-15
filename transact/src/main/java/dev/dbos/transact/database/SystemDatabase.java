@@ -35,6 +35,18 @@ import org.slf4j.LoggerFactory;
 
 public class SystemDatabase implements AutoCloseable {
 
+  public interface NotifcationRegistry {
+    Subscription subscribe(SignalKey.Message key);
+
+    Subscription subscribe(SignalKey.Event key);
+  }
+
+  public interface NotificationSource extends NotifcationRegistry {
+    void start();
+
+    void close();
+  }
+
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
 
   public static String sanitizeSchema(String schema) {
@@ -45,7 +57,7 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
 
   private final AtomicBoolean closed = new AtomicBoolean(false);
-  private final NotificationService notificationService;
+  private final NotificationSource notificationSource;
   private Duration dbPollingInterval = Duration.ofSeconds(1);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
@@ -72,7 +84,8 @@ public class SystemDatabase implements AutoCloseable {
     this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get);
     this.created = created;
 
-    notificationService = new NotificationService(dataSource);
+    // TODO: NotificationPollingService
+    notificationSource = new NotificationListenerSource(dataSource);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
@@ -141,14 +154,14 @@ public class SystemDatabase implements AutoCloseable {
   @Override
   public void close() {
     closed.set(true);
-    notificationService.stop();
+    notificationSource.close();
     if (created && ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
       hikariDataSource.close();
     }
   }
 
   public void start() {
-    notificationService.start();
+    notificationSource.start();
   }
 
   void speedUpPollingForTest() {
@@ -385,7 +398,7 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             NotificationsDAO.recv(
                 ctx,
-                notificationService,
+                notificationSource,
                 dbPollingInterval,
                 workflowId,
                 stepId,
@@ -414,7 +427,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                ctx, notificationService, dbPollingInterval, targetId, key, timeout, callerCtx));
+                ctx, notificationSource, dbPollingInterval, targetId, key, timeout, callerCtx));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {

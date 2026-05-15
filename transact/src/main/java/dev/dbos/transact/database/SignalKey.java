@@ -1,0 +1,39 @@
+package dev.dbos.transact.database;
+
+sealed interface SignalKey
+    permits SignalKey.Cancellation, SignalKey.Event, SignalKey.Message, SignalKey.Shutdown {
+
+  public enum WakeReason {
+    MESSAGE,
+    EVENT,
+    CANCELLED,
+    SHUTDOWN,
+    TIMEOUT
+  }
+
+  WakeReason wakeReason();
+
+  record Cancellation(String workflowId) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.CANCELLED;
+    }
+  }
+
+  record Event(String workflowId, String key) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.EVENT;
+    }
+  }
+
+  record Message(String workflowId, String topic) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.MESSAGE;
+    }
+  }
+
+  record Shutdown() implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.SHUTDOWN;
+    }
+  }
+}
