@@ -447,13 +447,12 @@ public class SystemDatabase implements AutoCloseable {
                 ctx, workflowId, functionId, key, message, asStep, serialization));
   }
 
-  public Object getEvent(
-      String targetId, String key, Duration timeout, GetWorkflowEventContext callerCtx) {
+  public Object getEvent(String targetId, String key, Duration timeout, GetEventCaller caller) {
 
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                ctx, notificationSource, dbPollingInterval, targetId, key, timeout, callerCtx));
+                ctx, targetId, key, timeout, caller, dbPollingInterval, notificationSource));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {

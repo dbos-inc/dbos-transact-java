@@ -2,7 +2,7 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
-import dev.dbos.transact.database.GetWorkflowEventContext;
+import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.SystemDatabase.NotifcationRegistry;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
@@ -21,8 +21,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -386,128 +389,108 @@ public class NotificationsDAO {
     }
   }
 
+  private record GetEventResult(String value, String serialization) {}
+
+  private static Optional<GetEventResult> getEvent(
+      DbContext ctx, @NonNull String workflowId, @NonNull String key) throws SQLException {
+    var sql =
+        """
+        SELECT value, serialization FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, key);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          var value = rs.getString("value");
+          var serialization = rs.getString("serialization");
+          return Optional.of(new GetEventResult(value, serialization));
+        }
+      }
+    }
+
+    return Optional.empty();
+  }
+
   public static Object getEvent(
       DbContext ctx,
-      NotifcationRegistry notifcationRegistry,
-      Duration dbPollingInterval,
-      String targetUuid,
+      String workflowId,
       String key,
       Duration timeout,
-      GetWorkflowEventContext callerCtx)
+      @Nullable GetEventCaller caller,
+      Duration dbPollingInterval,
+      NotifcationRegistry notifcationRegistry)
       throws SQLException {
 
-    return null;
-    // DBOSSerializer serializer = ctx.serializer();
-    // var startTime = System.currentTimeMillis();
-    // String functionName = "DBOS.getEvent";
+    if (Objects.requireNonNull(workflowId).isEmpty()) {
+      throw new IllegalArgumentException("workflowId must not be empty");
+    }
 
-    // if (callerCtx != null) {
-    //   StepResult recordedOutput;
-    //   try (Connection conn = ctx.getConnection()) {
-    //     recordedOutput =
-    //         StepsDAO.checkStepExecutionTxn(
-    //             conn, ctx.schema(), callerCtx.workflowId(), callerCtx.functionId(),
-    // functionName);
-    //   }
+    var stepName = "DBOS.getEvent";
 
-    //   if (recordedOutput != null) {
-    //     logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.functionId(), key);
-    //     if (recordedOutput.output() != null) {
-    //       return SerializationUtil.deserializeValue(
-    //           recordedOutput.output(), recordedOutput.serialization(), serializer);
-    //     } else {
-    //       throw new RuntimeException("No output recorded in the last getEvent");
-    //     }
-    //   } else {
-    //     logger.debug("Running getEvent, id: {}, key: {}", callerCtx.functionId(), key);
-    //   }
-    // }
+    if (caller != null) {
+      var prevResult =
+          StepsDAO.checkStepResult(ctx, caller.workflowId(), caller.stepId(), stepName);
+      if (prevResult != null) {
+        logger.debug("Replaying getEvent, id: {}, key: {}", caller.stepId(), key);
+        return prevResult.toResult(ctx.serializer());
+      }
+      logger.debug("Running getEvent, id: {}, key: {}", caller.stepId(), key);
+    }
 
-    // String payload = targetUuid + "::" + key;
-    // NotificationListenerService.LockConditionPair lockConditionPair =
-    //     notificationService.getOrCreateNotificationCondition(payload);
+    var startTime = Instant.now();
+    var eventKey = new SignalKey.Event(workflowId, key);
+    dbPollingInterval = Objects.requireNonNullElse(dbPollingInterval, Duration.ofSeconds(1));
 
-    // lockConditionPair.lock.lock();
-    // try {
-    //   Object value = null;
-    //   final String sql =
-    //       """
-    //         SELECT value, serialization FROM "%s".workflow_events WHERE workflow_uuid = ? AND key
-    // = ?
-    //       """
-    //           .formatted(ctx.schema());
+    GetEventResult result = null;
+    try (var eventSignal = notifcationRegistry.subscribe(eventKey)) {
+      while (true) {
+        var optResult = getEvent(ctx, workflowId, key);
+        if (optResult.isPresent()) {
+          result = optResult.get();
+          break;
+        }
 
-    //   double actualTimeout =
-    //       Objects.requireNonNull(timeout, "getEvent timeout cannot be null").toMillis();
-    //   var targetTime = System.currentTimeMillis() + actualTimeout;
-    //   var checkedDBForSleep = false;
-    //   var hasExistingNotification = false;
+        // check cancelled (both workflowId and caller.workflowId)
 
-    //   while (true) {
-    //     if (ctx.isClosed()) throw new IllegalStateException("SystemDatabase is closed");
-    //     try (Connection conn = ctx.getConnection();
-    //         PreparedStatement stmt = conn.prepareStatement(sql)) {
+        var sleepDuration =
+            caller != null
+                ? StepsDAO.durableSleepDuration(
+                    ctx, caller.workflowId(), caller.timeoutStepId(), timeout)
+                : timeout.minus(Duration.between(startTime, Instant.now()));
 
-    //       stmt.setString(1, targetUuid);
-    //       stmt.setString(2, key);
+        if (sleepDuration.isNegative() || sleepDuration.isZero()) {
+          result = new GetEventResult(null, null);
+          break;
+        }
 
-    //       try (ResultSet rs = stmt.executeQuery()) {
-    //         if (rs.next()) {
-    //           String serializedValue = rs.getString("value");
-    //           String serialization = rs.getString("serialization");
-    //           value =
-    //               SerializationUtil.deserializeValue(serializedValue, serialization, serializer);
-    //           hasExistingNotification = true;
-    //         }
-    //       }
-    //     }
+        var loopDuration =
+            dbPollingInterval.compareTo(sleepDuration) <= 0 ? dbPollingInterval : sleepDuration;
 
-    //     if (hasExistingNotification) break;
-    //     var nowTime = System.currentTimeMillis();
-    //     if (nowTime > targetTime) break;
+        SignalMap.awaitAny(loopDuration, eventSignal);
+      }
+    }
 
-    //     if (callerCtx != null && !checkedDBForSleep) {
-    //       actualTimeout =
-    //           StepsDAO.durableSleepDuration(
-    //                   ctx, callerCtx.workflowId(), callerCtx.timeoutFunctionId(), timeout)
-    //               .toMillis();
-    //       targetTime = System.currentTimeMillis() + actualTimeout;
-    //       checkedDBForSleep = true;
-    //       if (nowTime > targetTime) break;
-    //     }
+    Objects.requireNonNull(result);
+    ctx.checkClosed();
 
-    //     try {
-    //       long timeoutms = (long) (targetTime - nowTime);
-    //       logger.debug("Waiting for notification {}...", timeout);
-    //       lockConditionPair.condition.await(
-    //           Math.min(timeoutms, dbPollingInterval.toMillis()), TimeUnit.MILLISECONDS);
-    //     } catch (InterruptedException e) {
-    //       Thread.currentThread().interrupt();
-    //       throw new RuntimeException("Interrupted while waiting for event", e);
-    //     }
-    //   }
+    if (caller != null) {
+      var stepResult =
+          new StepResult(
+              caller.workflowId(),
+              caller.stepId(),
+              stepName,
+              result.value(),
+              null,
+              null,
+              result.serialization());
+      StepsDAO.recordStepResult(ctx, stepResult, startTime.toEpochMilli());
+    }
 
-    //   if (callerCtx != null) {
-    //     var toSaveSer = SerializationUtil.serializeValue(value, null, serializer);
-    //     StepResult output =
-    //         new StepResult(
-    //                 callerCtx.workflowId(),
-    //                 callerCtx.functionId(),
-    //                 functionName,
-    //                 null,
-    //                 null,
-    //                 null,
-    //                 toSaveSer.serialization())
-    //             .withOutput(toSaveSer.serializedValue());
-    //     StepsDAO.recordStepResultTxn(ctx, output, startTime, System.currentTimeMillis());
-    //   }
-
-    //   return value;
-
-    // } finally {
-    //   lockConditionPair.lock.unlock();
-    //   notificationService.unregisterNotificationCondition(payload);
-    // }
+    return SerializationUtil.deserializeValue(
+        result.value(), result.serialization(), ctx.serializer());
   }
 
   public static List<NotificationInfo> getAllNotifications(DbContext ctx, String workflowId)

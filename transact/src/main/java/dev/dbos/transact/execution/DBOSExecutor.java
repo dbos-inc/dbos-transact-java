@@ -11,7 +11,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.ExternalState;
-import dev.dbos.transact.database.GetWorkflowEventContext;
+import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
@@ -471,11 +471,11 @@ public class DBOSExecutor implements AutoCloseable {
     DBOSContext ctx = DBOSContextHolder.get();
 
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-      int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-      GetWorkflowEventContext callerCtx =
-          new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
-      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
+      int stepId = ctx.getAndIncrementFunctionId();
+      int timeoutStepId = ctx.getAndIncrementFunctionId();
+      GetEventCaller caller =
+          new GetEventCaller(ctx.getWorkflowId(), stepId, timeoutStepId);
+      return systemDatabase.getEvent(workflowId, key, timeout, caller);
     }
 
     return systemDatabase.getEvent(workflowId, key, timeout, null);
