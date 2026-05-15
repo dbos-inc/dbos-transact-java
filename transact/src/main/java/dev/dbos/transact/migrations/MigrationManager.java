@@ -56,15 +56,7 @@ public class MigrationManager {
 
     try (var conn = ds.getConnection()) {
 
-      var isCockroach = false;
-      try (var stmt = conn.createStatement();
-          var rs = stmt.executeQuery("SELECT version()")) {
-        if (rs.next()) {
-          String version = rs.getString(1).toLowerCase();
-          isCockroach = version.contains("cockroachdb");
-        }
-      }
-
+      var isCockroach = SystemDatabase.isCockroach(conn);
       if (isCockroach) {
         useListenNotify = false;
       }
@@ -188,6 +180,19 @@ public class MigrationManager {
     return 0;
   }
 
+  private static boolean notificationsPrimaryKeyExists(Connection conn, String schema)
+      throws SQLException {
+    var sql =
+        "SELECT 1 FROM information_schema.table_constraints"
+            + " WHERE table_schema = ? AND table_name = 'notifications' AND constraint_type = 'PRIMARY KEY'";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
   static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
     Objects.requireNonNull(schema, "schema must not be null");
     var lastApplied = getCurrentSysDbVersion(conn, schema);
@@ -199,10 +204,27 @@ public class MigrationManager {
       }
 
       logger.info("Applying DBOS system database schema migration {}", migrationIndex);
-      try (var stmt = conn.createStatement()) {
-        stmt.execute(migrations.get(i));
-      } catch (SQLException e) {
-        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+
+      // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
+      // (guard for installs that were created before the primary key was added to migration 1).
+      boolean skipMigration = false;
+      if (migrationIndex == 10) {
+        try {
+          skipMigration = notificationsPrimaryKeyExists(conn, schema);
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to check notifications primary key", e);
+        }
+        if (skipMigration) {
+          logger.info("Migration 10 skipped, primary key already exists");
+        }
+      }
+
+      if (!skipMigration) {
+        try (var stmt = conn.createStatement()) {
+          stmt.execute(migrations.get(i));
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+        }
       }
 
       try {
@@ -274,8 +296,8 @@ public class MigrationManager {
           output TEXT,
           error TEXT,
           executor_id TEXT,
-          created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+          created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
+          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
           application_version TEXT,
           application_id TEXT,
           class_name VARCHAR(255) DEFAULT NULL,
@@ -315,7 +337,7 @@ public class MigrationManager {
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
-          created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+          created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
           FOREIGN KEY (destination_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
@@ -421,7 +443,7 @@ public class MigrationManager {
 
   static final String MIGRATION_7 =
       """
-      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" TEXT DEFAULT NULL
       """;
 
   static final String MIGRATION_8 =
@@ -445,17 +467,7 @@ public class MigrationManager {
 
   static final String MIGRATION_10 =
       """
-      DO $$
-      BEGIN
-          IF NOT EXISTS (
-              SELECT 1 FROM information_schema.table_constraints
-              WHERE table_schema = '%1$s'
-              AND table_name = 'notifications'
-              AND constraint_type = 'PRIMARY KEY'
-          ) THEN
-              ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
-          END IF;
-      END $$;
+      ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
       """;
 
   static final String MIGRATION_11 =

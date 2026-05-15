@@ -70,6 +70,7 @@ spring-boot4-dependencies = { module = "org.springframework.boot:spring-boot-dep
 spring-boot4-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot4" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
+testcontainers-cockroachdb = { module = "org.testcontainers:testcontainers-cockroachdb", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 
 [bundles]

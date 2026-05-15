@@ -48,6 +48,7 @@ dependencies {
   testImplementation(libs.rest.assured)
   testImplementation(libs.kryo)
   testImplementation(libs.maven.artifact)
+  testImplementation(libs.testcontainers.cockroachdb)
   testImplementation(libs.testcontainers.postgresql)
 }
 

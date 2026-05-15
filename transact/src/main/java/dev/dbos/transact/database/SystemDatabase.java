@@ -151,6 +151,22 @@ public class SystemDatabase implements AutoCloseable {
     return new HikariDataSource(config);
   }
 
+  public static boolean isCockroach(DataSource dataSource) throws SQLException {
+    try (var conn = dataSource.getConnection()) {
+      return isCockroach(conn);
+    }
+  }
+
+  public static boolean isCockroach(Connection conn) throws SQLException {
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery("SELECT version()")) {
+      if (rs.next()) {
+        return rs.getString(1).toLowerCase().contains("cockroachdb");
+      }
+    }
+    return false;
+  }
+
   @Override
   public void close() {
     closed.set(true);
