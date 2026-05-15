@@ -11,6 +11,8 @@ import dev.dbos.transact.database.dao.StepsDAO;
 import dev.dbos.transact.database.dao.StreamsDAO;
 import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalKey.Event;
+import dev.dbos.transact.database.signal.SignalKey.Message;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -57,6 +59,25 @@ public class SystemDatabase implements AutoCloseable {
     void close();
   }
 
+  class NullNotificationSource implements NotificationSource {
+
+    @Override
+    public Subscription subscribe(Message key) {
+      return new Subscription(() -> {});
+    }
+
+    @Override
+    public Subscription subscribe(Event key) {
+      return new Subscription(() -> {});
+    }
+
+    @Override
+    public void start() {}
+
+    @Override
+    public void close() {}
+  }
+
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
 
   public static String sanitizeSchema(String schema) {
@@ -84,7 +105,11 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   private SystemDatabase(
-      DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
+      DataSource dataSource,
+      String schema,
+      boolean created,
+      DBOSSerializer serializer,
+      boolean useListenNotify) {
     validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
@@ -93,26 +118,37 @@ public class SystemDatabase implements AutoCloseable {
 
     this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get);
     this.created = created;
+    try {
+      useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
+    } catch (SQLException e) {
+      logger.error("Failed to determine if dataSouce is CockroachDB", e);
+      useListenNotify = false;
+    }
 
-    // TODO: NotificationPollingService
-    notificationSource = new NotificationListenerSource(dataSource);
-  }
-
-  public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null);
+    notificationSource =
+        useListenNotify ? new NotificationListenerSource(dataSource) : new NullNotificationSource();
   }
 
   public SystemDatabase(
-      String url, String user, String password, String schema, DBOSSerializer serializer) {
-    this(createDataSource(url, user, password), schema, true, serializer);
+      String url,
+      String user,
+      String password,
+      String schema,
+      DBOSSerializer serializer,
+      boolean useListenNotify) {
+    this(createDataSource(url, user, password), schema, true, serializer, useListenNotify);
+  }
+
+  public SystemDatabase(String url, String user, String password, String schema) {
+    this(createDataSource(url, user, password), schema, true, null, true);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null);
+    this(dataSource, schema, false, null, true);
   }
 
   public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer);
+    this(dataSource, schema, false, serializer, true);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
@@ -122,7 +158,8 @@ public class SystemDatabase implements AutoCloseable {
           config.dbUser(),
           config.dbPassword(),
           config.databaseSchema(),
-          config.serializer());
+          config.serializer(),
+          config.useListenNotify());
     } else {
       return new SystemDatabase(config.dataSource(), config.databaseSchema(), config.serializer());
     }

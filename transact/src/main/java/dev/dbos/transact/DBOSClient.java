@@ -79,7 +79,7 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
-    this(url, user, password, null, null);
+    this(url, user, password, null, null, true);
   }
 
   /**
@@ -95,7 +95,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    this(url, user, password, schema, null);
+    this(url, user, password, schema, null, true);
   }
 
   /**
@@ -113,8 +113,18 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String password,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
+    this(url, user, password, schema, serializer, true);
+  }
+
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify) {
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(url, user, password, schema, serializer);
+    systemDatabase = new SystemDatabase(url, user, password, schema, serializer, useListenNotify);
   }
 
   /**
