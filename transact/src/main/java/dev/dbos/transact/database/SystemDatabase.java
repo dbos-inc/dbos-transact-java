@@ -2,6 +2,16 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.dao.ApplicationVersionDAO;
+import dev.dbos.transact.database.dao.ExternalStateDAO;
+import dev.dbos.transact.database.dao.NotificationsDAO;
+import dev.dbos.transact.database.dao.QueuesDAO;
+import dev.dbos.transact.database.dao.SchedulesDAO;
+import dev.dbos.transact.database.dao.StepsDAO;
+import dev.dbos.transact.database.dao.StreamsDAO;
+import dev.dbos.transact.database.dao.WorkflowDAO;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -252,11 +262,11 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  static Instant toInstant(Long epochMs) {
+  public static Instant toInstant(Long epochMs) {
     return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
   }
 
-  static Duration toDuration(Long ms) {
+  public static Duration toDuration(Long ms) {
     return ms != null ? Duration.ofMillis(ms) : null;
   }
 

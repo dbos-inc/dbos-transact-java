@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -10,11 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-class StreamsDAO {
+public class StreamsDAO {
 
   private StreamsDAO() {}
 
-  static void writeStreamFromStep(
+  public static void writeStreamFromStep(
       DbContext ctx,
       String workflowId,
       int functionId,
@@ -27,7 +28,7 @@ class StreamsDAO {
     }
   }
 
-  static void writeStreamFromWorkflow(
+  public static void writeStreamFromWorkflow(
       DbContext ctx,
       String workflowId,
       int functionId,
@@ -125,13 +126,13 @@ class StreamsDAO {
     }
   }
 
-  static void closeStream(DbContext ctx, String workflowId, int functionId, String key)
+  public static void closeStream(DbContext ctx, String workflowId, int functionId, String key)
       throws SQLException {
     writeStreamFromWorkflow(
         ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
   }
 
-  static Object readStream(DbContext ctx, String workflowId, String key, int offset)
+  public static Object readStream(DbContext ctx, String workflowId, String key, int offset)
       throws SQLException {
     String sql =
         """
@@ -162,7 +163,7 @@ class StreamsDAO {
     }
   }
 
-  static Map<String, List<Object>> getAllStreamEntries(DbContext ctx, String workflowId)
+  public static Map<String, List<Object>> getAllStreamEntries(DbContext ctx, String workflowId)
       throws SQLException {
     String sql =
         """

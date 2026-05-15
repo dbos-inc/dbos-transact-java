@@ -7,7 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.database.SignalKey.WakeReason;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalKey.WakeReason;
+import dev.dbos.transact.database.signal.SignalMap;
+import dev.dbos.transact.database.signal.Subscription;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;

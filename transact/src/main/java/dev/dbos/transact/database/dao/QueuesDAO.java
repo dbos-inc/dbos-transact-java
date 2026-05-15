@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -17,13 +18,13 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class QueuesDAO {
+public class QueuesDAO {
 
   private QueuesDAO() {}
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  static List<String> getAndStartQueuedWorkflows(
+  public static List<String> getAndStartQueuedWorkflows(
       DbContext ctx, Queue queue, String executorId, String appVersion, String partitionKey)
       throws SQLException {
 
@@ -244,7 +245,7 @@ class QueuesDAO {
     }
   }
 
-  static boolean clearQueueAssignment(DbContext ctx, String workflowId) throws SQLException {
+  public static boolean clearQueueAssignment(DbContext ctx, String workflowId) throws SQLException {
 
     final String sql =
         """
@@ -264,7 +265,8 @@ class QueuesDAO {
     }
   }
 
-  static List<String> getQueuePartitions(DbContext ctx, String queueName) throws SQLException {
+  public static List<String> getQueuePartitions(DbContext ctx, String queueName)
+      throws SQLException {
 
     final String sql =
         """

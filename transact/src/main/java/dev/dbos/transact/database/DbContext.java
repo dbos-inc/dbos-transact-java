@@ -8,7 +8,7 @@ import java.util.function.BooleanSupplier;
 
 import javax.sql.DataSource;
 
-record DbContext(
+public record DbContext(
     DataSource dataSource, String schema, DBOSSerializer serializer, BooleanSupplier closed) {
 
   public Connection getConnection() throws SQLException {

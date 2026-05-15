@@ -1,6 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.signal;
 
-import dev.dbos.transact.database.SignalKey.WakeReason;
+import dev.dbos.transact.database.signal.SignalKey.WakeReason;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-class SignalMap<K> {
+public class SignalMap<K> {
   private static class Entry {
     final CompletableFuture<WakeReason> future = new CompletableFuture<>();
     final AtomicInteger refs = new AtomicInteger(1);
@@ -52,7 +52,7 @@ class SignalMap<K> {
     }
   }
 
-  static WakeReason awaitAny(Duration timeout, Subscription... subscriptions) {
+  public static WakeReason awaitAny(Duration timeout, Subscription... subscriptions) {
     try {
       return (WakeReason)
           CompletableFuture.anyOf(subscriptions).get(timeout.toMillis(), TimeUnit.MILLISECONDS);

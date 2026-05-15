@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.workflow.VersionInfo;
 
 import java.sql.SQLException;
@@ -8,11 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-class ApplicationVersionDAO {
+public class ApplicationVersionDAO {
 
   private ApplicationVersionDAO() {}
 
-  static void createApplicationVersion(DbContext ctx, String versionName) throws SQLException {
+  public static void createApplicationVersion(DbContext ctx, String versionName)
+      throws SQLException {
     String sql =
         """
           INSERT INTO "%s".application_versions (version_id, version_name)
@@ -28,7 +30,7 @@ class ApplicationVersionDAO {
     }
   }
 
-  static void updateApplicationVersionTimestamp(
+  public static void updateApplicationVersionTimestamp(
       DbContext ctx, String versionName, Instant newTimestamp) throws SQLException {
     String sql =
         """
@@ -45,7 +47,7 @@ class ApplicationVersionDAO {
     }
   }
 
-  static List<VersionInfo> listApplicationVersions(DbContext ctx) throws SQLException {
+  public static List<VersionInfo> listApplicationVersions(DbContext ctx) throws SQLException {
     String sql =
         """
           SELECT version_id, version_name, version_timestamp, created_at
@@ -69,7 +71,7 @@ class ApplicationVersionDAO {
     return results;
   }
 
-  static VersionInfo getLatestApplicationVersion(DbContext ctx) throws SQLException {
+  public static VersionInfo getLatestApplicationVersion(DbContext ctx) throws SQLException {
     String sql =
         """
           SELECT version_id, version_name, version_timestamp, created_at

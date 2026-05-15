@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -19,7 +20,7 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class StepsDAO {
+public class StepsDAO {
 
   private StepsDAO() {}
 
@@ -30,7 +31,7 @@ class StepsDAO {
     recordStepResult(ctx, result, startTimeEpochMs, System.currentTimeMillis());
   }
 
-  static void recordStepResult(
+  public static void recordStepResult(
       DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
@@ -114,7 +115,7 @@ class StepsDAO {
     }
   }
 
-  static StepResult checkStepResult(
+  public static StepResult checkStepResult(
       Connection conn, String schema, String workflowId, int functionId, String functionName)
       throws SQLException {
 
@@ -183,7 +184,7 @@ class StepsDAO {
     return recordedResult;
   }
 
-  static List<StepInfo> listWorkflowSteps(
+  public static List<StepInfo> listWorkflowSteps(
       DbContext ctx, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
@@ -279,7 +280,7 @@ class StepsDAO {
     return steps;
   }
 
-  static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
+  public static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
       throws SQLException {
     var sleepDuration = durableSleepDuration(ctx, workflowUuid, functionId, duration);
     logger.debug("Sleeping for duration {}", sleepDuration);
@@ -314,7 +315,7 @@ class StepsDAO {
     }
   }
 
-  static boolean patch(DbContext ctx, String workflowId, int functionId, String patchName)
+  public static boolean patch(DbContext ctx, String workflowId, int functionId, String patchName)
       throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
     try (var conn = ctx.getConnection()) {
@@ -329,8 +330,8 @@ class StepsDAO {
     }
   }
 
-  static boolean deprecatePatch(DbContext ctx, String workflowId, int functionId, String patchName)
-      throws SQLException {
+  public static boolean deprecatePatch(
+      DbContext ctx, String workflowId, int functionId, String patchName) throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
     try (var conn = ctx.getConnection()) {
       var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);

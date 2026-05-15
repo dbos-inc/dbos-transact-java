@@ -1,6 +1,11 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.MetricData;
+import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSConflictingWorkflowException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
@@ -49,7 +54,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class WorkflowDAO {
+public class WorkflowDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
 
@@ -69,7 +74,7 @@ class WorkflowDAO {
 
   private WorkflowDAO() {}
 
-  static WorkflowInitResult initWorkflowStatus(
+  public static WorkflowInitResult initWorkflowStatus(
       DbContext ctx,
       WorkflowStatusInternal initStatus,
       Integer maxRetries,
@@ -346,7 +351,7 @@ class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param result output serialized as json
    */
-  static void recordWorkflowOutput(DbContext ctx, String workflowId, String result)
+  public static void recordWorkflowOutput(DbContext ctx, String workflowId, String result)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
@@ -360,7 +365,7 @@ class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param error output serialized as json
    */
-  static void recordWorkflowError(DbContext ctx, String workflowId, String error)
+  public static void recordWorkflowError(DbContext ctx, String workflowId, String error)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
@@ -368,7 +373,8 @@ class WorkflowDAO {
     }
   }
 
-  static String getWorkflowSerialization(DbContext ctx, String workflowId) throws SQLException {
+  public static String getWorkflowSerialization(DbContext ctx, String workflowId)
+      throws SQLException {
     var sql =
         "SELECT serialization FROM \"%s\".workflow_status WHERE workflow_uuid = ?"
             .formatted(ctx.schema());
@@ -384,14 +390,15 @@ class WorkflowDAO {
     return null;
   }
 
-  static WorkflowStatus getWorkflowStatus(DbContext ctx, String workflowId) throws SQLException {
+  public static WorkflowStatus getWorkflowStatus(DbContext ctx, String workflowId)
+      throws SQLException {
 
     try (var conn = ctx.getConnection()) {
       return getWorkflowStatus(conn, ctx.schema(), ctx.serializer(), workflowId);
     }
   }
 
-  static WorkflowStatus getWorkflowStatus(
+  public static WorkflowStatus getWorkflowStatus(
       Connection conn, String schema, DBOSSerializer serializer, String workflowId)
       throws SQLException {
     if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
@@ -414,7 +421,7 @@ class WorkflowDAO {
     return null;
   }
 
-  static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
+  public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
       throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
     Objects.requireNonNull(delay, "delay must not be null");
@@ -449,7 +456,7 @@ class WorkflowDAO {
     }
   }
 
-  static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
+  public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """
           UPDATE "%s".workflow_status
@@ -469,7 +476,7 @@ class WorkflowDAO {
     }
   }
 
-  static List<WorkflowStatus> listWorkflows(DbContext ctx, ListWorkflowsInput input)
+  public static List<WorkflowStatus> listWorkflows(DbContext ctx, ListWorkflowsInput input)
       throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
@@ -645,7 +652,7 @@ class WorkflowDAO {
     return workflows;
   }
 
-  static List<WorkflowAggregateRow> getWorkflowAggregates(
+  public static List<WorkflowAggregateRow> getWorkflowAggregates(
       DbContext ctx, GetWorkflowAggregatesInput input) throws SQLException {
 
     if (input == null) {
@@ -815,7 +822,7 @@ class WorkflowDAO {
     return info;
   }
 
-  static List<WorkflowStatus> getPendingWorkflows(
+  public static List<WorkflowStatus> getPendingWorkflows(
       DbContext ctx, List<String> executorIds, String appVersion) throws SQLException {
     var input =
         new ListWorkflowsInput()
@@ -826,7 +833,7 @@ class WorkflowDAO {
   }
 
   @SuppressWarnings("unchecked")
-  static <T> Result<T> awaitWorkflowResult(
+  public static <T> Result<T> awaitWorkflowResult(
       DbContext ctx, Duration dbPollingInterval, String workflowId) throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
@@ -882,7 +889,7 @@ class WorkflowDAO {
     }
   }
 
-  static void recordChildWorkflow(
+  public static void recordChildWorkflow(
       DbContext ctx,
       String parentId,
       String childId, // workflowId of the child
@@ -899,8 +906,8 @@ class WorkflowDAO {
     }
   }
 
-  static Optional<String> checkChildWorkflow(DbContext ctx, String workflowUuid, int functionId)
-      throws SQLException {
+  public static Optional<String> checkChildWorkflow(
+      DbContext ctx, String workflowUuid, int functionId) throws SQLException {
 
     final String sql =
         """
@@ -931,7 +938,7 @@ class WorkflowDAO {
     return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
   }
 
-  static void cancelWorkflows(DbContext ctx, List<String> workflowIds) throws SQLException {
+  public static void cancelWorkflows(DbContext ctx, List<String> workflowIds) throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
@@ -964,7 +971,7 @@ class WorkflowDAO {
     }
   }
 
-  static void resumeWorkflows(DbContext ctx, List<String> workflowIds, String queueName)
+  public static void resumeWorkflows(DbContext ctx, List<String> workflowIds, String queueName)
       throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
@@ -1002,8 +1009,8 @@ class WorkflowDAO {
     }
   }
 
-  static void deleteWorkflows(DbContext ctx, List<String> workflowIds, boolean deleteChildren)
-      throws SQLException {
+  public static void deleteWorkflows(
+      DbContext ctx, List<String> workflowIds, boolean deleteChildren) throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
@@ -1036,7 +1043,8 @@ class WorkflowDAO {
     }
   }
 
-  static Set<String> getWorkflowChildren(DbContext ctx, String workflowId) throws SQLException {
+  public static Set<String> getWorkflowChildren(DbContext ctx, String workflowId)
+      throws SQLException {
     var children = new HashSet<String>();
     var toProcess = new ArrayDeque<String>();
     toProcess.add(workflowId);
@@ -1069,7 +1077,7 @@ class WorkflowDAO {
     return children;
   }
 
-  static String forkWorkflow(
+  public static String forkWorkflow(
       DbContext ctx, String originalWorkflowId, int startStep, ForkOptions options)
       throws SQLException {
 
@@ -1307,7 +1315,7 @@ class WorkflowDAO {
     return null;
   }
 
-  static void garbageCollect(DbContext ctx, Instant cutoff, Long rowsThreshold)
+  public static void garbageCollect(DbContext ctx, Instant cutoff, Long rowsThreshold)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
@@ -1338,7 +1346,7 @@ class WorkflowDAO {
     }
   }
 
-  static List<MetricData> getMetrics(DbContext ctx, Instant startTime, Instant endTime)
+  public static List<MetricData> getMetrics(DbContext ctx, Instant startTime, Instant endTime)
       throws SQLException {
     final var start = Objects.requireNonNull(startTime).toEpochMilli();
     final var end = Objects.requireNonNull(endTime).toEpochMilli();
@@ -1469,7 +1477,7 @@ class WorkflowDAO {
     return streams;
   }
 
-  static List<ExportedWorkflow> exportWorkflow(
+  public static List<ExportedWorkflow> exportWorkflow(
       DbContext ctx, String workflowId, boolean exportChildren) throws SQLException {
 
     var workflowIds =
@@ -1495,7 +1503,8 @@ class WorkflowDAO {
     return workflows;
   }
 
-  static void importWorkflow(DbContext ctx, List<ExportedWorkflow> workflows) throws SQLException {
+  public static void importWorkflow(DbContext ctx, List<ExportedWorkflow> workflows)
+      throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
     var wfSQL =
@@ -1685,7 +1694,8 @@ class WorkflowDAO {
     }
   }
 
-  static Map<String, Object> getAllEvents(DbContext ctx, String workflowId) throws SQLException {
+  public static Map<String, Object> getAllEvents(DbContext ctx, String workflowId)
+      throws SQLException {
     try (var conn = ctx.getConnection()) {
       var events = listWorkflowEvents(conn, ctx.schema(), workflowId);
       var result = new LinkedHashMap<String, Object>();

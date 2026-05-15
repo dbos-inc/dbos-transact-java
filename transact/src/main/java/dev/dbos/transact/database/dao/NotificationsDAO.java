@@ -1,7 +1,11 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase.NotifcationRegistry;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -22,13 +26,13 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class NotificationsDAO {
+public class NotificationsDAO {
 
   private NotificationsDAO() {}
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
-  static void send(
+  public static void send(
       DbContext ctx,
       String workflowId,
       int stepId,
@@ -110,7 +114,7 @@ class NotificationsDAO {
     }
   }
 
-  static void sendDirect(
+  public static void sendDirect(
       DbContext ctx,
       String destinationId,
       Object message,
@@ -148,7 +152,7 @@ class NotificationsDAO {
     }
   }
 
-  static Object recv(
+  public static Object recv(
       DbContext ctx,
       String workflowId,
       int stepId,
@@ -323,7 +327,7 @@ class NotificationsDAO {
     }
   }
 
-  static void setEvent(
+  public static void setEvent(
       DbContext ctx,
       String workflowId,
       int functionId,
@@ -382,7 +386,7 @@ class NotificationsDAO {
     }
   }
 
-  static Object getEvent(
+  public static Object getEvent(
       DbContext ctx,
       NotifcationRegistry notifcationRegistry,
       Duration dbPollingInterval,
@@ -506,7 +510,7 @@ class NotificationsDAO {
     // }
   }
 
-  static List<NotificationInfo> getAllNotifications(DbContext ctx, String workflowId)
+  public static List<NotificationInfo> getAllNotifications(DbContext ctx, String workflowId)
       throws SQLException {
     DBOSSerializer serializer = ctx.serializer();
     var sql =

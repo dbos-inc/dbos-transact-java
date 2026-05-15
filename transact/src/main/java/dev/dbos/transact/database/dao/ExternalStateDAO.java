@@ -1,4 +1,7 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
+
+import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.ExternalState;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -6,11 +9,11 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
-class ExternalStateDAO {
+public class ExternalStateDAO {
 
   private ExternalStateDAO() {}
 
-  static Optional<ExternalState> getExternalState(
+  public static Optional<ExternalState> getExternalState(
       DbContext ctx, String service, String workflowName, String key) throws SQLException {
     final String sql =
         """
@@ -38,7 +41,8 @@ class ExternalStateDAO {
     }
   }
 
-  static ExternalState upsertExternalState(DbContext ctx, ExternalState state) throws SQLException {
+  public static ExternalState upsertExternalState(DbContext ctx, ExternalState state)
+      throws SQLException {
     final var sql =
         """
           INSERT INTO "%s".event_dispatch_kv (

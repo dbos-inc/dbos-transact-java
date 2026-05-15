@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.execution.SchedulerService;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -20,11 +21,11 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.UUID;
 
-class SchedulesDAO {
+public class SchedulesDAO {
 
   private SchedulesDAO() {}
 
-  static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
+  public static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
     try (Connection conn = ctx.getConnection()) {
       createSchedule(conn, ctx.schema(), ctx.serializer(), schedule);
     }
@@ -80,7 +81,7 @@ class SchedulesDAO {
     }
   }
 
-  static List<WorkflowSchedule> listSchedules(
+  public static List<WorkflowSchedule> listSchedules(
       DbContext ctx,
       List<ScheduleStatus> statuses,
       List<String> workflowNames,
@@ -148,7 +149,8 @@ class SchedulesDAO {
     }
   }
 
-  static Optional<WorkflowSchedule> getSchedule(DbContext ctx, String name) throws SQLException {
+  public static Optional<WorkflowSchedule> getSchedule(DbContext ctx, String name)
+      throws SQLException {
     DBOSSerializer serializer = ctx.serializer();
     String sql =
         """
@@ -172,11 +174,11 @@ class SchedulesDAO {
     }
   }
 
-  static void pauseSchedule(DbContext ctx, String name) throws SQLException {
+  public static void pauseSchedule(DbContext ctx, String name) throws SQLException {
     setScheduleStatus(ctx, name, ScheduleStatus.PAUSED);
   }
 
-  static void resumeSchedule(DbContext ctx, String name) throws SQLException {
+  public static void resumeSchedule(DbContext ctx, String name) throws SQLException {
     setScheduleStatus(ctx, name, ScheduleStatus.ACTIVE);
   }
 
@@ -196,7 +198,7 @@ class SchedulesDAO {
     }
   }
 
-  static void updateScheduleLastFiredAt(DbContext ctx, String name, Instant lastFiredAt)
+  public static void updateScheduleLastFiredAt(DbContext ctx, String name, Instant lastFiredAt)
       throws SQLException {
     String sql =
         """
@@ -212,7 +214,7 @@ class SchedulesDAO {
     }
   }
 
-  static void deleteSchedule(DbContext ctx, String name) throws SQLException {
+  public static void deleteSchedule(DbContext ctx, String name) throws SQLException {
     try (var conn = ctx.getConnection()) {
       deleteSchedule(conn, ctx.schema(), name);
     }
@@ -231,7 +233,8 @@ class SchedulesDAO {
     }
   }
 
-  static void applySchedules(DbContext ctx, List<WorkflowSchedule> schedules) throws SQLException {
+  public static void applySchedules(DbContext ctx, List<WorkflowSchedule> schedules)
+      throws SQLException {
     try (var conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
       try {

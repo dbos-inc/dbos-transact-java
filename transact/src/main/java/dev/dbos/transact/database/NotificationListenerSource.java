@@ -1,6 +1,9 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.database.SystemDatabase.NotificationSource;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalMap;
+import dev.dbos.transact.database.signal.Subscription;
 
 import java.sql.Connection;
 import java.sql.SQLException;
