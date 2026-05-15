@@ -11,11 +11,13 @@ import javax.sql.DataSource;
 record DbContext(
     DataSource dataSource, String schema, DBOSSerializer serializer, BooleanSupplier closed) {
 
-  Connection getConnection() throws SQLException {
+  public Connection getConnection() throws SQLException {
     return dataSource.getConnection();
   }
 
-  boolean isClosed() {
-    return closed.getAsBoolean();
+  public void checkClosed() {
+    if (closed.getAsBoolean()) {
+      throw new IllegalStateException("Database is closed");
+    }
   }
 }

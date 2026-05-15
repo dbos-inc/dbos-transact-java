@@ -839,7 +839,7 @@ class WorkflowDAO {
             .formatted(ctx.schema());
 
     while (true) {
-      if (ctx.isClosed()) throw new IllegalStateException("SystemDatabase is closed");
+      ctx.checkClosed();
       try (Connection connection = ctx.getConnection();
           PreparedStatement stmt = connection.prepareStatement(sql)) {
 
@@ -895,7 +895,7 @@ class WorkflowDAO {
         new StepResult(parentId, functionId, functionName, null, null, null, null)
             .withChildWorkflowId(childId);
     try (var conn = ctx.getConnection()) {
-      StepsDAO.recordStepResultTxn(conn, ctx.schema(), result, null, null);
+      StepsDAO.recordStepResult(conn, ctx.schema(), result, null, null);
     }
   }
 

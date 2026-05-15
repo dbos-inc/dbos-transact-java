@@ -322,20 +322,20 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
-  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
+  public StepResult checkStepResult(String workflowId, int functionId, String functionName) {
 
     return dbRetry(
         () -> {
           try (Connection connection = ctx.getConnection()) {
-            return StepsDAO.checkStepExecutionTxn(
+            return StepsDAO.checkStepResult(
                 connection, ctx.schema(), workflowId, functionId, functionName);
           }
         });
   }
 
-  public void recordStepResultTxn(StepResult result, long startTime) {
+  public void recordStepResult(StepResult result, long startTime) {
     var et = System.currentTimeMillis();
-    dbRetry(() -> StepsDAO.recordStepResultTxn(ctx, result, startTime, et));
+    dbRetry(() -> StepsDAO.recordStepResult(ctx, result, startTime, et));
   }
 
   public List<StepInfo> listWorkflowSteps(
@@ -398,13 +398,13 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             NotificationsDAO.recv(
                 ctx,
-                notificationSource,
-                dbPollingInterval,
                 workflowId,
                 stepId,
+                timeout,
                 timeoutStepId,
                 topic,
-                timeout));
+                dbPollingInterval,
+                notificationSource));
   }
 
   public void setEvent(

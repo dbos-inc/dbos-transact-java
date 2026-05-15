@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.json.SerializationUtil.SerializedResult;
 
 public record StepResult(
     String workflowId,
@@ -30,6 +31,18 @@ public record StepResult(
 
   public StepResult withSerialization(String v) {
     return new StepResult(workflowId, stepId, stepName, output, error, childWorkflowId, v);
+  }
+
+  public static StepResult ofOutput(
+      String workflowId, int stepId, String stepName, SerializedResult result) {
+    return new StepResult(
+        workflowId, stepId, stepName, result.serializedValue(), null, null, result.serialization());
+  }
+
+  public static StepResult ofError(
+      String workflowId, int stepId, String stepName, SerializedResult result) {
+    return new StepResult(
+        workflowId, stepId, stepName, null, result.serializedValue(), null, result.serialization());
   }
 
   @SuppressWarnings("unchecked")

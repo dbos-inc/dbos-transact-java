@@ -25,16 +25,27 @@ class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
-  static void recordStepResultTxn(
+  static void recordStepResult(DbContext ctx, StepResult result, long startTimeEpochMs)
+      throws SQLException {
+    recordStepResult(ctx, result, startTimeEpochMs, System.currentTimeMillis());
+  }
+
+  static void recordStepResult(
       DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
-      recordStepResultTxn(conn, ctx.schema(), result, startTimeEpochMs, endTimeEpochMs);
+      recordStepResult(conn, ctx.schema(), result, startTimeEpochMs, endTimeEpochMs);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
-  static void recordStepResultTxn(
+  static void recordStepResult(
+      Connection conn, String schema, StepResult result, long startTimeEpochMs)
+      throws SQLException {
+    recordStepResult(conn, schema, result, startTimeEpochMs, System.currentTimeMillis());
+  }
+
+  static void recordStepResult(
       Connection conn, String schema, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
       throws SQLException {
 
@@ -96,9 +107,16 @@ class StepsDAO {
     }
   }
 
-  static StepResult checkStepExecutionTxn(
+  static StepResult checkStepResult(
+      DbContext ctx, String workflowId, int functionId, String functionName) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
+    }
+  }
+
+  static StepResult checkStepResult(
       Connection conn, String schema, String workflowId, int functionId, String functionName)
-      throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
+      throws SQLException {
 
     Objects.requireNonNull(schema);
     final String sql =
@@ -187,11 +205,11 @@ class StepsDAO {
     StringBuilder sqlBuilder =
         new StringBuilder(
             """
-          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
-          FROM "%s".operation_outputs
-          WHERE workflow_uuid = ?
-          ORDER BY function_id
-        """
+              SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
+              FROM "%s".operation_outputs
+              WHERE workflow_uuid = ?
+              ORDER BY function_id
+            """
                 .formatted(schema));
 
     if (limit != null) {
@@ -303,7 +321,7 @@ class StepsDAO {
       var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
       if (checkpointName == null) {
         var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
-        recordStepResultTxn(conn, ctx.schema(), output, System.currentTimeMillis(), null);
+        recordStepResult(conn, ctx.schema(), output, System.currentTimeMillis(), null);
         return true;
       } else {
         return patchName.equals(checkpointName);
@@ -331,8 +349,7 @@ class StepsDAO {
     StepResult recordedOutput;
 
     try (var conn = ctx.getConnection()) {
-      recordedOutput =
-          checkStepExecutionTxn(conn, ctx.schema(), workflowUuid, functionId, functionName);
+      recordedOutput = checkStepResult(conn, ctx.schema(), workflowUuid, functionId, functionName);
     }
 
     long endTime;
@@ -368,7 +385,7 @@ class StepsDAO {
                 null,
                 null,
                 serializedValue.serialization());
-        recordStepResultTxn(ctx, output, startTime, (long) endTime);
+        recordStepResult(ctx, output, startTime, (long) endTime);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }

@@ -1045,7 +1045,7 @@ public class DBOSExecutor implements AutoCloseable {
     var stepId = ctx.getAndIncrementFunctionId();
     logger.debug("executeStep #{} ({}) for workflow {}", stepId, options.name(), workflowId);
 
-    var prevResult = systemDatabase.checkStepExecutionTxn(workflowId, stepId, options.name());
+    var prevResult = systemDatabase.checkStepResult(workflowId, stepId, options.name());
     if (prevResult != null) {
       if (prevResult.error() != null) {
         var t =
@@ -1122,7 +1122,7 @@ public class DBOSExecutor implements AutoCloseable {
               serializedException.serializedValue(),
               childWorkflowId,
               serializedException.serialization());
-      systemDatabase.recordStepResultTxn(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime);
       throw (E) exception;
     } else {
       logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
@@ -1137,7 +1137,7 @@ public class DBOSExecutor implements AutoCloseable {
               null,
               childWorkflowId,
               serializedOutput.serialization());
-      systemDatabase.recordStepResultTxn(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime);
       return output;
     }
   }

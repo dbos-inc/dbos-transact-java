@@ -10,11 +10,13 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -47,7 +49,7 @@ class NotificationsDAO {
 
       try {
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(conn, ctx.schema(), workflowId, stepId, functionName);
+            StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
 
         if (recordedOutput != null) {
           logger.debug(
@@ -92,7 +94,7 @@ class NotificationsDAO {
         }
 
         var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-        StepsDAO.recordStepResultTxn(
+        StepsDAO.recordStepResult(
             conn, ctx.schema(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
@@ -148,155 +150,132 @@ class NotificationsDAO {
 
   static Object recv(
       DbContext ctx,
-      NotifcationRegistry notifcationRegistry,
-      Duration dbPollingInterval,
       String workflowId,
       int stepId,
-      int timeoutFunctionId,
+      Duration timeout,
+      int timeoutStepId,
       String topic,
-      Duration timeout)
+      Duration dbPollingInterval,
+      NotifcationRegistry notifcationRegistry)
       throws SQLException {
 
-    return null;
-    // DBOSSerializer serializer = ctx.serializer();
-    // var startTime = System.currentTimeMillis();
-    // String functionName = "DBOS.recv";
-    // String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
+    if (Objects.requireNonNull(workflowId).isEmpty()) {
+      throw new IllegalArgumentException("workflowId must not be empty");
+    }
 
-    // StepResult recordedOutput;
-    // try (Connection c = ctx.getConnection()) {
-    //   recordedOutput =
-    //       StepsDAO.checkStepExecutionTxn(c, ctx.schema(), workflowId, stepId, functionName);
-    // }
+    var stepName = "DBOS.recv";
+    topic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
-    // if (recordedOutput != null) {
-    //   logger.debug("Replaying recv, id: {}, topic: {}", stepId, finalTopic);
-    //   if (recordedOutput.output() != null) {
-    //     return SerializationUtil.deserializeValue(
-    //         recordedOutput.output(), recordedOutput.serialization(), serializer);
-    //   } else {
-    //     throw new RuntimeException("No output recorded in the last recv");
-    //   }
-    // } else {
-    //   logger.debug("Running recv, wfid {}, id: {}, topic: {}", workflowId, stepId, finalTopic);
-    // }
+    var recordedResult = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
+    if (recordedResult != null) {
+      logger.debug(
+          "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
+      if (recordedResult.output() != null) {
+        return recordedResult.toResult(ctx.serializer());
+      }
+      logger.debug(
+          "Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
+    }
 
-    // String payload = workflowId + "::" + finalTopic;
-    // var lockPair = new NotificationListenerService.LockConditionPair();
+    var startTime = System.currentTimeMillis();
+    var messageKey = new SignalKey.Message(workflowId, topic);
+    dbPollingInterval = Objects.requireNonNullElse(dbPollingInterval, Duration.ofSeconds(1));
 
-    // double actualTimeout = timeout.toMillis();
-    // var targetTime = System.currentTimeMillis() + actualTimeout;
-    // var checkedDBForSleep = false;
+    try (var messageSignal = notifcationRegistry.subscribe(messageKey)) {
+      while (true) {
+        ctx.checkClosed();
+        var sql =
+            """
+              SELECT topic FROM "%s".notifications
+              WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
+            """
+                .formatted(ctx.schema());
+        try (var conn = ctx.getConnection();
+            var stmt = conn.prepareStatement(sql)) {
+          stmt.setString(1, workflowId);
+          stmt.setString(2, topic);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              // query for results
+              break;
+            }
+          }
+        }
 
-    // try {
-    //   lockPair.lock.lock();
-    //   boolean success = notificationService.registerNotificationCondition(payload, lockPair);
-    //   if (!success) {
-    //     throw new DBOSWorkflowExecutionConflictException(workflowId);
-    //   }
+        // check cancelled
 
-    //   while (true) {
-    //     if (ctx.isClosed()) throw new IllegalStateException("SystemDatabase is closed");
-    //     boolean hasExistingNotification;
-    //     try (Connection conn = ctx.getConnection()) {
-    //       final String sql =
-    //           """
-    //           SELECT topic FROM "%s".notifications
-    //           WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
-    //           """
-    //               .formatted(ctx.schema());
+        var sleepDuration = StepsDAO.durableSleepDuration(ctx, workflowId, timeoutStepId, timeout);
+        if (sleepDuration.isNegative() || sleepDuration.isZero()) {
+          var output = SerializationUtil.serializeValue(null, null, ctx.serializer());
+          var stepResult = StepResult.ofOutput(workflowId, stepId, stepName, output);
+          StepsDAO.recordStepResult(ctx, stepResult, startTime);
+          return null;
+        }
 
-    //       try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-    //         stmt.setString(1, workflowId);
-    //         stmt.setString(2, finalTopic);
-    //         try (ResultSet rs = stmt.executeQuery()) {
-    //           hasExistingNotification = rs.next();
-    //         }
-    //       }
-    //     }
+        var loopDuration =
+            dbPollingInterval.compareTo(sleepDuration) <= 0 ? dbPollingInterval : sleepDuration;
 
-    //     if (hasExistingNotification) break;
+        SignalMap.awaitAny(loopDuration, messageSignal);
+      }
+    }
 
-    //     var nowTime = System.currentTimeMillis();
+    ctx.checkClosed();
+    var sql =
+        """
+          UPDATE "%1$s".notifications
+          SET consumed = TRUE
+          WHERE destination_uuid = ?
+            AND topic = ?
+            AND consumed = FALSE
+            AND message_uuid = (
+              SELECT message_uuid FROM "%1$s".notifications
+              WHERE destination_uuid = ?
+                AND topic = ?
+                AND consumed = FALSE
+              ORDER BY created_at_epoch_ms ASC
+              LIMIT 1
+            )
+          RETURNING message, serialization
+        """
+            .formatted(ctx.schema());
 
-    //     if (!checkedDBForSleep) {
-    //       actualTimeout =
-    //           StepsDAO.durableSleepDuration(ctx, workflowId, timeoutFunctionId,
-    // timeout).toMillis();
-    //       checkedDBForSleep = true;
-    //       targetTime = nowTime + actualTimeout;
-    //     }
-    //     if (nowTime >= targetTime) break;
-    //     long timeoutMs = (long) Math.min(targetTime - nowTime, dbPollingInterval.toMillis());
+    try (var conn = ctx.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        String serializedMessage = null;
+        String serialization = null;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+          stmt.setString(1, workflowId);
+          stmt.setString(2, topic);
+          stmt.setString(3, workflowId);
+          stmt.setString(4, topic);
 
-    //     try {
-    //       lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
-    //     } catch (InterruptedException e) {
-    //       Thread.currentThread().interrupt();
-    //       throw new RuntimeException("Interrupted while waiting for message", e);
-    //     }
-    //   }
-    // } finally {
-    //   lockPair.lock.unlock();
-    //   notificationService.unregisterNotificationCondition(payload);
-    // }
+          // Note, if there are two executors running the same workflow waiting on the same recv,
+          // only the first one will return a row here. The second one get a null message but then
+          // throw a WorkflowExecutionConflictException when it records the step result.
+          try (ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              serializedMessage = rs.getString("message");
+              serialization = rs.getString("serialization");
+            }
+          }
+        }
 
-    // try (Connection conn = ctx.getConnection()) {
-    //   conn.setAutoCommit(false);
+        var deserializedMessage =
+            SerializationUtil.deserializeValue(serializedMessage, serialization, ctx.serializer());
 
-    //   try {
-    //     final String sql =
-    //         """
-    //         UPDATE "%1$s".notifications
-    //         SET consumed = TRUE
-    //         WHERE destination_uuid = ?
-    //           AND topic = ?
-    //           AND consumed = FALSE
-    //           AND message_uuid = (
-    //             SELECT message_uuid FROM "%1$s".notifications
-    //             WHERE destination_uuid = ?
-    //               AND topic = ?
-    //               AND consumed = FALSE
-    //             ORDER BY created_at_epoch_ms ASC
-    //             LIMIT 1
-    //           )
-    //         RETURNING message, serialization
-    //         """
-    //             .formatted(ctx.schema());
+        var output =
+            new StepResult(
+                workflowId, stepId, stepName, serializedMessage, null, null, serialization);
+        StepsDAO.recordStepResult(conn, ctx.schema(), output, startTime);
 
-    //     String serializedMessage = null;
-    //     String serialization = null;
-    //     try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-    //       stmt.setString(1, workflowId);
-    //       stmt.setString(2, finalTopic);
-    //       stmt.setString(3, workflowId);
-    //       stmt.setString(4, finalTopic);
-
-    //       try (ResultSet rs = stmt.executeQuery()) {
-    //         if (rs.next()) {
-    //           serializedMessage = rs.getString("message");
-    //           serialization = rs.getString("serialization");
-    //         }
-    //       }
-    //     }
-
-    //     var recvdMessage =
-    //         SerializationUtil.deserializeValue(serializedMessage, serialization, serializer);
-
-    //     StepResult output =
-    //         new StepResult(
-    //             workflowId, stepId, functionName, serializedMessage, null, null, serialization);
-    //     StepsDAO.recordStepResultTxn(
-    //         conn, ctx.schema(), output, startTime, System.currentTimeMillis());
-
-    //     conn.commit();
-    //     return recvdMessage;
-
-    //   } catch (Exception e) {
-    //     conn.rollback();
-    //     throw e;
-    //   }
-    // }
+        conn.commit();
+        return deserializedMessage;
+      } catch (Exception e) {
+        conn.rollback();
+        throw e;
+      }
+    }
   }
 
   private static void setEvent(
@@ -366,8 +345,7 @@ class NotificationsDAO {
       try {
         if (asStep) {
           var recordedOutput =
-              StepsDAO.checkStepExecutionTxn(
-                  conn, ctx.schema(), workflowId, functionId, functionName);
+              StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
           if (recordedOutput != null) {
             logger.debug(
                 "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
@@ -391,8 +369,7 @@ class NotificationsDAO {
         if (asStep) {
           StepResult output =
               new StepResult(workflowId, functionId, functionName, null, null, null, null);
-          StepsDAO.recordStepResultTxn(
-              conn, ctx.schema(), output, startTime, System.currentTimeMillis());
+          StepsDAO.recordStepResult(conn, ctx.schema(), output, startTime);
         }
 
         conn.commit();

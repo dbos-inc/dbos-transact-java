@@ -44,8 +44,7 @@ class StreamsDAO {
 
       try {
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(
-                conn, ctx.schema(), workflowId, functionId, functionName);
+            StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
 
         if (recordedOutput != null) {
           logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
@@ -58,7 +57,7 @@ class StreamsDAO {
         insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
 
         var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
-        StepsDAO.recordStepResultTxn(
+        StepsDAO.recordStepResult(
             conn, ctx.schema(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
