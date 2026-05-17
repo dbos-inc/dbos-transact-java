@@ -210,7 +210,7 @@ public class QueuesDAO {
             started_at_epoch_ms = ?,
             workflow_deadline_epoch_ms = CASE
                 WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                THEN EXTRACT(epoch FROM NOW()) * 1000 + workflow_timeout_ms
+                THEN (EXTRACT(epoch FROM now()) * 1000)::bigint + workflow_timeout_ms
                 ELSE workflow_deadline_epoch_ms
             END
         WHERE workflow_uuid = ?

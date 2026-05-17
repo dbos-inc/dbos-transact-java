@@ -198,28 +198,40 @@ public class PgSqlClientTest {
             .toArray(String[]::new);
     var sql =
         """
-      SELECT dbos.enqueue_workflow(
-        workflow_name => ?,
-        class_name => ?,
-        queue_name => ?,
-        positional_args => ?,
-        deduplication_id => ?,
-        timeout_ms => ?,
-        deadline_epoch_ms => ?)
-      """;
+        SELECT dbos.enqueue_workflow(
+          ?, -- workflow_name
+          ?, -- queue_name
+          ?, -- positional_args
+          ?, -- named_args
+          ?, -- class_name
+          ?, -- config_name
+          ?, -- workflow_id
+          ?, -- app_version
+          ?, -- timeout_ms
+          ?, -- deadline_epoch_ms
+          ?, -- deduplication_id
+          ?, -- priority
+          ? -- queue_partition_key
+        )
+        """;
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareCall(sql)) {
       Long timeoutMS = timeout == null ? null : timeout.toMillis();
       Long deadlineMS = deadline == null ? null : deadline.toEpochMilli();
-      stmt.setString(1, Objects.requireNonNull(workflowName));
-      stmt.setString(2, "ClientServiceImpl");
-      stmt.setString(3, "testQueue");
-      stmt.setString(5, dedupId);
-      stmt.setObject(6, timeoutMS, Types.BIGINT);
-      stmt.setObject(7, deadlineMS, Types.BIGINT);
-
       var argsArray = conn.createArrayOf("json", jsonArgs);
-      stmt.setObject(4, argsArray);
+      stmt.setString(1, Objects.requireNonNull(workflowName)); // workflow_name
+      stmt.setString(2, "testQueue"); // queue_name
+      stmt.setObject(3, argsArray); // positional_args
+      stmt.setObject(4, null); // named_args
+      stmt.setString(5, "ClientServiceImpl"); // class_name
+      stmt.setObject(6, null); // config_name
+      stmt.setObject(7, null); // workflow_id
+      stmt.setObject(8, null); // app_version
+      stmt.setObject(9, timeoutMS, Types.BIGINT); // timeout_ms
+      stmt.setObject(10, deadlineMS, Types.BIGINT); // deadline_epoch_ms
+      stmt.setString(11, dedupId); // deduplication_id
+      stmt.setObject(12, null); // priority
+      stmt.setObject(13, null); // queue_partition_key
       try (ResultSet rs = stmt.executeQuery()) {
         return rs.next() ? rs.getString(1) : null;
       } finally {
@@ -232,7 +244,7 @@ public class PgSqlClientTest {
       throws SQLException, JsonProcessingException {
     String jsonMessage = MAPPER.writeValueAsString(Objects.requireNonNull(message));
 
-    var sql = "SELECT dbos.send_message(?, ?::json, topic => ?, idempotency_key => ?)";
+    var sql = "SELECT dbos.send_message(?, ?::json, ?, ?)";
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareCall(sql)) {
       stmt.setString(1, Objects.requireNonNull(destinationId));
