@@ -123,6 +123,8 @@ public class JdbcStepFactoryTest {
   @BeforeEach
   void beforeEach() throws SQLException {
 
+    pgContainer.createDatabase();
+
     dbosConfig = pgContainer.dbosConfig();
     dataSource = pgContainer.dataSource();
 

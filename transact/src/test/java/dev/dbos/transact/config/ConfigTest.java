@@ -276,6 +276,10 @@ public class ConfigTest {
   @Test
   public void configPGSimpleDataSource() throws Exception {
 
+    // dbos.launch doesn't attempt to create the database when
+    // receiving data source in DBOSConfig
+    pgContainer.createDatabase();
+
     var jdbcUrl = pgContainer.jdbcUrl();
     assertTrue(jdbcUrl.startsWith("jdbc:"));
 
@@ -315,6 +319,10 @@ public class ConfigTest {
 
   @Test
   public void configHikariDataSource() throws Exception {
+
+    // need to create database since we are connecting
+    // the data source prior to dbos launch
+    pgContainer.createDatabase();
 
     var poolName = "dbos-configDataSource";
 

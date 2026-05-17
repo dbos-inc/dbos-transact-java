@@ -3,9 +3,9 @@ package dev.dbos.transact.utils;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.migrations.MigrationManager;
 
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.UUID;
@@ -61,15 +61,6 @@ public class PgContainer implements AutoCloseable {
     pgContainer = acquire();
     dbName = "test_" + UUID.randomUUID().toString().replace("-", "");
     jdbcUrl = pgContainer.getJdbcUrl().replaceFirst("/[^/]+$", "/" + dbName);
-
-    try (var conn =
-            DriverManager.getConnection(
-                pgContainer.getJdbcUrl(), pgContainer.getUsername(), pgContainer.getPassword());
-        var stmt = conn.createStatement()) {
-      stmt.execute("CREATE DATABASE " + dbName);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   @Override
@@ -113,5 +104,9 @@ public class PgContainer implements AutoCloseable {
 
   public DBOSClient dbosClient() {
     return new DBOSClient(jdbcUrl(), username(), password());
+  }
+
+  public void createDatabase() {
+    MigrationManager.createDatabaseIfNotExists(jdbcUrl(), username(), password());
   }
 }

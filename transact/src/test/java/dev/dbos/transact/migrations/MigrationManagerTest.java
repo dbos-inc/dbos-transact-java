@@ -12,6 +12,7 @@ import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 
@@ -145,6 +146,39 @@ class MigrationManagerTest {
   }
 
   @Test
+  void testRunMigrations_CreatesDatabaseIfNotExists() throws Exception {
+    var dbosConfig = pgContainer.dbosConfig();
+    var pair = MigrationManager.extractDbAndPostgresUrl(pgContainer.jdbcUrl());
+
+    // Verify the database does not exist before running migrations
+    try (var conn =
+            DriverManager.getConnection(
+                pair.url(), pgContainer.username(), pgContainer.password());
+        var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
+      stmt.setString(1, pair.database());
+      try (var rs = stmt.executeQuery()) {
+        assertFalse(
+            rs.next(),
+            "Database '%s' should not exist before runMigrations".formatted(pair.database()));
+      }
+    }
+
+    MigrationManager.runMigrations(dbosConfig);
+
+    // Verify the database now exists after running migrations
+    try (var conn =
+            DriverManager.getConnection(
+                pair.url(), pgContainer.username(), pgContainer.password());
+        var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
+      stmt.setString(1, pair.database());
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(
+            rs.next(), "Database '%s' should exist after runMigrations".formatted(pair.database()));
+      }
+    }
+  }
+
+  @Test
   void testRunMigrations_IsIdempotent() throws Exception {
 
     testRunMigrations_CreatesTables();
@@ -204,6 +238,11 @@ class MigrationManagerTest {
 
   @Test
   void testOriginalMigration1ThenAllMigrations_NotificationsPrimaryKey() throws Exception {
+
+    // need to create database since we are connecting
+    // the data source prior to dbos launch
+    pgContainer.createDatabase();
+
     try (Connection conn = dataSource.getConnection()) {
       // Ensure schema and migration table exist
       MigrationManager.ensureDbosSchema(conn, Constants.DB_SCHEMA);
