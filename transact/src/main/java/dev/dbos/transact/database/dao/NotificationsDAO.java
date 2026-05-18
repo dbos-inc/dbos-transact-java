@@ -462,7 +462,8 @@ public class NotificationsDAO {
                 : timeout.minus(Duration.between(startTime, Instant.now()));
 
         if (sleepDuration.isNegative() || sleepDuration.isZero()) {
-          result = new GetEventResult(null, null);
+          var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
+          result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
           break;
         }
 

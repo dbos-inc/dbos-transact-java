@@ -51,6 +51,8 @@ interface EventsService {
   void setMultipleEventsWorkflow();
 
   Map<String, Object> getAllEventsWorkflow(String workflowId);
+
+  Object recvWorkflow(String topic, Duration timeout);
 }
 
 class EventsServiceImpl implements EventsService {
@@ -163,6 +165,12 @@ class EventsServiceImpl implements EventsService {
   @Override
   public Map<String, Object> getAllEventsWorkflow(String workflowId) {
     return dbos.getAllEvents(workflowId);
+  }
+
+  @Workflow
+  @Override
+  public Object recvWorkflow(String topic, Duration timeout) {
+    return dbos.recv(topic, timeout).orElse(null);
   }
 
   public void resetLatches() {
@@ -424,6 +432,40 @@ public class EventsTest {
       Map<String, Object> replayed = proxy.getAllEventsWorkflow(wf1Id);
       assertEquals(events, replayed);
     }
+  }
+
+  @Test
+  public void testGetEventTimeoutReplayable() throws Exception {
+    var wfid = UUID.randomUUID().toString();
+
+    // Run workflow — getEvent times out and records a step result with null output
+    try (var ctx = new WorkflowOptions(wfid).setContext()) {
+      assertNull(proxy.getEventWorkflow("nonexistent-wfid", "somekey", Duration.ofMillis(50)));
+    }
+
+    // Simulate crash: keep step result, reset workflow to PENDING
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+
+    // Recover — workflow body re-executes, getEvent step replays via toResult()
+    var handle = DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(wfid, true, false);
+    assertNull(handle.getResult());
+  }
+
+  @Test
+  public void testRecvTimeoutReplayable() throws Exception {
+    var wfid = UUID.randomUUID().toString();
+
+    // Run workflow — recv times out and records a step result with null output
+    try (var ctx = new WorkflowOptions(wfid).setContext()) {
+      assertNull(proxy.recvWorkflow("some-topic", Duration.ofMillis(50)));
+    }
+
+    // Simulate crash: keep step result, reset workflow to PENDING
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+
+    // Recover — workflow body re-executes, recv step replays via toResult()
+    var handle = DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(wfid, true, false);
+    assertNull(handle.getResult());
   }
 
   @Test
