@@ -54,14 +54,12 @@ public class PgContainer implements AutoCloseable {
       }
       return container;
     }
-    container  = containerSupplier();
+    container = containerSupplier();
     var jdbcUrl = container.getJdbcUrl().replaceFirst("/[^/]+$", "/" + DB_NAME);
 
-      MigrationManager.runMigrations(
-            jdbcUrl, container.getUsername(), container.getPassword(), "dbos", true);
-            return container;
-
-
+    MigrationManager.runMigrations(
+        jdbcUrl, container.getUsername(), container.getPassword(), "dbos", true);
+    return container;
   }
 
   static void release(JdbcDatabaseContainer<?> c) {
