@@ -18,6 +18,7 @@ import java.util.ArrayList;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,17 +40,20 @@ class MigrationManagerTest {
     "workflow_status"
   };
 
-  // Expected functions after migrations
-  static final String[] EXPECTED_FUNCTIONS = {
-    "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
+  // Expected functions after migrations (always present)
+  static final String[] EXPECTED_FUNCTIONS = {"enqueue_workflow", "send_message"};
+
+  // Expected LISTEN/NOTIFY functions after migrations (PG only, absent on CRDB)
+  static final String[] EXPECTED_NOTIFY_FUNCTIONS = {
+    "notifications_function", "workflow_events_function"
   };
 
-  // Expected LISTEN/NOTIFY triggers after migrations (only when useListenNotify=true)
+  // Expected LISTEN/NOTIFY triggers after migrations (PG only, absent on CRDB)
   static final String[] EXPECTED_NOTIFY_TRIGGERS = {
     "dbos_notifications_trigger", "dbos_workflow_events_trigger"
   };
 
-  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
   @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
@@ -75,8 +79,13 @@ class MigrationManagerTest {
       for (String function : EXPECTED_FUNCTIONS) {
         assertFunctionExists(metaData, function);
       }
-      for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
-        assertTriggerExists(conn, trigger);
+      if (!PgContainer.USE_COCKROACH_DB) {
+        for (String function : EXPECTED_NOTIFY_FUNCTIONS) {
+          assertFunctionExists(metaData, function);
+        }
+        for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
+          assertTriggerExists(conn, trigger);
+        }
       }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA, true));
@@ -135,8 +144,13 @@ class MigrationManagerTest {
       for (String function : EXPECTED_FUNCTIONS) {
         assertFunctionExists(metaData, function, schema);
       }
-      for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
-        assertTriggerExists(conn, trigger, schema);
+      if (!PgContainer.USE_COCKROACH_DB) {
+        for (String function : EXPECTED_NOTIFY_FUNCTIONS) {
+          assertFunctionExists(metaData, function, schema);
+        }
+        for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
+          assertTriggerExists(conn, trigger, schema);
+        }
       }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(schema, true));
@@ -238,6 +252,7 @@ class MigrationManagerTest {
 
   @Test
   void testOriginalMigration1ThenAllMigrations_NotificationsPrimaryKey() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "PG-only migration history test");
 
     // need to create database since we are connecting
     // the data source prior to dbos launch

@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class JdbcStepFactoryInitTest {
-  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
 
   @BeforeEach
   void beforeEach() throws SQLException {

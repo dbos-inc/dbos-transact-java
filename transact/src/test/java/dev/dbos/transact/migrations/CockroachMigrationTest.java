@@ -5,25 +5,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.Isolated;
-import org.testcontainers.cockroachdb.CockroachContainer;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Tests that LISTEN/NOTIFY functions and triggers are created on PG and omitted on CRDB. Each test
  * spins up its own container so these tests are always tied to the specified DB type regardless of
  * how PgContainer is configured for the rest of the test suite.
  */
-@Isolated
 class CockroachMigrationTest {
 
   @Test
   void testPg_isCockroachReturnsFalse() throws Exception {
-    try (var pg = new PostgreSQLContainer("postgres:latest")) {
+    try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
           SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
@@ -37,7 +34,7 @@ class CockroachMigrationTest {
 
   @Test
   void testCrdb_isCockroachReturnsTrue() throws Exception {
-    try (var crdb = new CockroachContainer("cockroachdb/cockroach:latest")) {
+    try (var crdb = PgContainer.getCRDB()) {
       crdb.start();
       try (var ds =
           SystemDatabase.createDataSource(
@@ -52,7 +49,7 @@ class CockroachMigrationTest {
 
   @Test
   void testPg_notifyFunctionsAndTriggersPresent() throws Exception {
-    try (var pg = new PostgreSQLContainer("postgres:latest")) {
+    try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
           SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
@@ -72,7 +69,7 @@ class CockroachMigrationTest {
 
   @Test
   void testPg_noListenNotify_notifyFunctionsAndTriggersAbsent() throws Exception {
-    try (var pg = new PostgreSQLContainer("postgres:latest")) {
+    try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
           SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
@@ -97,7 +94,7 @@ class CockroachMigrationTest {
 
   @Test
   void testCrdb_notifyFunctionsAndTriggersAbsent() throws Exception {
-    try (var crdb = new CockroachContainer("cockroachdb/cockroach:latest")) {
+    try (var crdb = PgContainer.getCRDB()) {
       crdb.start();
       try (var ds =
           SystemDatabase.createDataSource(
