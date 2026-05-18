@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class CustomSchemaTest {
-  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
   private static final String schema = "F8nny_sCHem@-n@m3";
   @AutoClose DBOS dbos;
   private HawkService proxy;

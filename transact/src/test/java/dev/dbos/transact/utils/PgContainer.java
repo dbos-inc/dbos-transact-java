@@ -3,85 +3,112 @@ package dev.dbos.transact.utils;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.migrations.MigrationManager;
 
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Semaphore;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.testcontainers.cockroachdb.CockroachContainer;
+import org.testcontainers.containers.JdbcDatabaseContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class PgContainer implements AutoCloseable {
 
-  private static final int SIZE = Runtime.getRuntime().availableProcessors();
-  private static final BlockingQueue<PostgreSQLContainer> POOL = new ArrayBlockingQueue<>(SIZE);
-  private static final Semaphore PERMITS = new Semaphore(SIZE);
+  public static final boolean USE_COCKROACH_DB =
+      Boolean.parseBoolean(System.getenv("DBOS_TEST_USE_COCKROACH_DB"));
+  private static final String DB_NAME = "dbos_test_db";
 
-  static {
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  var containers = new ArrayList<PostgreSQLContainer>();
-                  POOL.drainTo(containers);
-                  containers.forEach(PostgreSQLContainer::stop);
-                }));
+  private static final Queue<JdbcDatabaseContainer<?>> POOL = new ConcurrentLinkedQueue<>();
+
+  public static PostgreSQLContainer getPG() {
+    return new PostgreSQLContainer("postgres:18");
   }
 
-  static PostgreSQLContainer acquire() {
-    try {
-      PERMITS.acquire();
-      var container = POOL.poll();
-      if (container == null) {
-        container = new PostgreSQLContainer("postgres:18");
-        container.start();
+  public static CockroachContainer getCRDB() {
+    return new CockroachContainer("cockroachdb/cockroach:latest-v26.2");
+  }
+
+  private static JdbcDatabaseContainer<?> containerSupplier() {
+    var container = USE_COCKROACH_DB ? getCRDB() : getPG();
+    container.start();
+    return container;
+  }
+
+  static JdbcDatabaseContainer<?> acquire() {
+    var container = POOL.poll();
+    if (container != null) {
+      var jdbcUrl = container.getJdbcUrl().replaceFirst("/[^/]+$", "/" + DB_NAME);
+      try (var conn =
+          DriverManager.getConnection(jdbcUrl, container.getUsername(), container.getPassword())) {
+        truncateDbosTables(conn);
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
       }
       return container;
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+    }
+    container = containerSupplier();
+    var jdbcUrl = container.getJdbcUrl().replaceFirst("/[^/]+$", "/" + DB_NAME);
+
+    MigrationManager.runMigrations(
+        jdbcUrl, container.getUsername(), container.getPassword(), "dbos", true);
+    return container;
+  }
+
+  static void release(JdbcDatabaseContainer<?> c) {
+    POOL.offer(c);
+  }
+
+  public static void truncateDbosTables(Connection conn) throws SQLException {
+    // truncate the DBOS tables from the test DB before returning to the pool
+    var truncate =
+        """
+        TRUNCATE TABLE
+          "dbos".workflow_status,
+          "dbos".operation_outputs,
+          "dbos".workflow_events,
+          "dbos".workflow_events_history,
+          "dbos".notifications,
+          "dbos".event_dispatch_kv,
+          "dbos".streams,
+          "dbos".application_versions,
+          "dbos".workflow_schedules
+        CASCADE
+        """;
+    try (var stmt = conn.createStatement()) {
+      stmt.execute(truncate);
     }
   }
 
-  static void release(PostgreSQLContainer c) {
-    POOL.offer(c);
-    PERMITS.release();
-  }
-
-  private final PostgreSQLContainer pgContainer;
+  private final JdbcDatabaseContainer<?> pgContainer;
   private final String jdbcUrl;
-  private final String dbName;
+  private final boolean pooled;
 
   public PgContainer() {
-    // take a container from the pool and create a new database for it
-    pgContainer = acquire();
-    dbName = "test_" + UUID.randomUUID().toString().replace("-", "");
-    jdbcUrl = pgContainer.getJdbcUrl().replaceFirst("/[^/]+$", "/" + dbName);
+    this(false);
+  }
 
-    try (var conn =
-            DriverManager.getConnection(
-                pgContainer.getJdbcUrl(), pgContainer.getUsername(), pgContainer.getPassword());
-        var stmt = conn.createStatement()) {
-      stmt.execute("CREATE DATABASE " + dbName);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
+  private PgContainer(boolean requireFresh) {
+    pooled = !requireFresh;
+    pgContainer = pooled ? acquire() : containerSupplier();
+    jdbcUrl = pgContainer.getJdbcUrl().replaceFirst("/[^/]+$", "/" + DB_NAME);
+  }
+
+  public static PgContainer createFresh() {
+    return new PgContainer(true);
   }
 
   @Override
   public void close() throws Exception {
-    // drop the database we created and return the container too the pool
-    var _jdbcUrl = pgContainer.getJdbcUrl();
-    try (var conn = DriverManager.getConnection(_jdbcUrl, username(), password());
-        var stmt = conn.createStatement()) {
-      var sql = "DROP DATABASE IF EXISTS %s WITH (FORCE)".formatted(dbName);
-      stmt.execute(sql);
+    if (pooled) {
+      release(pgContainer);
+    } else {
+      pgContainer.close();
     }
-    release(pgContainer);
   }
 
   public String jdbcUrl() {
@@ -113,5 +140,9 @@ public class PgContainer implements AutoCloseable {
 
   public DBOSClient dbosClient() {
     return new DBOSClient(jdbcUrl(), username(), password());
+  }
+
+  public void createDatabase() {
+    MigrationManager.createDatabaseIfNotExists(jdbcUrl(), username(), password());
   }
 }

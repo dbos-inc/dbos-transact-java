@@ -38,8 +38,9 @@ public class MigrateCommand implements Callable<Integer> {
     out.format("  System Database: %s\n", dbOptions.url());
     out.format("  System Database User: %s\n", dbOptions.user());
 
+    // TODO: add option for useListenNotify
     MigrationManager.runMigrations(
-        dbOptions.url(), dbOptions.user(), dbOptions.password(), dbOptions.schema());
+        dbOptions.url(), dbOptions.user(), dbOptions.password(), dbOptions.schema(), true);
     grantDBOSSchemaPermissions(out, dbOptions.schema());
     return 0;
   }

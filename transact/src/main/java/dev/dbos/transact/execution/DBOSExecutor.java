@@ -11,7 +11,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.ExternalState;
-import dev.dbos.transact.database.GetWorkflowEventContext;
+import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
@@ -471,11 +471,10 @@ public class DBOSExecutor implements AutoCloseable {
     DBOSContext ctx = DBOSContextHolder.get();
 
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-      int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-      GetWorkflowEventContext callerCtx =
-          new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
-      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
+      int stepId = ctx.getAndIncrementFunctionId();
+      int timeoutStepId = ctx.getAndIncrementFunctionId();
+      GetEventCaller caller = new GetEventCaller(ctx.getWorkflowId(), stepId, timeoutStepId);
+      return systemDatabase.getEvent(workflowId, key, timeout, caller);
     }
 
     return systemDatabase.getEvent(workflowId, key, timeout, null);
@@ -1045,7 +1044,7 @@ public class DBOSExecutor implements AutoCloseable {
     var stepId = ctx.getAndIncrementFunctionId();
     logger.debug("executeStep #{} ({}) for workflow {}", stepId, options.name(), workflowId);
 
-    var prevResult = systemDatabase.checkStepExecutionTxn(workflowId, stepId, options.name());
+    var prevResult = systemDatabase.checkStepResult(workflowId, stepId, options.name());
     if (prevResult != null) {
       if (prevResult.error() != null) {
         var t =
@@ -1122,7 +1121,7 @@ public class DBOSExecutor implements AutoCloseable {
               serializedException.serializedValue(),
               childWorkflowId,
               serializedException.serialization());
-      systemDatabase.recordStepResultTxn(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime);
       throw (E) exception;
     } else {
       logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
@@ -1137,7 +1136,7 @@ public class DBOSExecutor implements AutoCloseable {
               null,
               childWorkflowId,
               serializedOutput.serialization());
-      systemDatabase.recordStepResultTxn(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime);
       return output;
     }
   }

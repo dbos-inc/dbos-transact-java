@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -14,31 +15,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.sql.DataSource;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class QueuesDAO {
+public class QueuesDAO {
 
   private QueuesDAO() {}
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  static List<String> getAndStartQueuedWorkflows(
-      DataSource dataSource,
-      String schema,
-      Queue queue,
-      String executorId,
-      String appVersion,
-      String partitionKey)
+  public static List<String> getAndStartQueuedWorkflows(
+      DbContext ctx, Queue queue, String executorId, String appVersion, String partitionKey)
       throws SQLException {
 
     if (partitionKey != null && partitionKey.length() == 0) {
       partitionKey = null;
     }
 
-    try (Connection connection = dataSource.getConnection()) {
+    try (Connection connection = ctx.getConnection()) {
       connection.setAutoCommit(false);
 
       try (Statement stmt = connection.createStatement()) {
@@ -59,7 +53,7 @@ class QueuesDAO {
               AND status NOT IN (?, ?)
               AND started_at_epoch_ms > ?
             """
-                .formatted(schema);
+                .formatted(ctx.schema());
         if (partitionKey != null) {
           limiterQuery += " AND queue_partition_key = ?";
         }
@@ -94,7 +88,7 @@ class QueuesDAO {
               FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
-                .formatted(schema);
+                .formatted(ctx.schema());
         if (partitionKey != null) {
           pendingQuery += " AND queue_partition_key = ?";
         }
@@ -163,7 +157,7 @@ class QueuesDAO {
                 AND status = ?
                 AND (application_version = ? OR application_version IS NULL)
           """
-              .formatted(schema);
+              .formatted(ctx.schema());
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
@@ -216,12 +210,12 @@ class QueuesDAO {
             started_at_epoch_ms = ?,
             workflow_deadline_epoch_ms = CASE
                 WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                THEN EXTRACT(epoch FROM NOW()) * 1000 + workflow_timeout_ms
+                THEN (EXTRACT(epoch FROM now()) * 1000)::bigint + workflow_timeout_ms
                 ELSE workflow_deadline_epoch_ms
             END
         WHERE workflow_uuid = ?
           """
-              .formatted(schema);
+              .formatted(ctx.schema());
 
       try (var ps = connection.prepareStatement(updateQuery)) {
         for (var id : dequeuedWorkflowIds) {
@@ -251,8 +245,7 @@ class QueuesDAO {
     }
   }
 
-  static boolean clearQueueAssignment(DataSource dataSource, String schema, String workflowId)
-      throws SQLException {
+  public static boolean clearQueueAssignment(DbContext ctx, String workflowId) throws SQLException {
 
     final String sql =
         """
@@ -260,8 +253,8 @@ class QueuesDAO {
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """
-            .formatted(schema);
-    try (Connection connection = dataSource.getConnection();
+            .formatted(ctx.schema());
+    try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
       stmt.setString(2, workflowId);
@@ -272,7 +265,7 @@ class QueuesDAO {
     }
   }
 
-  static List<String> getQueuePartitions(DataSource dataSource, String schema, String queueName)
+  public static List<String> getQueuePartitions(DbContext ctx, String queueName)
       throws SQLException {
 
     final String sql =
@@ -283,9 +276,9 @@ class QueuesDAO {
             AND status = ?
             AND queue_partition_key IS NOT NULL
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (Connection connection = dataSource.getConnection();
+    try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, queueName);
       stmt.setString(2, WorkflowState.ENQUEUED.name());

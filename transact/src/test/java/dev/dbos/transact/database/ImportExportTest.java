@@ -59,8 +59,8 @@ public class ImportExportTest {
     sysdb.recordWorkflowOutput(wfId, null);
 
     long now = System.currentTimeMillis();
-    sysdb.recordStepResultTxn(new StepResult(wfId, 0, "step0"), now - 2000);
-    sysdb.recordStepResultTxn(new StepResult(wfId, 1, "step1"), now - 1000);
+    sysdb.recordStepResult(new StepResult(wfId, 0, "step0"), now - 2000);
+    sysdb.recordStepResult(new StepResult(wfId, 1, "step1"), now - 1000);
 
     // asStep=false: writes to workflow_events + workflow_events_history, not operation_outputs
     sysdb.setEvent(wfId, 0, "event-key-1", "event-val-1", false, null);

@@ -39,6 +39,7 @@ dependencies {
   testImplementation(libs.junit.jupiter)
   testImplementation(libs.junit.pioneer)
   testImplementation(libs.system.stubs.jupiter)
+  testImplementation(libs.junit.platform.engine)
   testRuntimeOnly(libs.junit.platform.launcher)
 
   testImplementation(libs.java.websocket)
@@ -48,6 +49,7 @@ dependencies {
   testImplementation(libs.rest.assured)
   testImplementation(libs.kryo)
   testImplementation(libs.maven.artifact)
+  testImplementation(libs.testcontainers.cockroachdb)
   testImplementation(libs.testcontainers.postgresql)
 }
 

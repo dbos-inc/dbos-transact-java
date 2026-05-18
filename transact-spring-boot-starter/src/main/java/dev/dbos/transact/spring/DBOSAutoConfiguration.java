@@ -142,6 +142,7 @@ public class DBOSAutoConfiguration {
     config = config.withAdminServer(props.getAdminServer().isEnabled());
     config = config.withAdminServerPort(props.getAdminServer().getPort());
     config = config.withMigrate(props.getDatasource().isMigrate());
+    config = config.withUseListenNotify(props.getDatasource().isUseListenNotify());
     config = config.withEnablePatching(props.isEnablePatching());
 
     List<String> listenQueues = props.getListenQueues();

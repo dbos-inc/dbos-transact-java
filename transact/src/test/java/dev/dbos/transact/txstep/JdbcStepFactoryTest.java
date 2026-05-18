@@ -123,11 +123,15 @@ public class JdbcStepFactoryTest {
   @BeforeEach
   void beforeEach() throws SQLException {
 
+    pgContainer.createDatabase();
+
     dbosConfig = pgContainer.dbosConfig();
     dataSource = pgContainer.dataSource();
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
+      stmt.execute("DROP TABLE IF EXISTS greetings");
+      stmt.execute("DROP TABLE IF EXISTS dbos.tx_step_outputs");
       stmt.execute(
           "CREATE TABLE greetings(name text NOT NULL, greet_count integer DEFAULT 0, PRIMARY KEY(name))");
     }

@@ -17,10 +17,16 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 import org.junit.jupiter.api.AutoClose;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class JdbcStepFactoryInitTest {
-  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
+
+  @BeforeEach
+  void beforeEach() throws SQLException {
+    pgContainer.createDatabase();
+  }
 
   static boolean validateSchema(Connection conn, String schema) throws SQLException {
     Objects.requireNonNull(schema);

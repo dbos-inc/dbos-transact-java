@@ -1,5 +1,6 @@
-package dev.dbos.transact.database;
+package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -10,29 +11,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.sql.DataSource;
-
-class StreamsDAO {
+public class StreamsDAO {
 
   private StreamsDAO() {}
 
-  static void writeStreamFromStep(
-      DataSource dataSource,
-      String schema,
+  public static void writeStreamFromStep(
+      DbContext ctx,
       String workflowId,
       int functionId,
       String key,
       Object value,
       String serializationFormat)
       throws SQLException {
-    try (Connection conn = dataSource.getConnection()) {
-      insertStream(conn, schema, workflowId, functionId, key, value, serializationFormat);
+    try (var conn = ctx.getConnection()) {
+      insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
     }
   }
 
-  static void writeStreamFromWorkflow(
-      DataSource dataSource,
-      String schema,
+  public static void writeStreamFromWorkflow(
+      DbContext ctx,
       String workflowId,
       int functionId,
       String key,
@@ -43,12 +40,12 @@ class StreamsDAO {
         STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
     long startTime = System.currentTimeMillis();
 
-    try (Connection conn = dataSource.getConnection()) {
+    try (var conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, conn, schema);
+            StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
 
         if (recordedOutput != null) {
           logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
@@ -58,10 +55,11 @@ class StreamsDAO {
           logger.debug("Running writeStream, id: {}, key: {}", functionId, key);
         }
 
-        insertStream(conn, schema, workflowId, functionId, key, value, serializationFormat);
+        insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
 
         var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
-        StepsDAO.recordStepResultTxn(output, startTime, System.currentTimeMillis(), conn, schema);
+        StepsDAO.recordStepResult(
+            conn, ctx.schema(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
 
@@ -128,15 +126,13 @@ class StreamsDAO {
     }
   }
 
-  static void closeStream(
-      DataSource dataSource, String schema, String workflowId, int functionId, String key)
+  public static void closeStream(DbContext ctx, String workflowId, int functionId, String key)
       throws SQLException {
     writeStreamFromWorkflow(
-        dataSource, schema, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
+        ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
   }
 
-  static Object readStream(
-      DataSource dataSource, String schema, String workflowId, String key, int offset)
+  public static Object readStream(DbContext ctx, String workflowId, String key, int offset)
       throws SQLException {
     String sql =
         """
@@ -144,9 +140,9 @@ class StreamsDAO {
         FROM "%s".streams
         WHERE workflow_uuid = ? AND key = ? AND "offset" = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       stmt.setString(2, key);
@@ -167,8 +163,8 @@ class StreamsDAO {
     }
   }
 
-  static Map<String, List<Object>> getAllStreamEntries(
-      DataSource dataSource, String schema, String workflowId) throws SQLException {
+  public static Map<String, List<Object>> getAllStreamEntries(DbContext ctx, String workflowId)
+      throws SQLException {
     String sql =
         """
         SELECT key, value, serialization
@@ -176,10 +172,10 @@ class StreamsDAO {
         WHERE workflow_uuid = ?
         ORDER BY key, "offset"
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
     var streams = new LinkedHashMap<String, List<Object>>();
-    try (Connection conn = dataSource.getConnection();
+    try (Connection conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {

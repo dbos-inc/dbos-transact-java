@@ -23,29 +23,30 @@ public class MigrationManager {
     Objects.requireNonNull(config, "DBOS Config must not be null");
 
     if (config.dataSource() != null) {
-      runMigrations(config.dataSource(), config.databaseSchema());
+      runMigrations(config.dataSource(), config.databaseSchema(), config.useListenNotify());
     } else {
       createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
       try (var ds =
           SystemDatabase.createDataSource(
               config.databaseUrl(), config.dbUser(), config.dbPassword())) {
-        runMigrations(ds, config.databaseSchema());
+        runMigrations(ds, config.databaseSchema(), config.useListenNotify());
       }
     }
   }
 
-  public static void runMigrations(String url, String user, String password, String schema) {
+  public static void runMigrations(
+      String url, String user, String password, String schema, boolean useListenNotify) {
     Objects.requireNonNull(url, "database url must not be null");
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password)) {
-      runMigrations(ds, schema);
+      runMigrations(ds, schema, useListenNotify);
     }
   }
 
-  private static void runMigrations(DataSource ds, String schema) {
+  private static void runMigrations(DataSource ds, String schema, boolean useListenNotify) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
 
@@ -54,9 +55,15 @@ public class MigrationManager {
     }
 
     try (var conn = ds.getConnection()) {
+
+      var isCockroach = SystemDatabase.isCockroach(conn);
+      if (isCockroach) {
+        useListenNotify = false;
+      }
+
       ensureDbosSchema(conn, schema);
       ensureMigrationTable(conn, schema);
-      var migrations = getMigrations(schema);
+      var migrations = getMigrations(schema, useListenNotify);
       runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
@@ -173,6 +180,19 @@ public class MigrationManager {
     return 0;
   }
 
+  private static boolean notificationsPrimaryKeyExists(Connection conn, String schema)
+      throws SQLException {
+    var sql =
+        "SELECT 1 FROM information_schema.table_constraints"
+            + " WHERE table_schema = ? AND table_name = 'notifications' AND constraint_type = 'PRIMARY KEY'";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
   static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
     Objects.requireNonNull(schema, "schema must not be null");
     var lastApplied = getCurrentSysDbVersion(conn, schema);
@@ -184,10 +204,27 @@ public class MigrationManager {
       }
 
       logger.info("Applying DBOS system database schema migration {}", migrationIndex);
-      try (var stmt = conn.createStatement()) {
-        stmt.execute(migrations.get(i));
-      } catch (SQLException e) {
-        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+
+      // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
+      // (guard for installs that were created before the primary key was added to migration 1).
+      boolean skipMigration = false;
+      if (migrationIndex == 10) {
+        try {
+          skipMigration = notificationsPrimaryKeyExists(conn, schema);
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to check notifications primary key", e);
+        }
+        if (skipMigration) {
+          logger.info("Migration 10 skipped, primary key already exists");
+        }
+      }
+
+      if (!skipMigration) {
+        try (var stmt = conn.createStatement()) {
+          stmt.execute(migrations.get(i));
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+        }
       }
 
       try {
@@ -212,11 +249,12 @@ public class MigrationManager {
     }
   }
 
-  public static List<String> getMigrations(String schema) {
+  public static List<String> getMigrations(String schema, boolean useListenNotify) {
     Objects.requireNonNull(schema);
+
     var migrations =
         List.of(
-            MIGRATION_1,
+            migration1(useListenNotify),
             MIGRATION_2,
             MIGRATION_3,
             MIGRATION_4,
@@ -238,8 +276,13 @@ public class MigrationManager {
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
+  static String migration1(boolean useListenNotify) {
+    return useListenNotify ? MIGRATION_1 + MIGRATION_1_NOTIFY : MIGRATION_1;
+  }
+
   static final String MIGRATION_1 =
       """
+      -- Enable uuid extension for generating UUIDs
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       CREATE TABLE "%1$s".workflow_status (
@@ -253,8 +296,8 @@ public class MigrationManager {
           output TEXT,
           error TEXT,
           executor_id TEXT,
-          created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+          created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
+          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
           application_version TEXT,
           application_id TEXT,
           class_name VARCHAR(255) DEFAULT NULL,
@@ -294,26 +337,11 @@ public class MigrationManager {
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
-          created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+          created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
           FOREIGN KEY (destination_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
       CREATE INDEX idx_workflow_topic ON "%1$s".notifications (destination_uuid, topic);
-
-      -- Create notification function
-      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
-      DECLARE
-          payload text := NEW.destination_uuid || '::' || NEW.topic;
-      BEGIN
-          PERFORM pg_notify('dbos_notifications_channel', payload);
-          RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-
-      -- Create notification trigger
-      CREATE TRIGGER dbos_notifications_trigger
-      AFTER INSERT ON "%1$s".notifications
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
 
       CREATE TABLE "%1$s".workflow_events (
           workflow_uuid TEXT NOT NULL,
@@ -323,21 +351,6 @@ public class MigrationManager {
           FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-
-      -- Create events function
-      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
-      DECLARE
-          payload text := NEW.workflow_uuid || '::' || NEW.key;
-      BEGIN
-          PERFORM pg_notify('dbos_workflow_events_channel', payload);
-          RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-
-      -- Create events trigger
-      CREATE TRIGGER dbos_workflow_events_trigger
-      AFTER INSERT ON "%1$s".workflow_events
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
 
       CREATE TABLE "%1$s".streams (
           workflow_uuid TEXT NOT NULL,
@@ -358,6 +371,39 @@ public class MigrationManager {
           update_time NUMERIC(38,15),
           PRIMARY KEY (service_name, workflow_fn_name, key)
       );
+      """;
+
+  static final String MIGRATION_1_NOTIFY =
+      """
+      -- Create notification function
+      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
+      DECLARE
+          payload text := NEW.destination_uuid || '::' || NEW.topic;
+      BEGIN
+          PERFORM pg_notify('dbos_notifications_channel', payload);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      -- Create notification trigger
+      CREATE TRIGGER dbos_notifications_trigger
+      AFTER INSERT ON "%1$s".notifications
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
+
+      -- Create events function
+      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
+      DECLARE
+          payload text := NEW.workflow_uuid || '::' || NEW.key;
+      BEGIN
+          PERFORM pg_notify('dbos_workflow_events_channel', payload);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      -- Create events trigger
+      CREATE TRIGGER dbos_workflow_events_trigger
+      AFTER INSERT ON "%1$s".workflow_events
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
       """;
 
   static final String MIGRATION_2 =
@@ -397,7 +443,7 @@ public class MigrationManager {
 
   static final String MIGRATION_7 =
       """
-      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" TEXT DEFAULT NULL
       """;
 
   static final String MIGRATION_8 =
@@ -421,17 +467,7 @@ public class MigrationManager {
 
   static final String MIGRATION_10 =
       """
-      DO $$
-      BEGIN
-          IF NOT EXISTS (
-              SELECT 1 FROM information_schema.table_constraints
-              WHERE table_schema = '%1$s'
-              AND table_name = 'notifications'
-              AND constraint_type = 'PRIMARY KEY'
-          ) THEN
-              ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
-          END IF;
-      END $$;
+      ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
       """;
 
   static final String MIGRATION_11 =
