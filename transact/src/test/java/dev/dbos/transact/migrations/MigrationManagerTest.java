@@ -88,7 +88,10 @@ class MigrationManagerTest {
         }
       }
 
-      var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA, true));
+      var migrations =
+          new ArrayList<>(
+              MigrationManager.getMigrations(
+                  Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB));
       var version = getVersion(conn);
       assertEquals(migrations.size(), version);
     }
@@ -153,7 +156,9 @@ class MigrationManagerTest {
         }
       }
 
-      var migrations = new ArrayList<>(MigrationManager.getMigrations(schema, true));
+      var migrations =
+          new ArrayList<>(
+              MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB));
       var version = getVersion(conn, schema);
       assertEquals(migrations.size(), version);
     }
@@ -201,7 +206,10 @@ class MigrationManagerTest {
   void testAddingNewMigration() throws Exception {
     testRunMigrations_CreatesTables();
 
-    var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA, true));
+    var migrations =
+        new ArrayList<>(
+            MigrationManager.getMigrations(
+                Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB));
     migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
 
     try (var conn = dataSource.getConnection()) {
@@ -273,7 +281,8 @@ class MigrationManagerTest {
       assertTableExists(metaData, "notifications");
 
       // Now run all current migrations (including migration10 which ensures primary key)
-      var allMigrations = MigrationManager.getMigrations(Constants.DB_SCHEMA, true);
+      var allMigrations =
+          MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB);
       MigrationManager.runDbosMigrations(conn, Constants.DB_SCHEMA, allMigrations);
 
       // Verify that the notifications table has a primary key
