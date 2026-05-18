@@ -39,7 +39,6 @@ jobs:
         run: ./gradlew clean build
         env:
           PGPASSWORD: dbos
-          JDKVERSION: ${{ matrix.jdk-version }}
           SCALE_TEST: "true"
 
       - name: Test Summary

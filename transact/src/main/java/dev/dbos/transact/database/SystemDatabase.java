@@ -47,13 +47,13 @@ import org.slf4j.LoggerFactory;
 
 public class SystemDatabase implements AutoCloseable {
 
-  public interface NotifcationRegistry {
+  public interface NotificationRegistry {
     Subscription subscribe(SignalKey.Message key);
 
     Subscription subscribe(SignalKey.Event key);
   }
 
-  public interface NotificationSource extends NotifcationRegistry {
+  public interface NotificationSource extends NotificationRegistry {
     void start();
 
     void close();
@@ -121,7 +121,7 @@ public class SystemDatabase implements AutoCloseable {
     try {
       useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
     } catch (SQLException e) {
-      logger.error("Failed to determine if dataSouce is CockroachDB", e);
+      logger.error("Failed to determine if dataSource is CockroachDB", e);
       useListenNotify = false;
     }
 

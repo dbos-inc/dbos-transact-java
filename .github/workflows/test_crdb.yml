@@ -27,7 +27,6 @@ jobs:
         run: ./gradlew clean build
         env:
           PGPASSWORD: dbos
-          JDKVERSION: '17'
           DBOS_TEST_USE_COCKROACH_DB: 'true'
 
       - name: Test Summary
@@ -41,7 +40,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results-crdb-temurin-17
+          name: test-results-crdb-temurin-25
           path: |
             transact/build/reports/tests/
             transact/build/test-results/

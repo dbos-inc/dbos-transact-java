@@ -3,7 +3,7 @@ package dev.dbos.transact.database.dao;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
-import dev.dbos.transact.database.SystemDatabase.NotifcationRegistry;
+import dev.dbos.transact.database.SystemDatabase.NotificationRegistry;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
@@ -163,7 +163,7 @@ public class NotificationsDAO {
       int timeoutStepId,
       String topic,
       Duration dbPollingInterval,
-      NotifcationRegistry notifcationRegistry)
+      NotificationRegistry notifcationRegistry)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
@@ -421,7 +421,7 @@ public class NotificationsDAO {
       Duration timeout,
       @Nullable GetEventCaller caller,
       Duration dbPollingInterval,
-      NotifcationRegistry notifcationRegistry)
+      NotificationRegistry notifcationRegistry)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {

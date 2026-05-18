@@ -41,7 +41,12 @@ public class SignalMap<K> {
             () ->
                 map.compute(key, (k, e) -> e != null && e.refs.decrementAndGet() == 0 ? null : e));
 
-    entry.future.thenAccept(sub::complete);
+    entry.future.thenAccept(
+        r -> {
+          if (!sub.closed) {
+            sub.complete(r);
+          }
+        });
     return sub;
   }
 

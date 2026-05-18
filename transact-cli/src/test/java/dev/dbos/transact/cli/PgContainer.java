@@ -34,7 +34,7 @@ public class PgContainer implements AutoCloseable {
       PERMITS.acquire();
       var container = POOL.poll();
       if (container == null) {
-        container = new PostgreSQLContainer("postgres:latest");
+        container = new PostgreSQLContainer("postgres:18");
         container.start();
       }
       return container;

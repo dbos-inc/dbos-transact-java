@@ -166,29 +166,20 @@ class MigrationManagerTest {
 
     // Verify the database does not exist before running migrations
     try (var conn =
-            DriverManager.getConnection(
-                pair.url(), pgContainer.username(), pgContainer.password());
-        var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
-      stmt.setString(1, pair.database());
-      try (var rs = stmt.executeQuery()) {
-        assertFalse(
-            rs.next(),
-            "Database '%s' should not exist before runMigrations".formatted(pair.database()));
-      }
+        DriverManager.getConnection(pair.url(), pgContainer.username(), pgContainer.password())) {
+      assertFalse(
+          databaseExists(conn, pair.database()),
+          "Database '%s' should not exist before runMigrations".formatted(pair.database()));
     }
 
     MigrationManager.runMigrations(dbosConfig);
 
     // Verify the database now exists after running migrations
     try (var conn =
-            DriverManager.getConnection(
-                pair.url(), pgContainer.username(), pgContainer.password());
-        var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
-      stmt.setString(1, pair.database());
-      try (var rs = stmt.executeQuery()) {
-        assertTrue(
-            rs.next(), "Database '%s' should exist after runMigrations".formatted(pair.database()));
-      }
+        DriverManager.getConnection(pair.url(), pgContainer.username(), pgContainer.password())) {
+      assertTrue(
+          databaseExists(conn, pair.database()),
+          "Database '%s' should exist after runMigrations".formatted(pair.database()));
     }
   }
 
@@ -367,6 +358,15 @@ class MigrationManagerTest {
         assertTrue(
             rs.next(), "Trigger %s should exist in schema %s".formatted(triggerName, schema));
       }
+    }
+  }
+
+  static boolean databaseExists(Connection conn, String dbName) throws Exception {
+    try (ResultSet rs = conn.getMetaData().getCatalogs()) {
+      while (rs.next()) {
+        if (dbName.equals(rs.getString("TABLE_CAT"))) return true;
+      }
+      return false;
     }
   }
 

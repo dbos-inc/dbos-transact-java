@@ -26,11 +26,11 @@ public class PgContainer implements AutoCloseable {
   private static final Queue<JdbcDatabaseContainer<?>> POOL = new ConcurrentLinkedQueue<>();
 
   public static PostgreSQLContainer getPG() {
-    return new PostgreSQLContainer("postgres:latest");
+    return new PostgreSQLContainer("postgres:18");
   }
 
   public static CockroachContainer getCRDB() {
-    return new CockroachContainer("cockroachdb/cockroach:latest");
+    return new CockroachContainer("cockroachdb/cockroach:latest-v26.2");
   }
 
   private static JdbcDatabaseContainer<?> containerSupplier() {
