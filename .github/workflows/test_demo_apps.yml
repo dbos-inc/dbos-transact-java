@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  publish-maven-local:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
