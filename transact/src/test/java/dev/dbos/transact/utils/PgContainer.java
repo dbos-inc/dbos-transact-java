@@ -17,9 +17,6 @@ import org.testcontainers.cockroachdb.CockroachContainer;
 import org.testcontainers.containers.JdbcDatabaseContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-// TODO: custom junit.jupiter.execution.parallel.config.strategy / dynamic.factor /
-// fixed.parallelism = 2 reader
-
 public class PgContainer implements AutoCloseable {
 
   public static final boolean USE_COCKROACH_DB =
