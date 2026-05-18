@@ -16,12 +16,12 @@ import dev.dbos.transact.workflow.*;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.JRE;
 import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
@@ -69,8 +69,9 @@ class DBOSExecutorTest {
   }
 
   @Test
-  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "21|25")
-  public void virtualThreadPoolJDK21And25() throws Exception {
+  public void virtualThreadPoolJDK21OrLater() throws Exception {
+    int jdk = Runtime.version().feature();
+    Assumptions.assumeTrue(jdk >= 21, "Skipping: requires JDK 21 or later, got " + jdk);
     try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertFalse(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
@@ -87,8 +88,9 @@ class DBOSExecutorTest {
   }
 
   @Test
-  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17\\..*")
-  public void threadPoolJDK17() throws Exception {
+  public void threadPoolJDK20OrEarlier() throws Exception {
+    int jdk = Runtime.version().feature();
+    Assumptions.assumeTrue(jdk < 21, "Skipping: requires JDK 20 or earlier, got " + jdk);
     try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertTrue(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
