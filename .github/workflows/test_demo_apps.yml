@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish-maven-local:
+  publish:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -41,7 +41,7 @@ jobs:
           path: ~/.m2/repository/dev/dbos
 
   test-demo-apps:
-    needs: publish-maven-local
+    needs: publish
     runs-on: ubuntu-latest
 
     env:
