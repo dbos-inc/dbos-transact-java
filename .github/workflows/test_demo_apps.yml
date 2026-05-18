@@ -41,7 +41,7 @@ jobs:
           path: ~/.m2/repository/dev/dbos
 
   test-demo-apps:
-    needs: publish
+    needs: publish-maven-local
     runs-on: ubuntu-latest
 
     env:
