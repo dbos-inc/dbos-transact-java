@@ -214,7 +214,7 @@ By contrast, to add Temporal to your program, you must rearchitect your program 
 
 If you want to ask questions or hang out with the community, join us on [Discord](https://discord.gg/fMwQjeW5zg)!
 If you see a bug or have a feature request, don't hesitate to open an issue here on GitHub.
-If you're interested in contributing, check out our [contributions guide](./CONTRIBUTING.md).
+If you're interested in contributing, check out our [contributions guide](./DEVELOPING.md).
 
 
 
