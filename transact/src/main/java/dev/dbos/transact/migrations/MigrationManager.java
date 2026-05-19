@@ -86,25 +86,37 @@ public class MigrationManager {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
     }
 
-    try (var conn = ds.getConnection()) {
-
-      var isCockroach = SystemDatabase.isCockroach(conn);
+    try (var checkConn = ds.getConnection()) {
+      var isCockroach = SystemDatabase.isCockroach(checkConn);
       if (isCockroach) {
         useListenNotify = false;
       }
 
       // Skip advisory lock and migration work entirely if already up-to-date.
-      if (!shouldMigrate(conn, schema, useListenNotify, isCockroach)) {
+      if (!shouldMigrate(checkConn, schema, useListenNotify, isCockroach)) {
         return;
       }
+    } catch (SQLException e) {
+      throw new RuntimeException("Failed to run migrations", e);
+    }
 
-      // Use a session-level advisory lock to serialize concurrent migration attempts.
-      // Try for up to 30 s; if we can't acquire, proceed anyway rather than hang startup.
+    // Use a dedicated connection held in autocommit mode to hold the session-level advisory
+    // lock for the entire migration run. Keeping the lock on a separate connection prevents
+    // CockroachDB (and other databases) from releasing the lock when migration transactions
+    // commit on the main connection.
+    try (var lockConn = ds.getConnection();
+        var migrConn = ds.getConnection()) {
+
+      var isCockroach = SystemDatabase.isCockroach(migrConn);
+      if (isCockroach) {
+        useListenNotify = false;
+      }
+
       boolean locked = false;
-      conn.setAutoCommit(true);
+      lockConn.setAutoCommit(true);
       long deadline = System.currentTimeMillis() + MIGRATION_LOCK_TIMEOUT_SEC * 1000L;
       while (true) {
-        try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+        try (var stmt = lockConn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
           stmt.setLong(1, MIGRATION_LOCK_ID);
           try (var rs = stmt.executeQuery()) {
             if (rs.next() && rs.getBoolean(1)) {
@@ -123,13 +135,13 @@ public class MigrationManager {
       }
 
       try {
-        ensureDbosSchema(conn, schema);
-        ensureMigrationTable(conn, schema);
+        ensureDbosSchema(migrConn, schema);
+        ensureMigrationTable(migrConn, schema);
         var migrations = getMigrations(schema, useListenNotify, isCockroach);
-        runDbosMigrations(conn, schema, migrations, isCockroach);
+        runDbosMigrations(migrConn, schema, migrations, isCockroach);
       } finally {
         if (locked) {
-          try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
+          try (var stmt = lockConn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
             stmt.setLong(1, MIGRATION_LOCK_ID);
             stmt.execute();
           } catch (SQLException e) {
