@@ -15,6 +15,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assertions;
@@ -291,6 +292,185 @@ class MigrationManagerTest {
       // Verify all migrations were applied
       var finalVersion = getVersion(conn);
       assertEquals(allMigrations.size(), finalVersion);
+    }
+  }
+
+  @Test
+  void testConcurrentMigrations() throws Exception {
+    var dbosConfig = pgContainer.dbosConfig();
+    int numInstances = 10;
+
+    var errors = new CopyOnWriteArrayList<String>();
+    var threads = new ArrayList<Thread>();
+    for (int i = 0; i < numInstances; i++) {
+      final int idx = i;
+      threads.add(
+          new Thread(
+              () -> {
+                try {
+                  MigrationManager.runMigrations(dbosConfig);
+                } catch (Throwable e) {
+                  errors.add(
+                      "Instance %d: %s: %s"
+                          .formatted(idx, e.getClass().getSimpleName(), e.getMessage()));
+                }
+              }));
+    }
+    for (var t : threads) t.start();
+    for (var t : threads) t.join();
+
+    assertTrue(
+        errors.isEmpty(),
+        "%d/%d concurrent migrations failed:\n%s"
+            .formatted(errors.size(), numInstances, String.join("\n", errors)));
+
+    try (var conn = dataSource.getConnection()) {
+      var migrations =
+          MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB);
+      assertEquals(migrations.size(), getVersion(conn));
+    }
+  }
+
+  @Test
+  void testOnlineMigrationsAreIdempotent() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "PG-only online migration test");
+
+    var dbosConfig = pgContainer.dbosConfig();
+    MigrationManager.runMigrations(dbosConfig);
+
+    var schema = Constants.DB_SCHEMA;
+    var migrations = MigrationManager.getMigrations(schema, true, false);
+    // min(ONLINE_MIGRATIONS) == 22, so rewind to 21
+    int rewindTo = 21;
+    int expectedFinal = migrations.size();
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, rewindTo));
+    }
+
+    assertDoesNotThrow(
+        () -> MigrationManager.runMigrations(dbosConfig),
+        "Re-running online migrations against an already-migrated schema must succeed");
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(expectedFinal, getVersion(conn));
+    }
+  }
+
+  @Test
+  void testVersionNotBumpedOnMigrationFailure() throws Exception {
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: tests the online migration code path");
+
+    var dbosConfig = pgContainer.dbosConfig();
+    MigrationManager.runMigrations(dbosConfig);
+
+    var schema = Constants.DB_SCHEMA;
+    int rewindTo = 31; // one before migration 32
+    var allMigrations = MigrationManager.getMigrations(schema, true, false);
+    int expectedFinal = allMigrations.size();
+
+    // Rewind so migration 32 is pending again
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, rewindTo));
+    }
+
+    // Replace migration 32 (list index 31) with invalid SQL — must throw without bumping version
+    var patchedMigrations = new ArrayList<>(allMigrations);
+    patchedMigrations.set(31, "THIS IS NOT VALID SQL");
+
+    try (var conn = dataSource.getConnection()) {
+      assertThrows(
+          RuntimeException.class,
+          () -> MigrationManager.runDbosMigrations(conn, schema, patchedMigrations));
+    }
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(rewindTo, getVersion(conn));
+    }
+
+    // Re-run with real migrations: IF NOT EXISTS guards make 32+ idempotent given the index
+    // still exists from the original full migration run above.
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.runDbosMigrations(conn, schema, allMigrations);
+    }
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(expectedFinal, getVersion(conn));
+    }
+  }
+
+  @Test
+  void testRunnerResumesAfterInvalidIndex() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "PG-only: relies on pg_index.indisvalid");
+
+    var dbosConfig = pgContainer.dbosConfig();
+    MigrationManager.runMigrations(dbosConfig);
+
+    var schema = Constants.DB_SCHEMA;
+    String targetIndex = "idx_workflow_status_in_flight";
+    int rewindTo = 31; // one before migration 32 which creates targetIndex
+    int expectedFinal = MigrationManager.getMigrations(schema, true, false).size();
+
+    // Drop the valid index, create a non-CONCURRENTLY copy with the same name, then mark it
+    // INVALID — this mimics what Postgres leaves behind when CREATE INDEX CONCURRENTLY aborts
+    // mid-build.
+    try (var conn = dataSource.getConnection()) {
+      conn.setAutoCommit(true);
+      try (var stmt = conn.createStatement()) {
+        stmt.execute("DROP INDEX IF EXISTS \"%s\".\"%s\"".formatted(schema, targetIndex));
+        stmt.execute(
+            ("CREATE INDEX \"%s\" ON \"%s\".workflow_status"
+                    + " (queue_name, status, priority, created_at)"
+                    + " WHERE status IN ('ENQUEUED', 'PENDING')")
+                .formatted(targetIndex, schema));
+        stmt.execute(
+            ("UPDATE pg_index SET indisvalid = false"
+                    + " WHERE indexrelid = '\"%s\".\"%s\"'::regclass")
+                .formatted(schema, targetIndex));
+      }
+    }
+
+    // Confirm the planted index is INVALID
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "SELECT indisvalid FROM pg_index WHERE indexrelid = ?::regclass")) {
+      stmt.setString(1, "\"%s\".\"%s\"".formatted(schema, targetIndex));
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next());
+        assertFalse(rs.getBoolean("indisvalid"), "Index should be invalid before migration re-run");
+      }
+    }
+
+    // Rewind version so the runner re-executes migration 32
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, rewindTo));
+    }
+
+    // Re-run migrations: cleanupInvalidIndexes should drop the invalid index, then 32+ rebuild it
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+
+    // Index now exists and is valid
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "SELECT indisvalid FROM pg_index WHERE indexrelid = ?::regclass")) {
+      stmt.setString(1, "\"%s\".\"%s\"".formatted(schema, targetIndex));
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next());
+        assertTrue(rs.getBoolean("indisvalid"), "Index should be valid after migration re-run");
+      }
+    }
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(expectedFinal, getVersion(conn));
     }
   }
 

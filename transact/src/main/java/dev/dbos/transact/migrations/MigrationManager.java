@@ -24,6 +24,9 @@ public class MigrationManager {
   private static final Set<Integer> ONLINE_MIGRATIONS =
       Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35);
 
+  private static final long MIGRATION_LOCK_ID = 1234567890L;
+  private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
+
   public static void runMigrations(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
 
@@ -66,10 +69,50 @@ public class MigrationManager {
         useListenNotify = false;
       }
 
-      ensureDbosSchema(conn, schema);
-      ensureMigrationTable(conn, schema);
-      var migrations = getMigrations(schema, useListenNotify, isCockroach);
-      runDbosMigrations(conn, schema, migrations, isCockroach);
+      boolean locked = false;
+      if (!isCockroach) {
+        // Use a session-level advisory lock to serialize concurrent migration attempts.
+        // Try for up to 30 s; if we can't acquire, proceed anyway rather than hang startup.
+        conn.setAutoCommit(true);
+        long deadline = System.currentTimeMillis() + MIGRATION_LOCK_TIMEOUT_SEC * 1000L;
+        while (true) {
+          try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+            stmt.setLong(1, MIGRATION_LOCK_ID);
+            try (var rs = stmt.executeQuery()) {
+              if (rs.next() && rs.getBoolean(1)) {
+                locked = true;
+                break;
+              }
+            }
+          }
+          if (System.currentTimeMillis() >= deadline) {
+            logger.warn(
+                "Could not acquire migration advisory lock within {}s. Attempting migrations without lock.",
+                MIGRATION_LOCK_TIMEOUT_SEC);
+            break;
+          }
+          Thread.sleep(1000);
+        }
+      }
+
+      try {
+        ensureDbosSchema(conn, schema);
+        ensureMigrationTable(conn, schema);
+        var migrations = getMigrations(schema, useListenNotify, isCockroach);
+        runDbosMigrations(conn, schema, migrations, isCockroach);
+      } finally {
+        if (locked) {
+          try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
+            stmt.setLong(1, MIGRATION_LOCK_ID);
+            stmt.execute();
+          } catch (SQLException e) {
+            logger.warn("Failed to release migration advisory lock", e);
+          }
+        }
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Migration interrupted while waiting for advisory lock", e);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     }
