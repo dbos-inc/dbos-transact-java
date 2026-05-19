@@ -197,6 +197,9 @@ public final class Debouncer<R> {
             timeoutMs);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), periodMs);
 
+    // Tracks whether we already sent a message to the running debouncer. The message persists in
+    // the notifications table until processed, so we must not re-send on each ack-timeout retry.
+    boolean messageSent = false;
     while (true) {
       try {
         var startOpts =
@@ -226,7 +229,14 @@ public final class Debouncer<R> {
           continue;
         }
         DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), periodMs);
-        dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC);
+        // Send only once per call: messageId is fixed, so re-sending the same id on each
+        // retry would accumulate identical messages in the debouncer's inbox (each consuming
+        // a durable step when inside a workflow). The message persists in the notifications
+        // table until the debouncer processes it, so a single send is sufficient.
+        if (!messageSent) {
+          dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC);
+          messageSent = true;
+        }
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
         // processing this message, no ack arrives — start over.
@@ -236,18 +246,19 @@ public final class Debouncer<R> {
               "Debouncer {} did not ack message {}; retrying", existingDebouncerId, messageId);
           continue;
         }
-        // The existing debouncer absorbed our call. Read the pre-assigned user workflow id
-        // from the event it published at startup — avoids relying on Jackson deserialising
-        // record types from Object[] (records are final, so @class type info is not written).
-        var childIdOpt =
+        // CHILD_ID_KEY is set as the debouncer workflow's first action, before the recv-loop.
+        // If the ack arrived, the debouncer has already published this event — it cannot be empty.
+        var childId =
             dbos.<String>getEvent(
-                existingDebouncerId, Constants.DEBOUNCER_CHILD_ID_KEY, ACK_TIMEOUT);
-        if (childIdOpt.isEmpty()) {
-          logger.debug(
-              "Debouncer {} child workflow id not yet available; retrying", existingDebouncerId);
-          continue;
-        }
-        return dbos.retrieveWorkflow(childIdOpt.get());
+                    existingDebouncerId, Constants.DEBOUNCER_CHILD_ID_KEY, ACK_TIMEOUT)
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Debouncer "
+                                + existingDebouncerId
+                                + " acked but did not publish "
+                                + Constants.DEBOUNCER_CHILD_ID_KEY));
+        return dbos.retrieveWorkflow(childId);
       }
     }
   }
