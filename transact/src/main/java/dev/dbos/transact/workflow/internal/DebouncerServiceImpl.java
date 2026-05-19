@@ -34,6 +34,11 @@ public class DebouncerServiceImpl implements DebouncerService {
   public String debouncerWorkflow(
       DebouncerOptions options, DebouncerContextOptions ctx, DebouncerMessage initial) {
 
+    // Publish the pre-assigned user workflow id as an event so callers waiting on the
+    // deduplication path can retrieve it via getEvent without relying on Jackson deserializing
+    // workflow inputs (records are final classes so @class type info is not emitted).
+    dbos.setEvent(Constants.DEBOUNCER_CHILD_ID_KEY, ctx.userWorkflowId());
+
     // Record the absolute deadline once as a durable step. On recovery this returns the same
     // value so the loop's exit condition is replay-stable across crashes.
     long deadlineEpochMs =

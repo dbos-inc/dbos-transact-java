@@ -155,8 +155,18 @@ public final class Debouncer<R> {
 
     DBOSIntegration.CapturedInvocation invocation = dbos.integration().captureInvocation(wfLambda);
 
-    String userWorkflowId = UUID.randomUUID().toString();
-    String messageId = UUID.randomUUID().toString();
+    // When called from inside a workflow, UUID generation must be wrapped in a durable step so
+    // the same IDs are produced on replay. UUIDs are joined with "|" (not present in UUID format)
+    // to avoid two separate step increments.
+    String ids;
+    if (DBOS.inWorkflow() && !DBOS.inStep()) {
+      ids = dbos.runStep(() -> UUID.randomUUID() + "|" + UUID.randomUUID(), "assignDebounceIds");
+    } else {
+      ids = UUID.randomUUID() + "|" + UUID.randomUUID();
+    }
+    String[] idParts = ids.split("\\|", 2);
+    String userWorkflowId = idParts[0];
+    String messageId = idParts[1];
     String deduplicationId = invocation.workflowName() + "-" + debounceKey;
     long periodMs = debouncePeriod.toMillis();
 
@@ -203,18 +213,17 @@ public final class Debouncer<R> {
           continue;
         }
         // The existing debouncer absorbed our call. Read the pre-assigned user workflow id
-        // from its persisted inputs and return a handle to it.
-        var status = dbos.getWorkflowStatus(existingDebouncerId).orElse(null);
-        if (status == null || status.input() == null) {
-          logger.debug("Debouncer {} status unavailable; retrying", existingDebouncerId);
+        // from the event it published at startup — avoids relying on Jackson deserialising
+        // record types from Object[] (records are final, so @class type info is not written).
+        var childIdOpt =
+            dbos.<String>getEvent(
+                existingDebouncerId, Constants.DEBOUNCER_CHILD_ID_KEY, ACK_TIMEOUT);
+        if (childIdOpt.isEmpty()) {
+          logger.debug(
+              "Debouncer {} child workflow id not yet available; retrying", existingDebouncerId);
           continue;
         }
-        Object[] dedupInputs = status.input();
-        if (dedupInputs.length < 2 || !(dedupInputs[1] instanceof DebouncerContextOptions dco)) {
-          throw new IllegalStateException(
-              "Unexpected debouncer workflow inputs for " + existingDebouncerId);
-        }
-        return dbos.retrieveWorkflow(dco.userWorkflowId());
+        return dbos.retrieveWorkflow(childIdOpt.get());
       }
     }
   }
