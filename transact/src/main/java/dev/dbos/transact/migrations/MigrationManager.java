@@ -69,30 +69,28 @@ public class MigrationManager {
         useListenNotify = false;
       }
 
+      // Use a session-level advisory lock to serialize concurrent migration attempts.
+      // Try for up to 30 s; if we can't acquire, proceed anyway rather than hang startup.
       boolean locked = false;
-      if (!isCockroach) {
-        // Use a session-level advisory lock to serialize concurrent migration attempts.
-        // Try for up to 30 s; if we can't acquire, proceed anyway rather than hang startup.
-        conn.setAutoCommit(true);
-        long deadline = System.currentTimeMillis() + MIGRATION_LOCK_TIMEOUT_SEC * 1000L;
-        while (true) {
-          try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
-            stmt.setLong(1, MIGRATION_LOCK_ID);
-            try (var rs = stmt.executeQuery()) {
-              if (rs.next() && rs.getBoolean(1)) {
-                locked = true;
-                break;
-              }
+      conn.setAutoCommit(true);
+      long deadline = System.currentTimeMillis() + MIGRATION_LOCK_TIMEOUT_SEC * 1000L;
+      while (true) {
+        try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+          stmt.setLong(1, MIGRATION_LOCK_ID);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next() && rs.getBoolean(1)) {
+              locked = true;
+              break;
             }
           }
-          if (System.currentTimeMillis() >= deadline) {
-            logger.warn(
-                "Could not acquire migration advisory lock within {}s. Attempting migrations without lock.",
-                MIGRATION_LOCK_TIMEOUT_SEC);
-            break;
-          }
-          Thread.sleep(1000);
         }
+        if (System.currentTimeMillis() >= deadline) {
+          logger.warn(
+              "Could not acquire migration advisory lock within {}s. Attempting migrations without lock.",
+              MIGRATION_LOCK_TIMEOUT_SEC);
+          break;
+        }
+        Thread.sleep(1000);
       }
 
       try {
