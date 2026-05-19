@@ -228,4 +228,31 @@ public class DebouncerTest {
     // 7 * 3.0 = 21
     assertEquals(21L, result);
   }
+
+  // Verify that a second debounce call after the first window closes starts a fresh window.
+  // Regression test for: deduplication_id is cleared to NULL on completion, so the UNIQUE
+  // constraint no longer blocks a new enqueue with the same key.
+  @Test
+  public void reDebouncAfterWindowCloses() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    var debouncer = dbos.<String>debouncer();
+
+    // First window
+    var h1 = debouncer.debounce("rekey", Duration.ofMillis(400), () -> svc.process("first"));
+    assertEquals("result:first", h1.getResult());
+    assertEquals(1, serviceImpl.callCount());
+
+    // Wait long enough to ensure the first debouncer workflow has completed.
+    Thread.sleep(300);
+
+    // Second window — must NOT livelock; must start a fresh debouncer.
+    var h2 = debouncer.debounce("rekey", Duration.ofMillis(400), () -> svc.process("second"));
+    assertEquals("result:second", h2.getResult());
+    assertEquals(2, serviceImpl.callCount());
+
+    // Each window produces an independent user workflow.
+    assertNotEquals(h1.workflowId(), h2.workflowId());
+  }
 }

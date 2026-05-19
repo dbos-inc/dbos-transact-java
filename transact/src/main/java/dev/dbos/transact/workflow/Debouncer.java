@@ -193,7 +193,13 @@ public final class Debouncer<R> {
         return dbos.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
         // A debouncer for this key is already running. Forward the latest args to it.
-        String existingDebouncerId = lookupExistingDebouncerId(deduplicationId);
+        // When called from inside a workflow, record the result as a durable step so that
+        // replay returns the same debouncer id and the subsequent send/getEvent steps stay
+        // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
+        String existingDebouncerId =
+            (DBOS.inWorkflow() && !DBOS.inStep())
+                ? dbos.runStep(() -> lookupExistingDebouncerId(deduplicationId), "lookupDebouncer")
+                : lookupExistingDebouncerId(deduplicationId);
         if (existingDebouncerId == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
