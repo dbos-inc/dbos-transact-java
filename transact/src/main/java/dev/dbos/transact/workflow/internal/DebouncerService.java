@@ -9,13 +9,12 @@ package dev.dbos.transact.workflow.internal;
 public interface DebouncerService {
 
   /**
-   * The debouncer service workflow.
+   * The debouncer service workflow. Runs the recv-loop, then starts the user workflow.
    *
    * @param options identifies the user workflow to start and the absolute timeout
    * @param ctx caller context forwarded to the user workflow
    * @param initial initial debounce message from the first caller
-   * @return the user workflow id (the same value carried in {@code ctx.userWorkflowId()})
    */
-  String debouncerWorkflow(
+  void debouncerWorkflow(
       DebouncerOptions options, DebouncerContextOptions ctx, DebouncerMessage initial);
 }

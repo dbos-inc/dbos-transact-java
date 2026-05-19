@@ -1569,7 +1569,10 @@ public class DBOSExecutor implements AutoCloseable {
                     finalOptions.deadline(),
                     SerializationUtil.PORTABLE.equals(initResult.serialization())
                         ? SerializationStrategy.PORTABLE
-                        : SerializationStrategy.DEFAULT));
+                        : SerializationStrategy.DEFAULT,
+                    finalOptions.priority(),
+                    finalOptions.appVersion(),
+                    finalOptions.deduplicationId()));
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");

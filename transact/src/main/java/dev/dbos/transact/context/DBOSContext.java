@@ -23,6 +23,9 @@ public class DBOSContext {
   private final Duration timeout;
   private final Instant deadline;
   private SerializationStrategy serialization;
+  private final Integer priority;
+  private final String appVersion;
+  private final String deduplicationId;
 
   // private StepStatus stepStatus;
 
@@ -33,10 +36,13 @@ public class DBOSContext {
     timeout = null;
     deadline = null;
     serialization = SerializationStrategy.DEFAULT;
+    priority = null;
+    appVersion = null;
+    deduplicationId = null;
   }
 
   public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
-    this(workflowId, parent, timeout, deadline, null);
+    this(workflowId, parent, timeout, deadline, null, null, null, null);
   }
 
   public DBOSContext(
@@ -45,12 +51,27 @@ public class DBOSContext {
       Duration timeout,
       Instant deadline,
       SerializationStrategy serialization) {
+    this(workflowId, parent, timeout, deadline, serialization, null, null, null);
+  }
+
+  public DBOSContext(
+      String workflowId,
+      WorkflowInfo parent,
+      Duration timeout,
+      Instant deadline,
+      SerializationStrategy serialization,
+      Integer priority,
+      String appVersion,
+      String deduplicationId) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
     this.timeout = timeout;
     this.deadline = deadline;
     this.serialization = serialization;
+    this.priority = priority;
+    this.appVersion = appVersion;
+    this.deduplicationId = deduplicationId;
   }
 
   public DBOSContext(
@@ -68,6 +89,9 @@ public class DBOSContext {
     this.timeout = other.timeout;
     this.deadline = other.deadline;
     this.serialization = other.serialization;
+    this.priority = other.priority;
+    this.appVersion = other.appVersion;
+    this.deduplicationId = other.deduplicationId;
   }
 
   public boolean isInWorkflow() {
@@ -167,5 +191,32 @@ public class DBOSContext {
   public static SerializationStrategy serializationStrategy() {
     var ctx = DBOSContextHolder.get();
     return ctx != null ? ctx.getSerialization() : null;
+  }
+
+  public Integer getPriority() {
+    return priority;
+  }
+
+  public String getAppVersion() {
+    return appVersion;
+  }
+
+  public String getDeduplicationId() {
+    return deduplicationId;
+  }
+
+  public static Integer currentPriority() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.priority : null;
+  }
+
+  public static String currentAppVersion() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.appVersion : null;
+  }
+
+  public static String currentDeduplicationId() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.deduplicationId : null;
   }
 }

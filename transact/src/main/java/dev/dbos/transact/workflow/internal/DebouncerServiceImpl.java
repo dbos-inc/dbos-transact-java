@@ -32,7 +32,7 @@ public class DebouncerServiceImpl implements DebouncerService {
 
   @Override
   @Workflow(name = Constants.DEBOUNCER_WORKFLOW_NAME)
-  public String debouncerWorkflow(
+  public void debouncerWorkflow(
       DebouncerOptions options, DebouncerContextOptions ctx, DebouncerMessage initial) {
 
     // Publish the pre-assigned user workflow id as an event so callers waiting on the
@@ -119,6 +119,5 @@ public class DebouncerServiceImpl implements DebouncerService {
         options.workflowName(),
         ctx.userWorkflowId());
     dbos.integration().startRegisteredWorkflow(workflow, latestArgs, startOpts);
-    return ctx.userWorkflowId();
   }
 }

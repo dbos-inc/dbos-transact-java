@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
@@ -177,8 +179,22 @@ public final class Debouncer<R> {
             invocation.instanceName(),
             queueName,
             debounceTimeout == null ? null : debounceTimeout.toMillis());
+    // Propagate the calling workflow's context (priority, timeout, appVersion, deduplicationId)
+    // to the user workflow — mirrors Python's ContextOptions snapshot.
+    Long timeoutMs = null;
+    if (DBOS.inWorkflow()) {
+      var wfCtx = DBOSContextHolder.get();
+      if (wfCtx != null && wfCtx.getTimeout() != null) {
+        timeoutMs = wfCtx.getTimeout().toMillis();
+      }
+    }
     DebouncerContextOptions ctx =
-        new DebouncerContextOptions(userWorkflowId, null, null, null, null);
+        new DebouncerContextOptions(
+            userWorkflowId,
+            DBOSContext.currentDeduplicationId(),
+            DBOSContext.currentPriority(),
+            DBOSContext.currentAppVersion(),
+            timeoutMs);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), periodMs);
 
     while (true) {
@@ -188,7 +204,9 @@ public final class Debouncer<R> {
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
                 .withDeduplicationId(deduplicationId);
         dbos.startWorkflow(
-            () -> debouncerProxy.debouncerWorkflow(options, ctx, initial), startOpts);
+            (dev.dbos.transact.execution.ThrowingRunnable<RuntimeException>)
+                () -> debouncerProxy.debouncerWorkflow(options, ctx, initial),
+            startOpts);
         // Successfully enqueued a fresh debouncer for this key.
         return dbos.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
