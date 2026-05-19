@@ -229,17 +229,7 @@ public final class Debouncer<R> {
   }
 
   private @Nullable String lookupExistingDebouncerId(String deduplicationId) {
-    var input =
-        new ListWorkflowsInput()
-            .withQueueName(Constants.DBOS_INTERNAL_QUEUE)
-            .withQueuesOnly(true)
-            .withWorkflowName(Constants.DEBOUNCER_WORKFLOW_NAME)
-            .withLoadInput(false);
-    for (var s : dbos.listWorkflows(input)) {
-      if (deduplicationId.equals(s.deduplicationId())) {
-        return s.workflowId();
-      }
-    }
-    return null;
+    return dbos.integration()
+        .findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
   }
 }

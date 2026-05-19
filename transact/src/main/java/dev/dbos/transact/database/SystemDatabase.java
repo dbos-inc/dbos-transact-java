@@ -42,6 +42,7 @@ import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -367,6 +368,12 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return dbRetry(() -> WorkflowDAO.listWorkflows(ctx, input));
+  }
+
+  public @Nullable String findWorkflowIdByDeduplicationId(
+      String queueName, String deduplicationId) {
+    return dbRetry(
+        () -> WorkflowDAO.findWorkflowIdByDeduplicationId(ctx, queueName, deduplicationId));
   }
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {

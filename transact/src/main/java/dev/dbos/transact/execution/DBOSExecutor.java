@@ -337,6 +337,11 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase;
   }
 
+  public @Nullable String findWorkflowIdByDeduplicationId(
+      String queueName, String deduplicationId) {
+    return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
+  }
+
   QueueService getQueueService() {
     return queueService;
   }

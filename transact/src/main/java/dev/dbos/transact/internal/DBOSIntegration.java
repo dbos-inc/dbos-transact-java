@@ -187,6 +187,23 @@ public class DBOSIntegration {
   }
 
   /**
+   * Find the workflow ID of the currently-active workflow with a given queue and deduplication ID.
+   * Uses the unique {@code (queue_name, deduplication_id)} index for an O(1) point lookup. Returns
+   * {@code null} if no active (ENQUEUED, DELAYED, or PENDING) workflow with that deduplication ID
+   * exists in the given queue.
+   *
+   * @param queueName name of the queue to search
+   * @param deduplicationId deduplication ID to look up
+   * @return the workflow ID, or {@code null} if not found
+   * @throws IllegalStateException if DBOS has not been launched
+   */
+  public @Nullable String findWorkflowIdByDeduplicationId(
+      @NonNull String queueName, @NonNull String deduplicationId) {
+    return executor("findWorkflowIdByDeduplicationId")
+        .findWorkflowIdByDeduplicationId(queueName, deduplicationId);
+  }
+
+  /**
    * Start or enqueue a workflow by its {@link RegisteredWorkflow} registration. Intended for use by
    * event listeners and other infrastructure that dispatches workflows by registration rather than
    * by direct invocation.

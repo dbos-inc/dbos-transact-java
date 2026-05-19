@@ -51,6 +51,7 @@ import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -419,6 +420,32 @@ public class WorkflowDAO {
     }
 
     return null;
+  }
+
+  /**
+   * Look up the workflow_uuid of the currently-enqueued or running workflow with a given
+   * (queue_name, deduplication_id) pair. Uses the UNIQUE index on that pair for O(1) lookup.
+   * Returns {@code null} if no active workflow with that deduplication id exists.
+   */
+  public static @Nullable String findWorkflowIdByDeduplicationId(
+      DbContext ctx, String queueName, String deduplicationId) throws SQLException {
+    var sql =
+        """
+          SELECT workflow_uuid
+            FROM "%s".workflow_status
+           WHERE queue_name = ?
+             AND deduplication_id = ?
+           LIMIT 1
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, queueName);
+      stmt.setString(2, deduplicationId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString("workflow_uuid") : null;
+      }
+    }
   }
 
   public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
