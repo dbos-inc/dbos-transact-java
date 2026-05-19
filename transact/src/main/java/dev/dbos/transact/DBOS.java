@@ -11,6 +11,7 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.workflow.Debouncer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -25,6 +26,8 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.DebouncerService;
+import dev.dbos.transact.workflow.internal.DebouncerServiceImpl;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -62,6 +65,7 @@ public class DBOS implements AutoCloseable {
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
+  private final DebouncerService debouncerProxy;
 
   private AlertHandler alertHandler;
 
@@ -84,6 +88,9 @@ public class DBOS implements AutoCloseable {
     this.integration =
         new DBOSIntegration(
             this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
+    // Register the built-in debouncer service workflow so callers can use Debouncer without
+    // having to declare and wire the service themselves.
+    this.debouncerProxy = registerProxy(DebouncerService.class, new DebouncerServiceImpl(this));
   }
 
   /**
@@ -387,6 +394,21 @@ public class DBOS implements AutoCloseable {
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, null);
+  }
+
+  /**
+   * Build a {@link Debouncer} that consolidates a series of calls on the same key into one
+   * execution of the targeted workflow using the most recent arguments.
+   *
+   * <p>The returned debouncer is immutable; configuration helpers like {@link
+   * Debouncer#withQueue(String)} and {@link Debouncer#withDebounceTimeout(java.time.Duration)}
+   * return new instances.
+   *
+   * @param <R> the return type of the debounced workflow (used only for type inference)
+   * @return a fresh debouncer bound to this DBOS instance
+   */
+  public <R> @NonNull Debouncer<R> debouncer() {
+    return new Debouncer<>(this, debouncerProxy);
   }
 
   /**

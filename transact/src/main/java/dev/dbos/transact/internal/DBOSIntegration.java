@@ -1,5 +1,6 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.ExternalState;
@@ -7,17 +8,19 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.internal.DebouncerService;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -154,6 +157,36 @@ public class DBOSIntegration {
   }
 
   /**
+   * Captured information about a workflow invocation: the workflow name, declaring class name,
+   * optional instance name, and positional arguments.
+   */
+  public record CapturedInvocation(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object[] args) {}
+
+  /**
+   * Capture the workflow invocation triggered by the supplied lambda without executing the
+   * workflow. The lambda must call exactly one {@code @Workflow} method on a registered proxy. This
+   * is intended for infrastructure that needs to defer a workflow start (for example, the
+   * debouncer).
+   *
+   * @param wfLambda lambda that invokes exactly one workflow method on a registered proxy
+   * @return the captured workflow name, class name, instance name, and arguments
+   * @throws IllegalStateException if DBOS has not been launched
+   */
+  public <T, E extends Exception> CapturedInvocation captureInvocation(
+      @NonNull ThrowingSupplier<T, E> wfLambda) {
+    var invocation = executor("captureInvocation").captureInvocation(wfLambda);
+    return new CapturedInvocation(
+        invocation.workflowName(),
+        invocation.className(),
+        invocation.instanceName(),
+        invocation.args());
+  }
+
+  /**
    * Start or enqueue a workflow by its {@link RegisteredWorkflow} registration. Intended for use by
    * event listeners and other infrastructure that dispatches workflows by registration rather than
    * by direct invocation.
@@ -192,30 +225,46 @@ public class DBOSIntegration {
     return executor("runWorkflow").runWorkflow(target, instanceName, method, args, wfTag);
   }
 
-  /**
-   * Get all workflows registered with DBOS.
-   *
-   * @return list of all registered workflow methods
-   */
-  public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    var executor = executorSupplier.get();
-    if (executor != null) {
-      return executor.getRegisteredWorkflows();
-    }
-    return Collections.unmodifiableCollection(workflowRegistry.getWorkflowSnapshot().values());
+  private static boolean isInternalWorkflow(RegisteredWorkflow wf) {
+    return Constants.DEBOUNCER_WORKFLOW_NAME.equals(wf.workflowName());
+  }
+
+  private static boolean isInternalInstance(RegisteredWorkflowInstance inst) {
+    return inst.target() instanceof DebouncerService;
   }
 
   /**
-   * Get all workflow instances registered with DBOS.
+   * Get all user-registered workflows. Internal/system workflows registered by DBOS itself (for
+   * example, the debouncer service workflow) are excluded.
    *
-   * @return list of all class instances containing registered workflow methods
+   * @return list of all user-registered workflow methods
+   */
+  public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+    var executor = executorSupplier.get();
+    Collection<RegisteredWorkflow> all =
+        executor != null
+            ? executor.getRegisteredWorkflows()
+            : workflowRegistry.getWorkflowSnapshot().values();
+    return all.stream()
+        .filter(wf -> !isInternalWorkflow(wf))
+        .collect(Collectors.toUnmodifiableList());
+  }
+
+  /**
+   * Get all user-registered workflow instances. Internal/system instances registered by DBOS itself
+   * (for example, the debouncer service) are excluded.
+   *
+   * @return list of all user-registered class instances containing workflow methods
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     var executor = executorSupplier.get();
-    if (executor != null) {
-      return executor.getRegisteredWorkflowInstances();
-    }
-    return Collections.unmodifiableCollection(workflowRegistry.getInstanceSnapshot().values());
+    Collection<RegisteredWorkflowInstance> all =
+        executor != null
+            ? executor.getRegisteredWorkflowInstances()
+            : workflowRegistry.getInstanceSnapshot().values();
+    return all.stream()
+        .filter(inst -> !isInternalInstance(inst))
+        .collect(Collectors.toUnmodifiableList());
   }
 
   /**

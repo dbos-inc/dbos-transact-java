@@ -75,7 +75,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -92,7 +91,7 @@ public class DBOSExecutor implements AutoCloseable {
   // Invocation and hookHolder are used by startWorkflow to capture
   // workflow information w/o executing workflow function
 
-  record Invocation(
+  public record Invocation(
       DBOSExecutor executor,
       String workflowName,
       String className,
@@ -1205,6 +1204,36 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  /**
+   * Capture the workflow invocation triggered by the supplied lambda without executing the
+   * workflow. The lambda must call exactly one @Workflow method on a registered proxy on this
+   * executor.
+   */
+  public <T, E extends Exception> Invocation captureInvocation(ThrowingSupplier<T, E> wfLambda) {
+    AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
+    DBOSExecutor.hookHolder.set(
+        (invocation) -> {
+          if (!capturedInvocation.compareAndSet(null, invocation)) {
+            throw new RuntimeException("Only one @Workflow can be called in the captured lambda");
+          }
+        });
+    try {
+      wfLambda.execute();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      DBOSExecutor.hookHolder.remove();
+    }
+    var invocation =
+        Objects.requireNonNull(
+            capturedInvocation.get(), "The lambda must call exactly one @Workflow");
+    if (invocation.executor() != this) {
+      throw new IllegalStateException(
+          "The @Workflow method must be called on the DBOS instance passed to the lambda");
+    }
+    return invocation;
+  }
+
   // execute a workflow via startWorkflow
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> wfLambda, StartWorkflowOptions options) {
@@ -1217,35 +1246,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
 
-    // set the invocation hook holder and invoke the lambda to retrieve the invocation information
-    Function<ThrowingSupplier<T, E>, Invocation> invocationSupplier =
-        (lambda) -> {
-          AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
-          DBOSExecutor.hookHolder.set(
-              (invocation) -> {
-                if (!capturedInvocation.compareAndSet(null, invocation)) {
-                  throw new RuntimeException(
-                      "Only one @Workflow can be called in the startWorkflow lambda");
-                }
-              });
-
-          try {
-            lambda.execute();
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          } finally {
-            DBOSExecutor.hookHolder.remove();
-          }
-
-          return Objects.requireNonNull(
-              capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
-        };
-
-    var invocation = invocationSupplier.apply(wfLambda);
-    if (invocation.executor() != this) {
-      throw new IllegalStateException(
-          "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
-    }
+    var invocation = captureInvocation(wfLambda);
     var workflow =
         getRegisteredWorkflow(
                 invocation.workflowName(), invocation.className(), invocation.instanceName())

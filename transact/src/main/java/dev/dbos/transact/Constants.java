@@ -16,6 +16,9 @@ public class Constants {
 
   public static final String DBOS_INTERNAL_QUEUE = "_dbos_internal_queue";
 
+  public static final String DEBOUNCER_WORKFLOW_NAME = "_dbos_debouncer_workflow";
+  public static final String DEBOUNCER_TOPIC = "_dbos_debouncer_topic";
+
   public static final String SYSTEM_JDBC_URL_ENV_VAR = "DBOS_SYSTEM_JDBC_URL";
 
   public static final int DEFAULT_MAX_RECOVERY_ATTEMPTS = 100;
