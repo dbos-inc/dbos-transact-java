@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
@@ -101,11 +102,23 @@ public class DebouncerServiceImpl implements DebouncerService {
       startOpts = startOpts.withTimeout(Duration.ofMillis(ctx.workflowTimeoutMs()));
     }
 
+    // Coerce args to the method's declared parameter types before invocation.
+    // Jackson's type-info round-trip through send/recv (Object[]) can produce numeric
+    // mismatches (e.g. long → Integer) that cause IllegalArgumentException at reflection
+    // call-site. This mirrors the coercion already applied in executeWorkflowById.
+    var workflow = optWorkflow.orElseThrow();
+    try {
+      latestArgs = JsonUtility.coerceArguments(latestArgs, workflow.workflowMethod());
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "Debouncer argument coercion failed for workflow " + options.workflowName(), e);
+    }
+
     logger.debug(
         "Debouncer starting user workflow {} (id={})",
         options.workflowName(),
         ctx.userWorkflowId());
-    dbos.integration().startRegisteredWorkflow(optWorkflow.orElseThrow(), latestArgs, startOpts);
+    dbos.integration().startRegisteredWorkflow(workflow, latestArgs, startOpts);
     return ctx.userWorkflowId();
   }
 }

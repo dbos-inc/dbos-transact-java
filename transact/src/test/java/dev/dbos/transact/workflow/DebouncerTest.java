@@ -197,4 +197,35 @@ public class DebouncerTest {
     assertEquals(userQueue.name(), status.queueName());
     assertEquals(1, serviceImpl.callCount());
   }
+
+  // Workflow with numeric parameters to verify type coercion through send/recv round-trip.
+  public interface NumericService {
+    long compute(long value, double factor);
+  }
+
+  public static class NumericServiceImpl implements NumericService {
+    @Override
+    @Workflow
+    public long compute(long value, double factor) {
+      return (long) (value * factor);
+    }
+  }
+
+  @Test
+  public void numericArgsRoundTripCorrectly() throws Exception {
+    NumericService svc = dbos.registerProxy(NumericService.class, new NumericServiceImpl());
+    dbos.launch();
+
+    var debouncer = dbos.<Long>debouncer();
+    // First call
+    var h1 = debouncer.debounce("num-key", Duration.ofMillis(600), () -> svc.compute(10L, 2.5));
+    Thread.sleep(100);
+    // Second call overrides args — after period the workflow runs with these values
+    var h2 = debouncer.debounce("num-key", Duration.ofMillis(600), () -> svc.compute(7L, 3.0));
+
+    assertEquals(h1.workflowId(), h2.workflowId());
+    Long result = h2.getResult();
+    // 7 * 3.0 = 21
+    assertEquals(21L, result);
+  }
 }
