@@ -54,6 +54,30 @@ public class MigrationManager {
     }
   }
 
+  private static boolean shouldMigrate(
+      Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
+      throws SQLException {
+    var schemaSql = "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?";
+    try (var stmt = conn.prepareStatement(schemaSql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) return true;
+      }
+    }
+    var tableSql =
+        "SELECT 1 FROM information_schema.tables"
+            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+    try (var stmt = conn.prepareStatement(tableSql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) return true;
+      }
+    }
+    var currentVersion = getCurrentSysDbVersion(conn, schema);
+    var latestVersion = getMigrations(schema, useListenNotify, isCockroach).size();
+    return currentVersion < latestVersion;
+  }
+
   private static void runMigrations(DataSource ds, String schema, boolean useListenNotify) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
@@ -67,6 +91,11 @@ public class MigrationManager {
       var isCockroach = SystemDatabase.isCockroach(conn);
       if (isCockroach) {
         useListenNotify = false;
+      }
+
+      // Skip advisory lock and migration work entirely if already up-to-date.
+      if (!shouldMigrate(conn, schema, useListenNotify, isCockroach)) {
+        return;
       }
 
       // Use a session-level advisory lock to serialize concurrent migration attempts.
