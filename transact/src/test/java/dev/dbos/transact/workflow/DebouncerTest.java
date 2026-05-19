@@ -2,9 +2,11 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -227,6 +229,115 @@ public class DebouncerTest {
     Long result = h2.getResult();
     // 7 * 3.0 = 21
     assertEquals(21L, result);
+  }
+
+  // Verify that debounceVoid works for workflows with no return value.
+  public interface VoidService {
+    void doWork(String marker);
+  }
+
+  public static class VoidServiceImpl implements VoidService {
+    final AtomicInteger callCount = new AtomicInteger();
+    final ConcurrentLinkedQueue<String> markers = new ConcurrentLinkedQueue<>();
+
+    @Override
+    @Workflow
+    public void doWork(String marker) {
+      callCount.incrementAndGet();
+      markers.add(marker);
+    }
+  }
+
+  @Test
+  public void debounceVoidCoalescesCorrectly() throws Exception {
+    var impl = new VoidServiceImpl();
+    VoidService svc = dbos.registerProxy(VoidService.class, impl);
+    dbos.launch();
+
+    var debouncer = dbos.<Void>debouncer();
+    var h1 = debouncer.debounceVoid("void-key", Duration.ofMillis(500), () -> svc.doWork("a"));
+    Thread.sleep(100);
+    var h2 = debouncer.debounceVoid("void-key", Duration.ofMillis(500), () -> svc.doWork("b"));
+
+    h2.getResult();
+    assertEquals(h1.workflowId(), h2.workflowId());
+    assertEquals(1, impl.callCount.get());
+    assertEquals(List.of("b"), List.copyOf(impl.markers));
+  }
+
+  // Verify that absoluteTimeout fires with the LATEST args, not the first.
+  @Test
+  public void absoluteTimeoutUsesLatestArgs() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    // Long period (5s) so normal expiry cannot fire; only the 1.5s absolute timeout can.
+    var debouncer = dbos.<String>debouncer().withDebounceTimeout(Duration.ofMillis(1500));
+
+    var h = debouncer.debounce("abs-key", Duration.ofSeconds(5), () -> svc.process("first"));
+    Thread.sleep(500);
+    debouncer.debounce("abs-key", Duration.ofSeconds(5), () -> svc.process("last"));
+
+    String result = h.getResult();
+    assertEquals("result:last", result);
+    assertEquals(1, serviceImpl.callCount());
+    assertEquals(List.of("last"), serviceImpl.callArgs());
+  }
+
+  // Wrapper workflow that calls debounce() internally so caller context (priority)
+  // is available via DBOSContext when DebouncerContextOptions is built.
+  public interface OrchestratorService {
+    String debounceWithPriority(String arg);
+  }
+
+  public static class OrchestratorServiceImpl implements OrchestratorService {
+    private final DBOS dbos;
+    private final DebouncedService svc;
+    private final Queue userQueue;
+
+    public OrchestratorServiceImpl(DBOS dbos, DebouncedService svc, Queue userQueue) {
+      this.dbos = dbos;
+      this.svc = svc;
+      this.userQueue = userQueue;
+    }
+
+    @Override
+    @Workflow
+    public String debounceWithPriority(String arg) {
+      // withQueue ensures priority is forwarded (priority is only valid for queued workflows).
+      return dbos.<String>debouncer()
+          .withQueue(userQueue)
+          .debounce("prio-inner", Duration.ofMillis(400), () -> svc.process(arg))
+          .getResult();
+    }
+  }
+
+  // Verify that priority from caller workflow context is propagated to the user workflow.
+  @Test
+  public void priorityPropagatedFromCallerContext() throws Exception {
+    Queue q = new Queue("prio-queue").withPriorityEnabled(true);
+    dbos.registerQueue(q);
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
+    dbos.launch();
+
+    // Start the orchestrator with priority=42.
+    var opts = new StartWorkflowOptions().withQueue(q).withPriority(42);
+    var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"), opts);
+    assertEquals("result:prio-val", h.getResult());
+
+    // The user workflow started by the debouncer should have inherited priority=42.
+    // It runs on queue q, so priority is stored in workflow_status.
+    var userWfStatus =
+        dbos
+            .listWorkflows(
+                new ListWorkflowsInput().withQueueName(q.name()).withWorkflowName("process"))
+            .stream()
+            .findFirst()
+            .orElse(null);
+    assertNotNull(userWfStatus, "user workflow 'process' not found on queue " + q.name());
+    assertEquals(Integer.valueOf(42), userWfStatus.priority());
   }
 
   // Verify that a second debounce call after the first window closes starts a fresh window.

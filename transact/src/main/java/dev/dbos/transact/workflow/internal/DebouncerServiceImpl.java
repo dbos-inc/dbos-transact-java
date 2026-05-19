@@ -91,12 +91,15 @@ public class DebouncerServiceImpl implements DebouncerService {
               + (options.instanceName() == null ? "" : " / " + options.instanceName()));
     }
 
+    // priority and deduplicationId are only valid for queued workflows; the executor
+    // throws IllegalArgumentException if they are set without a queue name.
+    boolean hasQueue = options.queueName() != null;
     var startOpts =
         new StartWorkflowOptions()
             .withWorkflowId(ctx.userWorkflowId())
             .withQueue(options.queueName())
-            .withDeduplicationId(ctx.deduplicationId())
-            .withPriority(ctx.priority())
+            .withDeduplicationId(hasQueue ? ctx.deduplicationId() : null)
+            .withPriority(hasQueue ? ctx.priority() : null)
             .withAppVersion(ctx.appVersion());
     if (ctx.workflowTimeoutMs() != null) {
       startOpts = startOpts.withTimeout(Duration.ofMillis(ctx.workflowTimeoutMs()));
