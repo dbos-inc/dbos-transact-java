@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Property definition for a DBOS workflow queue. Provides options for a name, concurrency and rate
@@ -13,7 +14,8 @@ public record Queue(
     Integer workerConcurrency,
     boolean priorityEnabled,
     boolean partitioningEnabled,
-    RateLimit rateLimit) {
+    RateLimit rateLimit,
+    Duration pollingInterval) {
 
   /** Rate limit parameter structure for DBOS workflow queues */
   public static record RateLimit(int limit, Duration period) {}
@@ -26,11 +28,14 @@ public record Queue(
     if (workerConcurrency != null && workerConcurrency <= 0)
       throw new IllegalArgumentException(
           "If specified, queue workerConcurrency must be greater than zero");
+    if (pollingInterval != null && (pollingInterval.isNegative() || pollingInterval.isZero()))
+      throw new IllegalArgumentException(
+          "If specified, queue pollingInterval must be greater than zero");
   }
 
   /** Construct a queue with a given name */
   public Queue(String name) {
-    this(name, null, null, false, false, null);
+    this(name, null, null, false, false, null, null);
   }
 
   /**
@@ -43,7 +48,13 @@ public record Queue(
   /** Produces a new Queue with the assigned name. */
   public Queue withName(String name) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /**
@@ -52,7 +63,13 @@ public record Queue(
    */
   public Queue withConcurrency(Integer concurrency) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /**
@@ -61,19 +78,37 @@ public record Queue(
    */
   public Queue withWorkerConcurrency(Integer workerConcurrency) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /** Produces a new Queue with the prioritization enabled/disabled. */
   public Queue withPriorityEnabled(boolean priorityEnabled) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /** Produces a new Queue with the partitioned enabled/disabled. */
   public Queue withPartitioningEnabled(boolean partitioningEnabled) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /**
@@ -82,7 +117,13 @@ public record Queue(
    */
   public Queue withRateLimit(RateLimit rateLimit) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 
   /**
@@ -92,10 +133,23 @@ public record Queue(
     return withRateLimit(new RateLimit(limit, period));
   }
 
+  /** Produces a new Queue with the assigned rate limit, expressed in workflows per period. */
+  public Queue withRateLimit(int limit, long period, TimeUnit unit) {
+    return withRateLimit(new RateLimit(limit, Duration.of(period, unit.toChronoUnit())));
+  }
+
   /**
-   * Produces a new Queue with the assigned rate limit, expressed in workflows per period (seconds).
+   * Produces a new Queue with the assigned polling interval. `null` may be specified to use the
+   * executor default (1 second).
    */
-  public Queue withRateLimit(int limit, double period) {
-    return withRateLimit(new RateLimit(limit, Duration.ofMillis((long) (period * 1000))));
+  public Queue withPollingInterval(Duration pollingInterval) {
+    return new Queue(
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
   }
 }

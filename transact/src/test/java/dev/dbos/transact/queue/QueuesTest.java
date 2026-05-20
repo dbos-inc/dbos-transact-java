@@ -336,7 +336,8 @@ public class QueuesTest {
   public void testLimiter() throws Exception {
 
     int limit = 5;
-    double period = 1.8; //
+    double periodSec = 1.8;
+    Duration period = Duration.ofMillis((long) (periodSec * 1000));
 
     Queue limitQ =
         new Queue("limitQueue")
@@ -392,15 +393,15 @@ public class QueuesTest {
       double gap = startOfNextWave - startOfCurrentWave;
       logger.info(String.format("Gap between Wave %d and %d: %.3f", wave, wave + 1, gap));
       assertTrue(
-          gap > period - periodTolerance,
+          gap > periodSec - periodTolerance,
           String.format(
               "Gap between wave %d and %d should be at least %.3f. Actual: %.3f",
-              wave, wave + 1, period - periodTolerance, gap));
+              wave, wave + 1, periodSec - periodTolerance, gap));
       assertTrue(
-          gap < period + periodTolerance,
+          gap < periodSec + periodTolerance,
           String.format(
               "Gap between wave %d and %d should be at most %.3f. Actual: %.3f",
-              wave, wave + 1, period + periodTolerance, gap));
+              wave, wave + 1, periodSec + periodTolerance, gap));
     }
 
     for (WorkflowHandle<Double, ?> h : handles) {

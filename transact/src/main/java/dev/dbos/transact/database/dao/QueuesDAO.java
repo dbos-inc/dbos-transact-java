@@ -9,11 +9,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -291,6 +293,172 @@ public class QueuesDAO {
         }
         return partitions;
       }
+    }
+  }
+
+  /**
+   * Upsert a queue row. Returns true iff a new row was inserted (i.e. the queue did not previously
+   * exist). Returns false if the row already existed, regardless of whether it was updated.
+   */
+  public static boolean upsertQueue(DbContext ctx, Queue queue, boolean updateExisting)
+      throws SQLException {
+    final String conflictClause =
+        updateExisting
+            ? """
+              ON CONFLICT (name) DO UPDATE SET
+                concurrency           = EXCLUDED.concurrency,
+                worker_concurrency    = EXCLUDED.worker_concurrency,
+                rate_limit_max        = EXCLUDED.rate_limit_max,
+                rate_limit_period_sec = EXCLUDED.rate_limit_period_sec,
+                priority_enabled      = EXCLUDED.priority_enabled,
+                partition_queue       = EXCLUDED.partition_queue,
+                polling_interval_sec  = EXCLUDED.polling_interval_sec,
+                updated_at            = EXCLUDED.updated_at
+              """
+            : "ON CONFLICT (name) DO NOTHING";
+    final String insertSql =
+        """
+        INSERT INTO "%s".queues
+          (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
+            priority_enabled, partition_queue, polling_interval_sec, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        %s
+        """
+            .formatted(ctx.schema(), conflictClause);
+    final String existsSql = "SELECT 1 FROM \"%s\".queues WHERE name = ?".formatted(ctx.schema());
+
+    try (Connection connection = ctx.getConnection()) {
+      connection.setAutoCommit(false);
+      try {
+        boolean existed;
+        try (PreparedStatement ps = connection.prepareStatement(existsSql)) {
+          ps.setString(1, queue.name());
+          try (ResultSet rs = ps.executeQuery()) {
+            existed = rs.next();
+          }
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
+          ps.setString(1, queue.name());
+          setNullableInt(ps, 2, queue.concurrency());
+          setNullableInt(ps, 3, queue.workerConcurrency());
+          var rateLimit = queue.rateLimit();
+          if (rateLimit != null) {
+            ps.setInt(4, rateLimit.limit());
+            ps.setDouble(5, rateLimit.period().toMillis() / 1000.0);
+          } else {
+            ps.setNull(4, java.sql.Types.INTEGER);
+            ps.setNull(5, java.sql.Types.DOUBLE);
+          }
+          ps.setBoolean(6, queue.priorityEnabled());
+          ps.setBoolean(7, queue.partitioningEnabled());
+          var pollingInterval = queue.pollingInterval();
+          if (pollingInterval != null) {
+            ps.setDouble(8, pollingInterval.toMillis() / 1000.0);
+          } else {
+            ps.setNull(8, java.sql.Types.DOUBLE);
+          }
+          ps.setLong(9, System.currentTimeMillis());
+          ps.executeUpdate();
+        }
+
+        connection.commit();
+        return !existed;
+      } catch (SQLException e) {
+        connection.rollback();
+        throw e;
+      }
+    }
+  }
+
+  public static Optional<Queue> getQueue(DbContext ctx, String name) throws SQLException {
+    final String sql =
+        """
+        SELECT name, concurrency, worker_concurrency,
+          rate_limit_max, rate_limit_period_sec,
+          priority_enabled, partition_queue, polling_interval_sec
+        FROM "%s".queues
+        WHERE name = ?
+        """
+            .formatted(ctx.schema());
+
+    try (Connection connection = ctx.getConnection();
+        PreparedStatement stmt = connection.prepareStatement(sql)) {
+      stmt.setString(1, name);
+      try (ResultSet rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return Optional.of(queueFromResultSet(rs));
+        }
+        return Optional.empty();
+      }
+    }
+  }
+
+  public static List<Queue> listQueues(DbContext ctx) throws SQLException {
+    final String sql =
+        """
+        SELECT name, concurrency, worker_concurrency,
+          rate_limit_max, rate_limit_period_sec,
+          priority_enabled, partition_queue, polling_interval_sec
+        FROM "%s".queues
+        ORDER BY name
+        """
+            .formatted(ctx.schema());
+
+    try (Connection connection = ctx.getConnection();
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        ResultSet rs = stmt.executeQuery()) {
+      List<Queue> queues = new ArrayList<>();
+      while (rs.next()) {
+        queues.add(queueFromResultSet(rs));
+      }
+      return queues;
+    }
+  }
+
+  public static boolean deleteQueue(DbContext ctx, String name) throws SQLException {
+    final String sql = "DELETE FROM \"%s\".queues WHERE name = ?".formatted(ctx.schema());
+
+    try (Connection connection = ctx.getConnection();
+        PreparedStatement stmt = connection.prepareStatement(sql)) {
+      stmt.setString(1, name);
+      return stmt.executeUpdate() > 0;
+    }
+  }
+
+  private static Queue queueFromResultSet(ResultSet rs) throws SQLException {
+    String name = rs.getString("name");
+    Integer concurrency = rs.getObject("concurrency", Integer.class);
+    Integer workerConcurrency = rs.getObject("worker_concurrency", Integer.class);
+    Integer rateLimitMax = rs.getObject("rate_limit_max", Integer.class);
+    Double rateLimitPeriodSec = rs.getObject("rate_limit_period_sec", Double.class);
+    boolean priorityEnabled = rs.getBoolean("priority_enabled");
+    boolean partitioningEnabled = rs.getBoolean("partition_queue");
+    Double pollingIntervalSec = rs.getObject("polling_interval_sec", Double.class);
+
+    Queue.RateLimit rateLimit = null;
+    if (rateLimitMax != null && rateLimitPeriodSec != null) {
+      rateLimit =
+          new Queue.RateLimit(rateLimitMax, Duration.ofMillis((long) (rateLimitPeriodSec * 1000)));
+    }
+    Duration pollingInterval =
+        pollingIntervalSec != null ? Duration.ofMillis((long) (pollingIntervalSec * 1000)) : null;
+    return new Queue(
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
+  }
+
+  private static void setNullableInt(PreparedStatement stmt, int index, Integer value)
+      throws SQLException {
+    if (value != null) {
+      stmt.setInt(index, value);
+    } else {
+      stmt.setNull(index, java.sql.Types.INTEGER);
     }
   }
 }

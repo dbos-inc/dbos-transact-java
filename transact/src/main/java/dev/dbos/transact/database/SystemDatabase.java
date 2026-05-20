@@ -385,6 +385,22 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
+  public boolean upsertQueue(Queue queue, boolean updateExisting) {
+    return dbRetry(() -> QueuesDAO.upsertQueue(ctx, queue, updateExisting));
+  }
+
+  public Optional<Queue> getQueueFromDB(String name) {
+    return dbRetry(() -> QueuesDAO.getQueue(ctx, name));
+  }
+
+  public List<Queue> listQueuesFromDB() {
+    return dbRetry(() -> QueuesDAO.listQueues(ctx));
+  }
+
+  public boolean deleteQueue(String name) {
+    return dbRetry(() -> QueuesDAO.deleteQueue(ctx, name));
+  }
+
   public StepResult checkStepResult(String workflowId, int functionId, String functionName) {
 
     return dbRetry(
