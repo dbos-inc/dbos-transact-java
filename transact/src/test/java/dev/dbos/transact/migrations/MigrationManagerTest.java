@@ -297,6 +297,8 @@ class MigrationManagerTest {
 
   @Test
   void testConcurrentMigrations() throws Exception {
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: relies on Postgres advisory locks");
     var dbosConfig = pgContainer.dbosConfig();
     int numInstances = 10;
 
