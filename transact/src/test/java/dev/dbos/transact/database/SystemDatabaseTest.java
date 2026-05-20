@@ -1584,7 +1584,7 @@ public class SystemDatabaseTest {
     boolean inserted = sysdb.upsertQueue(queue, true);
     assertTrue(inserted, "upsertQueue should return true when the row is new");
 
-    var fetched = sysdb.getQueueFromDB("q-insert");
+    var fetched = sysdb.getQueue("q-insert");
     assertTrue(fetched.isPresent());
     var q = fetched.get();
     assertEquals("q-insert", q.name());
@@ -1605,7 +1605,7 @@ public class SystemDatabaseTest {
     boolean inserted = sysdb.upsertQueue(updated, true);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
-    var fetched = sysdb.getQueueFromDB("q-update").orElseThrow();
+    var fetched = sysdb.getQueue("q-update").orElseThrow();
     assertEquals(7, fetched.concurrency());
     assertEquals(4, fetched.workerConcurrency());
   }
@@ -1619,14 +1619,14 @@ public class SystemDatabaseTest {
     boolean inserted = sysdb.upsertQueue(attempted, false);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
-    var fetched = sysdb.getQueueFromDB("q-no-update").orElseThrow();
+    var fetched = sysdb.getQueue("q-no-update").orElseThrow();
     assertEquals(
         3, fetched.concurrency(), "concurrency should be unchanged when updateExisting=false");
   }
 
   @Test
   public void testGetQueueFromDBMissing() {
-    var result = sysdb.getQueueFromDB("does-not-exist");
+    var result = sysdb.getQueue("does-not-exist");
     assertTrue(result.isEmpty());
   }
 
@@ -1636,7 +1636,7 @@ public class SystemDatabaseTest {
     sysdb.upsertQueue(new Queue("q-list-b").withConcurrency(2), true);
     sysdb.upsertQueue(new Queue("q-list-c"), true);
 
-    var queues = sysdb.listQueuesFromDB();
+    var queues = sysdb.listQueues();
     var names = queues.stream().map(Queue::name).toList();
     assertTrue(names.contains("q-list-a"));
     assertTrue(names.contains("q-list-b"));
@@ -1646,11 +1646,11 @@ public class SystemDatabaseTest {
   @Test
   public void testDeleteQueue() {
     sysdb.upsertQueue(new Queue("q-delete").withConcurrency(1), true);
-    assertTrue(sysdb.getQueueFromDB("q-delete").isPresent());
+    assertTrue(sysdb.getQueue("q-delete").isPresent());
 
     boolean deleted = sysdb.deleteQueue("q-delete");
     assertTrue(deleted);
-    assertTrue(sysdb.getQueueFromDB("q-delete").isEmpty());
+    assertTrue(sysdb.getQueue("q-delete").isEmpty());
   }
 
   @Test
@@ -1669,7 +1669,7 @@ public class SystemDatabaseTest {
 
     sysdb.updateQueue("q-partial", QueueUpdate.setConcurrency(99));
 
-    var q = sysdb.getQueueFromDB("q-partial").orElseThrow();
+    var q = sysdb.getQueue("q-partial").orElseThrow();
     assertEquals(99, q.concurrency(), "concurrency should be updated");
     assertTrue(q.priorityEnabled(), "priorityEnabled should be unchanged");
     assertNotNull(q.rateLimit(), "rateLimit should be unchanged");
@@ -1682,7 +1682,7 @@ public class SystemDatabaseTest {
 
     sysdb.updateQueue("q-clear-conc", QueueUpdate.setConcurrency(null));
 
-    var q = sysdb.getQueueFromDB("q-clear-conc").orElseThrow();
+    var q = sysdb.getQueue("q-clear-conc").orElseThrow();
     assertNull(q.concurrency(), "concurrency should be cleared to null");
   }
 
@@ -1694,7 +1694,7 @@ public class SystemDatabaseTest {
 
     sysdb.updateQueue("q-clear-rate", QueueUpdate.setRateLimit(null, null));
 
-    var q = sysdb.getQueueFromDB("q-clear-rate").orElseThrow();
+    var q = sysdb.getQueue("q-clear-rate").orElseThrow();
     assertNull(q.rateLimit(), "rateLimit should be cleared to null");
   }
 
@@ -1714,7 +1714,7 @@ public class SystemDatabaseTest {
             Field.absent());
     sysdb.updateQueue("q-empty-update", emptyUpdate);
 
-    var q = sysdb.getQueueFromDB("q-empty-update").orElseThrow();
+    var q = sysdb.getQueue("q-empty-update").orElseThrow();
     assertEquals(5, q.concurrency());
   }
 
@@ -1730,7 +1730,7 @@ public class SystemDatabaseTest {
             .withPollingInterval(Duration.ofSeconds(5));
 
     sysdb.upsertQueue(original, true);
-    var fetched = sysdb.getQueueFromDB("q-roundtrip").orElseThrow();
+    var fetched = sysdb.getQueue("q-roundtrip").orElseThrow();
 
     assertEquals(original.name(), fetched.name());
     assertEquals(original.concurrency(), fetched.concurrency());
