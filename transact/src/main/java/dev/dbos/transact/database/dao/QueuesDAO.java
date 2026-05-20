@@ -1,7 +1,9 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueUpdate;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.Connection;
@@ -352,12 +354,7 @@ public class QueuesDAO {
           }
           ps.setBoolean(6, queue.priorityEnabled());
           ps.setBoolean(7, queue.partitioningEnabled());
-          var pollingInterval = queue.pollingInterval();
-          if (pollingInterval != null) {
-            ps.setDouble(8, pollingInterval.toMillis() / 1000.0);
-          } else {
-            ps.setNull(8, java.sql.Types.DOUBLE);
-          }
+          ps.setDouble(8, queue.pollingInterval().toMillis() / 1000.0);
           ps.setLong(9, System.currentTimeMillis());
           ps.executeUpdate();
         }
@@ -416,6 +413,46 @@ public class QueuesDAO {
     }
   }
 
+  public static void updateQueue(DbContext ctx, String name, QueueUpdate update)
+      throws SQLException {
+    if (update.isEmpty()) return;
+
+    List<String> setClauses = new ArrayList<>();
+    List<Object> params = new ArrayList<>();
+
+    collectField(setClauses, params, "concurrency", update.concurrency());
+    collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
+    collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
+    collectField(setClauses, params, "rate_limit_period_sec", update.rateLimitPeriodSec());
+    collectField(setClauses, params, "priority_enabled", update.priorityEnabled());
+    collectField(setClauses, params, "partition_queue", update.partitionQueue());
+    collectField(setClauses, params, "polling_interval_sec", update.pollingIntervalSec());
+
+    setClauses.add("\"updated_at\" = ?");
+    params.add(System.currentTimeMillis());
+    params.add(name);
+
+    String sql =
+        "UPDATE \"%s\".queues SET %s WHERE name = ?"
+            .formatted(ctx.schema(), String.join(", ", setClauses));
+
+    try (Connection connection = ctx.getConnection();
+        PreparedStatement ps = connection.prepareStatement(sql)) {
+      for (int i = 0; i < params.size(); i++) {
+        ps.setObject(i + 1, params.get(i));
+      }
+      ps.executeUpdate();
+    }
+  }
+
+  private static <T> void collectField(
+      List<String> clauses, List<Object> params, String column, Field<T> field) {
+    if (field.isPresent()) {
+      clauses.add("\"" + column + "\" = ?");
+      params.add(field.get());
+    }
+  }
+
   public static boolean deleteQueue(DbContext ctx, String name) throws SQLException {
     final String sql = "DELETE FROM \"%s\".queues WHERE name = ?".formatted(ctx.schema());
 
@@ -442,7 +479,9 @@ public class QueuesDAO {
           new Queue.RateLimit(rateLimitMax, Duration.ofMillis((long) (rateLimitPeriodSec * 1000)));
     }
     Duration pollingInterval =
-        pollingIntervalSec != null ? Duration.ofMillis((long) (pollingIntervalSec * 1000)) : null;
+        pollingIntervalSec != null
+            ? Duration.ofMillis((long) (pollingIntervalSec * 1000))
+            : Queue.DEFAULT_POLLING_INTERVAL;
     return new Queue(
         name,
         concurrency,

@@ -17,25 +17,27 @@ public record Queue(
     RateLimit rateLimit,
     Duration pollingInterval) {
 
+  public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(1);
+
   /** Rate limit parameter structure for DBOS workflow queues */
   public static record RateLimit(int limit, Duration period) {}
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
+    Objects.requireNonNull(pollingInterval, "Queue pollingInterval must not be null");
     if (concurrency != null && concurrency <= 0)
       throw new IllegalArgumentException(
           "If specified, queue concurrency must be greater than zero");
     if (workerConcurrency != null && workerConcurrency <= 0)
       throw new IllegalArgumentException(
           "If specified, queue workerConcurrency must be greater than zero");
-    if (pollingInterval != null && (pollingInterval.isNegative() || pollingInterval.isZero()))
-      throw new IllegalArgumentException(
-          "If specified, queue pollingInterval must be greater than zero");
+    if (pollingInterval.isNegative() || pollingInterval.isZero())
+      throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
   }
 
   /** Construct a queue with a given name */
   public Queue(String name) {
-    this(name, null, null, false, false, null, null);
+    this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL);
   }
 
   /**
@@ -138,10 +140,7 @@ public record Queue(
     return withRateLimit(new RateLimit(limit, Duration.of(period, unit.toChronoUnit())));
   }
 
-  /**
-   * Produces a new Queue with the assigned polling interval. `null` may be specified to use the
-   * executor default (1 second).
-   */
+  /** Produces a new Queue with the assigned polling interval. */
   public Queue withPollingInterval(Duration pollingInterval) {
     return new Queue(
         name,
