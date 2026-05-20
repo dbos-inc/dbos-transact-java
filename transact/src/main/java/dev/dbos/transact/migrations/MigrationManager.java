@@ -7,8 +7,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -18,6 +20,12 @@ import org.slf4j.LoggerFactory;
 public class MigrationManager {
 
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
+
+  private static final Set<Integer> ONLINE_MIGRATIONS =
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35);
+
+  private static final long MIGRATION_LOCK_ID = 1234567890L;
+  private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
 
   public static void runMigrations(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
@@ -46,6 +54,30 @@ public class MigrationManager {
     }
   }
 
+  private static boolean shouldMigrate(
+      Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
+      throws SQLException {
+    var schemaSql = "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?";
+    try (var stmt = conn.prepareStatement(schemaSql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) return true;
+      }
+    }
+    var tableSql =
+        "SELECT 1 FROM information_schema.tables"
+            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+    try (var stmt = conn.prepareStatement(tableSql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) return true;
+      }
+    }
+    var currentVersion = getCurrentSysDbVersion(conn, schema);
+    var latestVersion = getMigrations(schema, useListenNotify, isCockroach).size();
+    return currentVersion < latestVersion;
+  }
+
   private static void runMigrations(DataSource ds, String schema, boolean useListenNotify) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
@@ -54,17 +86,72 @@ public class MigrationManager {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
     }
 
-    try (var conn = ds.getConnection()) {
-
-      var isCockroach = SystemDatabase.isCockroach(conn);
+    try (var checkConn = ds.getConnection()) {
+      var isCockroach = SystemDatabase.isCockroach(checkConn);
       if (isCockroach) {
         useListenNotify = false;
       }
 
-      ensureDbosSchema(conn, schema);
-      ensureMigrationTable(conn, schema);
-      var migrations = getMigrations(schema, useListenNotify);
-      runDbosMigrations(conn, schema, migrations);
+      // Skip advisory lock and migration work entirely if already up-to-date.
+      if (!shouldMigrate(checkConn, schema, useListenNotify, isCockroach)) {
+        return;
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException("Failed to run migrations", e);
+    }
+
+    // Use a dedicated connection held in autocommit mode to hold the session-level advisory
+    // lock for the entire migration run. Keeping the lock on a separate connection prevents
+    // CockroachDB (and other databases) from releasing the lock when migration transactions
+    // commit on the main connection.
+    try (var lockConn = ds.getConnection();
+        var migrConn = ds.getConnection()) {
+
+      var isCockroach = SystemDatabase.isCockroach(migrConn);
+      if (isCockroach) {
+        useListenNotify = false;
+      }
+
+      boolean locked = false;
+      lockConn.setAutoCommit(true);
+      long deadline = System.currentTimeMillis() + MIGRATION_LOCK_TIMEOUT_SEC * 1000L;
+      while (true) {
+        try (var stmt = lockConn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+          stmt.setLong(1, MIGRATION_LOCK_ID);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next() && rs.getBoolean(1)) {
+              locked = true;
+              break;
+            }
+          }
+        }
+        if (System.currentTimeMillis() >= deadline) {
+          logger.warn(
+              "Could not acquire migration advisory lock within {}s. Attempting migrations without lock.",
+              MIGRATION_LOCK_TIMEOUT_SEC);
+          break;
+        }
+        Thread.sleep(1000);
+      }
+
+      try {
+        ensureDbosSchema(migrConn, schema);
+        ensureMigrationTable(migrConn, schema);
+        var migrations = getMigrations(schema, useListenNotify, isCockroach);
+        runDbosMigrations(migrConn, schema, migrations, isCockroach);
+      } finally {
+        if (locked) {
+          try (var stmt = lockConn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
+            stmt.setLong(1, MIGRATION_LOCK_ID);
+            stmt.execute();
+          } catch (SQLException e) {
+            logger.warn("Failed to release migration advisory lock", e);
+          }
+        }
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Migration interrupted while waiting for advisory lock", e);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     }
@@ -182,18 +269,39 @@ public class MigrationManager {
 
   private static boolean notificationsPrimaryKeyExists(Connection conn, String schema)
       throws SQLException {
-    var sql =
-        "SELECT 1 FROM information_schema.table_constraints"
-            + " WHERE table_schema = ? AND table_name = 'notifications' AND constraint_type = 'PRIMARY KEY'";
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, schema);
-      try (var rs = stmt.executeQuery()) {
-        return rs.next();
-      }
+    try (var rs = conn.getMetaData().getPrimaryKeys(null, schema, "notifications")) {
+      return rs.next();
     }
   }
 
   static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
+    try {
+      runDbosMigrations(conn, schema, migrations, SystemDatabase.isCockroach(conn));
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @FunctionalInterface
+  private interface SqlAction {
+    void run(Connection conn) throws SQLException;
+  }
+
+  private static void runInTransaction(Connection conn, SqlAction action) throws SQLException {
+    conn.setAutoCommit(false);
+    try {
+      action.run(conn);
+      conn.commit();
+    } catch (SQLException e) {
+      conn.rollback();
+      throw e;
+    } finally {
+      conn.setAutoCommit(true);
+    }
+  }
+
+  static void runDbosMigrations(
+      Connection conn, String schema, List<String> migrations, boolean isCockroach) {
     Objects.requireNonNull(schema, "schema must not be null");
     var lastApplied = getCurrentSysDbVersion(conn, schema);
 
@@ -205,53 +313,94 @@ public class MigrationManager {
 
       logger.info("Applying DBOS system database schema migration {}", migrationIndex);
 
-      // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
-      // (guard for installs that were created before the primary key was added to migration 1).
-      boolean skipMigration = false;
-      if (migrationIndex == 10) {
-        try {
-          skipMigration = notificationsPrimaryKeyExists(conn, schema);
-        } catch (SQLException e) {
-          throw new RuntimeException("Failed to check notifications primary key", e);
-        }
-        if (skipMigration) {
-          logger.info("Migration 10 skipped, primary key already exists");
-        }
-      }
-
-      if (!skipMigration) {
-        try (var stmt = conn.createStatement()) {
-          stmt.execute(migrations.get(i));
-        } catch (SQLException e) {
-          throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
-        }
-      }
+      var migrationSql = migrations.get(i);
+      var versionBefore = lastApplied;
 
       try {
-        if (lastApplied == 0) {
-          var sql = "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
-          try (var stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, migrationIndex);
-            stmt.executeUpdate();
+        if (migrationSql.isBlank()) {
+          // No DDL (e.g. migration 20 on CockroachDB); just record the version.
+          logger.info("Migration {} has no statements; skipping.", migrationIndex);
+          runInTransaction(
+              conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
+        } else if (migrationIndex == 10 && notificationsPrimaryKeyExists(conn, schema)) {
+          // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
+          // (guard for installs created before the primary key was added to migration 1).
+          logger.info("Migration 10 skipped, primary key already exists");
+          runInTransaction(
+              conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
+        } else if (ONLINE_MIGRATIONS.contains(migrationIndex) && !isCockroach) {
+          // CONCURRENTLY index DDL cannot run inside a transaction. Clean up any indexes left
+          // invalid by a prior failed attempt, run the DDL in autocommit, then bump the version
+          // in its own transaction.
+          cleanupInvalidIndexes(conn, schema);
+          try (var stmt = conn.createStatement()) {
+            stmt.execute(migrationSql);
           }
+          runInTransaction(
+              conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
         } else {
-          var sql = "UPDATE \"%s\".dbos_migrations SET version = ?".formatted(schema);
-          try (var stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, migrationIndex);
-            stmt.executeUpdate();
-          }
+          // Standard migration: DDL and version bump in one transaction.
+          runInTransaction(
+              conn,
+              c -> {
+                try (var stmt = c.createStatement()) {
+                  stmt.execute(migrationSql);
+                }
+                bumpMigrationVersion(c, schema, migrationIndex, versionBefore);
+              });
         }
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to update dbos migration version", e);
+        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
       }
 
       lastApplied = migrationIndex;
     }
   }
 
-  public static List<String> getMigrations(String schema, boolean useListenNotify) {
-    Objects.requireNonNull(schema);
+  private static void bumpMigrationVersion(
+      Connection conn, String schema, int version, int versionBefore) throws SQLException {
+    if (versionBefore == 0) {
+      var sql = "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setLong(1, version);
+        stmt.executeUpdate();
+      }
+    } else {
+      var sql = "UPDATE \"%s\".dbos_migrations SET version = ?".formatted(schema);
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setLong(1, version);
+        stmt.executeUpdate();
+      }
+    }
+  }
 
+  private static void cleanupInvalidIndexes(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT i.relname FROM pg_index ix "
+            + "JOIN pg_class i ON i.oid = ix.indexrelid "
+            + "JOIN pg_class t ON t.oid = ix.indrelid "
+            + "JOIN pg_namespace n ON n.oid = t.relnamespace "
+            + "WHERE NOT ix.indisvalid AND n.nspname = ?";
+    var invalidIndexes = new ArrayList<String>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          invalidIndexes.add(rs.getString(1));
+        }
+      }
+    }
+    for (var idxName : invalidIndexes) {
+      logger.warn("Dropping invalid index {}.{} left by a prior failed migration", schema, idxName);
+      try (var stmt = conn.createStatement()) {
+        stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS \"%s\".\"%s\"".formatted(schema, idxName));
+      }
+    }
+  }
+
+  public static List<String> getMigrations(
+      String schema, boolean useListenNotify, boolean isCockroach) {
+    Objects.requireNonNull(schema);
     var migrations =
         List.of(
             migration1(useListenNotify),
@@ -272,7 +421,23 @@ public class MigrationManager {
             MIGRATION_16,
             MIGRATION_17,
             MIGRATION_18,
-            MIGRATION_19);
+            MIGRATION_19,
+            migration20(useListenNotify, isCockroach),
+            MIGRATION_21,
+            migration22(isCockroach),
+            migration23(isCockroach),
+            migration24(isCockroach),
+            migration25(isCockroach),
+            migration26(isCockroach),
+            migration27(isCockroach),
+            migration28(isCockroach),
+            migration29(isCockroach),
+            migration30(isCockroach),
+            migration31(isCockroach),
+            migration32(isCockroach),
+            MIGRATION_33,
+            migration34(isCockroach),
+            migration35(isCockroach));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -628,4 +793,147 @@ public class MigrationManager {
       """
       CREATE INDEX "idx_operation_outputs_completed_at_function_name" ON "%1$s"."operation_outputs" ("completed_at_epoch_ms", "function_name");
       """;
+
+  static String migration20(boolean useListenNotify, boolean isCockroach) {
+    if (isCockroach) return "";
+    var m =
+        """
+        ALTER FUNCTION "%1$s".enqueue_workflow(
+            TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INTEGER, TEXT
+        ) SET search_path = pg_catalog, pg_temp;
+
+        ALTER FUNCTION "%1$s".send_message(
+            TEXT, JSON, TEXT, TEXT
+        ) SET search_path = pg_catalog, pg_temp;
+        """;
+    if (useListenNotify) {
+      m +=
+          """
+          ALTER FUNCTION "%1$s".notifications_function() SET search_path = pg_catalog, pg_temp;
+          ALTER FUNCTION "%1$s".workflow_events_function() SET search_path = pg_catalog, pg_temp;
+          """;
+    }
+    return m;
+  }
+
+  static final String MIGRATION_21 =
+      """
+      CREATE TABLE "%1$s".queues (
+          queue_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+          name TEXT NOT NULL UNIQUE,
+          concurrency INTEGER,
+          worker_concurrency INTEGER,
+          rate_limit_max INTEGER,
+          rate_limit_period_sec DOUBLE PRECISION,
+          priority_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          partition_queue BOOLEAN NOT NULL DEFAULT FALSE,
+          polling_interval_sec DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+          created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
+          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+      """;
+
+  private static String concurrently(boolean isCockroach) {
+    return isCockroach ? "" : "CONCURRENTLY";
+  }
+
+  static String migration22(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_forked_from\"";
+  }
+
+  static String migration23(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_forked_from\""
+        + " ON \"%1$s\".\"workflow_status\" (\"forked_from\") WHERE \"forked_from\" IS NOT NULL";
+  }
+
+  static String migration24(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_parent_workflow_id\"";
+  }
+
+  static String migration25(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_parent_workflow_id\""
+        + " ON \"%1$s\".\"workflow_status\" (\"parent_workflow_id\")"
+        + " WHERE \"parent_workflow_id\" IS NOT NULL";
+  }
+
+  static String migration26(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"workflow_status_executor_id_index\"";
+  }
+
+  static String migration27(boolean isCockroach) {
+    // New partial unique index uses a different name to avoid collision with the old constraint
+    return "CREATE UNIQUE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"uq_workflow_status_dedup_id\""
+        + " ON \"%1$s\".\"workflow_status\" (\"queue_name\", \"deduplication_id\")"
+        + " WHERE \"deduplication_id\" IS NOT NULL";
+  }
+
+  static String migration28(boolean isCockroach) {
+    // CockroachDB implements unique constraints as indexes and rejects ALTER TABLE DROP CONSTRAINT;
+    // Postgres rejects DROP INDEX on a constraint-backed index.
+    if (isCockroach) {
+      return "DROP INDEX IF EXISTS \"%1$s\".\"uq_workflow_status_queue_name_dedup_id\" CASCADE";
+    }
+    return "ALTER TABLE \"%1$s\".workflow_status"
+        + " DROP CONSTRAINT IF EXISTS uq_workflow_status_queue_name_dedup_id";
+  }
+
+  static String migration29(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_pending\""
+        + " ON \"%1$s\".\"workflow_status\" (\"created_at\") WHERE \"status\" = 'PENDING'";
+  }
+
+  static String migration30(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_failed\""
+        + " ON \"%1$s\".\"workflow_status\" (\"status\", \"created_at\")"
+        + " WHERE \"status\" IN ('ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')";
+  }
+
+  static String migration31(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"workflow_status_status_index\"";
+  }
+
+  static String migration32(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_in_flight\""
+        + " ON \"%1$s\".\"workflow_status\" (\"queue_name\", \"status\", \"priority\", \"created_at\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING')";
+  }
+
+  // ALTER TABLE ADD COLUMN with constant default is a fast catalog-only update on Postgres.
+  static final String MIGRATION_33 =
+      "ALTER TABLE \"%1$s\".\"workflow_status\""
+          + " ADD COLUMN IF NOT EXISTS \"rate_limited\" BOOLEAN NOT NULL DEFAULT FALSE";
+
+  static String migration34(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_rate_limited\""
+        + " ON \"%1$s\".\"workflow_status\" (\"queue_name\", \"started_at_epoch_ms\")"
+        + " WHERE \"rate_limited\" = TRUE";
+  }
+
+  static String migration35(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_queue_status_started\"";
+  }
 }

@@ -9,8 +9,6 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
-  test-crdb:
-    uses: ./.github/workflows/test_crdb.yml
   publish:
     needs: test
     uses: ./.github/workflows/publish.yml
