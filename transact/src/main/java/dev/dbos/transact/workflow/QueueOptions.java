@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -79,44 +80,79 @@ public record QueueOptions(
 
   public QueueOptions withConcurrency(Field<Integer> concurrency) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withWorkerConcurrency(Field<Integer> workerConcurrency) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withRateLimitMax(Field<Integer> rateLimitMax) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withRateLimitPeriod(Field<Duration> rateLimitPeriod) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withPriorityEnabled(Field<Boolean> priorityEnabled) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withPartitionQueue(Field<Boolean> partitionQueue) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   public QueueOptions withPollingInterval(Field<Duration> pollingInterval) {
     return new QueueOptions(
-        concurrency, workerConcurrency, rateLimitMax, rateLimitPeriod,
-        priorityEnabled, partitionQueue, pollingInterval);
+        concurrency,
+        workerConcurrency,
+        rateLimitMax,
+        rateLimitPeriod,
+        priorityEnabled,
+        partitionQueue,
+        pollingInterval);
   }
 
   // ── Conversion for DB registration ───────────────────────────────────────
@@ -132,8 +168,10 @@ public record QueueOptions(
     Boolean partitionQueueVal = partitionQueue.isPresent() ? partitionQueue.get() : null;
 
     Queue.RateLimit rateLimit = null;
-    if (rateLimitMax.isPresent() && rateLimitPeriod.isPresent()
-        && rateLimitMax.get() != null && rateLimitPeriod.get() != null) {
+    if (rateLimitMax.isPresent()
+        && rateLimitPeriod.isPresent()
+        && rateLimitMax.get() != null
+        && rateLimitPeriod.get() != null) {
       rateLimit = new Queue.RateLimit(rateLimitMax.get(), rateLimitPeriod.get());
     }
 

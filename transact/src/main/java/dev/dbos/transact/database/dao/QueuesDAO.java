@@ -423,10 +423,12 @@ public class QueuesDAO {
     collectField(setClauses, params, "concurrency", update.concurrency());
     collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
     collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
-    collectField(setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
+    collectField(
+        setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
     collectField(setClauses, params, "priority_enabled", update.priorityEnabled());
     collectField(setClauses, params, "partition_queue", update.partitionQueue());
-    collectField(setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
+    collectField(
+        setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
     setClauses.add("\"updated_at\" = ?");
     params.add(System.currentTimeMillis());
