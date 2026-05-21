@@ -17,6 +17,8 @@ public class Constants {
   public static final String DBOS_INTERNAL_QUEUE = "_dbos_internal_queue";
 
   public static final String DEBOUNCER_WORKFLOW_NAME = "_dbos_debouncer_workflow";
+  public static final String DEBOUNCER_SERVICE_CLASS_NAME =
+      "dev.dbos.transact.workflow.internal.DebouncerServiceImpl";
   public static final String DEBOUNCER_TOPIC = "_dbos_debouncer_topic";
   // Event key published by the debouncer-workflow so callers can retrieve the pre-assigned
   // user workflow id without relying on Jackson deserialization of workflow inputs.
