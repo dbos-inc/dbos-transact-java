@@ -71,8 +71,7 @@ public class DynamicQueuesTest {
       String id = "dynwf" + i;
       String input = "v" + i;
       dbos.startWorkflow(
-          () -> serviceQ.simpleQWorkflow(input),
-          new StartWorkflowOptions(id).withQueue("concQ"));
+          () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue("concQ"));
     }
 
     for (int i = 0; i < 3; i++) {
@@ -120,13 +119,19 @@ public class DynamicQueuesTest {
     dbos.registerQueue("q-update", QueueOptions.setConcurrency(5));
 
     var before =
-        dbos.listQueues().stream().filter(x -> x.name().equals("q-update")).findFirst().orElseThrow();
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-update"))
+            .findFirst()
+            .orElseThrow();
     assertEquals(5, before.concurrency());
 
     dbos.updateQueue("q-update", QueueOptions.setConcurrency(10));
 
     var after =
-        dbos.listQueues().stream().filter(x -> x.name().equals("q-update")).findFirst().orElseThrow();
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-update"))
+            .findFirst()
+            .orElseThrow();
     assertEquals(10, after.concurrency());
   }
 
@@ -137,10 +142,14 @@ public class DynamicQueuesTest {
     dbos.registerQueue("q-conflict", QueueOptions.setConcurrency(5));
 
     // NEVER_UPDATE: second call should not overwrite
-    dbos.registerQueue("q-conflict", QueueOptions.setConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
+    dbos.registerQueue(
+        "q-conflict", QueueOptions.setConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
 
     var q =
-        dbos.listQueues().stream().filter(x -> x.name().equals("q-conflict")).findFirst().orElseThrow();
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-conflict"))
+            .findFirst()
+            .orElseThrow();
     assertEquals(5, q.concurrency());
   }
 
@@ -151,10 +160,14 @@ public class DynamicQueuesTest {
     dbos.registerQueue("q-always", QueueOptions.setConcurrency(5));
 
     // ALWAYS_UPDATE: second call should overwrite
-    dbos.registerQueue("q-always", QueueOptions.setConcurrency(99), QueueConflictResolution.ALWAYS_UPDATE);
+    dbos.registerQueue(
+        "q-always", QueueOptions.setConcurrency(99), QueueConflictResolution.ALWAYS_UPDATE);
 
     var q =
-        dbos.listQueues().stream().filter(x -> x.name().equals("q-always")).findFirst().orElseThrow();
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-always"))
+            .findFirst()
+            .orElseThrow();
     assertEquals(99, q.concurrency());
   }
 

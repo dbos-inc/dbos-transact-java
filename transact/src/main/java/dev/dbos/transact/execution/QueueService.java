@@ -29,7 +29,7 @@ public class QueueService implements AutoCloseable {
 
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
-  private  Set<String> listenQueues;
+  private Set<String> listenQueues;
   private double speedup = 1.0;
 
   public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
@@ -84,7 +84,8 @@ public class QueueService implements AutoCloseable {
     var execService = execServiceRef.get();
     if (execService != null) {
       execService.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
-      execService.scheduleAtFixedRate(this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
+      execService.scheduleAtFixedRate(
+          this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
     }
 
     for (var _queue : queues) {

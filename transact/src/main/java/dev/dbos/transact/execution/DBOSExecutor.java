@@ -419,7 +419,6 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.listQueues();
   }
 
-
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
     if (alertHandler != null) {
       alertHandler.invoke(name, message, metadata);
