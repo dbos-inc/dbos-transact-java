@@ -1574,14 +1574,13 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueInsert() {
-    var queue =
-        new Queue("q-insert")
-            .withConcurrency(5)
-            .withWorkerConcurrency(2)
-            .withPriorityEnabled(true)
-            .withRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
+    var options =
+        QueueOptions.setConcurrency(5)
+            .andWorkerConcurrency(2)
+            .andPriorityEnabled(true)
+            .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
 
-    boolean inserted = sysdb.upsertQueue(queue, true);
+    boolean inserted = sysdb.upsertQueue("q-insert", options, true);
     assertTrue(inserted, "upsertQueue should return true when the row is new");
 
     var fetched = sysdb.getQueue("q-insert");
@@ -1598,11 +1597,10 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueOptionsExisting() {
-    var queue = new Queue("q-update").withConcurrency(3);
-    sysdb.upsertQueue(queue, true);
+    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true);
 
-    var updated = new Queue("q-update").withConcurrency(7).withWorkerConcurrency(4);
-    boolean inserted = sysdb.upsertQueue(updated, true);
+    boolean inserted =
+        sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.getQueue("q-update").orElseThrow();
@@ -1612,11 +1610,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueNoUpdateExisting() {
-    var queue = new Queue("q-no-update").withConcurrency(3);
-    sysdb.upsertQueue(queue, true);
+    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true);
 
-    var attempted = new Queue("q-no-update").withConcurrency(99);
-    boolean inserted = sysdb.upsertQueue(attempted, false);
+    boolean inserted = sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.getQueue("q-no-update").orElseThrow();
@@ -1632,9 +1628,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListQueuesFromDB() {
-    sysdb.upsertQueue(new Queue("q-list-a").withConcurrency(1), true);
-    sysdb.upsertQueue(new Queue("q-list-b").withConcurrency(2), true);
-    sysdb.upsertQueue(new Queue("q-list-c"), true);
+    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true);
+    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true);
+    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true);
 
     var queues = sysdb.listQueues();
     var names = queues.stream().map(Queue::name).toList();
@@ -1645,7 +1641,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testDeleteQueue() {
-    sysdb.upsertQueue(new Queue("q-delete").withConcurrency(1), true);
+    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true);
     assertTrue(sysdb.getQueue("q-delete").isPresent());
 
     boolean deleted = sysdb.deleteQueue("q-delete");
@@ -1661,10 +1657,10 @@ public class SystemDatabaseTest {
   @Test
   public void testUpdateQueuePartialConcurrency() {
     sysdb.upsertQueue(
-        new Queue("q-partial")
-            .withConcurrency(5)
-            .withPriorityEnabled(true)
-            .withRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
+        "q-partial",
+        QueueOptions.setConcurrency(5)
+            .andPriorityEnabled(true)
+            .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
         true);
 
     sysdb.updateQueue("q-partial", QueueOptions.setConcurrency(99));
@@ -1678,7 +1674,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueClearConcurrency() {
-    sysdb.upsertQueue(new Queue("q-clear-conc").withConcurrency(5), true);
+    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true);
 
     sysdb.updateQueue("q-clear-conc", QueueOptions.setConcurrency(null));
 
@@ -1689,7 +1685,8 @@ public class SystemDatabaseTest {
   @Test
   public void testUpdateQueueClearRateLimit() {
     sysdb.upsertQueue(
-        new Queue("q-clear-rate").withRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
+        "q-clear-rate",
+        QueueOptions.setRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
         true);
 
     sysdb.updateQueue("q-clear-rate", QueueOptions.setRateLimit(null, null));
@@ -1700,7 +1697,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueEmpty() {
-    sysdb.upsertQueue(new Queue("q-empty-update").withConcurrency(5), true);
+    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true);
 
     // Empty update should be a no-op (no exception, no change)
     var emptyUpdate =
@@ -1720,25 +1717,25 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueRoundTrip() {
-    var original =
-        new Queue("q-roundtrip")
-            .withConcurrency(8)
-            .withWorkerConcurrency(4)
-            .withPriorityEnabled(true)
-            .withPartitioningEnabled(true)
-            .withRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
-            .withPollingInterval(Duration.ofSeconds(5));
-
-    sysdb.upsertQueue(original, true);
+    sysdb.upsertQueue(
+        "q-roundtrip",
+        QueueOptions.setConcurrency(8)
+            .andWorkerConcurrency(4)
+            .andPriorityEnabled(true)
+            .andPartitionQueue(true)
+            .andRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
+            .andPollingInterval(Duration.ofSeconds(5)),
+        true);
     var fetched = sysdb.getQueue("q-roundtrip").orElseThrow();
 
-    assertEquals(original.name(), fetched.name());
-    assertEquals(original.concurrency(), fetched.concurrency());
-    assertEquals(original.workerConcurrency(), fetched.workerConcurrency());
-    assertEquals(original.priorityEnabled(), fetched.priorityEnabled());
-    assertEquals(original.partitioningEnabled(), fetched.partitioningEnabled());
-    assertEquals(original.rateLimit().limit(), fetched.rateLimit().limit());
-    assertEquals(original.rateLimit().period(), fetched.rateLimit().period());
-    assertEquals(original.pollingInterval(), fetched.pollingInterval());
+    assertEquals("q-roundtrip", fetched.name());
+    assertEquals(8, fetched.concurrency());
+    assertEquals(4, fetched.workerConcurrency());
+    assertTrue(fetched.priorityEnabled());
+    assertTrue(fetched.partitioningEnabled());
+    assertNotNull(fetched.rateLimit());
+    assertEquals(20, fetched.rateLimit().limit());
+    assertEquals(Duration.ofSeconds(30), fetched.rateLimit().period());
+    assertEquals(Duration.ofSeconds(5), fetched.pollingInterval());
   }
 }

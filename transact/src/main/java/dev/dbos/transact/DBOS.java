@@ -167,13 +167,24 @@ public class DBOS implements AutoCloseable {
 
   /**
    * Register a database-backed dynamic queue. Must be called after launch. Queue configuration can
-   * be updated at runtime via {@code DBOS.updateQueue(String, QueueOptions)}.
+   * be updated at runtime via {@link #updateQueue(String, QueueOptions)}.
    *
    * @param name Queue name
    * @param options Initial configuration options
    */
   public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
-    ensureLaunched("registerQueue").registerDynamicQueue(name, options);
+    ensureLaunched("registerQueue").registerQueue(name, options);
+  }
+
+  /**
+   * Update the configuration of a database-backed dynamic queue. Must be called after launch. Only
+   * fields that are present in {@code options} are written; absent fields are left unchanged.
+   *
+   * @param name Queue name
+   * @param options Fields to update
+   */
+  public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
+    ensureLaunched("updateQueue").updateQueue(name, options);
   }
 
   /**

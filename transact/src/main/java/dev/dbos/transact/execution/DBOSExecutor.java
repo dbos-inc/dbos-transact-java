@@ -391,8 +391,12 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.ofNullable(this.queueMap.get(queueName));
   }
 
-  public void registerDynamicQueue(String name, QueueOptions options) {
-    systemDatabase.upsertQueue(options.toQueue(name), true);
+  public void registerQueue(String name, QueueOptions options) {
+    systemDatabase.upsertQueue(name, options, true);
+  }
+
+  public void updateQueue(String name, QueueOptions options) {
+    systemDatabase.updateQueue(name, options);
   }
 
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {

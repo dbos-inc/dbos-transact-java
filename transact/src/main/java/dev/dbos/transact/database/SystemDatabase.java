@@ -386,8 +386,8 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
-  public boolean upsertQueue(Queue queue, boolean updateExisting) {
-    return dbRetry(() -> QueuesDAO.upsertQueue(ctx, queue, updateExisting));
+  public boolean upsertQueue(String name, QueueOptions options, boolean updateExisting) {
+    return dbRetry(() -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting));
   }
 
   public void updateQueue(String name, QueueOptions update) {

@@ -13,6 +13,7 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
@@ -1096,5 +1097,26 @@ public class DBOSClient implements AutoCloseable {
         new WorkflowDelay.DelayUntil(
             Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
     systemDatabase.setWorkflowDelay(workflowId, wfDelay);
+  }
+
+  /**
+   * Register a database-backed dynamic queue, or replace its configuration if it already exists.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   */
+  public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
+    systemDatabase.upsertQueue(name, options, true);
+  }
+
+  /**
+   * Update the configuration of a database-backed dynamic queue. Only fields that are present in
+   * {@code options} are written; absent fields are left unchanged.
+   *
+   * @param name Queue name
+   * @param options Fields to update
+   */
+  public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
+    systemDatabase.updateQueue(name, options);
   }
 }

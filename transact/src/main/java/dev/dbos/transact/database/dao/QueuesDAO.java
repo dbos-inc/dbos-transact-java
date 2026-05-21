@@ -302,8 +302,10 @@ public class QueuesDAO {
    * Upsert a queue row. Returns true iff a new row was inserted (i.e. the queue did not previously
    * exist). Returns false if the row already existed, regardless of whether it was updated.
    */
-  public static boolean upsertQueue(DbContext ctx, Queue queue, boolean updateExisting)
+  public static boolean upsertQueue(
+      DbContext ctx, String name, QueueOptions options, boolean updateExisting)
       throws SQLException {
+    Queue queue = queueFromOptions(name, options);
     final String conflictClause =
         updateExisting
             ? """
@@ -498,6 +500,39 @@ public class QueuesDAO {
         partitioningEnabled,
         rateLimit,
         pollingInterval);
+  }
+
+  private static Queue queueFromOptions(String name, QueueOptions options) {
+    Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
+    Integer workerConcurrencyVal =
+        options.workerConcurrency().isPresent() ? options.workerConcurrency().get() : null;
+    Boolean priorityEnabledVal =
+        options.priorityEnabled().isPresent() ? options.priorityEnabled().get() : null;
+    Boolean partitionQueueVal =
+        options.partitionQueue().isPresent() ? options.partitionQueue().get() : null;
+
+    Queue.RateLimit rateLimit = null;
+    if (options.rateLimitMax().isPresent()
+        && options.rateLimitPeriod().isPresent()
+        && options.rateLimitMax().get() != null
+        && options.rateLimitPeriod().get() != null) {
+      rateLimit =
+          new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
+    }
+
+    Duration pollingIntervalVal = Queue.DEFAULT_POLLING_INTERVAL;
+    if (options.pollingInterval().isPresent() && options.pollingInterval().get() != null) {
+      pollingIntervalVal = options.pollingInterval().get();
+    }
+
+    return new Queue(
+        name,
+        concurrencyVal,
+        workerConcurrencyVal,
+        Boolean.TRUE.equals(priorityEnabledVal),
+        Boolean.TRUE.equals(partitionQueueVal),
+        rateLimit,
+        pollingIntervalVal);
   }
 
   private static void setNullableInt(PreparedStatement stmt, int index, Integer value)

@@ -32,6 +32,10 @@ public record QueueOptions(
           Field.absent(),
           Field.absent());
 
+  public static QueueOptions empty() {
+    return EMPTY;
+  }
+
   public boolean isEmpty() {
     return !concurrency.isPresent()
         && !workerConcurrency.isPresent()
@@ -155,38 +159,37 @@ public record QueueOptions(
         pollingInterval);
   }
 
-  // ── Conversion for DB registration ───────────────────────────────────────
+  // ── Convenience chaining methods (take raw values, wrap in Field.of) ────
 
-  /**
-   * Converts to a {@link Queue} record for DB upsert. Absent and null fields both produce null
-   * column values (no limit / use default).
-   */
-  public Queue toQueue(String name) {
-    Integer concurrencyVal = concurrency.isPresent() ? concurrency.get() : null;
-    Integer workerConcurrencyVal = workerConcurrency.isPresent() ? workerConcurrency.get() : null;
-    Boolean priorityEnabledVal = priorityEnabled.isPresent() ? priorityEnabled.get() : null;
-    Boolean partitionQueueVal = partitionQueue.isPresent() ? partitionQueue.get() : null;
+  public QueueOptions andConcurrency(@Nullable Integer value) {
+    return withConcurrency(Field.of(value));
+  }
 
-    Queue.RateLimit rateLimit = null;
-    if (rateLimitMax.isPresent()
-        && rateLimitPeriod.isPresent()
-        && rateLimitMax.get() != null
-        && rateLimitPeriod.get() != null) {
-      rateLimit = new Queue.RateLimit(rateLimitMax.get(), rateLimitPeriod.get());
-    }
+  public QueueOptions andWorkerConcurrency(@Nullable Integer value) {
+    return withWorkerConcurrency(Field.of(value));
+  }
 
-    Duration pollingIntervalVal = Queue.DEFAULT_POLLING_INTERVAL;
-    if (pollingInterval.isPresent() && pollingInterval.get() != null) {
-      pollingIntervalVal = pollingInterval.get();
-    }
+  public QueueOptions andRateLimit(@Nullable Integer max, @Nullable Duration period) {
+    return withRateLimitMax(Field.of(max)).withRateLimitPeriod(Field.of(period));
+  }
 
-    return new Queue(
-        name,
-        concurrencyVal,
-        workerConcurrencyVal,
-        Boolean.TRUE.equals(priorityEnabledVal),
-        Boolean.TRUE.equals(partitionQueueVal),
-        rateLimit,
-        pollingIntervalVal);
+  public QueueOptions andRateLimit(int max, Duration period) {
+    return andRateLimit(max, (Duration) period);
+  }
+
+  public QueueOptions andRateLimit(int max, long period, TimeUnit unit) {
+    return andRateLimit(max, Duration.of(period, unit.toChronoUnit()));
+  }
+
+  public QueueOptions andPriorityEnabled(boolean value) {
+    return withPriorityEnabled(Field.of(value));
+  }
+
+  public QueueOptions andPartitionQueue(boolean value) {
+    return withPartitionQueue(Field.of(value));
+  }
+
+  public QueueOptions andPollingInterval(@Nullable Duration value) {
+    return withPollingInterval(Field.of(value));
   }
 }
