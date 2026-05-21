@@ -73,7 +73,6 @@ public class InternalWorkflows {
 
       Optional<DebouncerMessage> msg = dbos.recv(Constants.DEBOUNCER_TOPIC, waitDuration);
       if (msg.isEmpty()) {
-        // Period elapsed with no new message — fire.
         break;
       }
       DebouncerMessage next = msg.get();

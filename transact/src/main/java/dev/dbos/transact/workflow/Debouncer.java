@@ -262,7 +262,6 @@ public final class Debouncer<R> {
             appVersion,
             priority,
             deduplicationId);
-    // DBOSContextHolder.get() is guaranteed non-null inside a workflow context
     Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
     DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
@@ -298,7 +297,7 @@ public final class Debouncer<R> {
           continue;
         }
         DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
-        // messageId is the idempotency key — exactly-once delivery, no tracking flag needed.
+        // messageId is the idempotency key — exactly-once delivery.
         dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before

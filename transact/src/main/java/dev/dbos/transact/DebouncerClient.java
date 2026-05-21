@@ -258,8 +258,6 @@ public final class DebouncerClient<R> {
     DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
-    // Use the stable class-name constant so a rename of InternalWorkflows is caught at compile
-    // time.
     var enqueueOpts =
         new DBOSClient.EnqueueOptions(
                 Constants.DEBOUNCER_WORKFLOW_NAME,
