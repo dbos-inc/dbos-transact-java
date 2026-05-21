@@ -9,7 +9,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
-import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
@@ -62,11 +61,13 @@ public class DebouncerClientTest {
     dbos.registerQueue(USER_QUEUE);
     dbos.launch();
 
-    dbosClient = new DBOSClient(pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    dbosClient =
+        new DBOSClient(pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
   }
 
   private DebouncerClient<String> debouncer() {
-    return dbosClient.<String>debouncer("process")
+    return dbosClient
+        .<String>debouncer("process")
         .withClassName(ClientTargetServiceImpl.class.getName());
   }
 
@@ -125,9 +126,8 @@ public class DebouncerClientTest {
 
   @Test
   void debouncerClientWithQueue() throws Exception {
-    var handle = debouncer()
-        .withQueue(USER_QUEUE)
-        .debounce("key-q", Duration.ofMillis(400), "queued");
+    var handle =
+        debouncer().withQueue(USER_QUEUE).debounce("key-q", Duration.ofMillis(400), "queued");
 
     assertEquals("result:queued", handle.getResult());
 

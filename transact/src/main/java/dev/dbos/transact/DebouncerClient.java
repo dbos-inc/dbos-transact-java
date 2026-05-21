@@ -85,15 +85,31 @@ public final class DebouncerClient<R> {
   /** Specify the Java class name of the target workflow implementation. */
   public @NonNull DebouncerClient<R> withClassName(@Nullable String className) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /** Specify the DBOS instance name of the target workflow implementation. */
   public @NonNull DebouncerClient<R> withInstanceName(@Nullable String instanceName) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /**
@@ -105,8 +121,16 @@ public final class DebouncerClient<R> {
       throw new IllegalArgumentException("queueName must not be empty");
     }
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, queueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -115,41 +139,81 @@ public final class DebouncerClient<R> {
   }
 
   /**
-   * Set an absolute cap on how long the debouncer may keep absorbing calls for a single key.
-   * After this duration the user workflow fires even if more calls keep arriving.
+   * Set an absolute cap on how long the debouncer may keep absorbing calls for a single key. After
+   * this duration the user workflow fires even if more calls keep arriving.
    */
   public @NonNull DebouncerClient<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /** Target a specific application version for the user workflow. */
   public @NonNull DebouncerClient<R> withAppVersion(@Nullable String appVersion) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /** Set the priority for the user workflow (only used when a queue is configured). */
   public @NonNull DebouncerClient<R> withPriority(@Nullable Integer priority) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout);
   }
 
   /** Set a deduplication ID to be forwarded to the user workflow. */
   public @NonNull DebouncerClient<R> withDeduplicationId(@Nullable String deduplicationId) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, deduplicationId, workflowTimeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId,
+        workflowTimeout);
   }
 
   /** Set a timeout for the user workflow. */
   public @NonNull DebouncerClient<R> withTimeout(@Nullable Duration timeout) {
     return new DebouncerClient<>(
-        client, workflowName, className, instanceName, userQueueName, debounceTimeout,
-        appVersion, priority, userDeduplicationId, timeout);
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        timeout);
   }
 
   /**
@@ -183,12 +247,19 @@ public final class DebouncerClient<R> {
 
     DebouncerOptions debouncerOpts =
         new DebouncerOptions(
-            workflowName, className, instanceName, userQueueName, debounceTimeout,
-            appVersion, priority, userDeduplicationId);
+            workflowName,
+            className,
+            instanceName,
+            userQueueName,
+            debounceTimeout,
+            appVersion,
+            priority,
+            userDeduplicationId);
     DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
-    // Use the stable class-name constant so a rename of DebouncerServiceImpl is caught at compile time.
+    // Use the stable class-name constant so a rename of DebouncerServiceImpl is caught at compile
+    // time.
     var enqueueOpts =
         new DBOSClient.EnqueueOptions(
                 Constants.DEBOUNCER_WORKFLOW_NAME,
@@ -203,8 +274,7 @@ public final class DebouncerClient<R> {
       } catch (DBOSQueueDuplicatedException dup) {
         // A debouncer for this key is already running — forward the latest args to it.
         String existingDebouncerId =
-            client.findWorkflowIdByDeduplicationId(
-                Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+            client.findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
         if (existingDebouncerId == null) {
           logger.debug(
               "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);

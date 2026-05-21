@@ -4,6 +4,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -22,7 +23,6 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -96,7 +96,9 @@ public class DBOS implements AutoCloseable {
     for (var m : DebouncerServiceImpl.class.getDeclaredMethods()) {
       if (m.isAnnotationPresent(dev.dbos.transact.workflow.Workflow.class)) {
         m.setAccessible(true);
-        rw = integration.registerWorkflow(m.getAnnotation(dev.dbos.transact.workflow.Workflow.class), debouncerImpl, m, null);
+        rw =
+            integration.registerWorkflow(
+                m.getAnnotation(dev.dbos.transact.workflow.Workflow.class), debouncerImpl, m, null);
         break;
       }
     }

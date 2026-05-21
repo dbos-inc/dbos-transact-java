@@ -57,8 +57,7 @@ public class DebouncerServiceImpl implements DebouncerService {
       if (remaining.compareTo(Duration.ZERO) <= 0) {
         break;
       }
-      Duration waitDuration =
-          remaining.compareTo(debouncePeriod) < 0 ? remaining : debouncePeriod;
+      Duration waitDuration = remaining.compareTo(debouncePeriod) < 0 ? remaining : debouncePeriod;
 
       Optional<DebouncerMessage> msg = dbos.recv(Constants.DEBOUNCER_TOPIC, waitDuration);
       if (msg.isEmpty()) {

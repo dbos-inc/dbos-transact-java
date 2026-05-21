@@ -9,7 +9,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
@@ -110,7 +109,15 @@ public final class Debouncer<R> {
     if (queueName != null && queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName must not be empty");
     }
-    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(
+        dbos,
+        executor,
+        debouncerWorkflow,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -124,22 +131,54 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(
+        dbos,
+        executor,
+        debouncerWorkflow,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId);
   }
 
   /** Target a specific application version for the user workflow. */
   public @NonNull Debouncer<R> withAppVersion(@Nullable String appVersion) {
-    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(
+        dbos,
+        executor,
+        debouncerWorkflow,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId);
   }
 
   /** Set the priority for the user workflow (only applies when a queue is configured). */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
-    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(
+        dbos,
+        executor,
+        debouncerWorkflow,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId);
   }
 
   /** Set a deduplication ID to be forwarded to the user workflow. */
   public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
-    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(
+        dbos,
+        executor,
+        debouncerWorkflow,
+        queueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        deduplicationId);
   }
 
   /**
@@ -245,17 +284,20 @@ public final class Debouncer<R> {
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
         String existingDebouncerId =
             (DBOS.inWorkflow() && !DBOS.inStep())
-                ? executor.runStep(() -> lookupExistingDebouncerId(debouncerDeduplicationId), new StepOptions("lookupDebouncer"), null)
+                ? executor.runStep(
+                    () -> lookupExistingDebouncerId(debouncerDeduplicationId),
+                    new StepOptions("lookupDebouncer"),
+                    null)
                 : lookupExistingDebouncerId(debouncerDeduplicationId);
         if (existingDebouncerId == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
           logger.debug(
-              "Debouncer for dedupId {} not found after conflict; retrying", debouncerDeduplicationId);
+              "Debouncer for dedupId {} not found after conflict; retrying",
+              debouncerDeduplicationId);
           continue;
         }
-        DebouncerMessage msg =
-            new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
+        DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
         // messageId is the idempotency key — exactly-once delivery, no tracking flag needed.
         dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
