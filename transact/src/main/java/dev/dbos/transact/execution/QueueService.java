@@ -95,7 +95,7 @@ public class QueueService implements AutoCloseable {
       var task =
           new Runnable() {
             final Queue queue = _queue;
-            Duration pollingInterval = Duration.ofSeconds(1);
+            Duration pollingInterval = queue.pollingInterval();
 
             public void schedule() {
               var randomSleepFactor = 0.95 + ThreadLocalRandom.current().nextDouble(0.1);
