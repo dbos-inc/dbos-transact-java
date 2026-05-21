@@ -3354,7 +3354,7 @@ public class ConductorTest {
 
     dev.dbos.transact.workflow.Queue queue =
         new dev.dbos.transact.workflow.Queue("my-queue").withConcurrency(3);
-    when(mockDB.getQueue("my-queue")).thenReturn(Optional.of(queue));
+    when(mockDB.findQueue("my-queue")).thenReturn(Optional.of(queue));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -3363,7 +3363,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_QUEUE, "req-get-queue", Map.of("name", "my-queue"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).getQueue("my-queue");
+      verify(mockDB).findQueue("my-queue");
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_queue", json.get("type").asText());
@@ -3383,7 +3383,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getQueue("nonexistent")).thenReturn(Optional.empty());
+    when(mockDB.findQueue("nonexistent")).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

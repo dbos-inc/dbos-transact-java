@@ -208,6 +208,35 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * Retrieve a database-backed dynamic queue by name. Must be called after launch.
+   *
+   * @param name Queue name
+   * @return the queue if it exists in the database, or empty
+   */
+  public @NonNull Optional<Queue> findQueue(@NonNull String name) {
+    return ensureLaunched("findQueue").findQueue(name);
+  }
+
+  /**
+   * Delete a database-backed dynamic queue. Must be called after launch.
+   *
+   * @param name Queue name
+   * @return true if the queue was deleted, false if it did not exist
+   */
+  public boolean deleteQueue(@NonNull String name) {
+    return ensureLaunched("deleteQueue").deleteQueue(name);
+  }
+
+  /**
+   * List all database-backed dynamic queues. Must be called after launch.
+   *
+   * @return list of all queues currently registered in the database
+   */
+  public @NonNull List<Queue> listQueues() {
+    return ensureLaunched("listQueues").listQueues();
+  }
+
+  /**
    * Register all workflows and steps in the provided class instance
    *
    * @param <T> The interface type for the instance

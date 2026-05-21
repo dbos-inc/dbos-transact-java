@@ -370,7 +370,7 @@ public class QueuesDAO {
     }
   }
 
-  public static Optional<Queue> getQueue(DbContext ctx, String name) throws SQLException {
+  public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
     final String sql =
         """
         SELECT name, concurrency, worker_concurrency,

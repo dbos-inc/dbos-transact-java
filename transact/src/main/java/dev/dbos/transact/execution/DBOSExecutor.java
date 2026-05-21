@@ -407,6 +407,19 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.updateQueue(name, options);
   }
 
+  public Optional<Queue> findQueue(String name) {
+    return systemDatabase.findQueue(name);
+  }
+
+  public boolean deleteQueue(String name) {
+    return systemDatabase.deleteQueue(name);
+  }
+
+  public List<Queue> listQueues() {
+    return systemDatabase.listQueues();
+  }
+
+
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
     if (alertHandler != null) {
       alertHandler.invoke(name, message, metadata);
@@ -1419,6 +1432,7 @@ public class DBOSExecutor implements AutoCloseable {
   private void validateQueue(String queueName) {
     if (queueName != null) {
       getQueue(queueName)
+          .or(() -> systemDatabase.findQueue(queueName))
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
     }
@@ -1431,7 +1445,7 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS internal queue is not a partitioned queue, but a partition key was provided");
       }
     } else {
-      var queue = this.getQueue(queueName);
+      var queue = getQueue(queueName).or(() -> systemDatabase.findQueue(queueName));
       if (queue.isPresent()) {
         if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
           throw new IllegalArgumentException(

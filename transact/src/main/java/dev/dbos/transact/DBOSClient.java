@@ -13,6 +13,7 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
@@ -1143,5 +1144,34 @@ public class DBOSClient implements AutoCloseable {
    */
   public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
     systemDatabase.updateQueue(name, options);
+  }
+
+  /**
+   * Retrieve a database-backed dynamic queue by name.
+   *
+   * @param name Queue name
+   * @return the queue if it exists in the database, or empty
+   */
+  public @NonNull Optional<Queue> findQueue(@NonNull String name) {
+    return systemDatabase.findQueue(name);
+  }
+
+  /**
+   * List all database-backed dynamic queues.
+   *
+   * @return list of all queues currently registered in the database
+   */
+  public @NonNull List<Queue> listQueues() {
+    return systemDatabase.listQueues();
+  }
+
+  /**
+   * Delete a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @return true if the queue was deleted, false if it did not exist
+   */
+  public boolean deleteQueue(@NonNull String name) {
+    return systemDatabase.deleteQueue(name);
   }
 }

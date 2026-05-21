@@ -1387,7 +1387,7 @@ public class Conductor implements AutoCloseable {
         () -> {
           GetQueueRequest request = (GetQueueRequest) message;
           try {
-            var queue = conductor.systemDatabase.getQueue(request.name);
+            var queue = conductor.systemDatabase.findQueue(request.name);
             return new GetQueueResponse(request, queue.map(QueueOutput::from).orElse(null));
           } catch (Exception e) {
             logger.error("Exception encountered when getting queue {}", request.name, e);

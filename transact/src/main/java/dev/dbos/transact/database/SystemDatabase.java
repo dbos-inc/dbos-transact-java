@@ -394,8 +394,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> QueuesDAO.updateQueue(ctx, name, update));
   }
 
-  public Optional<Queue> getQueue(String name) {
-    return dbRetry(() -> QueuesDAO.getQueue(ctx, name));
+  public Optional<Queue> findQueue(String name) {
+    return dbRetry(() -> QueuesDAO.findQueue(ctx, name));
   }
 
   public List<Queue> listQueues() {
