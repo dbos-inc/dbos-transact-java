@@ -231,7 +231,7 @@ public class DebouncerTest {
     assertEquals(21L, result);
   }
 
-  // Verify that debounceVoid works for workflows with no return value.
+  // Verify that debounce works for workflows with no return value.
   public interface VoidService {
     void doWork(String marker);
   }
@@ -249,15 +249,15 @@ public class DebouncerTest {
   }
 
   @Test
-  public void debounceVoidCoalescesCorrectly() throws Exception {
+  public void debounceCoalescesCorrectly() throws Exception {
     var impl = new VoidServiceImpl();
     VoidService svc = dbos.registerProxy(VoidService.class, impl);
     dbos.launch();
 
     var debouncer = dbos.<Void>debouncer();
-    var h1 = debouncer.debounceVoid("void-key", Duration.ofMillis(500), () -> svc.doWork("a"));
+    var h1 = debouncer.debounce("void-key", Duration.ofMillis(500), () -> svc.doWork("a"));
     Thread.sleep(100);
-    var h2 = debouncer.debounceVoid("void-key", Duration.ofMillis(500), () -> svc.doWork("b"));
+    var h2 = debouncer.debounce("void-key", Duration.ofMillis(500), () -> svc.doWork("b"));
 
     h2.getResult();
     assertEquals(h1.workflowId(), h2.workflowId());

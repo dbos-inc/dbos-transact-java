@@ -114,15 +114,14 @@ public final class Debouncer<R> {
   }
 
   /**
-   * Debounce a workflow with no return value. The supplier's return value is ignored — pass {@code
-   * null} when no value is available.
+   * Debounce a workflow with no return value.
    *
    * @param debounceKey key that groups concurrent calls; calls with the same key are coalesced
    * @param debouncePeriod inactivity window before the user workflow runs; each call resets it
    * @param wfLambda lambda calling exactly one {@code @Workflow} method
    * @return handle to the future user workflow
    */
-  public @NonNull <E extends Exception> WorkflowHandle<Void, E> debounceVoid(
+  public @NonNull <E extends Exception> WorkflowHandle<Void, E> debounce(
       @NonNull String debounceKey,
       @NonNull Duration debouncePeriod,
       @NonNull ThrowingRunnable<E> wfLambda) {

@@ -3,7 +3,6 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
@@ -35,9 +34,8 @@ public class DebouncerServiceImpl implements DebouncerService {
   public void debouncerWorkflow(
       DebouncerOptions options, DebouncerContextOptions ctx, DebouncerMessage initial) {
 
-    // Publish the pre-assigned user workflow id as an event so callers waiting on the
-    // deduplication path can retrieve it via getEvent without relying on Jackson deserializing
-    // workflow inputs (records are final classes so @class type info is not emitted).
+    // Publish the pre-assigned user workflow id as an event so callers on the deduplication path
+    // can retrieve it via getEvent without having to parse workflow inputs.
     dbos.setEvent(Constants.DEBOUNCER_CHILD_ID_KEY, ctx.userWorkflowId());
 
     // Record the absolute deadline once as a durable step. On recovery this returns the same
@@ -74,7 +72,6 @@ public class DebouncerServiceImpl implements DebouncerService {
       dbos.setEvent(next.messageId(), next.messageId());
     }
 
-    // Fix 11: combine isEmpty check with orElseThrow
     var workflow =
         dbos.integration()
             .getRegisteredWorkflow(
@@ -102,17 +99,6 @@ public class DebouncerServiceImpl implements DebouncerService {
             .withAppVersion(ctx.appVersion());
     if (ctx.workflowTimeout() != null) {
       startOpts = startOpts.withTimeout(ctx.workflowTimeout());
-    }
-
-    // Coerce args to the method's declared parameter types before invocation.
-    // Jackson's type-info round-trip through send/recv (Object[]) can produce numeric
-    // mismatches (e.g. long → Integer) that cause IllegalArgumentException at reflection
-    // call-site. This mirrors the coercion already applied in executeWorkflowById.
-    try {
-      latestArgs = JsonUtility.coerceArguments(latestArgs, workflow.workflowMethod());
-    } catch (IllegalArgumentException e) {
-      throw new IllegalStateException(
-          "Debouncer argument coercion failed for workflow " + options.workflowName(), e);
     }
 
     logger.debug(
