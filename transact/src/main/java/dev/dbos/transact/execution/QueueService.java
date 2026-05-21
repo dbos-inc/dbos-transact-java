@@ -49,13 +49,16 @@ public class QueueService implements AutoCloseable {
     paused.set(false);
   }
 
-  public void start(Collection<Queue> queues, Set<String> listenQueues) {
+  public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {
     if (this.execServiceRef.get() == null) {
       var procCount = Runtime.getRuntime().availableProcessors();
       var scheduler = Executors.newScheduledThreadPool(procCount);
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         this.listenQueues = listenQueues;
-        startQueueListeners(queues);
+        scheduler.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(
+            this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
+        startStaticQueueListeners(staticQueues);
       }
     }
   }
@@ -73,34 +76,27 @@ public class QueueService implements AutoCloseable {
     return this.execServiceRef.get() == null;
   }
 
-  private void startQueueListeners(Collection<Queue> queues) {
-    logger.debug("startQueueListeners");
+  private void startStaticQueueListeners(Collection<Queue> staticQueues) {
+    logger.debug("startStaticQueueListeners");
 
     final var executorId = dbosExecutor.executorId();
     final var appVersion = dbosExecutor.appVersion();
     final Duration minPollingInterval = Duration.ofSeconds(1);
     final Duration maxPollingInterval = Duration.ofSeconds(120);
 
-    var execService = execServiceRef.get();
-    if (execService != null) {
-      execService.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
-      execService.scheduleAtFixedRate(
-          this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
-    }
-
-    for (var _queue : queues) {
+    for (var staticQueue : staticQueues) {
 
       var listening =
-          _queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)
+          staticQueue.name().equals(Constants.DBOS_INTERNAL_QUEUE)
               || listenQueues.isEmpty()
-              || listenQueues.contains(_queue.name());
+              || listenQueues.contains(staticQueue.name());
       if (!listening) {
         continue;
       }
 
       var task =
           new Runnable() {
-            final Queue queue = _queue;
+            final Queue queue = staticQueue;
             Duration pollingInterval = queue.pollingInterval();
 
             public void schedule() {
@@ -189,9 +185,20 @@ public class QueueService implements AutoCloseable {
       if (execServiceRef.get() == null) return;
 
       var dbQueues = systemDatabase.listQueues();
-      var dbQueueNames = dbQueues.stream().map(Queue::name).collect(Collectors.toSet());
+      if (logger.isDebugEnabled()) {
+        logger.debug("pollDynamicQueues found {} queues", dbQueues.size());
+        for (var q : dbQueues) {
+          logger.debug(
+              "  queue: {} concurrency: {} pollingInterval: {}",
+              q.name(),
+              q.concurrency(),
+              q.pollingInterval());
+        }
+      }
 
-      // Stop listeners for queues that have been deleted from the DB.
+      // Remove listeners for queues that have been deleted from the DB. The listener threads will
+      // automatically stop on the next poll when they fail to find their queue in dbListeningQueues
+      var dbQueueNames = dbQueues.stream().map(Queue::name).collect(Collectors.toSet());
       dbListeningQueues.removeIf(name -> !dbQueueNames.contains(name));
 
       for (var queue : dbQueues) {

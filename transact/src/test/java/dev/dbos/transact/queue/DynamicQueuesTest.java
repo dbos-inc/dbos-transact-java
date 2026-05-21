@@ -2,6 +2,7 @@ package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -181,5 +182,14 @@ public class DynamicQueuesTest {
     var q =
         dbos.listQueues().stream().filter(x -> x.name().equals("q-poll")).findFirst().orElseThrow();
     assertEquals(interval, q.pollingInterval());
+  }
+
+  @Test
+  public void testRegisterInternalQueueThrows() throws Exception {
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("_dbos_internal_queue", QueueOptions.empty()));
   }
 }

@@ -387,6 +387,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public boolean upsertQueue(String name, QueueOptions options, boolean updateExisting) {
+    if (Constants.DBOS_INTERNAL_QUEUE.equals(name)) {
+      throw new IllegalArgumentException(
+          String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
+    }
     return dbRetry(() -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting));
   }
 
