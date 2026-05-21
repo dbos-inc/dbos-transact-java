@@ -182,10 +182,10 @@ public final class DebouncerClient<R> {
     String deduplicationId = workflowName + "-" + debounceKey;
 
     DebouncerOptions debouncerOpts =
-        new DebouncerOptions(workflowName, className, instanceName, userQueueName, debounceTimeout);
-    DebouncerContextOptions ctx =
-        new DebouncerContextOptions(
-            userWorkflowId, userDeduplicationId, priority, appVersion, workflowTimeout);
+        new DebouncerOptions(
+            workflowName, className, instanceName, userQueueName, debounceTimeout,
+            appVersion, priority, userDeduplicationId);
+    DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
     // Use the stable class-name constant so a rename of DebouncerServiceImpl is caught at compile time.

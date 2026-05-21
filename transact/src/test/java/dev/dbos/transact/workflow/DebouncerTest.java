@@ -284,8 +284,6 @@ public class DebouncerTest {
     assertEquals(List.of("last"), serviceImpl.callArgs());
   }
 
-  // Wrapper workflow that calls debounce() internally so caller context (priority)
-  // is available via DBOSContext when DebouncerContextOptions is built.
   public interface OrchestratorService {
     String debounceWithPriority(String arg);
   }
@@ -304,17 +302,17 @@ public class DebouncerTest {
     @Override
     @Workflow
     public String debounceWithPriority(String arg) {
-      // withQueue ensures priority is forwarded (priority is only valid for queued workflows).
       return dbos.<String>debouncer()
           .withQueue(userQueue)
+          .withPriority(42)
           .debounce("prio-inner", Duration.ofMillis(400), () -> svc.process(arg))
           .getResult();
     }
   }
 
-  // Verify that priority from caller workflow context is propagated to the user workflow.
+  // Verify that explicit withPriority() on Debouncer is forwarded to the user workflow.
   @Test
-  public void priorityPropagatedFromCallerContext() throws Exception {
+  public void explicitPriorityForwardedToUserWorkflow() throws Exception {
     Queue q = new Queue("prio-queue").withPriorityEnabled(true);
     dbos.registerQueue(q);
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
@@ -322,13 +320,9 @@ public class DebouncerTest {
         dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
     dbos.launch();
 
-    // Start the orchestrator with priority=42.
-    var opts = new StartWorkflowOptions().withQueue(q).withPriority(42);
-    var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"), opts);
+    var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"));
     assertEquals("result:prio-val", h.getResult());
 
-    // The user workflow started by the debouncer should have inherited priority=42.
-    // It runs on queue q, so priority is stored in workflow_status.
     var userWfStatus =
         dbos
             .listWorkflows(

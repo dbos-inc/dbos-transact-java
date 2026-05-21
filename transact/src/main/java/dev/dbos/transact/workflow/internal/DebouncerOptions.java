@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Inputs to the debouncer service workflow that identify the user workflow to be eventually started
- * and the optional absolute timeout cap.
+ * and configures how it should be enqueued.
  *
  * <p>Not part of the public API.
  */
@@ -16,4 +16,7 @@ public record DebouncerOptions(
     @NonNull String className,
     @Nullable String instanceName,
     @Nullable String queueName,
-    @Nullable Duration debounceTimeout) {}
+    @Nullable Duration debounceTimeout,
+    @Nullable String appVersion,
+    @Nullable Integer priority,
+    @Nullable String deduplicationId) {}

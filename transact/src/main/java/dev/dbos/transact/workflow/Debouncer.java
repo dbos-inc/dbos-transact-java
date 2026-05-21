@@ -3,7 +3,6 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.RegisteredWorkflow;
@@ -71,21 +70,30 @@ public final class Debouncer<R> {
   private final RegisteredWorkflow debouncerWorkflow;
   private final @Nullable String queueName;
   private final @Nullable Duration debounceTimeout;
+  private final @Nullable String appVersion;
+  private final @Nullable Integer priority;
+  private final @Nullable String deduplicationId;
 
   public Debouncer(@NonNull DBOS dbos, @NonNull RegisteredWorkflow debouncerWorkflow) {
-    this(dbos, debouncerWorkflow, null, null);
+    this(dbos, debouncerWorkflow, null, null, null, null, null);
   }
 
   private Debouncer(
       DBOS dbos,
       RegisteredWorkflow debouncerWorkflow,
       @Nullable String queueName,
-      @Nullable Duration debounceTimeout) {
+      @Nullable Duration debounceTimeout,
+      @Nullable String appVersion,
+      @Nullable Integer priority,
+      @Nullable String deduplicationId) {
     this.dbos = Objects.requireNonNull(dbos, "dbos must not be null");
     this.debouncerWorkflow =
         Objects.requireNonNull(debouncerWorkflow, "debouncerWorkflow must not be null");
     this.queueName = queueName;
     this.debounceTimeout = debounceTimeout;
+    this.appVersion = appVersion;
+    this.priority = priority;
+    this.deduplicationId = deduplicationId;
   }
 
   /**
@@ -96,7 +104,7 @@ public final class Debouncer<R> {
     if (queueName != null && queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName must not be empty");
     }
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout);
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -110,7 +118,22 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout);
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+  }
+
+  /** Target a specific application version for the user workflow. */
+  public @NonNull Debouncer<R> withAppVersion(@Nullable String appVersion) {
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+  }
+
+  /** Set the priority for the user workflow (only applies when a queue is configured). */
+  public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+  }
+
+  /** Set a deduplication ID to be forwarded to the user workflow. */
+  public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /**
@@ -176,27 +199,21 @@ public final class Debouncer<R> {
     }
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
-    String deduplicationId = invocation.workflowName() + "-" + debounceKey;
+    String debouncerDeduplicationId = invocation.workflowName() + "-" + debounceKey;
 
-    // Fix 4: pass Duration directly instead of converting to millis
     DebouncerOptions options =
         new DebouncerOptions(
             invocation.workflowName(),
             invocation.className(),
             invocation.instanceName(),
             queueName,
-            debounceTimeout);
-    // Fix 8: DBOSContextHolder.get() is guaranteed non-null inside a workflow context
-    // Propagate the calling workflow's context (priority, timeout, appVersion, deduplicationId)
-    // to the user workflow — mirrors Python's ContextOptions snapshot.
+            debounceTimeout,
+            appVersion,
+            priority,
+            deduplicationId);
+    // DBOSContextHolder.get() is guaranteed non-null inside a workflow context
     Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
-    DebouncerContextOptions ctx =
-        new DebouncerContextOptions(
-            userWorkflowId,
-            DBOSContext.currentDeduplicationId(),
-            DBOSContext.currentPriority(),
-            DBOSContext.currentAppVersion(),
-            workflowTimeout);
+    DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
     while (true) {
@@ -204,7 +221,7 @@ public final class Debouncer<R> {
         var startOpts =
             new StartWorkflowOptions()
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
-                .withDeduplicationId(deduplicationId);
+                .withDeduplicationId(debouncerDeduplicationId);
         // Fix 5: use startRegisteredWorkflow instead of startWorkflow with proxy lambda
         dbos.integration()
             .startRegisteredWorkflow(
@@ -218,13 +235,13 @@ public final class Debouncer<R> {
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
         String existingDebouncerId =
             (DBOS.inWorkflow() && !DBOS.inStep())
-                ? dbos.runStep(() -> lookupExistingDebouncerId(deduplicationId), "lookupDebouncer")
-                : lookupExistingDebouncerId(deduplicationId);
+                ? dbos.runStep(() -> lookupExistingDebouncerId(debouncerDeduplicationId), "lookupDebouncer")
+                : lookupExistingDebouncerId(debouncerDeduplicationId);
         if (existingDebouncerId == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
           logger.debug(
-              "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);
+              "Debouncer for dedupId {} not found after conflict; retrying", debouncerDeduplicationId);
           continue;
         }
         DebouncerMessage msg =

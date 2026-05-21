@@ -94,9 +94,9 @@ public class DebouncerServiceImpl implements DebouncerService {
         new StartWorkflowOptions()
             .withWorkflowId(ctx.userWorkflowId())
             .withQueue(options.queueName())
-            .withDeduplicationId(hasQueue ? ctx.deduplicationId() : null)
-            .withPriority(hasQueue ? ctx.priority() : null)
-            .withAppVersion(ctx.appVersion());
+            .withDeduplicationId(hasQueue ? options.deduplicationId() : null)
+            .withPriority(hasQueue ? options.priority() : null)
+            .withAppVersion(options.appVersion());
     if (ctx.workflowTimeout() != null) {
       startOpts = startOpts.withTimeout(ctx.workflowTimeout());
     }

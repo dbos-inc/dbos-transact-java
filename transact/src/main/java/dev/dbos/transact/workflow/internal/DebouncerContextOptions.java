@@ -6,15 +6,15 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Context captured from the caller of {@code Debouncer.debounce()} and forwarded to the user
- * workflow when it is eventually started. The {@code userWorkflowId} is pre-assigned by the caller
- * so that the caller can return a handle pointing to the future workflow.
+ * Per-call context forwarded from the caller of {@code Debouncer.debounce()} to the debouncer
+ * service workflow. Contains only values that are inherently call-specific: the pre-assigned user
+ * workflow ID and the caller's active timeout (if any).
+ *
+ * <p>Enqueue-time options (appVersion, priority, deduplicationId) are carried in
+ * {@link DebouncerOptions} instead, where they are set explicitly via the Debouncer builder.
  *
  * <p>Not part of the public API.
  */
 public record DebouncerContextOptions(
     @NonNull String userWorkflowId,
-    @Nullable String deduplicationId,
-    @Nullable Integer priority,
-    @Nullable String appVersion,
     @Nullable Duration workflowTimeout) {}

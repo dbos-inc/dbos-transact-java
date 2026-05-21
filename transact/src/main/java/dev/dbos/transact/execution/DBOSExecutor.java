@@ -1353,13 +1353,9 @@ public class DBOSExecutor implements AutoCloseable {
       throw e;
     }
 
-    // Restore queue-related metadata so the workflow context carries them during execution.
-    // This is needed for context propagation (e.g. priority forwarded to child workflows).
     var options =
         new ExecutionOptions(workflowId, status.timeout(), status.deadline())
-            .withSerialization(status.serialization())
-            .withPriority(status.priority())
-            .withAppVersion(status.appVersion());
+            .withSerialization(status.serialization());
     if (isRecoveryRequest) options = options.asRecoveryRequest();
     if (isDequeuedRequest) options = options.asDequeuedRequest();
     return executeWorkflow(workflow, inputs, options, null);
@@ -1489,22 +1485,18 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
-    // For dequeued or recovered workflows, queue-related options are restored from
-    // workflow_status for context propagation. Skip the validation that would reject them.
     var badOptionList = new ArrayList<String>();
-    if (!options.isDequeuedRequest() && !options.isRecoveryRequest()) {
-      if (options.deduplicationId() != null) {
-        badOptionList.add("deduplicationId");
-      }
-      if (options.priority() != null) {
-        badOptionList.add("priority");
-      }
-      if (options.queuePartitionKey() != null) {
-        badOptionList.add("queuePartitionKey");
-      }
-      if (options.delay() != null) {
-        badOptionList.add("delay");
-      }
+    if (options.deduplicationId() != null) {
+      badOptionList.add("deduplicationId");
+    }
+    if (options.priority() != null) {
+      badOptionList.add("priority");
+    }
+    if (options.queuePartitionKey() != null) {
+      badOptionList.add("queuePartitionKey");
+    }
+    if (options.delay() != null) {
+      badOptionList.add("delay");
     }
 
     if (!badOptionList.isEmpty()) {
@@ -1574,10 +1566,7 @@ public class DBOSExecutor implements AutoCloseable {
                     finalOptions.deadline(),
                     SerializationUtil.PORTABLE.equals(initResult.serialization())
                         ? SerializationStrategy.PORTABLE
-                        : SerializationStrategy.DEFAULT,
-                    finalOptions.priority(),
-                    finalOptions.appVersion(),
-                    finalOptions.deduplicationId()));
+                        : SerializationStrategy.DEFAULT));
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
