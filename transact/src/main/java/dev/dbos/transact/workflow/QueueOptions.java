@@ -60,10 +60,6 @@ public record QueueOptions(
     return EMPTY.withRateLimitMax(Field.of(max)).withRateLimitPeriod(Field.of(period));
   }
 
-  public static QueueOptions setRateLimit(int limit, Duration period) {
-    return setRateLimit(limit, (Duration) period);
-  }
-
   public static QueueOptions setRateLimit(int limit, long period, TimeUnit unit) {
     return setRateLimit(limit, Duration.of(period, unit.toChronoUnit()));
   }
@@ -171,10 +167,6 @@ public record QueueOptions(
 
   public QueueOptions andRateLimit(@Nullable Integer max, @Nullable Duration period) {
     return withRateLimitMax(Field.of(max)).withRateLimitPeriod(Field.of(period));
-  }
-
-  public QueueOptions andRateLimit(int max, Duration period) {
-    return andRateLimit(max, (Duration) period);
   }
 
   public QueueOptions andRateLimit(int max, long period, TimeUnit unit) {
