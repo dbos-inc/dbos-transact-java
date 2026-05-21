@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
+import java.time.Duration;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -14,4 +16,4 @@ public record DebouncerOptions(
     @NonNull String className,
     @Nullable String instanceName,
     @Nullable String queueName,
-    @Nullable Long debounceTimeoutMs) {}
+    @Nullable Duration debounceTimeout) {}

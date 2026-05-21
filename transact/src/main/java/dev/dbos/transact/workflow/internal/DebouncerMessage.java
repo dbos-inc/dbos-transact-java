@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
+import java.time.Duration;
+
 import org.jspecify.annotations.NonNull;
 
 /**
@@ -10,4 +12,4 @@ import org.jspecify.annotations.NonNull;
  * <p>Not part of the public API — the debouncer infrastructure consumes this directly.
  */
 public record DebouncerMessage(
-    @NonNull String messageId, @NonNull Object[] args, long debouncePeriodMs) {}
+    @NonNull String messageId, @NonNull Object[] args, @NonNull Duration debouncePeriod) {}

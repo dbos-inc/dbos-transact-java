@@ -22,11 +22,11 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.DebouncerService;
 import dev.dbos.transact.workflow.internal.DebouncerServiceImpl;
 
 import java.io.IOException;
@@ -65,7 +65,7 @@ public class DBOS implements AutoCloseable {
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
-  private final DebouncerService debouncerProxy;
+  private final RegisteredWorkflow debouncerWorkflow;
 
   private AlertHandler alertHandler;
 
@@ -88,9 +88,20 @@ public class DBOS implements AutoCloseable {
     this.integration =
         new DBOSIntegration(
             this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
-    // Register the built-in debouncer service workflow so callers can use Debouncer without
-    // having to declare and wire the service themselves.
-    this.debouncerProxy = registerProxy(DebouncerService.class, new DebouncerServiceImpl(this));
+    // Register the built-in debouncer service workflow directly (without a proxy) so callers can
+    // use Debouncer without having to declare and wire the service themselves.
+    var debouncerImpl = new DebouncerServiceImpl(this);
+    workflowRegistry.registerInstance(null, debouncerImpl);
+    RegisteredWorkflow rw = null;
+    for (var m : DebouncerServiceImpl.class.getDeclaredMethods()) {
+      if (m.isAnnotationPresent(dev.dbos.transact.workflow.Workflow.class)) {
+        m.setAccessible(true);
+        rw = integration.registerWorkflow(m.getAnnotation(dev.dbos.transact.workflow.Workflow.class), debouncerImpl, m, null);
+        break;
+      }
+    }
+    this.debouncerWorkflow =
+        Objects.requireNonNull(rw, "DebouncerServiceImpl must have a @Workflow method");
   }
 
   /**
@@ -408,7 +419,7 @@ public class DBOS implements AutoCloseable {
    * @return a fresh debouncer bound to this DBOS instance
    */
   public <R> @NonNull Debouncer<R> debouncer() {
-    return new Debouncer<>(this, debouncerProxy);
+    return new Debouncer<>(this, debouncerWorkflow);
   }
 
   /**

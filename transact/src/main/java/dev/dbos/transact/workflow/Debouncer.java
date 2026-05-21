@@ -6,13 +6,13 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
-import dev.dbos.transact.workflow.internal.DebouncerService;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -64,22 +64,26 @@ public final class Debouncer<R> {
    */
   private static final Duration ACK_TIMEOUT = Duration.ofSeconds(1);
 
+  // Fix 9: record for carrying the two pre-assigned IDs out of a durable step
+  private record DebounceIds(String userWorkflowId, String messageId) {}
+
   private final DBOS dbos;
-  private final DebouncerService debouncerProxy;
+  private final RegisteredWorkflow debouncerWorkflow;
   private final @Nullable String queueName;
   private final @Nullable Duration debounceTimeout;
 
-  public Debouncer(@NonNull DBOS dbos, @NonNull DebouncerService debouncerProxy) {
-    this(dbos, debouncerProxy, null, null);
+  public Debouncer(@NonNull DBOS dbos, @NonNull RegisteredWorkflow debouncerWorkflow) {
+    this(dbos, debouncerWorkflow, null, null);
   }
 
   private Debouncer(
       DBOS dbos,
-      DebouncerService debouncerProxy,
+      RegisteredWorkflow debouncerWorkflow,
       @Nullable String queueName,
       @Nullable Duration debounceTimeout) {
     this.dbos = Objects.requireNonNull(dbos, "dbos must not be null");
-    this.debouncerProxy = Objects.requireNonNull(debouncerProxy, "debouncerProxy must not be null");
+    this.debouncerWorkflow =
+        Objects.requireNonNull(debouncerWorkflow, "debouncerWorkflow must not be null");
     this.queueName = queueName;
     this.debounceTimeout = debounceTimeout;
   }
@@ -89,7 +93,10 @@ public final class Debouncer<R> {
    * {@code null} starts the user workflow directly (not enqueued).
    */
   public @NonNull Debouncer<R> withQueue(@Nullable String queueName) {
-    return new Debouncer<>(dbos, debouncerProxy, queueName, debounceTimeout);
+    if (queueName != null && queueName.isEmpty()) {
+      throw new IllegalArgumentException("queueName must not be empty");
+    }
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -103,7 +110,7 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(dbos, debouncerProxy, queueName, debounceTimeout);
+    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout);
   }
 
   /**
@@ -157,59 +164,52 @@ public final class Debouncer<R> {
 
     DBOSIntegration.CapturedInvocation invocation = dbos.integration().captureInvocation(wfLambda);
 
-    // When called from inside a workflow, UUID generation must be wrapped in a durable step so
-    // the same IDs are produced on replay. UUIDs are joined with "|" (not present in UUID format)
-    // to avoid two separate step increments.
-    String ids;
+    // Fix 9: use a record to carry both IDs out of a single durable step, eliminating
+    // the "|"-join/split hack. Inside a workflow the step makes replay deterministic.
+    DebounceIds ids;
     if (DBOS.inWorkflow() && !DBOS.inStep()) {
-      ids = dbos.runStep(() -> UUID.randomUUID() + "|" + UUID.randomUUID(), "assignDebounceIds");
+      ids =
+          dbos.runStep(
+              () -> new DebounceIds(UUID.randomUUID().toString(), UUID.randomUUID().toString()),
+              "assignDebounceIds");
     } else {
-      ids = UUID.randomUUID() + "|" + UUID.randomUUID();
+      ids = new DebounceIds(UUID.randomUUID().toString(), UUID.randomUUID().toString());
     }
-    String[] idParts = ids.split("\\|", 2);
-    String userWorkflowId = idParts[0];
-    String messageId = idParts[1];
+    String userWorkflowId = ids.userWorkflowId();
+    String messageId = ids.messageId();
     String deduplicationId = invocation.workflowName() + "-" + debounceKey;
-    long periodMs = debouncePeriod.toMillis();
 
+    // Fix 4: pass Duration directly instead of converting to millis
     DebouncerOptions options =
         new DebouncerOptions(
             invocation.workflowName(),
             invocation.className(),
             invocation.instanceName(),
             queueName,
-            debounceTimeout == null ? null : debounceTimeout.toMillis());
+            debounceTimeout);
+    // Fix 8: DBOSContextHolder.get() is guaranteed non-null inside a workflow context
     // Propagate the calling workflow's context (priority, timeout, appVersion, deduplicationId)
     // to the user workflow — mirrors Python's ContextOptions snapshot.
-    Long timeoutMs = null;
-    if (DBOS.inWorkflow()) {
-      var wfCtx = DBOSContextHolder.get();
-      if (wfCtx != null && wfCtx.getTimeout() != null) {
-        timeoutMs = wfCtx.getTimeout().toMillis();
-      }
-    }
+    Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
     DebouncerContextOptions ctx =
         new DebouncerContextOptions(
             userWorkflowId,
             DBOSContext.currentDeduplicationId(),
             DBOSContext.currentPriority(),
             DBOSContext.currentAppVersion(),
-            timeoutMs);
-    DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), periodMs);
+            workflowTimeout);
+    DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
-    // Tracks whether we already sent a message to the running debouncer. The message persists in
-    // the notifications table until processed, so we must not re-send on each ack-timeout retry.
-    boolean messageSent = false;
     while (true) {
       try {
         var startOpts =
             new StartWorkflowOptions()
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
                 .withDeduplicationId(deduplicationId);
-        dbos.startWorkflow(
-            (dev.dbos.transact.execution.ThrowingRunnable<RuntimeException>)
-                () -> debouncerProxy.debouncerWorkflow(options, ctx, initial),
-            startOpts);
+        // Fix 5: use startRegisteredWorkflow instead of startWorkflow with proxy lambda
+        dbos.integration()
+            .startRegisteredWorkflow(
+                debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
         // Successfully enqueued a fresh debouncer for this key.
         return dbos.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
@@ -228,15 +228,11 @@ public final class Debouncer<R> {
               "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);
           continue;
         }
-        DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), periodMs);
-        // Send only once per call: messageId is fixed, so re-sending the same id on each
-        // retry would accumulate identical messages in the debouncer's inbox (each consuming
-        // a durable step when inside a workflow). The message persists in the notifications
-        // table until the debouncer processes it, so a single send is sufficient.
-        if (!messageSent) {
-          dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC);
-          messageSent = true;
-        }
+        DebouncerMessage msg =
+            new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
+        // Fix 7: use messageId as idempotency key — the send overload guarantees exactly-once
+        // delivery without needing a separate messageSent tracking flag.
+        dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
         // processing this message, no ack arrives — start over.

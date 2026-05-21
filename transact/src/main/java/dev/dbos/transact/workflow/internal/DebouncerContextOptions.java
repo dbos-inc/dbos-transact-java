@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
+import java.time.Duration;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -15,4 +17,4 @@ public record DebouncerContextOptions(
     @Nullable String deduplicationId,
     @Nullable Integer priority,
     @Nullable String appVersion,
-    @Nullable Long workflowTimeoutMs) {}
+    @Nullable Duration workflowTimeout) {}

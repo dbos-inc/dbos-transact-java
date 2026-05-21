@@ -381,7 +381,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      String workflowName, String className, String instanceName) {
+      String workflowName, String className, @Nullable String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     return Optional.ofNullable(this.workflowMap.get(fqName));
   }

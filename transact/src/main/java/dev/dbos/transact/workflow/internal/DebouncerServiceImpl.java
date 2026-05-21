@@ -45,15 +45,15 @@ public class DebouncerServiceImpl implements DebouncerService {
     long deadlineEpochMs =
         dbos.runStep(
             () -> {
-              if (options.debounceTimeoutMs() == null) {
+              if (options.debounceTimeout() == null) {
                 return Long.MAX_VALUE;
               }
-              return Instant.now().toEpochMilli() + options.debounceTimeoutMs();
+              return Instant.now().plus(options.debounceTimeout()).toEpochMilli();
             },
             "DBOS.debouncerComputeDeadline");
 
     Object[] latestArgs = initial.args();
-    long debouncePeriodMs = initial.debouncePeriodMs();
+    Duration debouncePeriod = initial.debouncePeriod();
 
     while (true) {
       long now = dbos.runStep(() -> Instant.now().toEpochMilli(), "DBOS.debouncerNow");
@@ -61,35 +61,38 @@ public class DebouncerServiceImpl implements DebouncerService {
         break;
       }
       long timeUntilDeadlineMs = Math.max(deadlineEpochMs - now, 0);
-      long waitMs = Math.min(debouncePeriodMs, timeUntilDeadlineMs);
+      Duration waitDuration =
+          debouncePeriod.toMillis() <= timeUntilDeadlineMs
+              ? debouncePeriod
+              : Duration.ofMillis(timeUntilDeadlineMs);
 
-      Optional<DebouncerMessage> msg =
-          dbos.recv(Constants.DEBOUNCER_TOPIC, Duration.ofMillis(waitMs));
+      Optional<DebouncerMessage> msg = dbos.recv(Constants.DEBOUNCER_TOPIC, waitDuration);
       if (msg.isEmpty()) {
         // Period elapsed with no new message — fire.
         break;
       }
       DebouncerMessage next = msg.get();
       latestArgs = next.args();
-      debouncePeriodMs = next.debouncePeriodMs();
+      debouncePeriod = next.debouncePeriod();
       // Acknowledge receipt so the sender knows the message was consumed by this loop iteration.
       dbos.setEvent(next.messageId(), next.messageId());
     }
 
-    var optWorkflow =
+    // Fix 11: combine isEmpty check with orElseThrow
+    var workflow =
         dbos.integration()
             .getRegisteredWorkflow(
-                options.workflowName(),
-                options.className(),
-                options.instanceName() == null ? "" : options.instanceName());
-    if (optWorkflow.isEmpty()) {
-      throw new IllegalStateException(
-          "Debouncer cannot find registered user workflow: "
-              + options.workflowName()
-              + " / "
-              + options.className()
-              + (options.instanceName() == null ? "" : " / " + options.instanceName()));
-    }
+                options.workflowName(), options.className(), options.instanceName())
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Debouncer cannot find registered user workflow: "
+                            + options.workflowName()
+                            + " / "
+                            + options.className()
+                            + (options.instanceName() == null
+                                ? ""
+                                : " / " + options.instanceName())));
 
     // priority and deduplicationId are only valid for queued workflows; the executor
     // throws IllegalArgumentException if they are set without a queue name.
@@ -101,15 +104,14 @@ public class DebouncerServiceImpl implements DebouncerService {
             .withDeduplicationId(hasQueue ? ctx.deduplicationId() : null)
             .withPriority(hasQueue ? ctx.priority() : null)
             .withAppVersion(ctx.appVersion());
-    if (ctx.workflowTimeoutMs() != null) {
-      startOpts = startOpts.withTimeout(Duration.ofMillis(ctx.workflowTimeoutMs()));
+    if (ctx.workflowTimeout() != null) {
+      startOpts = startOpts.withTimeout(ctx.workflowTimeout());
     }
 
     // Coerce args to the method's declared parameter types before invocation.
     // Jackson's type-info round-trip through send/recv (Object[]) can produce numeric
     // mismatches (e.g. long → Integer) that cause IllegalArgumentException at reflection
     // call-site. This mirrors the coercion already applied in executeWorkflowById.
-    var workflow = optWorkflow.orElseThrow();
     try {
       latestArgs = JsonUtility.coerceArguments(latestArgs, workflow.workflowMethod());
     } catch (IllegalArgumentException e) {

@@ -307,7 +307,7 @@ public class DBOSIntegration {
    * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
    */
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
     var executor = executorSupplier.get();
     if (executor != null) {
       return executor.getRegisteredWorkflow(workflowName, className, instanceName);
