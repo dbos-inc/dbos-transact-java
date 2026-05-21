@@ -13,6 +13,7 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -1100,13 +1101,37 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Register a database-backed dynamic queue, or replace its configuration if it already exists.
+   * Register a database-backed dynamic queue. Uses {@link QueueConflictResolution#ALWAYS_UPDATE} by
+   * default.
    *
    * @param name Queue name
    * @param options Configuration options
    */
   public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
-    systemDatabase.upsertQueue(name, options, true);
+    registerQueue(name, options, QueueConflictResolution.ALWAYS_UPDATE);
+  }
+
+  /**
+   * Register a database-backed dynamic queue.
+   *
+   * <p>{@link QueueConflictResolution#UPDATE_IF_LATEST_VERSION} is not supported by {@code
+   * DBOSClient} because clients are not associated with an application version. Use {@link
+   * QueueConflictResolution#ALWAYS_UPDATE} or {@link QueueConflictResolution#NEVER_UPDATE}.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   */
+  public void registerQueue(
+      @NonNull String name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict) {
+    if (onConflict == QueueConflictResolution.UPDATE_IF_LATEST_VERSION) {
+      throw new IllegalArgumentException(
+          "DBOSClient.registerQueue does not support UPDATE_IF_LATEST_VERSION because clients are"
+              + " not associated with an application version. Use ALWAYS_UPDATE or NEVER_UPDATE.");
+    }
+    systemDatabase.upsertQueue(name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE);
   }
 
   /**

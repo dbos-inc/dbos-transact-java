@@ -30,6 +30,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -391,8 +392,15 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.ofNullable(this.queueMap.get(queueName));
   }
 
-  public void registerQueue(String name, QueueOptions options) {
-    systemDatabase.upsertQueue(name, options, true);
+  public void registerQueue(String name, QueueOptions options, QueueConflictResolution onConflict) {
+    boolean updateExisting =
+        switch (onConflict) {
+          case ALWAYS_UPDATE -> true;
+          case NEVER_UPDATE -> false;
+          case UPDATE_IF_LATEST_VERSION ->
+              appVersion.equals(systemDatabase.getLatestApplicationVersion().versionName());
+        };
+    systemDatabase.upsertQueue(name, options, updateExisting);
   }
 
   public void updateQueue(String name, QueueOptions options) {
