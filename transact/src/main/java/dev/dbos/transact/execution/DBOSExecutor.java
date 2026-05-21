@@ -1009,7 +1009,7 @@ public class DBOSExecutor implements AutoCloseable {
     return runStepInternal(step, options, childWorkflowId);
   }
 
-  private <T, E extends Exception> T runDbosFunctionAsStep(
+  public <T, E extends Exception> T runDbosFunctionAsStep(
       @NonNull ThrowingSupplier<T, E> step,
       @NonNull String stepName,
       @Nullable String childWorkflowId)

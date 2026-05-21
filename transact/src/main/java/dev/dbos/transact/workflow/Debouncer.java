@@ -235,12 +235,12 @@ public final class Debouncer<R> {
     DebounceIds ids;
     if (DBOS.inWorkflow() && !DBOS.inStep()) {
       ids =
-          executor.runStep(
+          executor.runDbosFunctionAsStep(
               () ->
                   new DebounceIds(
                       DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
                       UUID.randomUUID().toString()),
-              new StepOptions("assignDebounceIds"),
+              "DBOS.assignDebounceIds",
               null);
     } else {
       ids =
@@ -284,9 +284,9 @@ public final class Debouncer<R> {
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
         String existingDebouncerId =
             (DBOS.inWorkflow() && !DBOS.inStep())
-                ? executor.runStep(
+                ? executor.runDbosFunctionAsStep(
                     () -> lookupExistingDebouncerId(debouncerDeduplicationId),
-                    new StepOptions("lookupDebouncer"),
+                    "DBOS.lookupDebouncer",
                     null)
                 : lookupExistingDebouncerId(debouncerDeduplicationId);
         if (existingDebouncerId == null) {
