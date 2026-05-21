@@ -44,27 +44,23 @@ public class DebouncerServiceImpl implements DebouncerService {
     // value so the loop's exit condition is replay-stable across crashes.
     long deadlineEpochMs =
         dbos.runStep(
-            () -> {
-              if (options.debounceTimeout() == null) {
-                return Long.MAX_VALUE;
-              }
-              return Instant.now().plus(options.debounceTimeout()).toEpochMilli();
-            },
+            () ->
+                options.debounceTimeout() == null
+                    ? Long.MAX_VALUE
+                    : Instant.now().plus(options.debounceTimeout()).toEpochMilli(),
             "DBOS.debouncerComputeDeadline");
 
     Object[] latestArgs = initial.args();
     Duration debouncePeriod = initial.debouncePeriod();
 
     while (true) {
-      long now = dbos.runStep(() -> Instant.now().toEpochMilli(), "DBOS.debouncerNow");
-      if (now >= deadlineEpochMs) {
+      long nowEpochMs = dbos.runStep(() -> Instant.now().toEpochMilli(), "DBOS.debouncerNow");
+      Duration remaining = Duration.ofMillis(deadlineEpochMs - nowEpochMs);
+      if (remaining.compareTo(Duration.ZERO) <= 0) {
         break;
       }
-      long timeUntilDeadlineMs = Math.max(deadlineEpochMs - now, 0);
       Duration waitDuration =
-          debouncePeriod.toMillis() <= timeUntilDeadlineMs
-              ? debouncePeriod
-              : Duration.ofMillis(timeUntilDeadlineMs);
+          remaining.compareTo(debouncePeriod) < 0 ? remaining : debouncePeriod;
 
       Optional<DebouncerMessage> msg = dbos.recv(Constants.DEBOUNCER_TOPIC, waitDuration);
       if (msg.isEmpty()) {
