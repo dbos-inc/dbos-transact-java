@@ -3,7 +3,7 @@ package dev.dbos.transact.database.dao;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.QueueUpdate;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.Connection;
@@ -413,7 +413,7 @@ public class QueuesDAO {
     }
   }
 
-  public static void updateQueue(DbContext ctx, String name, QueueUpdate update)
+  public static void updateQueue(DbContext ctx, String name, QueueOptions update)
       throws SQLException {
     if (update.isEmpty()) return;
 
@@ -423,10 +423,10 @@ public class QueuesDAO {
     collectField(setClauses, params, "concurrency", update.concurrency());
     collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
     collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
-    collectField(setClauses, params, "rate_limit_period_sec", update.rateLimitPeriodSec());
+    collectField(setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
     collectField(setClauses, params, "priority_enabled", update.priorityEnabled());
     collectField(setClauses, params, "partition_queue", update.partitionQueue());
-    collectField(setClauses, params, "polling_interval_sec", update.pollingIntervalSec());
+    collectField(setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
     setClauses.add("\"updated_at\" = ?");
     params.add(System.currentTimeMillis());
@@ -451,6 +451,12 @@ public class QueuesDAO {
       clauses.add("\"" + column + "\" = ?");
       params.add(field.get());
     }
+  }
+
+  private static Field<Double> durationToSec(Field<Duration> field) {
+    if (!field.isPresent()) return Field.absent();
+    Duration d = field.get();
+    return Field.of(d != null ? d.toMillis() / 1000.0 : null);
   }
 
   public static boolean deleteQueue(DbContext ctx, String name) throws SQLException {

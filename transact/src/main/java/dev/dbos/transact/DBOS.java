@@ -11,6 +11,7 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -162,6 +163,17 @@ public class DBOS implements AutoCloseable {
     for (Queue queue : queues) {
       registerQueue(queue);
     }
+  }
+
+  /**
+   * Register a database-backed dynamic queue. Must be called after launch. Queue configuration can
+   * be updated at runtime via {@code DBOS.updateQueue(String, QueueOptions)}.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   */
+  public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
+    ensureLaunched("registerQueue").registerDynamicQueue(name, options);
   }
 
   /**

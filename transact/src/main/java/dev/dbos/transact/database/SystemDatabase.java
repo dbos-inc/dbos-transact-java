@@ -22,7 +22,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.QueueUpdate;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -390,7 +390,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.upsertQueue(ctx, queue, updateExisting));
   }
 
-  public void updateQueue(String name, QueueUpdate update) {
+  public void updateQueue(String name, QueueOptions update) {
     dbRetry(() -> QueuesDAO.updateQueue(ctx, name, update));
   }
 

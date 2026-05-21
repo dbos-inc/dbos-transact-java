@@ -25,7 +25,7 @@ import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.QueueUpdate;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
@@ -1597,7 +1597,7 @@ public class SystemDatabaseTest {
   }
 
   @Test
-  public void testUpsertQueueUpdateExisting() {
+  public void testUpsertQueueOptionsExisting() {
     var queue = new Queue("q-update").withConcurrency(3);
     sysdb.upsertQueue(queue, true);
 
@@ -1667,7 +1667,7 @@ public class SystemDatabaseTest {
             .withRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
         true);
 
-    sysdb.updateQueue("q-partial", QueueUpdate.setConcurrency(99));
+    sysdb.updateQueue("q-partial", QueueOptions.setConcurrency(99));
 
     var q = sysdb.getQueue("q-partial").orElseThrow();
     assertEquals(99, q.concurrency(), "concurrency should be updated");
@@ -1680,7 +1680,7 @@ public class SystemDatabaseTest {
   public void testUpdateQueueClearConcurrency() {
     sysdb.upsertQueue(new Queue("q-clear-conc").withConcurrency(5), true);
 
-    sysdb.updateQueue("q-clear-conc", QueueUpdate.setConcurrency(null));
+    sysdb.updateQueue("q-clear-conc", QueueOptions.setConcurrency(null));
 
     var q = sysdb.getQueue("q-clear-conc").orElseThrow();
     assertNull(q.concurrency(), "concurrency should be cleared to null");
@@ -1692,7 +1692,7 @@ public class SystemDatabaseTest {
         new Queue("q-clear-rate").withRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
         true);
 
-    sysdb.updateQueue("q-clear-rate", QueueUpdate.setRateLimit(null, null));
+    sysdb.updateQueue("q-clear-rate", QueueOptions.setRateLimit(null, null));
 
     var q = sysdb.getQueue("q-clear-rate").orElseThrow();
     assertNull(q.rateLimit(), "rateLimit should be cleared to null");
@@ -1704,7 +1704,7 @@ public class SystemDatabaseTest {
 
     // Empty update should be a no-op (no exception, no change)
     var emptyUpdate =
-        new QueueUpdate(
+        new QueueOptions(
             Field.absent(),
             Field.absent(),
             Field.absent(),

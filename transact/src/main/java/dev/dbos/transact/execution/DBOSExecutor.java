@@ -36,6 +36,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -388,6 +389,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Optional<Queue> getQueue(String queueName) {
     return Optional.ofNullable(this.queueMap.get(queueName));
+  }
+
+  public void registerDynamicQueue(String name, QueueOptions options) {
+    systemDatabase.upsertQueue(options.toQueue(name), true);
   }
 
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
