@@ -8,7 +8,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
-import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -154,53 +153,6 @@ public class DBOSIntegration {
         method,
         maxRecoveryAttempts,
         serializationStrategy);
-  }
-
-  /**
-   * Captured information about a workflow invocation: the workflow name, declaring class name,
-   * optional instance name, and positional arguments.
-   */
-  public record CapturedInvocation(
-      @NonNull String workflowName,
-      @NonNull String className,
-      @Nullable String instanceName,
-      @NonNull Object[] args) {}
-
-  /**
-   * Capture the workflow invocation triggered by the supplied lambda without executing the
-   * workflow. The lambda must call exactly one {@code @Workflow} method on a registered proxy. This
-   * is intended for infrastructure that needs to defer a workflow start (for example, the
-   * debouncer).
-   *
-   * @param wfLambda lambda that invokes exactly one workflow method on a registered proxy
-   * @return the captured workflow name, class name, instance name, and arguments
-   * @throws IllegalStateException if DBOS has not been launched
-   */
-  public <T, E extends Exception> CapturedInvocation captureInvocation(
-      @NonNull ThrowingSupplier<T, E> wfLambda) {
-    var invocation = executor("captureInvocation").captureInvocation(wfLambda);
-    return new CapturedInvocation(
-        invocation.workflowName(),
-        invocation.className(),
-        invocation.instanceName(),
-        invocation.args());
-  }
-
-  /**
-   * Find the workflow ID of the currently-active workflow with a given queue and deduplication ID.
-   * Uses the unique {@code (queue_name, deduplication_id)} index for an O(1) point lookup. Returns
-   * {@code null} if no active (ENQUEUED, DELAYED, or PENDING) workflow with that deduplication ID
-   * exists in the given queue.
-   *
-   * @param queueName name of the queue to search
-   * @param deduplicationId deduplication ID to look up
-   * @return the workflow ID, or {@code null} if not found
-   * @throws IllegalStateException if DBOS has not been launched
-   */
-  public @Nullable String findWorkflowIdByDeduplicationId(
-      @NonNull String queueName, @NonNull String deduplicationId) {
-    return executor("findWorkflowIdByDeduplicationId")
-        .findWorkflowIdByDeduplicationId(queueName, deduplicationId);
   }
 
   /**

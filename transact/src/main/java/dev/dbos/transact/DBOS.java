@@ -419,7 +419,7 @@ public class DBOS implements AutoCloseable {
    * @return a fresh debouncer bound to this DBOS instance
    */
   public <R> @NonNull Debouncer<R> debouncer() {
-    return new Debouncer<>(this, debouncerWorkflow);
+    return new Debouncer<>(this, ensureLaunched("debouncer"), debouncerWorkflow);
   }
 
   /**

@@ -5,10 +5,11 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.internal.DBOSIntegration;
+import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
@@ -63,10 +64,10 @@ public final class Debouncer<R> {
    */
   private static final Duration ACK_TIMEOUT = Duration.ofSeconds(1);
 
-  // Fix 9: record for carrying the two pre-assigned IDs out of a durable step
   private record DebounceIds(String userWorkflowId, String messageId) {}
 
   private final DBOS dbos;
+  private final DBOSExecutor executor;
   private final RegisteredWorkflow debouncerWorkflow;
   private final @Nullable String queueName;
   private final @Nullable Duration debounceTimeout;
@@ -74,12 +75,16 @@ public final class Debouncer<R> {
   private final @Nullable Integer priority;
   private final @Nullable String deduplicationId;
 
-  public Debouncer(@NonNull DBOS dbos, @NonNull RegisteredWorkflow debouncerWorkflow) {
-    this(dbos, debouncerWorkflow, null, null, null, null, null);
+  public Debouncer(
+      @NonNull DBOS dbos,
+      @NonNull DBOSExecutor executor,
+      @NonNull RegisteredWorkflow debouncerWorkflow) {
+    this(dbos, executor, debouncerWorkflow, null, null, null, null, null);
   }
 
   private Debouncer(
       DBOS dbos,
+      DBOSExecutor executor,
       RegisteredWorkflow debouncerWorkflow,
       @Nullable String queueName,
       @Nullable Duration debounceTimeout,
@@ -87,6 +92,7 @@ public final class Debouncer<R> {
       @Nullable Integer priority,
       @Nullable String deduplicationId) {
     this.dbos = Objects.requireNonNull(dbos, "dbos must not be null");
+    this.executor = Objects.requireNonNull(executor, "executor must not be null");
     this.debouncerWorkflow =
         Objects.requireNonNull(debouncerWorkflow, "debouncerWorkflow must not be null");
     this.queueName = queueName;
@@ -104,7 +110,7 @@ public final class Debouncer<R> {
     if (queueName != null && queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName must not be empty");
     }
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -118,22 +124,22 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /** Target a specific application version for the user workflow. */
   public @NonNull Debouncer<R> withAppVersion(@Nullable String appVersion) {
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /** Set the priority for the user workflow (only applies when a queue is configured). */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /** Set a deduplication ID to be forwarded to the user workflow. */
   public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
-    return new Debouncer<>(dbos, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
+    return new Debouncer<>(dbos, executor, debouncerWorkflow, queueName, debounceTimeout, appVersion, priority, deduplicationId);
   }
 
   /**
@@ -184,18 +190,24 @@ public final class Debouncer<R> {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
     }
 
-    DBOSIntegration.CapturedInvocation invocation = dbos.integration().captureInvocation(wfLambda);
+    DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);
 
-    // Fix 9: use a record to carry both IDs out of a single durable step, eliminating
-    // the "|"-join/split hack. Inside a workflow the step makes replay deterministic.
+    // Inside a workflow, ID generation is wrapped in a step so replay is deterministic.
     DebounceIds ids;
     if (DBOS.inWorkflow() && !DBOS.inStep()) {
       ids =
-          dbos.runStep(
-              () -> new DebounceIds(UUID.randomUUID().toString(), UUID.randomUUID().toString()),
-              "assignDebounceIds");
+          executor.runStep(
+              () ->
+                  new DebounceIds(
+                      DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
+                      UUID.randomUUID().toString()),
+              new StepOptions("assignDebounceIds"),
+              null);
     } else {
-      ids = new DebounceIds(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+      ids =
+          new DebounceIds(
+              DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
+              UUID.randomUUID().toString());
     }
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
@@ -222,10 +234,8 @@ public final class Debouncer<R> {
             new StartWorkflowOptions()
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
                 .withDeduplicationId(debouncerDeduplicationId);
-        // Fix 5: use startRegisteredWorkflow instead of startWorkflow with proxy lambda
-        dbos.integration()
-            .startRegisteredWorkflow(
-                debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
+        executor.startRegisteredWorkflow(
+            debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
         // Successfully enqueued a fresh debouncer for this key.
         return dbos.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
@@ -235,7 +245,7 @@ public final class Debouncer<R> {
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
         String existingDebouncerId =
             (DBOS.inWorkflow() && !DBOS.inStep())
-                ? dbos.runStep(() -> lookupExistingDebouncerId(debouncerDeduplicationId), "lookupDebouncer")
+                ? executor.runStep(() -> lookupExistingDebouncerId(debouncerDeduplicationId), new StepOptions("lookupDebouncer"), null)
                 : lookupExistingDebouncerId(debouncerDeduplicationId);
         if (existingDebouncerId == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
@@ -246,8 +256,7 @@ public final class Debouncer<R> {
         }
         DebouncerMessage msg =
             new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
-        // Fix 7: use messageId as idempotency key — the send overload guarantees exactly-once
-        // delivery without needing a separate messageSent tracking flag.
+        // messageId is the idempotency key — exactly-once delivery, no tracking flag needed.
         dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
@@ -276,7 +285,6 @@ public final class Debouncer<R> {
   }
 
   private @Nullable String lookupExistingDebouncerId(String deduplicationId) {
-    return dbos.integration()
-        .findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+    return executor.findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
   }
 }
