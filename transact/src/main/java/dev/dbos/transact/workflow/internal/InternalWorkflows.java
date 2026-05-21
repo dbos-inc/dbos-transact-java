@@ -3,8 +3,8 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.workflow.Workflow;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -13,24 +13,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Implementation of the debouncer service workflow. Holds a reference to the {@link DBOS} instance
- * to call durable primitives (recv, setEvent, runStep) and to start the user workflow when the
- * debounce period elapses.
+ * Built-in workflows registered by DBOS itself. Currently holds the debouncer service workflow.
  *
- * <p>Auto-registered by DBOS during construction.
+ * <p>Not part of the public API.
  */
-public class DebouncerServiceImpl implements DebouncerService {
+public class InternalWorkflows {
 
-  private static final Logger logger = LoggerFactory.getLogger(DebouncerServiceImpl.class);
+  private static final Logger logger = LoggerFactory.getLogger(InternalWorkflows.class);
 
   private final DBOS dbos;
 
-  public DebouncerServiceImpl(DBOS dbos) {
+  public InternalWorkflows(DBOS dbos) {
     this.dbos = dbos;
   }
 
-  @Override
-  @Workflow(name = Constants.DEBOUNCER_WORKFLOW_NAME)
+  /**
+   * Returns the {@link Method} reference for {@link #debouncerWorkflow}, used by DBOS at startup to
+   * register the workflow without relying on reflection over {@code @Workflow} annotations.
+   */
+  public static Method debouncerWorkflowMethod() {
+    try {
+      return InternalWorkflows.class.getDeclaredMethod(
+          "debouncerWorkflow",
+          DebouncerOptions.class,
+          DebouncerContextOptions.class,
+          DebouncerMessage.class);
+    } catch (NoSuchMethodException e) {
+      throw new IllegalStateException("debouncerWorkflow method missing", e);
+    }
+  }
+
   public void debouncerWorkflow(
       DebouncerOptions options, DebouncerContextOptions ctx, DebouncerMessage initial) {
 

@@ -11,7 +11,7 @@ import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
-import dev.dbos.transact.workflow.internal.DebouncerService;
+import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
@@ -199,7 +199,7 @@ public class DBOSIntegration {
   }
 
   private static boolean isInternalInstance(RegisteredWorkflowInstance inst) {
-    return inst.target() instanceof DebouncerService;
+    return inst.target() instanceof InternalWorkflows;
   }
 
   /**

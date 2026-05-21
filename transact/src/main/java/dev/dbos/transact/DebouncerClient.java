@@ -234,7 +234,7 @@ public final class DebouncerClient<R> {
     if (debouncePeriod.isNegative() || debouncePeriod.isZero()) {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
     }
-    // className is required: DebouncerServiceImpl uses it to look up the registered workflow.
+    // className is required: the debouncer workflow uses it to look up the registered workflow.
     if (className == null) {
       throw new IllegalStateException(
           "className is required; call withClassName(MyServiceImpl.class.getName()) before debounce()");
@@ -258,7 +258,7 @@ public final class DebouncerClient<R> {
     DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
-    // Use the stable class-name constant so a rename of DebouncerServiceImpl is caught at compile
+    // Use the stable class-name constant so a rename of InternalWorkflows is caught at compile
     // time.
     var enqueueOpts =
         new DBOSClient.EnqueueOptions(
