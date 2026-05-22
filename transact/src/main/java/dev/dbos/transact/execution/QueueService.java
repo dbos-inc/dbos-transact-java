@@ -25,7 +25,7 @@ public class QueueService implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
   private static final Duration MIN_POLLING_INTERVAL = Duration.ofSeconds(1);
   private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
-  private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 5;
+  private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
   private final AtomicBoolean paused = new AtomicBoolean(false);
@@ -121,6 +121,13 @@ public class QueueService implements AutoCloseable {
       dbListeningQueues.removeIf(name -> !dbQueueNames.contains(name));
 
       for (var queue : dbQueues) {
+        if (dbosExecutor.findStaticQueue(queue.name()).isPresent()) {
+          logger.warn(
+              "Database-backed queue {} has the same name as a static queue; "
+                  + "the static queue's configuration is being used and the database-backed queue is ignored.",
+              queue.name());
+          continue;
+        }
         startQueueListenerIfNeeded(queue, true);
       }
     } catch (Exception e) {

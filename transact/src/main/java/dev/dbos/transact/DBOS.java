@@ -178,7 +178,7 @@ public class DBOS implements AutoCloseable {
    */
   public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
     ensureLaunched("registerQueue")
-        .registerQueue(name, options, QueueConflictResolution.UPDATE_IF_LATEST_VERSION);
+        .registerDynamicQueue(name, options, QueueConflictResolution.UPDATE_IF_LATEST_VERSION);
   }
 
   /**
@@ -193,7 +193,7 @@ public class DBOS implements AutoCloseable {
       @NonNull String name,
       @NonNull QueueOptions options,
       @NonNull QueueConflictResolution onConflict) {
-    ensureLaunched("registerQueue").registerQueue(name, options, onConflict);
+    ensureLaunched("registerQueue").registerDynamicQueue(name, options, onConflict);
   }
 
   /**
@@ -204,7 +204,7 @@ public class DBOS implements AutoCloseable {
    * @param options Fields to update
    */
   public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
-    ensureLaunched("updateQueue").updateQueue(name, options);
+    ensureLaunched("updateQueue").updateDynamicQueue(name, options);
   }
 
   /**
@@ -214,7 +214,7 @@ public class DBOS implements AutoCloseable {
    * @return the queue if it exists in the database, or empty
    */
   public @NonNull Optional<Queue> findQueue(@NonNull String name) {
-    return ensureLaunched("findQueue").findQueue(name);
+    return ensureLaunched("findQueue").findDynamicQueue(name);
   }
 
   /**
@@ -224,7 +224,7 @@ public class DBOS implements AutoCloseable {
    * @return true if the queue was deleted, false if it did not exist
    */
   public boolean deleteQueue(@NonNull String name) {
-    return ensureLaunched("deleteQueue").deleteQueue(name);
+    return ensureLaunched("deleteQueue").deleteDynamicQueue(name);
   }
 
   /**
@@ -233,7 +233,7 @@ public class DBOS implements AutoCloseable {
    * @return list of all queues currently registered in the database
    */
   public @NonNull List<Queue> listQueues() {
-    return ensureLaunched("listQueues").listQueues();
+    return ensureLaunched("listQueues").listDynamicQueues();
   }
 
   /**
@@ -383,7 +383,7 @@ public class DBOS implements AutoCloseable {
    * @return Optional containing the queue definition for given `queueName`, or empty if not found
    */
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
-    return ensureLaunched("getQueue").getQueue(queueName);
+    return ensureLaunched("getQueue").findStaticQueue(queueName);
   }
 
   /**

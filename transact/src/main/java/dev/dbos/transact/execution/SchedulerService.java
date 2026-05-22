@@ -141,7 +141,7 @@ public class SchedulerService implements AutoCloseable {
 
           final String queueName =
               Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
-          if (dbosExecutor.getQueue(queueName).isEmpty()) {
+          if (dbosExecutor.findQueue(queueName).isEmpty()) {
             logger.error(
                 "Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
             continue;
