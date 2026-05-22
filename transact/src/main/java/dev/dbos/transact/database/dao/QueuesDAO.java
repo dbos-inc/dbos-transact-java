@@ -306,68 +306,77 @@ public class QueuesDAO {
       DbContext ctx, String name, QueueOptions options, boolean updateExisting)
       throws SQLException {
     Queue queue = queueFromOptions(name, options);
-    final String conflictClause =
-        updateExisting
-            ? """
-              ON CONFLICT (name) DO UPDATE SET
-                concurrency           = EXCLUDED.concurrency,
-                worker_concurrency    = EXCLUDED.worker_concurrency,
-                rate_limit_max        = EXCLUDED.rate_limit_max,
-                rate_limit_period_sec = EXCLUDED.rate_limit_period_sec,
-                priority_enabled      = EXCLUDED.priority_enabled,
-                partition_queue       = EXCLUDED.partition_queue,
-                polling_interval_sec  = EXCLUDED.polling_interval_sec,
-                updated_at            = EXCLUDED.updated_at
-              """
-            : "ON CONFLICT (name) DO NOTHING";
     final String insertSql =
         """
         INSERT INTO "%s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        %s
+        ON CONFLICT (name) DO NOTHING
         """
-            .formatted(ctx.schema(), conflictClause);
-    final String existsSql = "SELECT 1 FROM \"%s\".queues WHERE name = ?".formatted(ctx.schema());
+            .formatted(ctx.schema());
+    final String updateSql =
+        """
+        UPDATE "%s".queues SET
+          concurrency           = ?,
+          worker_concurrency    = ?,
+          rate_limit_max        = ?,
+          rate_limit_period_sec = ?,
+          priority_enabled      = ?,
+          partition_queue       = ?,
+          polling_interval_sec  = ?,
+          updated_at            = ?
+        WHERE name = ?
+        """
+            .formatted(ctx.schema());
 
     try (Connection connection = ctx.getConnection()) {
-      connection.setAutoCommit(false);
-      try {
-        boolean existed;
-        try (PreparedStatement ps = connection.prepareStatement(existsSql)) {
-          ps.setString(1, queue.name());
-          try (ResultSet rs = ps.executeQuery()) {
-            existed = rs.next();
-          }
-        }
-
-        try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-          ps.setString(1, queue.name());
-          setNullableInt(ps, 2, queue.concurrency());
-          setNullableInt(ps, 3, queue.workerConcurrency());
+      boolean inserted;
+      try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
+        bindQueueParams(ps, queue, 1);
+        inserted = ps.executeUpdate() == 1;
+      }
+      if (!inserted && updateExisting) {
+        try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
+          setNullableInt(ps, 1, queue.concurrency());
+          setNullableInt(ps, 2, queue.workerConcurrency());
           var rateLimit = queue.rateLimit();
           if (rateLimit != null) {
-            ps.setInt(4, rateLimit.limit());
-            ps.setDouble(5, rateLimit.period().toMillis() / 1000.0);
+            ps.setInt(3, rateLimit.limit());
+            ps.setDouble(4, rateLimit.period().toMillis() / 1000.0);
           } else {
-            ps.setNull(4, java.sql.Types.INTEGER);
-            ps.setNull(5, java.sql.Types.DOUBLE);
+            ps.setNull(3, java.sql.Types.INTEGER);
+            ps.setNull(4, java.sql.Types.DOUBLE);
           }
-          ps.setBoolean(6, queue.priorityEnabled());
-          ps.setBoolean(7, queue.partitioningEnabled());
-          ps.setDouble(8, queue.pollingInterval().toMillis() / 1000.0);
-          ps.setLong(9, System.currentTimeMillis());
+          ps.setBoolean(5, queue.priorityEnabled());
+          ps.setBoolean(6, queue.partitioningEnabled());
+          ps.setDouble(7, queue.pollingInterval().toMillis() / 1000.0);
+          ps.setLong(8, System.currentTimeMillis());
+          ps.setString(9, queue.name());
           ps.executeUpdate();
         }
-
-        connection.commit();
-        return !existed;
-      } catch (SQLException e) {
-        connection.rollback();
-        throw e;
       }
+      return inserted;
     }
+  }
+
+  private static void bindQueueParams(PreparedStatement ps, Queue queue, int offset)
+      throws SQLException {
+    ps.setString(offset, queue.name());
+    setNullableInt(ps, offset + 1, queue.concurrency());
+    setNullableInt(ps, offset + 2, queue.workerConcurrency());
+    var rateLimit = queue.rateLimit();
+    if (rateLimit != null) {
+      ps.setInt(offset + 3, rateLimit.limit());
+      ps.setDouble(offset + 4, rateLimit.period().toMillis() / 1000.0);
+    } else {
+      ps.setNull(offset + 3, java.sql.Types.INTEGER);
+      ps.setNull(offset + 4, java.sql.Types.DOUBLE);
+    }
+    ps.setBoolean(offset + 5, queue.priorityEnabled());
+    ps.setBoolean(offset + 6, queue.partitioningEnabled());
+    ps.setDouble(offset + 7, queue.pollingInterval().toMillis() / 1000.0);
+    ps.setLong(offset + 8, System.currentTimeMillis());
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
@@ -427,9 +436,9 @@ public class QueuesDAO {
     collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
     collectField(
         setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
-    collectField(setClauses, params, "priority_enabled", update.priorityEnabled());
-    collectField(setClauses, params, "partition_queue", update.partitionQueue());
-    collectField(
+    collectOptional(setClauses, params, "priority_enabled", update.priorityEnabled());
+    collectOptional(setClauses, params, "partition_queue", update.partitionQueue());
+    collectOptional(
         setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
     setClauses.add("\"updated_at\" = ?");
@@ -457,10 +466,23 @@ public class QueuesDAO {
     }
   }
 
+  private static <T> void collectOptional(
+      List<String> clauses, List<Object> params, String column, Optional<T> opt) {
+    opt.ifPresent(
+        value -> {
+          clauses.add("\"" + column + "\" = ?");
+          params.add(value);
+        });
+  }
+
   private static Field<Double> durationToSec(Field<Duration> field) {
     if (!field.isPresent()) return Field.absent();
     Duration d = field.get();
     return Field.of(d != null ? d.toMillis() / 1000.0 : null);
+  }
+
+  private static Optional<Double> durationToSec(Optional<Duration> opt) {
+    return opt.map(d -> d.toMillis() / 1000.0);
   }
 
   public static boolean deleteQueue(DbContext ctx, String name) throws SQLException {
@@ -506,10 +528,8 @@ public class QueuesDAO {
     Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
     Integer workerConcurrencyVal =
         options.workerConcurrency().isPresent() ? options.workerConcurrency().get() : null;
-    Boolean priorityEnabledVal =
-        options.priorityEnabled().isPresent() ? options.priorityEnabled().get() : null;
-    Boolean partitionQueueVal =
-        options.partitionQueue().isPresent() ? options.partitionQueue().get() : null;
+    boolean priorityEnabledVal = options.priorityEnabled().orElse(false);
+    boolean partitionQueueVal = options.partitionQueue().orElse(false);
 
     Queue.RateLimit rateLimit = null;
     if (options.rateLimitMax().isPresent()
@@ -520,17 +540,14 @@ public class QueuesDAO {
           new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
     }
 
-    Duration pollingIntervalVal = Queue.DEFAULT_POLLING_INTERVAL;
-    if (options.pollingInterval().isPresent() && options.pollingInterval().get() != null) {
-      pollingIntervalVal = options.pollingInterval().get();
-    }
+    Duration pollingIntervalVal = options.pollingInterval().orElse(Queue.DEFAULT_POLLING_INTERVAL);
 
     return new Queue(
         name,
         concurrencyVal,
         workerConcurrencyVal,
-        Boolean.TRUE.equals(priorityEnabledVal),
-        Boolean.TRUE.equals(partitionQueueVal),
+        priorityEnabledVal,
+        partitionQueueVal,
         rateLimit,
         pollingIntervalVal);
   }

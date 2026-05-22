@@ -25,6 +25,7 @@ public sealed interface Field<T> permits Field.Absent, Field.Present {
   }
 
   default @Nullable T get() {
-    return ((Present<T>) this).value();
+    if (this instanceof Present<T> p) return p.value();
+    throw new IllegalStateException("Field.get() called on an absent field");
   }
 }

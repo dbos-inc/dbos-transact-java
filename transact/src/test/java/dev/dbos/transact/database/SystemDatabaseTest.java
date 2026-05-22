@@ -21,7 +21,6 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.Queue;
@@ -1700,15 +1699,7 @@ public class SystemDatabaseTest {
     sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true);
 
     // Empty update should be a no-op (no exception, no change)
-    var emptyUpdate =
-        new QueueOptions(
-            Field.absent(),
-            Field.absent(),
-            Field.absent(),
-            Field.absent(),
-            Field.absent(),
-            Field.absent(),
-            Field.absent());
+    var emptyUpdate = QueueOptions.empty();
     sysdb.updateQueue("q-empty-update", emptyUpdate);
 
     var q = sysdb.findQueue("q-empty-update").orElseThrow();

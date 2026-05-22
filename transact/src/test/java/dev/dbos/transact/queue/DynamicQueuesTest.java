@@ -48,7 +48,7 @@ public class DynamicQueuesTest {
     // Register a dynamic queue after launch — this writes to DB.
     dbos.registerQueue("dynQueue", QueueOptions.empty());
 
-    // The supervisor polls every 5s; wait for it to discover and start a listener.
+    // The supervisor polls every 1s; wait for it to discover and start a listener.
     var handle =
         dbos.startWorkflow(
             () -> serviceQ.simpleQWorkflow("hello"),

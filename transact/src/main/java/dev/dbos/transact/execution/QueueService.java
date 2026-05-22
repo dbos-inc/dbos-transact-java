@@ -15,7 +15,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +22,6 @@ import org.slf4j.LoggerFactory;
 public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
-  private static final Duration MIN_POLLING_INTERVAL = Duration.ofSeconds(1);
   private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
@@ -115,11 +113,6 @@ public class QueueService implements AutoCloseable {
         }
       }
 
-      // Remove listeners for queues deleted from DB; listener tasks self-terminate when they
-      // next fire and find their name absent from dbListeningQueues.
-      var dbQueueNames = dbQueues.stream().map(Queue::name).collect(Collectors.toSet());
-      dbListeningQueues.removeIf(name -> !dbQueueNames.contains(name));
-
       for (var queue : dbQueues) {
         if (dbosExecutor.findStaticQueue(queue.name()).isPresent()) {
           logger.warn(
@@ -140,20 +133,20 @@ public class QueueService implements AutoCloseable {
   private class QueueListenerTask implements Runnable {
 
     Queue queue;
-    Duration pollingInterval;
+    double backoffFactor = 1.0;
     final boolean dynamic;
     final String executorId = dbosExecutor.executorId();
     final String appVersion = dbosExecutor.appVersion();
 
     QueueListenerTask(Queue queue, boolean dynamic) {
       this.queue = queue;
-      this.pollingInterval = queue.pollingInterval();
       this.dynamic = dynamic;
     }
 
     void schedule() {
       var randomSleepFactor = 0.95 + ThreadLocalRandom.current().nextDouble(0.1);
-      var delayMs = (long) (randomSleepFactor * pollingInterval.toMillis() * speedup);
+      var delayMs =
+          (long) (randomSleepFactor * queue.pollingInterval().toMillis() * backoffFactor * speedup);
       var svc = execServiceRef.get();
       if (svc != null) {
         svc.schedule(this, delayMs, TimeUnit.MILLISECONDS);
@@ -186,9 +179,13 @@ public class QueueService implements AutoCloseable {
     @Override
     public void run() {
       if (execServiceRef.get() == null) return;
-      if (dynamic && !dbListeningQueues.contains(queue.name())) return;
       if (dynamic) {
-        queue = systemDatabase.findQueue(queue.name()).orElse(queue);
+        var refreshed = systemDatabase.findQueue(queue.name());
+        if (refreshed.isEmpty()) {
+          dbListeningQueues.remove(queue.name());
+          return;
+        }
+        queue = refreshed.get();
       }
 
       try {
@@ -201,18 +198,12 @@ public class QueueService implements AutoCloseable {
           processPartition(null);
         }
 
-        pollingInterval = Duration.ofMillis((long) (pollingInterval.toMillis() * 0.9));
-        pollingInterval =
-            pollingInterval.compareTo(MIN_POLLING_INTERVAL) >= 0
-                ? pollingInterval
-                : MIN_POLLING_INTERVAL;
+        backoffFactor = Math.max(backoffFactor * 0.9, 1.0);
       } catch (Exception e) {
         logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
-        pollingInterval = pollingInterval.multipliedBy(2);
-        pollingInterval =
-            pollingInterval.compareTo(MAX_POLLING_INTERVAL) <= 0
-                ? pollingInterval
-                : MAX_POLLING_INTERVAL;
+        double maxFactor =
+            (double) MAX_POLLING_INTERVAL.toMillis() / queue.pollingInterval().toMillis();
+        backoffFactor = Math.min(backoffFactor * 2.0, maxFactor);
       } finally {
         this.schedule();
       }

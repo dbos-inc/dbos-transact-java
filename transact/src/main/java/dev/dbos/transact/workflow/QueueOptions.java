@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.Nullable;
@@ -12,15 +13,19 @@ import org.jspecify.annotations.Nullable;
  * <p>When used for registration, absent and null fields both result in the column being null (no
  * limit / use default). When used for updates, absent fields are left unchanged in the database
  * while null-valued fields clear the column.
+ *
+ * <p>The non-nullable queue properties ({@code priorityEnabled}, {@code partitionQueue}, {@code
+ * pollingInterval}) use {@link Optional} — {@link Optional#empty()} means use the default on
+ * creation or leave unchanged on update; a present value sets the column.
  */
 public record QueueOptions(
     Field<Integer> concurrency,
     Field<Integer> workerConcurrency,
     Field<Integer> rateLimitMax,
     Field<Duration> rateLimitPeriod,
-    Field<Boolean> priorityEnabled,
-    Field<Boolean> partitionQueue,
-    Field<Duration> pollingInterval) {
+    Optional<Boolean> priorityEnabled,
+    Optional<Boolean> partitionQueue,
+    Optional<Duration> pollingInterval) {
 
   private static final QueueOptions EMPTY =
       new QueueOptions(
@@ -28,9 +33,9 @@ public record QueueOptions(
           Field.absent(),
           Field.absent(),
           Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent());
+          Optional.empty(),
+          Optional.empty(),
+          Optional.empty());
 
   public static QueueOptions empty() {
     return EMPTY;
@@ -41,9 +46,9 @@ public record QueueOptions(
         && !workerConcurrency.isPresent()
         && !rateLimitMax.isPresent()
         && !rateLimitPeriod.isPresent()
-        && !priorityEnabled.isPresent()
-        && !partitionQueue.isPresent()
-        && !pollingInterval.isPresent();
+        && priorityEnabled.isEmpty()
+        && partitionQueue.isEmpty()
+        && pollingInterval.isEmpty();
   }
 
   // ── Static factories ──────────────────────────────────────────────────────
@@ -65,15 +70,15 @@ public record QueueOptions(
   }
 
   public static QueueOptions setPriorityEnabled(boolean value) {
-    return EMPTY.withPriorityEnabled(Field.of(value));
+    return EMPTY.withPriorityEnabled(Optional.of(value));
   }
 
   public static QueueOptions setPartitionQueue(boolean value) {
-    return EMPTY.withPartitionQueue(Field.of(value));
+    return EMPTY.withPartitionQueue(Optional.of(value));
   }
 
-  public static QueueOptions setPollingInterval(@Nullable Duration value) {
-    return EMPTY.withPollingInterval(Field.of(value));
+  public static QueueOptions setPollingInterval(Duration value) {
+    return EMPTY.withPollingInterval(Optional.of(value));
   }
 
   // ── Builders for chaining ─────────────────────────────────────────────────
@@ -122,7 +127,7 @@ public record QueueOptions(
         pollingInterval);
   }
 
-  public QueueOptions withPriorityEnabled(Field<Boolean> priorityEnabled) {
+  public QueueOptions withPriorityEnabled(Optional<Boolean> priorityEnabled) {
     return new QueueOptions(
         concurrency,
         workerConcurrency,
@@ -133,7 +138,7 @@ public record QueueOptions(
         pollingInterval);
   }
 
-  public QueueOptions withPartitionQueue(Field<Boolean> partitionQueue) {
+  public QueueOptions withPartitionQueue(Optional<Boolean> partitionQueue) {
     return new QueueOptions(
         concurrency,
         workerConcurrency,
@@ -144,7 +149,7 @@ public record QueueOptions(
         pollingInterval);
   }
 
-  public QueueOptions withPollingInterval(Field<Duration> pollingInterval) {
+  public QueueOptions withPollingInterval(Optional<Duration> pollingInterval) {
     return new QueueOptions(
         concurrency,
         workerConcurrency,
@@ -155,7 +160,7 @@ public record QueueOptions(
         pollingInterval);
   }
 
-  // ── Convenience chaining methods (take raw values, wrap in Field.of) ────
+  // ── Convenience chaining methods ──────────────────────────────────────────
 
   public QueueOptions andConcurrency(@Nullable Integer value) {
     return withConcurrency(Field.of(value));
@@ -174,14 +179,14 @@ public record QueueOptions(
   }
 
   public QueueOptions andPriorityEnabled(boolean value) {
-    return withPriorityEnabled(Field.of(value));
+    return withPriorityEnabled(Optional.of(value));
   }
 
   public QueueOptions andPartitionQueue(boolean value) {
-    return withPartitionQueue(Field.of(value));
+    return withPartitionQueue(Optional.of(value));
   }
 
-  public QueueOptions andPollingInterval(@Nullable Duration value) {
-    return withPollingInterval(Field.of(value));
+  public QueueOptions andPollingInterval(Duration value) {
+    return withPollingInterval(Optional.of(value));
   }
 }
