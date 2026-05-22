@@ -159,6 +159,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("removal")
   public void start(
       DBOS dbos,
       Set<DBOSLifecycleListener> listenerSet,
