@@ -568,6 +568,9 @@ public class Conductor implements AutoCloseable {
                           }
                         });
 
+                if (pingTimeout != null) {
+                  pingTimeout.cancel(false);
+                }
                 pingTimeout =
                     scheduler.schedule(
                         () -> {

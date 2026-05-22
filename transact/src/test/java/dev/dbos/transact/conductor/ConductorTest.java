@@ -158,7 +158,7 @@ public class ConductorTest {
     Listener listener = new Listener();
     testServer.setListener(listener);
 
-    builder.pingPeriodMs(2000).pingTimeoutMs(1000);
+    builder.pingPeriodMs(2000).pingTimeoutMs(5000);
     try (Conductor conductor = builder.build()) {
       conductor.start();
 
