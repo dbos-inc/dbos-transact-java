@@ -14,6 +14,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
 import java.util.List;
+import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assumptions;
@@ -302,7 +303,7 @@ class DBOSExecutorTest {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-      String wfid = "wf-123";
+      String wfid = UUID.randomUUID().toString();
       try (var id = new WorkflowOptions(wfid).setContext()) {
         executingService.sleepingWorkflow(.002f);
       }

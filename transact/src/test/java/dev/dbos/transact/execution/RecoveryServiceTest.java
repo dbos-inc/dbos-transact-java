@@ -9,6 +9,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -96,8 +97,11 @@ class RecoveryServiceTest {
       setWorkflowStateToPending(dataSource);
 
       var pending =
-          systemDatabase.getPendingWorkflows(
-              List.of(dbosExecutor.executorId()), dbosExecutor.appVersion());
+          systemDatabase.listWorkflows(
+              new ListWorkflowsInput()
+                  .withStatus(WorkflowState.PENDING)
+                  .withExecutorIds(List.of(dbosExecutor.executorId()))
+                  .withApplicationVersion(dbosExecutor.appVersion()));
 
       assertEquals(5, pending.size());
 

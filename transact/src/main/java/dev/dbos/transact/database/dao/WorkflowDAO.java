@@ -822,16 +822,6 @@ public class WorkflowDAO {
     return info;
   }
 
-  public static List<WorkflowStatus> getPendingWorkflows(
-      DbContext ctx, List<String> executorIds, String appVersion) throws SQLException {
-    var input =
-        new ListWorkflowsInput()
-            .withStatus(WorkflowState.PENDING)
-            .withExecutorIds(executorIds)
-            .withApplicationVersion(appVersion);
-    return listWorkflows(ctx, input);
-  }
-
   @SuppressWarnings("unchecked")
   public static <T> Result<T> awaitWorkflowResult(
       DbContext ctx, Duration dbPollingInterval, String workflowId) throws SQLException {

@@ -235,10 +235,19 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched(dbos);
       }
 
+      var recoveryQuery =
+          new ListWorkflowsInput()
+              .withStatus(WorkflowState.PENDING)
+              .withExecutorIds(List.of(executorId()))
+              .withApplicationVersion(appVersion)
+              .withEndTime(Instant.now());
       Runnable recoveryTask =
           () -> {
             try {
-              recoverPendingWorkflows(List.of(executorId()));
+              var workflows = systemDatabase.listWorkflows(recoveryQuery);
+              for (var wf : workflows) {
+                recoverWorkflow(wf.workflowId(), wf.queueName());
+              }
             } catch (Throwable t) {
               logger.error("Recovery task failed", t);
             }
@@ -960,7 +969,12 @@ public class DBOSExecutor implements AutoCloseable {
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
 
-    var workflows = systemDatabase.getPendingWorkflows(executorIds, appVersion);
+    var input =
+        new ListWorkflowsInput()
+            .withStatus(WorkflowState.PENDING)
+            .withExecutorIds(executorIds)
+            .withApplicationVersion(appVersion);
+    var workflows = systemDatabase.listWorkflows(input);
     return workflows.stream()
         .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
         .collect(Collectors.toList());
