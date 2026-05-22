@@ -192,4 +192,82 @@ public class DynamicQueuesTest {
         IllegalArgumentException.class,
         () -> dbos.registerQueue("_dbos_internal_queue", QueueOptions.empty()));
   }
+
+  @Test
+  public void testDeleteAndRecreateQueue() throws Exception {
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    dbos.registerQueue("q-lifecycle", QueueOptions.setConcurrency(5));
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("first"),
+            new StartWorkflowOptions("lc-wf1").withQueue("q-lifecycle"));
+    assertEquals("firstfirst", h1.getResult());
+
+    dbos.deleteQueue("q-lifecycle");
+    assertFalse(dbos.listQueues().stream().anyMatch(x -> x.name().equals("q-lifecycle")));
+
+    // Recreate with different config.
+    dbos.registerQueue("q-lifecycle", QueueOptions.setConcurrency(2));
+    var recreated =
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-lifecycle"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(2, recreated.concurrency());
+
+    var h2 =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("second"),
+            new StartWorkflowOptions("lc-wf2").withQueue("q-lifecycle"));
+    assertEquals("secondsecond", h2.getResult());
+  }
+
+  @Test
+  public void testStaticAndDynamicQueueSameName() throws Exception {
+    // Static queue registered pre-launch.
+    var staticQ = new Queue("q-shared").withConcurrency(3);
+    dbos.registerQueue(staticQ);
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    // Register same name as a dynamic queue — supervisor should ignore the DB entry.
+    dbos.registerQueue("q-shared", QueueOptions.setConcurrency(99));
+
+    // Workflow still executes — static listener handles it.
+    var handle =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("shared"),
+            new StartWorkflowOptions().withQueue("q-shared"));
+    assertEquals("sharedshared", handle.getResult());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+  }
+
+  @Test
+  public void testRegisterQueueValidation() throws Exception {
+    dbos.launch();
+
+    // Zero or negative polling interval should fail.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.registerQueue(
+                "q-bad-poll", QueueOptions.setPollingInterval(Duration.ofSeconds(-1))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-bad-poll", QueueOptions.setPollingInterval(Duration.ZERO)));
+
+    // Zero or negative concurrency should fail.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-bad-conc", QueueOptions.setConcurrency(0)));
+  }
 }
