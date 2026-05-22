@@ -103,6 +103,7 @@ public class DBOSAutoConfiguration {
     return new DBOSWorkflowRegistrar(dbos, applicationContext);
   }
 
+  @SuppressWarnings("removal")
   private DBOSConfig buildConfig(DBOSProperties props, String springAppName) {
     String appName =
         props.getApplication().getName() != null ? props.getApplication().getName() : springAppName;

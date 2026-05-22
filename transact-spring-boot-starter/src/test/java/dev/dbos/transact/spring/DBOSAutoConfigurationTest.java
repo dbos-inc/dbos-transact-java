@@ -66,6 +66,7 @@ class DBOSAutoConfigurationTest {
   }
 
   @Test
+  @SuppressWarnings("removal")
   void dbosConfigReflectsOptionalProperties() {
     runner
         .withPropertyValues(
