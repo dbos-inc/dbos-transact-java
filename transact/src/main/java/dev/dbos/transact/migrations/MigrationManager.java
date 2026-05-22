@@ -675,7 +675,7 @@ public class MigrationManager {
           timeout_ms BIGINT DEFAULT NULL,
           deadline_epoch_ms BIGINT DEFAULT NULL,
           deduplication_id TEXT DEFAULT NULL,
-          priority INTEGER DEFAULT NULL,
+          priority INT4 DEFAULT NULL,
           queue_partition_key TEXT DEFAULT NULL
       ) RETURNS TEXT AS $$
       DECLARE
@@ -683,8 +683,8 @@ public class MigrationManager {
           v_serialized_inputs TEXT;
           v_owner_xid TEXT;
           v_now BIGINT;
-          v_recovery_attempts INTEGER := 0;
-          v_priority INTEGER;
+          v_recovery_attempts INT4 := 0;
+          v_priority INT4;
       BEGIN
 
           -- Validate required parameters
@@ -799,7 +799,7 @@ public class MigrationManager {
     var m =
         """
         ALTER FUNCTION "%1$s".enqueue_workflow(
-            TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INTEGER, TEXT
+            TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT
         ) SET search_path = pg_catalog, pg_temp;
 
         ALTER FUNCTION "%1$s".send_message(
@@ -821,9 +821,9 @@ public class MigrationManager {
       CREATE TABLE "%1$s".queues (
           queue_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
           name TEXT NOT NULL UNIQUE,
-          concurrency INTEGER,
-          worker_concurrency INTEGER,
-          rate_limit_max INTEGER,
+          concurrency INT4,
+          worker_concurrency INT4,
+          rate_limit_max INT4,
           rate_limit_period_sec DOUBLE PRECISION,
           priority_enabled BOOLEAN NOT NULL DEFAULT FALSE,
           partition_queue BOOLEAN NOT NULL DEFAULT FALSE,
