@@ -1144,6 +1144,14 @@ public class DBOSExecutor implements AutoCloseable {
 
   // Workflow Execution Methods
 
+  // helper method to validate that @Workflow methods are not invoked from the startWorkflow lambda
+  public void validateNonWorkflowInvocation() {
+    var hook = hookHolder.get();
+    if (hook != null) {
+      throw new RuntimeException("Only @Workflow functions may run in this context");
+    }
+  }
+
   // execute a workflow via a proxy
   public Object runWorkflow(
       Object target, String instanceName, Method method, Object[] args, Workflow wfTag)
