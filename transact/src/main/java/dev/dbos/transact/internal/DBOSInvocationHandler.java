@@ -57,15 +57,18 @@ public class DBOSInvocationHandler implements InvocationHandler {
     var implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
     implMethod.setAccessible(true);
 
+    var executor = executor();
     var wfTag = implMethod.getAnnotation(Workflow.class);
     if (wfTag != null) {
-      return executor().runWorkflow(target, instanceName, implMethod, args, wfTag);
+      return executor.runWorkflow(target, instanceName, implMethod, args, wfTag);
     }
+
+    executor.validateNonWorkflowInvocation();
 
     var stepTag = implMethod.getAnnotation(Step.class);
     if (stepTag != null) {
       var options = StepOptions.create(stepTag, method);
-      return executor().runStep(() -> implMethod.invoke(target, args), options, null);
+      return executor.runStep(() -> implMethod.invoke(target, args), options, null);
     }
 
     return method.invoke(target, args);
