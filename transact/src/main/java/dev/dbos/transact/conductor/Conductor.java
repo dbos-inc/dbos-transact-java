@@ -10,6 +10,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.ByteArrayInputStream;
@@ -568,6 +569,9 @@ public class Conductor implements AutoCloseable {
                           }
                         });
 
+                if (pingTimeout != null) {
+                  pingTimeout.cancel(false);
+                }
                 pingTimeout =
                     scheduler.schedule(
                         () -> {
@@ -938,8 +942,11 @@ public class Conductor implements AutoCloseable {
           ExistPendingWorkflowsRequest request = (ExistPendingWorkflowsRequest) message;
           try {
             var pending =
-                conductor.systemDatabase.getPendingWorkflows(
-                    List.of(request.executor_id), request.application_version);
+                conductor.systemDatabase.listWorkflows(
+                    new ListWorkflowsInput()
+                        .withStatus(WorkflowState.PENDING)
+                        .withExecutorIds(List.of(request.executor_id))
+                        .withApplicationVersion(request.application_version));
             return new ExistPendingWorkflowsResponse(request, !pending.isEmpty());
           } catch (Exception e) {
             logger.error("Exception encountered when checking for pending workflows", e);

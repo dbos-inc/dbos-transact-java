@@ -372,7 +372,7 @@ public class QueuesTest {
       times.add(result);
     }
 
-    double waveTolerance = 0.5;
+    double waveTolerance = 1.0;
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);

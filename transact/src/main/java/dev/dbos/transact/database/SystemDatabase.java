@@ -374,10 +374,6 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }
 
-  public List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion) {
-    return dbRetry(() -> WorkflowDAO.getPendingWorkflows(ctx, executorIds, appVersion));
-  }
-
   public boolean clearQueueAssignment(String workflowId) {
     return dbRetry(() -> QueuesDAO.clearQueueAssignment(ctx, workflowId));
   }
