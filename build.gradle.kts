@@ -109,21 +109,23 @@ subprojects {
   extensions.configure<com.diffplug.gradle.spotless.SpotlessExtension> {
     java {
       googleJavaFormat()
-      importOrder("dev.dbos", "java", "javax", "")
+      cleanthat()
+      formatAnnotations()
       removeUnusedImports()
+      importOrder("dev.dbos", "java", "javax", "")
       trimTrailingWhitespace()
       endWithNewline()
     }
     kotlin {
       target("**/*.kt")
       targetExclude("build/**/*.kt")
-      ktfmt("0.61").googleStyle()
+      ktfmt("0.62").googleStyle()
       trimTrailingWhitespace()
       endWithNewline()
     }
     kotlinGradle {
       target("**/*.gradle.kts")
-      ktfmt("0.61").googleStyle()
+      ktfmt("0.62").googleStyle()
       trimTrailingWhitespace()
       endWithNewline()
     }
