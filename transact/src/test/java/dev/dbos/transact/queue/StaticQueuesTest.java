@@ -17,7 +17,6 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -35,9 +34,14 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class QueuesTest {
+/**
+ * Tests for the static (in-memory) queue registration path. All queues here are registered via
+ * {@code dbos.registerQueue(Queue)} before launch, which exercises the pre-launch static listener
+ * code path. See {@link QueuesTest} for the equivalent tests using database-backed dynamic queues.
+ */
+public class StaticQueuesTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(StaticQueuesTest.class);
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -52,8 +56,6 @@ public class QueuesTest {
     dataSource = pgContainer.dataSource();
   }
 
-  // One dedicated in-memory queue test to guard against regressions on the
-  // static-queue path. All other tests below use database-backed queues.
   @Test
   public void testQueuedWorkflow() throws Exception {
 
@@ -76,23 +78,23 @@ public class QueuesTest {
   @Test
   public void testDedupeId() throws Exception {
 
+    Queue firstQ = new Queue("firstQueue");
+    dbos.registerQueue(firstQ);
+
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.empty());
-
     // pause queue service for test validation
+    var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
 
-    var options = new StartWorkflowOptions().withQueue("firstQueue");
+    var options = new StartWorkflowOptions().withQueue(firstQ);
     var dedupeId = "dedupeId";
     var h1 =
         dbos.startWorkflow(
             () -> serviceQ.simpleQWorkflow("abc"), options.withDeduplicationId(dedupeId));
     var s1 = h1.getStatus();
-    assertEquals(s1.queueName(), "firstQueue");
+    assertEquals(s1.queueName(), firstQ.name());
     assertEquals(s1.deduplicationId(), dedupeId);
 
     // enqueue with different dedupe ID should be fine
@@ -101,13 +103,13 @@ public class QueuesTest {
         dbos.startWorkflow(
             () -> serviceQ.simpleQWorkflow("def"), options.withDeduplicationId(dedupeId2));
     var s2 = h2.getStatus();
-    assertEquals(s2.queueName(), "firstQueue");
+    assertEquals(s2.queueName(), firstQ.name());
     assertEquals(s2.deduplicationId(), dedupeId2);
 
     // enqueue with no dedupe ID should be fine
     var h3 = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("ghi"), options);
     var s3 = h3.getStatus();
-    assertEquals(s3.queueName(), "firstQueue");
+    assertEquals(s3.queueName(), firstQ.name());
     assertNull(s3.deduplicationId());
 
     assertThrows(
@@ -142,17 +144,17 @@ public class QueuesTest {
   @Test
   public void testDedupeIdWithDelay() throws Exception {
 
+    Queue firstQ = new Queue("firstQueue");
+    dbos.registerQueue(firstQ);
+
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
 
     var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.empty());
-
     qs.pause();
 
     var dedupeId = "dedupeId";
-    var options = new StartWorkflowOptions().withQueue("firstQueue").withDeduplicationId(dedupeId);
+    var options = new StartWorkflowOptions().withQueue(firstQ).withDeduplicationId(dedupeId);
     var h1 =
         dbos.startWorkflow(
             () -> serviceQ.simpleQWorkflow("abc"), options.withDelay(Duration.ofHours(1)));
@@ -178,25 +180,28 @@ public class QueuesTest {
   @Test
   public void testPriority() throws Exception {
 
+    Queue firstQ =
+        new Queue("firstQueue")
+            .withPriorityEnabled(true)
+            .withConcurrency(1)
+            .withWorkerConcurrency(1);
+    dbos.registerQueue(firstQ);
+
     ServiceQImpl impl = new ServiceQImpl();
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, impl);
+
     dbos.launch();
 
     var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue(
-        "firstQueue",
-        QueueOptions.setPriorityEnabled(true).andConcurrency(1).andWorkerConcurrency(1));
-
     qs.pause();
 
-    var o1 = new StartWorkflowOptions().withQueue("firstQueue").withPriority(100);
+    var o1 = new StartWorkflowOptions().withQueue(firstQ).withPriority(100);
     var h1 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
 
-    var o2 = new StartWorkflowOptions().withQueue("firstQueue").withPriority(50);
+    var o2 = new StartWorkflowOptions().withQueue(firstQ).withPriority(50);
     var h2 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
 
-    var o3 = new StartWorkflowOptions().withQueue("firstQueue").withPriority(10);
+    var o3 = new StartWorkflowOptions().withQueue(firstQ).withPriority(10);
     var h3 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
 
     qs.unpause();
@@ -214,22 +219,21 @@ public class QueuesTest {
   @Test
   public void testQueuedMultipleWorkflows() throws Exception {
 
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    dbos.registerQueue(firstQ);
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+
     dbos.launch();
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
-
-    qs.pause();
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.pause();
     Thread.sleep(2000);
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
       dbos.startWorkflow(
-          () -> serviceQ.simpleQWorkflow(input),
-          new StartWorkflowOptions(id).withQueue("firstQueue"));
+          () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
     var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
@@ -242,7 +246,7 @@ public class QueuesTest {
       assertEquals(WorkflowState.ENQUEUED, wfs.get(i).status());
     }
 
-    qs.unpause();
+    queueService.unpause();
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
@@ -258,21 +262,20 @@ public class QueuesTest {
   @Test
   void testListQueuedWorkflow() throws Exception {
 
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    dbos.registerQueue(firstQ);
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+
     dbos.launch();
+    var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
-
-    qs.pause();
+    queueService.pause();
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
       dbos.startWorkflow(
-          () -> serviceQ.simpleQWorkflow(input),
-          new StartWorkflowOptions(id).withQueue("firstQueue"));
+          () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
       Thread.sleep(100);
     }
 
@@ -303,23 +306,22 @@ public class QueuesTest {
   @Test
   public void multipleQueues() throws Exception {
 
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue secondQ = new Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
+    dbos.registerQueues(firstQ, secondQ);
     ServiceQ serviceQ1 = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     ServiceI serviceI = dbos.registerProxy(ServiceI.class, new ServiceIImpl());
-    dbos.launch();
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
-    dbos.registerQueue("secondQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.launch();
 
     String id1 = "firstQ1234";
     String id2 = "second1234";
 
-    var options1 = new StartWorkflowOptions(id1).withQueue("firstQueue");
+    var options1 = new StartWorkflowOptions(id1).withQueue(firstQ);
     WorkflowHandle<String, ?> handle1 =
         dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
 
-    var options2 = new StartWorkflowOptions(id2).withQueue("secondQueue");
+    var options2 = new StartWorkflowOptions(id2).withQueue(secondQ);
     WorkflowHandle<Integer, ?> handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25), options2);
 
     assertEquals(id1, handle1.workflowId());
@@ -342,14 +344,18 @@ public class QueuesTest {
     double periodSec = 1.8;
     Duration period = Duration.ofMillis((long) (periodSec * 1000));
 
-    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
-    dbos.launch();
+    Queue limitQ =
+        new Queue("limitQueue")
+            .withRateLimit(limit, period)
+            .withConcurrency(1)
+            .withWorkerConcurrency(1);
+    dbos.registerQueue(limitQ);
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue(
-        "limitQueue",
-        QueueOptions.setRateLimit(limit, period).andConcurrency(1).andWorkerConcurrency(1));
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+
+    dbos.launch();
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.setSpeedupForTest();
     Thread.sleep(1000);
 
     int numWaves = 3;
@@ -359,7 +365,7 @@ public class QueuesTest {
 
     for (int i = 0; i < numTasks; i++) {
       String id = "id" + i;
-      var options = new StartWorkflowOptions(id).withQueue("limitQueue");
+      var options = new StartWorkflowOptions(id).withQueue(limitQ);
       WorkflowHandle<Double, ?> handle =
           dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
       handles.add(handle);
@@ -411,13 +417,14 @@ public class QueuesTest {
   @Test
   public void testWorkerConcurrency() throws Exception {
 
+    Queue qwithWCLimit =
+        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    dbos.registerQueue(qwithWCLimit);
+
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
-
-    dbos.registerQueue("QwithWCLimit", QueueOptions.setConcurrency(3).andWorkerConcurrency(2));
-    Queue qwithWCLimit = dbos.findQueue("QwithWCLimit").get();
 
     String executorId = dbosExecutor.executorId();
     String appVersion = dbosExecutor.appVersion();
@@ -486,13 +493,13 @@ public class QueuesTest {
   @Test
   public void testGlobalConcurrency() throws Exception {
 
+    Queue qwithWCLimit =
+        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    dbos.registerQueue(qwithWCLimit);
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
-
-    dbos.registerQueue("QwithWCLimit", QueueOptions.setConcurrency(3).andWorkerConcurrency(2));
-    Queue qwithWCLimit = dbos.findQueue("QwithWCLimit").get();
 
     String executorId = dbosExecutor.executorId();
     String appVersion = dbosExecutor.appVersion();
@@ -558,16 +565,16 @@ public class QueuesTest {
   @Test
   public void testenQueueWF() throws Exception {
 
-    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
-    dbos.launch();
+    Queue firstQ = new Queue("firstQueue");
+    dbos.registerQueue(firstQ);
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.empty());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+
+    dbos.launch();
 
     String id = "q1234";
 
-    var option = new StartWorkflowOptions(id).withQueue("firstQueue");
+    var option = new StartWorkflowOptions(id).withQueue(firstQ);
     WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
 
@@ -578,21 +585,21 @@ public class QueuesTest {
 
   @Test
   public void testQueueConcurrencyUnderRecovery() throws Exception {
+    Queue queue = new Queue("test_queue").withConcurrency(2);
+    dbos.registerQueue(queue);
+
     ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
     ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+
     dbos.launch();
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(2));
-
-    var opt1 = new StartWorkflowOptions("wf1").withQueue("test_queue");
+    var opt1 = new StartWorkflowOptions("wf1").withQueue(queue);
     var handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
 
-    var opt2 = new StartWorkflowOptions("wf2").withQueue("test_queue");
+    var opt2 = new StartWorkflowOptions("wf2").withQueue(queue);
     var handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
 
-    var opt3 = new StartWorkflowOptions("wf3").withQueue("test_queue");
+    var opt3 = new StartWorkflowOptions("wf3").withQueue(queue);
     var handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
 
     // each call to blockedWorkflow releases the semaphore once,
@@ -655,22 +662,19 @@ public class QueuesTest {
     var config = dbosConfig.withListenQueue("queueOne");
     try (var dbos = new DBOS(config)) {
 
+      Queue queueOne = new Queue("queueOne");
+      Queue queueTwo = new Queue("queueTwo");
+      dbos.registerQueues(queueOne, queueTwo);
+
       ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
       dbos.launch();
 
-      var qs = DBOSTestAccess.getQueueService(dbos);
-      qs.setSpeedupForTest();
-      dbos.registerQueue("queueOne", QueueOptions.empty());
-      dbos.registerQueue("queueTwo", QueueOptions.empty());
-
       var h2 =
           dbos.startWorkflow(
-              () -> serviceQ.simpleQWorkflow("two"),
-              new StartWorkflowOptions().withQueue("queueTwo"));
+              () -> serviceQ.simpleQWorkflow("two"), new StartWorkflowOptions(queueTwo));
       var h1 =
           dbos.startWorkflow(
-              () -> serviceQ.simpleQWorkflow("one"),
-              new StartWorkflowOptions().withQueue("queueOne"));
+              () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
 
       Thread.sleep(3000);
       assertEquals("oneone", h1.getResult());

@@ -212,6 +212,11 @@ public class DynamicQueuesTest {
     dbos.deleteQueue("q-lifecycle");
     assertFalse(dbos.listQueues().stream().anyMatch(x -> x.name().equals("q-lifecycle")));
 
+    // Wait for the old listener to detect the deletion and remove itself from the
+    // active-listener set. Without this wait the supervisor may not start a fresh
+    // listener for the recreated queue (dbListeningQueues still contains the name).
+    Thread.sleep(500);
+
     // Recreate with different config.
     dbos.registerQueue("q-lifecycle", QueueOptions.setConcurrency(2));
     var recreated =
@@ -249,6 +254,51 @@ public class DynamicQueuesTest {
             new StartWorkflowOptions().withQueue("q-shared"));
     assertEquals("sharedshared", handle.getResult());
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+  }
+
+  @Test
+  public void testDynamicConcurrencyTakesEffect() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    // Start with concurrency=1 so only one workflow dequeues at a time.
+    dbos.registerQueue("dyn-update-q", QueueOptions.setConcurrency(1));
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0),
+            new StartWorkflowOptions("dyn-wf1").withQueue("dyn-update-q"));
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(1),
+            new StartWorkflowOptions("dyn-wf2").withQueue("dyn-update-q"));
+    var h3 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(2),
+            new StartWorkflowOptions("dyn-wf3").withQueue("dyn-update-q"));
+
+    // Wait for exactly one workflow to be dequeued and start running.
+    impl.wfSemaphore.acquire(1);
+
+    // With concurrency=1 the other two should still be waiting.
+    Thread.sleep(200);
+    assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, h3.getStatus().status());
+
+    // Bump concurrency. The runner reloads queue settings on its next poll and
+    // should immediately dequeue the remaining two workflows.
+    dbos.updateQueue("dyn-update-q", QueueOptions.setConcurrency(3));
+    impl.wfSemaphore.acquire(2);
+
+    // Release all blocked workflows and verify they complete successfully.
+    impl.latch.countDown();
+    assertEquals(0, h1.getResult());
+    assertEquals(1, h2.getResult());
+    assertEquals(2, h3.getResult());
   }
 
   @Test
