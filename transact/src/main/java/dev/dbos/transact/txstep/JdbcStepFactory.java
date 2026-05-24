@@ -78,16 +78,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
       try (var rs = stmt.executeQuery()) {
-        if (!rs.next()) return Optional.empty();
-        return Optional.of(
-            new StepResult(
-                workflowId,
-                stepId,
-                stepName,
-                rs.getString("output"),
-                rs.getString("error"),
-                null,
-                rs.getString("serialization")));
+        return TxStepSchema.readResult(rs, workflowId, stepId, stepName);
       }
     } catch (SQLException e) {
       throw new RuntimeException(e);
