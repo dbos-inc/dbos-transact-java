@@ -32,6 +32,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,7 +107,7 @@ class AdminServerTest {
   @Test
   public void exceptionCatching500() throws IOException {
     var exception = new RuntimeException("test-exception");
-    when(mockExec.getQueues()).thenThrow(exception);
+    when(mockExec.getStaticQueues()).thenThrow(exception);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -197,9 +198,9 @@ class AdminServerTest {
             .withConcurrency(10)
             .withWorkerConcurrency(5)
             .withPriorityEnabled(true)
-            .withRateLimit(2, 4.0);
+            .withRateLimit(2, 4, TimeUnit.SECONDS);
 
-    when(mockExec.getQueues()).thenReturn(List.of(queue1, queue2));
+    when(mockExec.getStaticQueues()).thenReturn(List.of(queue1, queue2));
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
