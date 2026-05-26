@@ -59,7 +59,6 @@ public class TransactionalStepTest {
                 }));
   }
 
-  @SuppressWarnings("resource")
   private static PostgreSQLContainer acquireContainer() {
     try {
       PG_PERMITS.acquire();
