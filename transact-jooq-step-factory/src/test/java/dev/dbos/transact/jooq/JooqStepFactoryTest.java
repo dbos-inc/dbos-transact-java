@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -165,7 +165,9 @@ public class JooqStepFactoryTest {
     DSLContext dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
     stepFactory = new JooqStepFactory(dbos, dsl);
 
-    impl = new FactoryTestServiceImpl(stepFactory, dataSource, SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema()));
+    impl =
+        new FactoryTestServiceImpl(
+            stepFactory, dataSource, SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema()));
     proxy = dbos.registerProxy(FactoryTestService.class, impl);
 
     dbos.launch();

@@ -161,7 +161,12 @@ public class TransactionalStepFactory {
           } catch (PostgresStepFactory.StepConflictException conflict) {
             txManager.rollback(status);
             return checkExecution(workflowId, stepId, stepName)
-                .orElseThrow()
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                .formatted(workflowId, stepId, stepName),
+                            conflict))
                 .<Object, E>toResult(serializer);
           } catch (Exception e) {
             txManager.rollback(status);

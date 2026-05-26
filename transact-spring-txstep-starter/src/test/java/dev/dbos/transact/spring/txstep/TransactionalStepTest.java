@@ -69,12 +69,15 @@ public class TransactionalStepTest {
       }
       return c;
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw new RuntimeException(e);
     }
   }
 
   private static void releaseContainer(PostgreSQLContainer c) {
-    PG_POOL.offer(c);
+    if (!PG_POOL.offer(c)) {
+      c.stop();
+    }
     PG_PERMITS.release();
   }
 

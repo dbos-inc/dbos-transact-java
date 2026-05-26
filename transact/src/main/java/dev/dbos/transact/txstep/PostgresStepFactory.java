@@ -64,8 +64,9 @@ public abstract class PostgresStepFactory {
   }
 
   public static boolean isUniqueViolation(Exception e) {
-    if (e instanceof SQLException sq) return "23505".equals(sq.getSQLState());
-    if (e.getCause() instanceof SQLException sq) return "23505".equals(sq.getSQLState());
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof SQLException sq && "23505".equals(sq.getSQLState())) return true;
+    }
     return false;
   }
 

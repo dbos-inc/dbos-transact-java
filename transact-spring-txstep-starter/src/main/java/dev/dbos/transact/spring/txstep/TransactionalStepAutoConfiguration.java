@@ -16,16 +16,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 /**
  * Spring Boot auto-configuration for {@link TransactionalStep @TransactionalStep} support.
  *
- * <p>Activates when both a {@link DBOS} bean and a {@link PlatformTransactionManager} bean are
- * present. Creates {@link TransactionalStepFactory}, {@link TransactionalStepAspect}, and {@link
- * TransactionalStepRegistrar} beans.
+ * <p>Activates when a {@link DBOS} bean, a {@link PlatformTransactionManager} bean, and a {@link
+ * DataSource} bean are all present. Creates {@link TransactionalStepFactory}, {@link
+ * TransactionalStepAspect}, and {@link TransactionalStepRegistrar} beans.
  *
  * <p>If {@code JpaTransactionManager} is detected and its {@code dataSource} property is not yet
  * set, it is set automatically so that {@code DataSourceUtils.getConnection()} returns the
  * transaction-bound connection inside {@code @TransactionalStep} methods.
  */
 @AutoConfiguration(after = DBOSAutoConfiguration.class)
-@ConditionalOnBean({DBOS.class, PlatformTransactionManager.class})
+@ConditionalOnBean({DBOS.class, PlatformTransactionManager.class, DataSource.class})
 @EnableConfigurationProperties(TransactionalStepProperties.class)
 public class TransactionalStepAutoConfiguration {
 

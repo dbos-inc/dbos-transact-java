@@ -98,7 +98,12 @@ public class JooqStepFactory extends PostgresStepFactory {
                 });
           } catch (StepConflictException e) {
             return checkExecution(wfId, stepId, stepName)
-                .orElseThrow()
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                .formatted(wfId, stepId, stepName),
+                            e))
                 .<T, RuntimeException>toResult(serializer);
           }
         },

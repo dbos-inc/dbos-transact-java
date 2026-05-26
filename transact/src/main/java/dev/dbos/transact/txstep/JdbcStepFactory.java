@@ -120,7 +120,14 @@ public class JdbcStepFactory extends PostgresStepFactory {
                   return result;
                 });
           } catch (StepConflictException e) {
-            return checkExecution(wfId, stepId, stepName).orElseThrow().<R, X>toResult(serializer);
+            return checkExecution(wfId, stepId, stepName)
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                .formatted(wfId, stepId, stepName),
+                            e))
+                .<R, X>toResult(serializer);
           }
         },
         stepName);
