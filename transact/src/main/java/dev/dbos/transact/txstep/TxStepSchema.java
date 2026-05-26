@@ -53,7 +53,6 @@ public class TxStepSchema {
         INSERT INTO "%s".tx_step_outputs
           (workflow_id, step_id, output, error, serialization)
         VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT DO NOTHING
         """
         .formatted(schema);
   }

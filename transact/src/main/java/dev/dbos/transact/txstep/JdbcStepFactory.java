@@ -110,14 +110,21 @@ public class JdbcStepFactory extends PostgresStepFactory {
   public <R, X extends Exception> R txStep(
       final TransactionalFunction<R, X> callback, String stepName) throws X {
     return runTxStep(
-        (wfId, stepId) ->
-            executeTransaction(
+        (wfId, stepId) -> {
+          try {
+            return executeTransaction(
                 dataSource,
                 c -> {
                   var result = callback.execute(c);
                   recordOutput(c, wfId, stepId, result);
                   return result;
-                }),
+                });
+          } catch (StepConflictException e) {
+            return checkExecution(wfId, stepId, stepName)
+                .orElseThrow()
+                .<R, X>toResult(serializer);
+          }
+        },
         stepName);
   }
 
@@ -195,13 +202,16 @@ public class JdbcStepFactory extends PostgresStepFactory {
   @Override
   protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
-    executeTransaction(
-        dataSource,
-        (Connection conn) -> {
-          recordResult(
-              conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
-          return null;
-        });
+    try {
+      executeTransaction(
+          dataSource,
+          (Connection conn) -> {
+            recordResult(
+                conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
+            return null;
+          });
+    } catch (StepConflictException ignored) {
+    }
   }
 
   private void recordResult(
@@ -219,6 +229,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
       stmt.setString(5, serialization);
       stmt.executeUpdate();
     } catch (SQLException e) {
+      if (isUniqueViolation(e)) throw new StepConflictException(e);
       throw new RuntimeException(e);
     }
   }

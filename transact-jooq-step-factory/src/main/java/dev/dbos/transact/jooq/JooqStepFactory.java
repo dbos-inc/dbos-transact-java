@@ -13,6 +13,7 @@ import org.jooq.Configuration;
 import org.jooq.DSLContext;
 import org.jooq.TransactionalCallable;
 import org.jooq.TransactionalRunnable;
+import org.jooq.exception.DataAccessException;
 
 /**
  * Runs idempotent transactional steps inside DBOS workflows using jOOQ {@link DSLContext} objects.
@@ -86,13 +87,20 @@ public class JooqStepFactory extends PostgresStepFactory {
    */
   public <T> T txStepResult(TransactionalCallable<T> callback, String stepName) {
     return runTxStep(
-        (wfId, stepId) ->
-            dsl.transactionResult(
+        (wfId, stepId) -> {
+          try {
+            return dsl.transactionResult(
                 trx -> {
                   var result = callback.run(trx);
                   recordOutput(trx, wfId, stepId, result);
                   return result;
-                }),
+                });
+          } catch (StepConflictException e) {
+            return checkExecution(wfId, stepId, stepName)
+                .orElseThrow()
+                .<T, RuntimeException>toResult(serializer);
+          }
+        },
         stepName);
   }
 
@@ -141,15 +149,18 @@ public class JooqStepFactory extends PostgresStepFactory {
   @Override
   protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
-    dsl.transaction(
-        trx ->
-            recordResult(
-                trx.dsl(),
-                workflowId,
-                stepId,
-                null,
-                value.serializedValue(),
-                value.serialization()));
+    try {
+      dsl.transaction(
+          trx ->
+              recordResult(
+                  trx.dsl(),
+                  workflowId,
+                  stepId,
+                  null,
+                  value.serializedValue(),
+                  value.serialization()));
+    } catch (StepConflictException ignored) {
+    }
   }
 
   private void recordResult(
@@ -159,6 +170,11 @@ public class JooqStepFactory extends PostgresStepFactory {
       String output,
       String error,
       String serialization) {
-    ctx.execute(upsertSql(), workflowId, stepId, output, error, serialization);
+    try {
+      ctx.execute(upsertSql(), workflowId, stepId, output, error, serialization);
+    } catch (DataAccessException e) {
+      if (isUniqueViolation(e)) throw new StepConflictException(e);
+      throw e;
+    }
   }
 }
