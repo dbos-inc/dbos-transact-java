@@ -16,6 +16,7 @@ import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
+import java.util.function.BooleanSupplier;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -299,6 +300,58 @@ public class DynamicQueuesTest {
     assertEquals(0, h1.getResult());
     assertEquals(1, h2.getResult());
     assertEquals(2, h3.getResult());
+  }
+
+  @Test
+  public void testDynamicQueueMapUpdatedOnRegister() throws Exception {
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+
+    assertFalse(qs.findDynamicQueue("q-map-reg").isPresent());
+
+    dbos.registerQueue("q-map-reg", QueueOptions.setConcurrency(5));
+    awaitCondition(() -> qs.findDynamicQueue("q-map-reg").isPresent());
+
+    assertEquals(5, qs.findDynamicQueue("q-map-reg").get().concurrency());
+  }
+
+  @Test
+  public void testDynamicQueueMapUpdatedOnUpdate() throws Exception {
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+
+    dbos.registerQueue("q-map-upd", QueueOptions.setConcurrency(5));
+    awaitCondition(() -> qs.findDynamicQueue("q-map-upd").isPresent());
+
+    dbos.updateQueue("q-map-upd", QueueOptions.setConcurrency(10));
+    awaitCondition(
+        () ->
+            qs.findDynamicQueue("q-map-upd")
+                .filter(q -> Integer.valueOf(10).equals(q.concurrency()))
+                .isPresent());
+
+    assertEquals(10, qs.findDynamicQueue("q-map-upd").get().concurrency());
+  }
+
+  @Test
+  public void testDynamicQueueMapUpdatedOnDelete() throws Exception {
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+
+    dbos.registerQueue("q-map-del", QueueOptions.empty());
+    awaitCondition(() -> qs.findDynamicQueue("q-map-del").isPresent());
+
+    dbos.deleteQueue("q-map-del");
+    awaitCondition(() -> qs.findDynamicQueue("q-map-del").isEmpty());
+  }
+
+  private static void awaitCondition(BooleanSupplier condition) throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 2000;
+    while (!condition.getAsBoolean()) {
+      if (System.currentTimeMillis() > deadline)
+        throw new AssertionError("Condition not met within 2s");
+      Thread.sleep(50);
+    }
   }
 
   @Test
