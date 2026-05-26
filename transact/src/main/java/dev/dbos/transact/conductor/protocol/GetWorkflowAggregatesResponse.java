@@ -8,7 +8,7 @@ import java.util.Map;
 
 public class GetWorkflowAggregatesResponse extends BaseResponse {
 
-  public static record WorkflowAggregateOutput(Map<String, String> group, long count) {
+  public record WorkflowAggregateOutput(Map<String, String> group, long count) {
     public static WorkflowAggregateOutput from(WorkflowAggregateRow row) {
       return new WorkflowAggregateOutput(row.group(), row.count());
     }

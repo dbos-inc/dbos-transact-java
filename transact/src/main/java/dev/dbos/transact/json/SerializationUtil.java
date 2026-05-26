@@ -278,7 +278,7 @@ public final class SerializationUtil {
    * serializer used (to be stored in the DB).
    */
   /** Result of serialization, containing the serialized string and the format used. */
-  public static record SerializedResult(String serializedValue, String serialization) {
+  public record SerializedResult(String serializedValue, String serialization) {
     public SerializedResult {
       Objects.requireNonNull(serializedValue);
       // serialization can be null for backward compatibility (default format)

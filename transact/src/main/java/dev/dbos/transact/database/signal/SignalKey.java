@@ -3,7 +3,7 @@ package dev.dbos.transact.database.signal;
 public sealed interface SignalKey
     permits SignalKey.Cancellation, SignalKey.Event, SignalKey.Message, SignalKey.Shutdown {
 
-  public enum WakeReason {
+  enum WakeReason {
     MESSAGE,
     EVENT,
     CANCELLED,

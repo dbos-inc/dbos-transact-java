@@ -32,7 +32,7 @@ public class QueuesDAO {
       DbContext ctx, Queue queue, String executorId, String appVersion, String partitionKey)
       throws SQLException {
 
-    if (partitionKey != null && partitionKey.length() == 0) {
+    if (partitionKey != null && partitionKey.isEmpty()) {
       partitionKey = null;
     }
 

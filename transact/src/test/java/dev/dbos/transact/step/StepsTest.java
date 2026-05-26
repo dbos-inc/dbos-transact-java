@@ -203,7 +203,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
       throw new Exception("First try");
     }
     if (System.currentTimeMillis() - startedTime > 500) {
-      var rv = Integer.valueOf(this.stepWithLongRetryRuns).toString();
+      var rv = Integer.toString(this.stepWithLongRetryRuns);
       startedTime = 0;
       return rv;
     }
@@ -217,7 +217,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
     boolean caught = false;
     String result = "2 Retries: ";
     try {
-      result = result + self.stepWith2Retries(input);
+      result += self.stepWith2Retries(input);
     } catch (Exception e) {
       caught = true;
     }
@@ -273,17 +273,16 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
     boolean caught = false;
     String result = "2 Retries: ";
     try {
-      result =
-          result
-              + dbos.runStep(
-                  () -> {
-                    ++this.stepWithRetryRuns;
-                    throw new Exception("Will not ever run");
-                  },
-                  new StepOptions("inlineStepWithRetries")
-                      .withMaxAttempts(2)
-                      .withRetryInterval(Duration.ofMillis(100))
-                      .withBackoffRate(2.0));
+      result +=
+          dbos.runStep(
+              () -> {
+                ++this.stepWithRetryRuns;
+                throw new Exception("Will not ever run");
+              },
+              new StepOptions("inlineStepWithRetries")
+                  .withMaxAttempts(2)
+                  .withRetryInterval(Duration.ofMillis(100))
+                  .withBackoffRate(2.0));
       ;
     } catch (Exception e) {
       caught = true;
