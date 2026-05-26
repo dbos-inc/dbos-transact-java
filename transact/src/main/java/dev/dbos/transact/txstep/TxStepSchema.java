@@ -8,11 +8,11 @@ import java.sql.SQLException;
 import java.util.Optional;
 
 /** Shared SQL DDL and query constants for the {@code tx_step_outputs} table. */
-class TxStepSchema {
+public class TxStepSchema {
 
   private TxStepSchema() {}
 
-  static void verifyPostgres(Connection conn) throws SQLException {
+  public static void verifyPostgres(Connection conn) throws SQLException {
     var productName = conn.getMetaData().getDatabaseProductName();
     if (!productName.equalsIgnoreCase("PostgreSQL")) {
       throw new IllegalArgumentException(
@@ -20,7 +20,7 @@ class TxStepSchema {
     }
   }
 
-  static void createTable(Connection conn, String schema) throws SQLException {
+  public static void createTable(Connection conn, String schema) throws SQLException {
     try (var stmt = conn.createStatement()) {
       stmt.addBatch("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
       stmt.addBatch(
@@ -39,7 +39,7 @@ class TxStepSchema {
     }
   }
 
-  static String checkSql(String schema) {
+  public static String checkSql(String schema) {
     return """
         SELECT output, error, serialization
         FROM "%s".tx_step_outputs
@@ -48,7 +48,7 @@ class TxStepSchema {
         .formatted(schema);
   }
 
-  static String upsertSql(String schema) {
+  public static String upsertSql(String schema) {
     return """
         INSERT INTO "%s".tx_step_outputs
           (workflow_id, step_id, output, error, serialization)
@@ -58,7 +58,7 @@ class TxStepSchema {
         .formatted(schema);
   }
 
-  static Optional<StepResult> readResult(
+  public static Optional<StepResult> readResult(
       ResultSet rs, String workflowId, int stepId, String stepName) throws SQLException {
     if (!rs.next()) return Optional.empty();
     return Optional.of(

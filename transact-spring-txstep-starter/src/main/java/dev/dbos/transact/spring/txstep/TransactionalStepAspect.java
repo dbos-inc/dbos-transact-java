@@ -1,7 +1,6 @@
 package dev.dbos.transact.spring.txstep;
 
 import dev.dbos.transact.spring.WrappedThrowableException;
-import dev.dbos.transact.txstep.SpringTransactionalStepFactory;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -10,16 +9,16 @@ import org.aspectj.lang.reflect.MethodSignature;
 
 /**
  * AOP aspect that intercepts {@link TransactionalStep @TransactionalStep} annotated methods and
- * delegates execution to {@link SpringTransactionalStepFactory}.
+ * delegates execution to {@link TransactionalStepFactory}.
  *
  * <p>This bean is registered by {@link TransactionalStepAutoConfiguration}.
  */
 @Aspect
 public class TransactionalStepAspect {
 
-  private final SpringTransactionalStepFactory factory;
+  private final TransactionalStepFactory factory;
 
-  public TransactionalStepAspect(SpringTransactionalStepFactory factory) {
+  public TransactionalStepAspect(TransactionalStepFactory factory) {
     this.factory = factory;
   }
 

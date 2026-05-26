@@ -1,4 +1,4 @@
-package dev.dbos.transact.txstep;
+package dev.dbos.transact.spring.txstep;
 
 import static org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW;
 
@@ -7,6 +7,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -33,7 +34,7 @@ import org.springframework.transaction.support.DefaultTransactionDefinition;
  * #initialize()} before processing any steps (the registrar does this automatically when it detects
  * annotated methods).
  */
-public class SpringTransactionalStepFactory {
+public class TransactionalStepFactory {
 
   private final DBOS dbos;
   private final DataSource dataSource;
@@ -41,13 +42,13 @@ public class SpringTransactionalStepFactory {
   private final String schema;
   private final DBOSSerializer serializer;
 
-  public SpringTransactionalStepFactory(
-      DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager) {
+  public TransactionalStepFactory(
+      DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager, String schema) {
     this.dbos = Objects.requireNonNull(dbos);
     this.dataSource = Objects.requireNonNull(dataSource);
     this.txManager = Objects.requireNonNull(txManager);
     var config = dbos.integration().config();
-    this.schema = SystemDatabase.sanitizeSchema(config.databaseSchema());
+    this.schema = SystemDatabase.sanitizeSchema(schema != null ? schema : config.databaseSchema());
     this.serializer = config.serializer();
   }
 

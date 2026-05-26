@@ -2,13 +2,13 @@ package dev.dbos.transact.spring.txstep;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.spring.DBOSAutoConfiguration;
-import dev.dbos.transact.txstep.SpringTransactionalStepFactory;
 
 import javax.sql.DataSource;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -17,8 +17,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Spring Boot auto-configuration for {@link TransactionalStep @TransactionalStep} support.
  *
  * <p>Activates when both a {@link DBOS} bean and a {@link PlatformTransactionManager} bean are
- * present. Creates {@link SpringTransactionalStepFactory}, {@link TransactionalStepAspect}, and
- * {@link TransactionalStepRegistrar} beans.
+ * present. Creates {@link TransactionalStepFactory}, {@link TransactionalStepAspect}, and {@link
+ * TransactionalStepRegistrar} beans.
  *
  * <p>If {@code JpaTransactionManager} is detected and its {@code dataSource} property is not yet
  * set, it is set automatically so that {@code DataSourceUtils.getConnection()} returns the
@@ -26,22 +26,25 @@ import org.springframework.transaction.PlatformTransactionManager;
  */
 @AutoConfiguration(after = DBOSAutoConfiguration.class)
 @ConditionalOnBean({DBOS.class, PlatformTransactionManager.class})
+@EnableConfigurationProperties(TransactionalStepProperties.class)
 public class TransactionalStepAutoConfiguration {
 
   @Bean
-  public SpringTransactionalStepFactory springTransactionalStepFactory(
-      DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager) {
-    return new SpringTransactionalStepFactory(dbos, dataSource, txManager);
+  public TransactionalStepFactory springTransactionalStepFactory(
+      DBOS dbos,
+      DataSource dataSource,
+      PlatformTransactionManager txManager,
+      TransactionalStepProperties properties) {
+    return new TransactionalStepFactory(dbos, dataSource, txManager, properties.getSchema());
   }
 
   @Bean
-  public TransactionalStepAspect transactionalStepAspect(SpringTransactionalStepFactory factory) {
+  public TransactionalStepAspect transactionalStepAspect(TransactionalStepFactory factory) {
     return new TransactionalStepAspect(factory);
   }
 
   @Bean
-  public TransactionalStepRegistrar transactionalStepRegistrar(
-      SpringTransactionalStepFactory factory) {
+  public TransactionalStepRegistrar transactionalStepRegistrar(TransactionalStepFactory factory) {
     return new TransactionalStepRegistrar(factory);
   }
 

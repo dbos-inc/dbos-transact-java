@@ -1,7 +1,5 @@
 package dev.dbos.transact.spring.txstep;
 
-import dev.dbos.transact.txstep.SpringTransactionalStepFactory;
-
 import java.lang.reflect.Method;
 
 import org.slf4j.Logger;
@@ -14,7 +12,7 @@ import org.springframework.context.ApplicationContextAware;
 /**
  * Scans all Spring beans after singleton initialization for {@link
  * TransactionalStep @TransactionalStep} annotated methods. If at least one is found, calls {@link
- * SpringTransactionalStepFactory#initialize()} to verify PostgreSQL and create the {@code
+ * TransactionalStepFactory#initialize()} to verify PostgreSQL and create the {@code
  * tx_step_outputs} table. If none are found, no database contact occurs.
  *
  * <p>This bean is registered by {@link TransactionalStepAutoConfiguration}.
@@ -24,10 +22,10 @@ public class TransactionalStepRegistrar
 
   private static final Logger logger = LoggerFactory.getLogger(TransactionalStepRegistrar.class);
 
-  private final SpringTransactionalStepFactory factory;
+  private final TransactionalStepFactory factory;
   private ApplicationContext applicationContext;
 
-  public TransactionalStepRegistrar(SpringTransactionalStepFactory factory) {
+  public TransactionalStepRegistrar(TransactionalStepFactory factory) {
     this.factory = factory;
   }
 

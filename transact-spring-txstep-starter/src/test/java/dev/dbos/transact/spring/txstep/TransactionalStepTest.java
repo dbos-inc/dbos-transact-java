@@ -7,7 +7,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.txstep.SpringTransactionalStepFactory;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.DriverManager;
@@ -182,10 +181,10 @@ public class TransactionalStepTest {
   }
 
   static class GreetingServiceImpl implements GreetingService {
-    private final SpringTransactionalStepFactory factory;
+    private final TransactionalStepFactory factory;
     private final JdbcTemplate jdbc;
 
-    GreetingServiceImpl(SpringTransactionalStepFactory factory, JdbcTemplate jdbc) {
+    GreetingServiceImpl(TransactionalStepFactory factory, JdbcTemplate jdbc) {
       this.factory = factory;
       this.jdbc = jdbc;
     }
@@ -235,7 +234,7 @@ public class TransactionalStepTest {
     @AutoClose TestDatabase db;
     @AutoClose DBOS dbos;
     JdbcTemplate jdbc;
-    SpringTransactionalStepFactory factory;
+    TransactionalStepFactory factory;
     GreetingService proxy;
 
     @BeforeEach
@@ -251,7 +250,7 @@ public class TransactionalStepTest {
 
       dbos = new DBOS(db.dbosConfig());
       var txManager = new DataSourceTransactionManager(db.dataSource);
-      factory = new SpringTransactionalStepFactory(dbos, db.dataSource, txManager);
+      factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
       factory.initialize();
 
       var impl = new GreetingServiceImpl(factory, jdbc);
@@ -324,6 +323,57 @@ public class TransactionalStepTest {
     }
   }
 
+  // ---- Custom schema tests ----
+
+  @Test
+  void customSchema_explicitSchemaOverride_tableInCustomSchema() throws SQLException {
+    try (var db = new TestDatabase()) {
+      try (var dbos = new DBOS(db.dbosConfig())) {
+        var txManager = new DataSourceTransactionManager(db.dataSource);
+        var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, "app_schema");
+        factory.initialize();
+        dbos.launch();
+
+        assertThat(tableExists(db.dataSource, "app_schema", "tx_step_outputs")).isTrue();
+        assertThat(
+                tableExists(db.dataSource, SystemDatabase.sanitizeSchema(null), "tx_step_outputs"))
+            .isFalse();
+      }
+    }
+  }
+
+  @Test
+  void customSchema_nullExplicit_fallsBackToDbosConfigSchema() throws SQLException {
+    try (var db = new TestDatabase()) {
+      try (var dbos = new DBOS(db.dbosConfig().withDatabaseSchema("cfg_schema"))) {
+        var txManager = new DataSourceTransactionManager(db.dataSource);
+        var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
+        factory.initialize();
+        dbos.launch();
+
+        assertThat(tableExists(db.dataSource, "cfg_schema", "tx_step_outputs")).isTrue();
+        assertThat(
+                tableExists(db.dataSource, SystemDatabase.sanitizeSchema(null), "tx_step_outputs"))
+            .isFalse();
+      }
+    }
+  }
+
+  @Test
+  void customSchema_bothNull_usesDefaultDbosSchema() throws SQLException {
+    try (var db = new TestDatabase()) {
+      try (var dbos = new DBOS(db.dbosConfig())) {
+        var txManager = new DataSourceTransactionManager(db.dataSource);
+        var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
+        factory.initialize();
+        dbos.launch();
+
+        var defaultSchema = SystemDatabase.sanitizeSchema(null);
+        assertThat(tableExists(db.dataSource, defaultSchema, "tx_step_outputs")).isTrue();
+      }
+    }
+  }
+
   // ---- Lazy initialization test ----
 
   @Test
@@ -332,7 +382,7 @@ public class TransactionalStepTest {
       var dbosConfig = db.dbosConfig();
       try (var dbos = new DBOS(dbosConfig)) {
         var txManager = new DataSourceTransactionManager(db.dataSource);
-        var factory = new SpringTransactionalStepFactory(dbos, db.dataSource, txManager);
+        var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
         // initialize() is NOT called — simulating no @TransactionalStep methods found
         dbos.launch();
 
@@ -350,7 +400,7 @@ public class TransactionalStepTest {
     @AutoClose TestDatabase db;
     @AutoClose DBOS dbos;
     JdbcTemplate jdbc;
-    SpringTransactionalStepFactory factory;
+    TransactionalStepFactory factory;
     GreetingService proxy;
 
     @BeforeEach
@@ -367,7 +417,7 @@ public class TransactionalStepTest {
       dbos = new DBOS(db.dbosConfig());
 
       var jpaTxManager = buildJpaTransactionManager(db.dataSource);
-      factory = new SpringTransactionalStepFactory(dbos, db.dataSource, jpaTxManager);
+      factory = new TransactionalStepFactory(dbos, db.dataSource, jpaTxManager, null);
       factory.initialize();
 
       var impl = new GreetingServiceImpl(factory, jdbc);
