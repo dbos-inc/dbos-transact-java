@@ -382,7 +382,7 @@ public class TransactionalStepTest {
       var dbosConfig = db.dbosConfig();
       try (var dbos = new DBOS(dbosConfig)) {
         var txManager = new DataSourceTransactionManager(db.dataSource);
-        var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
+        new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
         // initialize() is NOT called — simulating no @TransactionalStep methods found
         dbos.launch();
 
