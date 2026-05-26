@@ -46,7 +46,9 @@ public class TransactionalStepRegistrar implements SmartInitializingSingleton, B
 
   @Override
   public void afterSingletonsInstantiated() {
-    for (String beanName : beanFactory.getBeanDefinitionNames()) {
+    String[] beanNames = beanFactory.getBeanDefinitionNames();
+    logger.debug("Scanning {} bean definitions for @TransactionalStep methods", beanNames.length);
+    for (String beanName : beanNames) {
       Class<?> typeToCheck;
 
       // If the singleton is already created, use its actual class (unwrapping any AOP proxy).
@@ -58,16 +60,25 @@ public class TransactionalStepRegistrar implements SmartInitializingSingleton, B
         // Bean not yet instantiated (e.g. lazy). Resolve from the bean definition without
         // creating the bean; null means the type cannot be determined statically — skip it.
         typeToCheck = beanFactory.getType(beanName, false);
+        if (typeToCheck == null) {
+          logger.debug("Skipping bean '{}': type could not be determined statically", beanName);
+          continue;
+        }
       }
 
       if (typeToCheck != null && hasTransactionalStep(typeToCheck)) {
-        logger.debug(
-            "Found @TransactionalStep in bean '{}'; initializing tx_step_outputs", beanName);
+        logger.info(
+            "Found @TransactionalStep in bean '{}' ({}); initializing tx_step_outputs",
+            beanName,
+            typeToCheck.getName());
         factory.initialize();
         return;
       }
     }
-    logger.debug("No @TransactionalStep methods found; skipping tx_step_outputs initialization");
+    logger.warn(
+        "No @TransactionalStep methods found in any of {} bean definitions; "
+            + "tx_step_outputs table will NOT be created",
+        beanNames.length);
   }
 
   private static boolean hasTransactionalStep(Class<?> targetClass) {

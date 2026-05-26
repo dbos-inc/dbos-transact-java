@@ -5,6 +5,8 @@ import dev.dbos.transact.spring.DBOSAutoConfiguration;
 
 import javax.sql.DataSource;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -36,12 +38,19 @@ import org.springframework.transaction.PlatformTransactionManager;
 @EnableConfigurationProperties(TransactionalStepProperties.class)
 public class TransactionalStepAutoConfiguration {
 
+  private static final Logger logger =
+      LoggerFactory.getLogger(TransactionalStepAutoConfiguration.class);
+
   @Bean
   public TransactionalStepFactory springTransactionalStepFactory(
       DBOS dbos,
       DataSource dataSource,
       PlatformTransactionManager txManager,
       TransactionalStepProperties properties) {
+    logger.info(
+        "TransactionalStepAutoConfiguration activated; txManager={} dataSource={}",
+        txManager.getClass().getName(),
+        dataSource.getClass().getName());
     return new TransactionalStepFactory(dbos, dataSource, txManager, properties.getSchema());
   }
 
