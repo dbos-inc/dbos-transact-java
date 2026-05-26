@@ -13,6 +13,9 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
@@ -1096,5 +1099,79 @@ public class DBOSClient implements AutoCloseable {
         new WorkflowDelay.DelayUntil(
             Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
     systemDatabase.setWorkflowDelay(workflowId, wfDelay);
+  }
+
+  /**
+   * Register a database-backed dynamic queue. Uses {@link QueueConflictResolution#ALWAYS_UPDATE} by
+   * default.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   */
+  public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
+    registerQueue(name, options, QueueConflictResolution.ALWAYS_UPDATE);
+  }
+
+  /**
+   * Register a database-backed dynamic queue.
+   *
+   * <p>{@link QueueConflictResolution#UPDATE_IF_LATEST_VERSION} is not supported by {@code
+   * DBOSClient} because clients are not associated with an application version. Use {@link
+   * QueueConflictResolution#ALWAYS_UPDATE} or {@link QueueConflictResolution#NEVER_UPDATE}.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   */
+  public void registerQueue(
+      @NonNull String name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict) {
+    if (onConflict == QueueConflictResolution.UPDATE_IF_LATEST_VERSION) {
+      throw new IllegalArgumentException(
+          "DBOSClient.registerQueue does not support UPDATE_IF_LATEST_VERSION because clients are"
+              + " not associated with an application version. Use ALWAYS_UPDATE or NEVER_UPDATE.");
+    }
+    systemDatabase.upsertQueue(name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE);
+  }
+
+  /**
+   * Update the configuration of a database-backed dynamic queue. Only fields that are present in
+   * {@code options} are written; absent fields are left unchanged.
+   *
+   * @param name Queue name
+   * @param options Fields to update
+   */
+  public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
+    systemDatabase.updateQueue(name, options);
+  }
+
+  /**
+   * Retrieve a database-backed dynamic queue by name.
+   *
+   * @param name Queue name
+   * @return the queue if it exists in the database, or empty
+   */
+  public @NonNull Optional<Queue> findQueue(@NonNull String name) {
+    return systemDatabase.findQueue(name);
+  }
+
+  /**
+   * List all database-backed dynamic queues.
+   *
+   * @return list of all queues currently registered in the database
+   */
+  public @NonNull List<Queue> listQueues() {
+    return systemDatabase.listQueues();
+  }
+
+  /**
+   * Delete a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @return true if the queue was deleted, false if it did not exist
+   */
+  public boolean deleteQueue(@NonNull String name) {
+    return systemDatabase.deleteQueue(name);
   }
 }

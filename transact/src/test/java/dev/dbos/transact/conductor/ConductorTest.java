@@ -3265,4 +3265,136 @@ public class ConductorTest {
       assertEquals(0, json.get("streams").size());
     }
   }
+
+  @RetryingTest(3)
+  public void canListQueues() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    dev.dbos.transact.workflow.Queue q1 =
+        new dev.dbos.transact.workflow.Queue("queue-1")
+            .withConcurrency(5)
+            .withWorkerConcurrency(2)
+            .withRateLimit(10, Duration.ofSeconds(60))
+            .withPriorityEnabled(true)
+            .withPartitioningEnabled(true)
+            .withPollingInterval(Duration.ofMillis(500));
+    dev.dbos.transact.workflow.Queue q2 = new dev.dbos.transact.workflow.Queue("queue-2");
+    when(mockDB.listQueues()).thenReturn(List.of(q1, q2));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.LIST_QUEUES, "req-list-queues", Map.of());
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).listQueues();
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_queues", json.get("type").asText());
+      assertEquals("req-list-queues", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+
+      JsonNode first = output.get(0);
+      assertEquals("queue-1", first.get("name").asText());
+      assertEquals(5, first.get("concurrency").asInt());
+      assertEquals(2, first.get("worker_concurrency").asInt());
+      assertEquals(10, first.get("rate_limit_max").asInt());
+      assertEquals(60.0, first.get("rate_limit_period_sec").asDouble(), 0.001);
+      assertTrue(first.get("priority_enabled").asBoolean());
+      assertTrue(first.get("partition_queue").asBoolean());
+      assertEquals(0.5, first.get("polling_interval_sec").asDouble(), 0.001);
+
+      JsonNode second = output.get(1);
+      assertEquals("queue-2", second.get("name").asText());
+      assertTrue(second.get("concurrency").isNull());
+      assertTrue(second.get("worker_concurrency").isNull());
+      assertTrue(second.get("rate_limit_max").isNull());
+      assertTrue(second.get("rate_limit_period_sec").isNull());
+      assertFalse(second.get("priority_enabled").asBoolean());
+      assertFalse(second.get("partition_queue").asBoolean());
+      assertEquals(1.0, second.get("polling_interval_sec").asDouble(), 0.001);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListQueuesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canListQueuesThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).listQueues();
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.LIST_QUEUES, "req-list-queues-err", Map.of());
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_queues", json.get("type").asText());
+      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetQueue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    dev.dbos.transact.workflow.Queue queue =
+        new dev.dbos.transact.workflow.Queue("my-queue").withConcurrency(3);
+    when(mockDB.findQueue("my-queue")).thenReturn(Optional.of(queue));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.GET_QUEUE, "req-get-queue", Map.of("name", "my-queue"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).findQueue("my-queue");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_queue", json.get("type").asText());
+      assertEquals("req-get-queue", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertEquals("my-queue", output.get("name").asText());
+      assertEquals(3, output.get("concurrency").asInt());
+      assertTrue(output.get("worker_concurrency").isNull());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetQueueNotFound() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.findQueue("nonexistent")).thenReturn(Optional.empty());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.GET_QUEUE, "req-get-queue-404", Map.of("name", "nonexistent"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_queue", json.get("type").asText());
+      assertEquals("req-get-queue-404", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      assertTrue(!json.has("output") || json.get("output").isNull());
+    }
+  }
 }

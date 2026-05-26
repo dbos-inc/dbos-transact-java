@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -379,6 +380,30 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<String> getQueuePartitions(String queueName) {
     return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
+  }
+
+  public boolean upsertQueue(String name, QueueOptions options, boolean updateExisting) {
+    if (Constants.DBOS_INTERNAL_QUEUE.equals(name)) {
+      throw new IllegalArgumentException(
+          String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
+    }
+    return dbRetry(() -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting));
+  }
+
+  public void updateQueue(String name, QueueOptions update) {
+    dbRetry(() -> QueuesDAO.updateQueue(ctx, name, update));
+  }
+
+  public Optional<Queue> findQueue(String name) {
+    return dbRetry(() -> QueuesDAO.findQueue(ctx, name));
+  }
+
+  public List<Queue> listQueues() {
+    return dbRetry(() -> QueuesDAO.listQueues(ctx));
+  }
+
+  public boolean deleteQueue(String name) {
+    return dbRetry(() -> QueuesDAO.deleteQueue(ctx, name));
   }
 
   public StepResult checkStepResult(String workflowId, int functionId, String functionName) {
