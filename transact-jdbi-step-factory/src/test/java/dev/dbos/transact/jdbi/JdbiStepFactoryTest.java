@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
@@ -45,10 +46,12 @@ class FactoryTestServiceImpl implements FactoryTestService {
 
   private final JdbiStepFactory stepFactory;
   private final DataSource dataSource;
+  final String schema;
 
-  public FactoryTestServiceImpl(JdbiStepFactory stepFactory, DataSource dataSource) {
+  public FactoryTestServiceImpl(JdbiStepFactory stepFactory, DataSource dataSource, String schema) {
     this.stepFactory = stepFactory;
     this.dataSource = dataSource;
+    this.schema = schema;
   }
 
   FactoryTestService.TestResult insertGreeting(Handle handle, String user) {
@@ -124,9 +127,10 @@ class FactoryTestServiceImpl implements FactoryTestService {
     var value = SerializationUtil.serializeValue(winner, null, null);
     var sql =
         """
-        INSERT INTO "dbos".tx_step_outputs(workflow_id, step_id, output, error, serialization)
+        INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
         VALUES (?, 0, ?, NULL, ?)
-        """;
+        """
+            .formatted(schema);
     try (var conn2 = dataSource.getConnection();
         var stmt = conn2.prepareStatement(sql)) {
       stmt.setString(1, wfId);
@@ -171,7 +175,7 @@ public class JdbiStepFactoryTest {
     Jdbi jdbi = Jdbi.create(dataSource);
     stepFactory = new JdbiStepFactory(dbos, jdbi);
 
-    impl = new FactoryTestServiceImpl(stepFactory, dataSource);
+    impl = new FactoryTestServiceImpl(stepFactory, dataSource, SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema()));
     proxy = dbos.registerProxy(FactoryTestService.class, impl);
 
     dbos.launch();

@@ -186,10 +186,12 @@ public class TransactionalStepTest {
   static class GreetingServiceImpl implements GreetingService {
     private final TransactionalStepFactory factory;
     private final JdbcTemplate jdbc;
+    private final String schema;
 
-    GreetingServiceImpl(TransactionalStepFactory factory, JdbcTemplate jdbc) {
+    GreetingServiceImpl(TransactionalStepFactory factory, JdbcTemplate jdbc, String schema) {
       this.factory = factory;
       this.jdbc = jdbc;
+      this.schema = schema;
     }
 
     @Override
@@ -241,7 +243,6 @@ public class TransactionalStepTest {
               () -> {
                 var wfId = Objects.requireNonNull(DBOS.workflowId());
                 var stepId = Objects.requireNonNull(DBOS.stepId());
-                var schema = SystemDatabase.sanitizeSchema(null);
                 var value = SerializationUtil.serializeValue("winner", null, null);
                 var sql =
                     """
@@ -291,7 +292,7 @@ public class TransactionalStepTest {
       factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
       factory.initialize();
 
-      var impl = new GreetingServiceImpl(factory, jdbc);
+      var impl = new GreetingServiceImpl(factory, jdbc, SystemDatabase.sanitizeSchema(null));
       proxy = dbos.registerProxy(GreetingService.class, impl);
       dbos.launch();
     }
@@ -480,7 +481,7 @@ public class TransactionalStepTest {
       factory = new TransactionalStepFactory(dbos, db.dataSource, jpaTxManager, null);
       factory.initialize();
 
-      var impl = new GreetingServiceImpl(factory, jdbc);
+      var impl = new GreetingServiceImpl(factory, jdbc, SystemDatabase.sanitizeSchema(null));
       proxy = dbos.registerProxy(GreetingService.class, impl);
       dbos.launch();
     }
