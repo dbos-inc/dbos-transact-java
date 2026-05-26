@@ -6,7 +6,9 @@ import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -15,6 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +31,7 @@ public class QueueService implements AutoCloseable {
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
+  private volatile Map<String, Queue> dynamicQueueMap = Map.of();
 
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
@@ -80,6 +84,10 @@ public class QueueService implements AutoCloseable {
     return this.execServiceRef.get() == null;
   }
 
+  public Optional<Queue> findDynamicQueue(String queueName) {
+    return Optional.ofNullable(dynamicQueueMap.get(queueName));
+  }
+
   private boolean isListening(String queueName) {
     return queueName.equals(Constants.DBOS_INTERNAL_QUEUE)
         || listenQueues.isEmpty()
@@ -102,6 +110,8 @@ public class QueueService implements AutoCloseable {
       if (execServiceRef.get() == null) return;
 
       var dbQueues = systemDatabase.listQueues();
+      dynamicQueueMap =
+          dbQueues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, q -> q));
       if (logger.isDebugEnabled()) {
         logger.debug("pollDynamicQueues found {} queues", dbQueues.size());
         for (var q : dbQueues) {

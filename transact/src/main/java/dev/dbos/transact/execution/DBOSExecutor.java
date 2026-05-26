@@ -395,7 +395,9 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<Queue> findQueue(String queueName) {
-    return findStaticQueue(queueName).or(() -> systemDatabase.findQueue(queueName));
+    return findStaticQueue(queueName)
+        .or(() -> queueService.findDynamicQueue(queueName))
+        .or(() -> systemDatabase.findQueue(queueName));
   }
 
   public Collection<Queue> getStaticQueues() {
@@ -1458,8 +1460,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateQueue(String queueName) {
     if (queueName != null) {
-      findStaticQueue(queueName)
-          .or(() -> systemDatabase.findQueue(queueName))
+      findQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
     }
@@ -1472,7 +1473,7 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS internal queue is not a partitioned queue, but a partition key was provided");
       }
     } else {
-      var queue = findStaticQueue(queueName).or(() -> systemDatabase.findQueue(queueName));
+      var queue = findQueue(queueName);
       if (queue.isPresent()) {
         if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
           throw new IllegalArgumentException(
