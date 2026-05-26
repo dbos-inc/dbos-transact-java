@@ -140,7 +140,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void workflowQueuesMetadata(HttpExchange exchange) throws IOException {
-    var queues = dbosExecutor.getQueues();
+    var queues = dbosExecutor.getStaticQueues();
     sendMappedJson(exchange, 200, queues);
   }
 

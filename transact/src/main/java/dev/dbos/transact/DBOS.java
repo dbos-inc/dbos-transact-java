@@ -14,6 +14,8 @@ import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Step;
@@ -165,6 +167,76 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * Register a database-backed dynamic queue. Must be called after launch. Queue configuration can
+   * be updated at runtime via {@link #updateQueue(String, QueueOptions)}.
+   *
+   * <p>Uses {@link QueueConflictResolution#UPDATE_IF_LATEST_VERSION} by default: the existing
+   * configuration is overwritten only if this executor is running the latest application version.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   */
+  public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
+    ensureLaunched("registerQueue")
+        .registerDynamicQueue(name, options, QueueConflictResolution.UPDATE_IF_LATEST_VERSION);
+  }
+
+  /**
+   * Register a database-backed dynamic queue. Must be called after launch. Queue configuration can
+   * be updated at runtime via {@link #updateQueue(String, QueueOptions)}.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   */
+  public void registerQueue(
+      @NonNull String name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict) {
+    ensureLaunched("registerQueue").registerDynamicQueue(name, options, onConflict);
+  }
+
+  /**
+   * Update the configuration of a database-backed dynamic queue. Must be called after launch. Only
+   * fields that are present in {@code options} are written; absent fields are left unchanged.
+   *
+   * @param name Queue name
+   * @param options Fields to update
+   */
+  public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
+    ensureLaunched("updateQueue").updateDynamicQueue(name, options);
+  }
+
+  /**
+   * Retrieve a database-backed dynamic queue by name. Must be called after launch.
+   *
+   * @param name Queue name
+   * @return the queue if it exists in the database, or empty
+   */
+  public @NonNull Optional<Queue> findQueue(@NonNull String name) {
+    return ensureLaunched("findQueue").findDynamicQueue(name);
+  }
+
+  /**
+   * Delete a database-backed dynamic queue. Must be called after launch.
+   *
+   * @param name Queue name
+   * @return true if the queue was deleted, false if it did not exist
+   */
+  public boolean deleteQueue(@NonNull String name) {
+    return ensureLaunched("deleteQueue").deleteDynamicQueue(name);
+  }
+
+  /**
+   * List all database-backed dynamic queues. Must be called after launch.
+   *
+   * @return list of all queues currently registered in the database
+   */
+  public @NonNull List<Queue> listQueues() {
+    return ensureLaunched("listQueues").listDynamicQueues();
+  }
+
+  /**
    * Register all workflows and steps in the provided class instance
    *
    * @param <T> The interface type for the instance
@@ -311,7 +383,7 @@ public class DBOS implements AutoCloseable {
    * @return Optional containing the queue definition for given `queueName`, or empty if not found
    */
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
-    return ensureLaunched("getQueue").getQueue(queueName);
+    return ensureLaunched("getQueue").findStaticQueue(queueName);
   }
 
   /**

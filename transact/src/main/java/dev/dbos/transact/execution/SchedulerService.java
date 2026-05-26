@@ -85,170 +85,168 @@ public class SchedulerService implements AutoCloseable {
 
   private void pollWorkflowSchedules() {
     try {
-      pollWorkflowSchedulesImpl();
+      // if execServiceRef is null, the scheduler service was shut down so don't poll schedules
+      if (execServiceRef.get() == null) {
+        return;
+      }
+
+      var schedules = dbosExecutor.listSchedules(null, null, null);
+      if (logger.isDebugEnabled()) {
+        logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
+        for (var s : schedules) {
+          logger.debug(
+              "  schedule: {} workflow: {} cron: {}", s.scheduleName(), s.workflowName(), s.cron());
+        }
+      }
+
+      // shut down any scheduled future that isn't in the list of current schedules
+      var currentIds = schedules.stream().map(WorkflowSchedule::id).collect(Collectors.toSet());
+      for (var key : workflowScheduleFutures.keySet()) {
+        if (!currentIds.contains(key)) {
+          cancelWorkflowSchedule(key);
+        }
+      }
+
+      for (var schedule : schedules) {
+        var scheduleRunning = workflowScheduleFutures.containsKey(schedule.id());
+        if (!schedule.isActive()) {
+          // if the schedule is no longer active but we still have a scheduled future for it, cancel
+          // it
+          if (scheduleRunning) {
+            cancelWorkflowSchedule(schedule.id());
+          }
+        } else if (!scheduleRunning) {
+          // if the schedule is active but we don't yet have a scheduled future for it, schedule it
+          // now
+          var optRegWf =
+              dbosExecutor.getRegisteredWorkflow(schedule.workflowName(), schedule.className(), "");
+          if (optRegWf.isEmpty()) {
+            logger.error(
+                "Workflow schedule {} has missing workflow function {}",
+                schedule.scheduleName(),
+                RegisteredWorkflow.fullyQualifiedName(
+                    schedule.workflowName(), schedule.className()));
+            continue;
+          }
+
+          var regWorkflow = optRegWf.orElseThrow();
+          if (!Arrays.equals(
+              regWorkflow.workflowMethod().getParameterTypes(), EXPECTED_PARAMETERS)) {
+            logger.error(
+                "Workflow schedule {} workflow {} has invalid signature, signature must be (Instant, Object)",
+                schedule.scheduleName(),
+                regWorkflow.fullyQualifiedName());
+            continue;
+          }
+
+          final String queueName =
+              Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
+          if (dbosExecutor.findQueue(queueName).isEmpty()) {
+            logger.error(
+                "Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
+            continue;
+          }
+
+          Cron cron;
+          try {
+            cron = CRON_PARSER.parse(schedule.cron()).validate();
+          } catch (Exception e) {
+            logger.error(
+                "Workflow schedule {} has invalid cron expression {}",
+                schedule.scheduleName(),
+                schedule.cron(),
+                e);
+            continue;
+          }
+
+          if (schedule.automaticBackfill()
+              && schedule.lastFiredAt() != null
+              && schedule.lastFiredAt().isBefore(Instant.now())) {
+            dbosExecutor.backfillSchedule(
+                schedule.scheduleName(), schedule.lastFiredAt(), Instant.now());
+          }
+
+          var task =
+              new Runnable() {
+
+                final ZoneId timeZone =
+                    Objects.requireNonNullElseGet(
+                        schedule.cronTimezone(), () -> ZoneId.systemDefault());
+                final WorkflowSchedule wfSchedule = schedule;
+                final ExecutionTime executionTime = ExecutionTime.forCron(cron);
+
+                ZonedDateTime nextTime = ZonedDateTime.now(timeZone);
+
+                public void schedule() {
+                  executionTime
+                      .nextExecution(nextTime)
+                      .ifPresent(
+                          cronTime -> {
+                            this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
+                            var prevFuture =
+                                workflowScheduleFutures.put(
+                                    wfSchedule.id(), scheduleTask(this.nextTime, this));
+                            // prevFuture should be null or a scheduled task that already fired.
+                            // cancel it anyway just to be sure
+                            if (prevFuture != null) {
+                              if (!prevFuture.isDone()) {
+                                logger.debug(
+                                    "Previous scheduled task for {} has not yet completed",
+                                    wfSchedule.scheduleName());
+                              }
+                              prevFuture.cancel(false);
+                            }
+                          });
+                }
+
+                @Override
+                public void run() {
+                  // if execServiceRef is null, the scheduler service was shut down so don't start
+                  // the workflow or schedule the next execution
+                  if (execServiceRef.get() == null) {
+                    return;
+                  }
+
+                  try {
+                    if (paused.get()) {
+                      logger.debug(
+                          "Skipping scheduled workflow {} schedule {} because scheduler is paused",
+                          regWorkflow.fullyQualifiedName(),
+                          wfSchedule.scheduleName());
+                      return;
+                    }
+                    var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
+                    var workflowId =
+                        "sched-%s-%s"
+                            .formatted(wfSchedule.scheduleName(), nextTime.toOffsetDateTime());
+                    logger.debug(
+                        "Queuing scheduled workflow {} schedule {} workflowId {}",
+                        regWorkflow.fullyQualifiedName(),
+                        wfSchedule.scheduleName(),
+                        workflowId);
+                    var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
+                    var options =
+                        new StartWorkflowOptions(workflowId)
+                            .withQueue(queueName)
+                            .withAppVersion(appVersion);
+                    dbosExecutor.startRegisteredWorkflow(regWorkflow, args, options);
+                    systemDatabase.updateScheduleLastFiredAt(
+                        wfSchedule.scheduleName(), nextTime.toInstant());
+                  } catch (Exception e) {
+                    logger.error("Scheduled task {} exception", schedule.scheduleName(), e);
+                  } finally {
+                    schedule();
+                  }
+                }
+              };
+
+          task.schedule();
+        }
+      }
     } catch (Exception e) {
       // Catch all exceptions to prevent scheduleAtFixedRate from permanently suppressing future
       // poll invocations. A transient DB failure should not permanently disable the scheduler.
       logger.error("pollWorkflowSchedules failed", e);
-    }
-  }
-
-  private void pollWorkflowSchedulesImpl() {
-    // if execServiceRef is null, the scheduler service was shut down so don't poll schedules
-    if (execServiceRef.get() == null) {
-      return;
-    }
-
-    var schedules = dbosExecutor.listSchedules(null, null, null);
-    if (logger.isDebugEnabled()) {
-      logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
-      for (var s : schedules) {
-        logger.debug(
-            "  schedule: {} workflow: {} cron: {}", s.scheduleName(), s.workflowName(), s.cron());
-      }
-    }
-
-    // shut down any scheduled future that isn't in the list of current schedules
-    var currentIds = schedules.stream().map(WorkflowSchedule::id).collect(Collectors.toSet());
-    for (var key : workflowScheduleFutures.keySet()) {
-      if (!currentIds.contains(key)) {
-        cancelWorkflowSchedule(key);
-      }
-    }
-
-    for (var schedule : schedules) {
-      var scheduleRunning = workflowScheduleFutures.containsKey(schedule.id());
-      if (!schedule.isActive()) {
-        // if the schedule is no longer active but we still have a scheduled future for it, cancel
-        // it
-        if (scheduleRunning) {
-          cancelWorkflowSchedule(schedule.id());
-        }
-      } else if (!scheduleRunning) {
-        // if the schedule is active but we don't yet have a scheduled future for it, schedule it
-        // now
-        var optRegWf =
-            dbosExecutor.getRegisteredWorkflow(schedule.workflowName(), schedule.className(), "");
-        if (optRegWf.isEmpty()) {
-          logger.error(
-              "Workflow schedule {} has missing workflow function {}",
-              schedule.scheduleName(),
-              RegisteredWorkflow.fullyQualifiedName(schedule.workflowName(), schedule.className()));
-          continue;
-        }
-
-        var regWorkflow = optRegWf.orElseThrow();
-        if (!Arrays.equals(regWorkflow.workflowMethod().getParameterTypes(), EXPECTED_PARAMETERS)) {
-          logger.error(
-              "Workflow schedule {} workflow {} has invalid signature, signature must be (Instant, Object)",
-              schedule.scheduleName(),
-              regWorkflow.fullyQualifiedName());
-          continue;
-        }
-
-        final String queueName =
-            Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
-        if (dbosExecutor.getQueue(queueName).isEmpty()) {
-          logger.error(
-              "Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
-          continue;
-        }
-
-        Cron cron;
-        try {
-          cron = CRON_PARSER.parse(schedule.cron()).validate();
-        } catch (Exception e) {
-          logger.error(
-              "Workflow schedule {} has invalid cron expression {}",
-              schedule.scheduleName(),
-              schedule.cron(),
-              e);
-          continue;
-        }
-
-        if (schedule.automaticBackfill()
-            && schedule.lastFiredAt() != null
-            && schedule.lastFiredAt().isBefore(Instant.now())) {
-          dbosExecutor.backfillSchedule(
-              schedule.scheduleName(), schedule.lastFiredAt(), Instant.now());
-        }
-
-        var task =
-            new Runnable() {
-
-              final ZoneId timeZone =
-                  Objects.requireNonNullElseGet(
-                      schedule.cronTimezone(), () -> ZoneId.systemDefault());
-              final WorkflowSchedule wfSchedule = schedule;
-              final ExecutionTime executionTime = ExecutionTime.forCron(cron);
-
-              ZonedDateTime nextTime = ZonedDateTime.now(timeZone);
-
-              public void schedule() {
-                executionTime
-                    .nextExecution(nextTime)
-                    .ifPresent(
-                        cronTime -> {
-                          this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
-                          var prevFuture =
-                              workflowScheduleFutures.put(
-                                  wfSchedule.id(), scheduleTask(this.nextTime, this));
-                          // prevFuture should be null or a scheduled task that already fired.
-                          // cancel it anyway just to be sure
-                          if (prevFuture != null) {
-                            if (!prevFuture.isDone()) {
-                              logger.debug(
-                                  "Previous scheduled task for {} has not yet completed",
-                                  wfSchedule.scheduleName());
-                            }
-                            prevFuture.cancel(false);
-                          }
-                        });
-              }
-
-              @Override
-              public void run() {
-                // if execServiceRef is null, the scheduler service was shut down so don't start the
-                // workflow or schedule the next execution
-                if (execServiceRef.get() == null) {
-                  return;
-                }
-
-                try {
-                  if (paused.get()) {
-                    logger.debug(
-                        "Skipping scheduled workflow {} schedule {} because scheduler is paused",
-                        regWorkflow.fullyQualifiedName(),
-                        wfSchedule.scheduleName());
-                    return;
-                  }
-                  var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
-                  var workflowId =
-                      "sched-%s-%s"
-                          .formatted(wfSchedule.scheduleName(), nextTime.toOffsetDateTime());
-                  logger.debug(
-                      "Queuing scheduled workflow {} schedule {} workflowId {}",
-                      regWorkflow.fullyQualifiedName(),
-                      wfSchedule.scheduleName(),
-                      workflowId);
-                  var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
-                  var options =
-                      new StartWorkflowOptions(workflowId)
-                          .withQueue(queueName)
-                          .withAppVersion(appVersion);
-                  dbosExecutor.startRegisteredWorkflow(regWorkflow, args, options);
-                  systemDatabase.updateScheduleLastFiredAt(
-                      wfSchedule.scheduleName(), nextTime.toInstant());
-                } catch (Exception e) {
-                  logger.error("Scheduled task {} exception", schedule.scheduleName(), e);
-                } finally {
-                  schedule();
-                }
-              }
-            };
-
-        task.schedule();
-      }
     }
   }
 

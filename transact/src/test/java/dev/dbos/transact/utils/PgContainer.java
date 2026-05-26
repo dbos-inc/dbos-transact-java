@@ -76,7 +76,8 @@ public class PgContainer implements AutoCloseable {
           "dbos".event_dispatch_kv,
           "dbos".streams,
           "dbos".application_versions,
-          "dbos".workflow_schedules
+          "dbos".workflow_schedules,
+          "dbos".queues
         CASCADE
         """;
     try (var stmt = conn.createStatement()) {
