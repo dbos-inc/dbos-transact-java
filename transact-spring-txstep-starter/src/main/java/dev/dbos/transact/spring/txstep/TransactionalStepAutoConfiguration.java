@@ -24,7 +24,14 @@ import org.springframework.transaction.PlatformTransactionManager;
  * set, it is set automatically so that {@code DataSourceUtils.getConnection()} returns the
  * transaction-bound connection inside {@code @TransactionalStep} methods.
  */
-@AutoConfiguration(after = DBOSAutoConfiguration.class)
+@AutoConfiguration(
+    after = DBOSAutoConfiguration.class,
+    afterName = {
+      // Ensure the JDBC and JPA transaction manager auto-configurations have registered their
+      // PlatformTransactionManager bean definitions before our @ConditionalOnBean check runs.
+      "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration",
+      "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+    })
 @ConditionalOnBean({DBOS.class, PlatformTransactionManager.class, DataSource.class})
 @EnableConfigurationProperties(TransactionalStepProperties.class)
 public class TransactionalStepAutoConfiguration {
