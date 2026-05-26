@@ -47,16 +47,8 @@ public abstract class PostgresStepFactory {
     }
   }
 
-  protected String checkSql() {
-    return TxStepSchema.checkSql(schema);
-  }
-
   protected abstract Optional<StepResult> checkExecution(
       String workflowId, int stepId, String stepName);
-
-  protected String upsertSql() {
-    return TxStepSchema.upsertSql(schema);
-  }
 
   protected abstract void recordError(String workflowId, int stepId, Exception exception);
 

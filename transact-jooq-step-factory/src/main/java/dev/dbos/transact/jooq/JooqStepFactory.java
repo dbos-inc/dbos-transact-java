@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
@@ -127,7 +128,7 @@ public class JooqStepFactory extends PostgresStepFactory {
 
   @Override
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    return dsl.fetchOptional(checkSql(), workflowId, stepId)
+    return dsl.fetchOptional(TxStepSchema.checkSql(schema), workflowId, stepId)
         .map(
             r ->
                 new StepResult(
@@ -171,7 +172,7 @@ public class JooqStepFactory extends PostgresStepFactory {
       String error,
       String serialization) {
     try {
-      ctx.execute(upsertSql(), workflowId, stepId, output, error, serialization);
+      ctx.execute(TxStepSchema.upsertSql(schema), workflowId, stepId, output, error, serialization);
     } catch (DataAccessException e) {
       if (isUniqueViolation(e)) throw new StepConflictException(e);
       throw e;

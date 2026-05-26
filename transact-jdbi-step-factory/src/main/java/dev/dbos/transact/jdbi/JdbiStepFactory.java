@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
@@ -150,7 +151,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
     return jdbi.withHandle(
         h ->
-            h.createQuery(checkSql())
+            h.createQuery(TxStepSchema.checkSql(schema))
                 .bind(0, workflowId)
                 .bind(1, stepId)
                 .map(
@@ -192,7 +193,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
       String serialization) {
     try {
       handle
-          .createUpdate(upsertSql())
+          .createUpdate(TxStepSchema.upsertSql(schema))
           .bind(0, workflowId)
           .bind(1, stepId)
           .bind(2, output)

@@ -74,7 +74,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
   @Override
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
     try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(checkSql())) {
+        var stmt = conn.prepareStatement(TxStepSchema.checkSql(schema))) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
       try (var rs = stmt.executeQuery()) {
@@ -219,7 +219,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
       String output,
       String error,
       String serialization) {
-    try (var stmt = conn.prepareStatement(upsertSql())) {
+    try (var stmt = conn.prepareStatement(TxStepSchema.upsertSql(schema))) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
       stmt.setString(3, output);
