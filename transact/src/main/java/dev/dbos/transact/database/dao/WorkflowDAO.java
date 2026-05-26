@@ -170,7 +170,7 @@ public class WorkflowDAO {
     } // end try with resources connection closed
   }
 
-  static record InsertWorkflowResult(
+  record InsertWorkflowResult(
       int recoveryAttempts,
       String status,
       String workflowName,

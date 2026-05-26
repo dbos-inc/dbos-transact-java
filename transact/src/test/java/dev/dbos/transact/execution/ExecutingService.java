@@ -23,7 +23,7 @@ interface ExecutingService {
 
   void stepWithNoReturn();
 
-  public static class MyAppException extends Exception {
+  class MyAppException extends Exception {
     public MyAppException() {
       super("You asked for it");
     }

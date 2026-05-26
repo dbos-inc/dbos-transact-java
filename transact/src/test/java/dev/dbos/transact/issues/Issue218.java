@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory;
 
 interface Issue218Service {
 
-  public void taskWorkflow(int i) throws Exception;
+  void taskWorkflow(int i) throws Exception;
 
-  public void parentParallel() throws Exception;
+  void parentParallel() throws Exception;
 }
 
 class Issue218ServiceImpl implements Issue218Service {

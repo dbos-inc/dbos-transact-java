@@ -2,9 +2,9 @@ package dev.dbos.transact.queue;
 
 public interface ServiceQ {
 
-  public String simpleQWorkflow(String input);
+  String simpleQWorkflow(String input);
 
-  public Double limitWorkflow(String var1, String var2);
+  Double limitWorkflow(String var1, String var2);
 
-  public String priorityWorkflow(int input);
+  String priorityWorkflow(int input);
 }

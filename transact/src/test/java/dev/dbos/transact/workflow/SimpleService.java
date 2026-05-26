@@ -11,25 +11,25 @@ import org.slf4j.LoggerFactory;
 
 interface SimpleService {
 
-  public String workWithString(String input);
+  String workWithString(String input);
 
-  public void workWithError() throws Exception;
+  void workWithError() throws Exception;
 
-  public String parentWorkflowWithoutSet(String input);
+  String parentWorkflowWithoutSet(String input);
 
-  public String workflowWithMultipleChildren(String input) throws Exception;
+  String workflowWithMultipleChildren(String input) throws Exception;
 
-  public String childWorkflow(String input);
+  String childWorkflow(String input);
 
-  public String childWorkflow2(String input);
+  String childWorkflow2(String input);
 
-  public String childWorkflow3(String input);
+  String childWorkflow3(String input);
 
-  public String childWorkflow4(String input) throws Exception;
+  String childWorkflow4(String input) throws Exception;
 
-  public String grandchildWorkflow(String input);
+  String grandchildWorkflow(String input);
 
-  public String grandParent(String input) throws Exception;
+  String grandParent(String input) throws Exception;
 
   String syncWithQueued();
 
@@ -91,7 +91,7 @@ class SimpleServiceImpl implements SimpleService {
   public String parentWorkflowWithoutSet(String input) {
     String result = input;
 
-    result = result + self.childWorkflow("abc");
+    result += self.childWorkflow("abc");
 
     return result;
   }
@@ -110,17 +110,17 @@ class SimpleServiceImpl implements SimpleService {
     try (var id = new WorkflowOptions("child1").setContext()) {
       self.childWorkflow("abc");
     }
-    result = result + dbos.retrieveWorkflow("child1").getResult();
+    result += dbos.retrieveWorkflow("child1").getResult();
 
     try (var id = new WorkflowOptions("child2").setContext()) {
       self.childWorkflow2("def");
     }
-    result = result + dbos.retrieveWorkflow("child2").getResult();
+    result += dbos.retrieveWorkflow("child2").getResult();
 
     try (var id = new WorkflowOptions("child3").setContext()) {
       self.childWorkflow3("ghi");
     }
-    result = result + dbos.retrieveWorkflow("child3").getResult();
+    result += dbos.retrieveWorkflow("child3").getResult();
 
     return result;
   }

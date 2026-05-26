@@ -16,7 +16,7 @@ public record Queue(
     RateLimit rateLimit) {
 
   /** Rate limit parameter structure for DBOS workflow queues */
-  public static record RateLimit(int limit, Duration period) {}
+  public record RateLimit(int limit, Duration period) {}
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
