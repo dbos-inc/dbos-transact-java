@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class ListApplicationVersionsResponse extends BaseResponse {
-  public static record AppVersionInfo(
+  public record AppVersionInfo(
       String version_id, String version_name, long version_timestamp, long created_at) {
     public static AppVersionInfo fromVersionInfo(VersionInfo v) {
       return new AppVersionInfo(
