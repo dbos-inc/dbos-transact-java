@@ -65,13 +65,13 @@ public abstract class PostgresStepFactory {
     R execute(String workflowId, int stepId) throws X;
   }
 
-  protected static final class StepConflictException extends RuntimeException {
+  public static final class StepConflictException extends RuntimeException {
     public StepConflictException(Exception cause) {
       super(cause);
     }
   }
 
-  protected static boolean isUniqueViolation(Exception e) {
+  public static boolean isUniqueViolation(Exception e) {
     if (e instanceof SQLException sq) return "23505".equals(sq.getSQLState());
     if (e.getCause() instanceof SQLException sq) return "23505".equals(sq.getSQLState());
     return false;

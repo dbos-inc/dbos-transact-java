@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.DriverManager;
@@ -14,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -178,6 +180,8 @@ public class TransactionalStepTest {
     String error(String name);
 
     void voidStep();
+
+    String conflictInsert(String name) throws SQLException;
   }
 
   static class GreetingServiceImpl implements GreetingService {
@@ -223,6 +227,40 @@ public class TransactionalStepTest {
     @Workflow
     public void voidStep() {
       factory.runTransactionalStep(() -> null, "voidStep");
+    }
+
+    // Simulates a concurrent winner committing a result while this executor's transaction is still
+    // open. The separate autocommit connection represents the other executor — its INSERT persists
+    // even when the Spring transaction manager rolls back the main transaction. When recordOutput
+    // subsequently tries to INSERT the same (workflowId, stepId) key, it gets a 23505
+    // unique-constraint violation. The factory rolls back and falls back to checkExecution.
+    @Override
+    @Workflow
+    public String conflictInsert(String name) throws SQLException {
+      return (String)
+          factory.runTransactionalStep(
+              () -> {
+                var wfId = Objects.requireNonNull(DBOS.workflowId());
+                var stepId = Objects.requireNonNull(DBOS.stepId());
+                var schema = SystemDatabase.sanitizeSchema(null);
+                var value = SerializationUtil.serializeValue("winner", null, null);
+                var sql =
+                    """
+                    INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
+                    VALUES (?, ?, ?, NULL, ?)
+                    """.formatted(schema);
+                try (var conn2 = jdbc.getDataSource().getConnection();
+                    var stmt = conn2.prepareStatement(sql)) {
+                  stmt.setString(1, wfId);
+                  stmt.setInt(2, stepId);
+                  stmt.setString(3, value.serializedValue());
+                  stmt.setString(4, value.serialization());
+                  stmt.executeUpdate();
+                }
+                jdbc.update("INSERT INTO greetings(name, count) VALUES (?, 1)", name);
+                return name;
+              },
+              "conflictInsert");
     }
   }
 
@@ -319,6 +357,28 @@ public class TransactionalStepTest {
 
       var rows = getTxRows(db.dataSource, wfid);
       assertThat(rows).hasSize(1);
+      assertThat(rows.get(0).error()).isNull();
+    }
+
+    // Two executors race to write the result for the same step. The loser detects the 23505
+    // conflict on its INSERT, rolls back its transaction, and returns the winner's stored value.
+    @Test
+    void upsertConflict() throws SQLException {
+      var wfid = "wf-conflict";
+
+      try (var _o = new WorkflowOptions(wfid).setContext()) {
+        var result = proxy.conflictInsert("diana");
+        // Returns winner's sentinel value, not what the supplier would have returned
+        assertThat(result).isEqualTo("winner");
+      }
+
+      // Main transaction was rolled back — INSERT into greetings never committed
+      assertThat(greetCount(db.dataSource, "diana")).isEqualTo(0);
+
+      // Exactly one tx_step_outputs row containing the winner's result
+      var rows = getTxRows(db.dataSource, wfid);
+      assertThat(rows).hasSize(1);
+      assertThat(rows.get(0).output()).isNotNull();
       assertThat(rows.get(0).error()).isNull();
     }
   }
@@ -457,6 +517,28 @@ public class TransactionalStepTest {
       assertThat(rows).hasSize(1);
       assertThat(rows.get(0).output()).isNull();
       assertThat(rows.get(0).error()).isNotNull();
+    }
+
+    // Two executors race to write the result for the same step. The loser detects the 23505
+    // conflict on its INSERT, rolls back its transaction, and returns the winner's stored value.
+    @Test
+    void upsertConflict() throws SQLException {
+      var wfid = "wf-jpa-conflict";
+
+      try (var _o = new WorkflowOptions(wfid).setContext()) {
+        var result = proxy.conflictInsert("fiona");
+        // Returns winner's sentinel value, not what the supplier would have returned
+        assertThat(result).isEqualTo("winner");
+      }
+
+      // Main transaction was rolled back — INSERT into greetings never committed
+      assertThat(greetCount(db.dataSource, "fiona")).isEqualTo(0);
+
+      // Exactly one tx_step_outputs row containing the winner's result
+      var rows = getTxRows(db.dataSource, wfid);
+      assertThat(rows).hasSize(1);
+      assertThat(rows.get(0).output()).isNotNull();
+      assertThat(rows.get(0).error()).isNull();
     }
 
     private static JpaTransactionManager buildJpaTransactionManager(DataSource dataSource) {

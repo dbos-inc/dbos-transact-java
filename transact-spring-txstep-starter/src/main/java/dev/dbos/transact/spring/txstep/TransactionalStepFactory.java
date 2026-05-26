@@ -7,6 +7,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.txstep.PostgresStepFactory;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -92,6 +93,8 @@ public class TransactionalStepFactory {
         recordResult(
             conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
         conn.commit();
+      } catch (PostgresStepFactory.StepConflictException ignored) {
+        conn.rollback();
       } catch (SQLException ex) {
         conn.rollback();
         throw ex;
@@ -116,6 +119,8 @@ public class TransactionalStepFactory {
       stmt.setString(5, serialization);
       stmt.executeUpdate();
     } catch (SQLException e) {
+      if (PostgresStepFactory.isUniqueViolation(e))
+        throw new PostgresStepFactory.StepConflictException(e);
       throw new RuntimeException(e);
     }
   }
@@ -153,6 +158,11 @@ public class TransactionalStepFactory {
             recordOutput(conn, workflowId, stepId, result);
             txManager.commit(status);
             return result;
+          } catch (PostgresStepFactory.StepConflictException conflict) {
+            txManager.rollback(status);
+            return checkExecution(workflowId, stepId, stepName)
+                .orElseThrow()
+                .<Object, E>toResult(serializer);
           } catch (Exception e) {
             txManager.rollback(status);
             recordError(workflowId, stepId, e);
