@@ -47,6 +47,7 @@ jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
 jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
 jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
+jdbi-spring = { module = "org.jdbi:jdbi3-spring", version.ref = "jdbi" }
 jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
