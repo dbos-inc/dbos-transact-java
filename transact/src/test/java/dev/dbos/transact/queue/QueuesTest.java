@@ -628,6 +628,8 @@ public class QueuesTest {
     assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
+    // Pause the listener before recovery so it can't race the ENQUEUED status checks below.
+    qs.pause();
     List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
     assertEquals(2, localHandles.size());
     List<String> expectedWorkflowIds = List.of(handle1.workflowId(), handle2.workflowId());
@@ -641,6 +643,7 @@ public class QueuesTest {
     assertEquals(WorkflowState.ENQUEUED, handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
+    qs.unpause();
     impl.latch.countDown();
     assertEquals(0, handle1.getResult());
     assertEquals(1, handle2.getResult());
