@@ -73,10 +73,11 @@ public class TransactionalStepRegistrar implements SmartInitializingSingleton, B
   private static boolean hasTransactionalStep(Class<?> targetClass) {
     return !MethodIntrospector.selectMethods(
             targetClass,
-            (MethodIntrospector.MetadataLookup<?>) method ->
-                AnnotatedElementUtils.hasAnnotation(method, TransactionalStep.class)
-                    ? Boolean.TRUE
-                    : null)
+            (MethodIntrospector.MetadataLookup<?>)
+                method ->
+                    AnnotatedElementUtils.hasAnnotation(method, TransactionalStep.class)
+                        ? Boolean.TRUE
+                        : null)
         .isEmpty();
   }
 }

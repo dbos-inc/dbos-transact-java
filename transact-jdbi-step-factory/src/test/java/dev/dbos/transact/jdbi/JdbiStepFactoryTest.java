@@ -118,8 +118,8 @@ class FactoryTestServiceImpl implements FactoryTestService {
   // even when JDBI rolls back the main transaction. When recordResult subsequently tries to INSERT
   // the same (workflowId, stepId) key, it gets a 23505 unique-constraint violation. The factory
   // rolls back and falls back to checkExecution to return the winner's value.
-  FactoryTestService.TestResult conflictGreeting(Handle handle, String user, FactoryTestService.TestResult winner)
-      throws SQLException {
+  FactoryTestService.TestResult conflictGreeting(
+      Handle handle, String user, FactoryTestService.TestResult winner) throws SQLException {
     var wfId = Objects.requireNonNull(DBOS.workflowId());
     var value = SerializationUtil.serializeValue(winner, null, null);
     var sql =

@@ -247,7 +247,8 @@ public class TransactionalStepTest {
                     """
                     INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
                     VALUES (?, ?, ?, NULL, ?)
-                    """.formatted(schema);
+                    """
+                        .formatted(schema);
                 try (var conn2 = jdbc.getDataSource().getConnection();
                     var stmt = conn2.prepareStatement(sql)) {
                   stmt.setString(1, wfId);

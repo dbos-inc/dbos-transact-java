@@ -127,7 +127,8 @@ class FactoryTestServiceImpl implements FactoryTestService {
         """
         INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
         VALUES (?, 0, ?, NULL, ?)
-        """.formatted(stepFactory.schema);
+        """
+            .formatted(stepFactory.schema);
     try (var conn2 = dataSource.getConnection();
         var stmt = conn2.prepareStatement(sql)) {
       stmt.setString(1, wfId);

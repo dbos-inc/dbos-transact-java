@@ -120,9 +120,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
                   return result;
                 });
           } catch (StepConflictException e) {
-            return checkExecution(wfId, stepId, stepName)
-                .orElseThrow()
-                .<R, X>toResult(serializer);
+            return checkExecution(wfId, stepId, stepName).orElseThrow().<R, X>toResult(serializer);
           }
         },
         stepName);

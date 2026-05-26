@@ -108,8 +108,8 @@ class FactoryTestServiceImpl implements FactoryTestService {
   // even when jOOQ rolls back the main transaction. When recordResult subsequently tries to INSERT
   // the same (workflowId, stepId) key, it gets a 23505 unique-constraint violation. The factory
   // rolls back and falls back to checkExecution to return the winner's value.
-  FactoryTestService.TestResult conflictGreeting(DSLContext ctx, String user, FactoryTestService.TestResult winner)
-      throws SQLException {
+  FactoryTestService.TestResult conflictGreeting(
+      DSLContext ctx, String user, FactoryTestService.TestResult winner) throws SQLException {
     var wfId = Objects.requireNonNull(DBOS.workflowId());
     var value = SerializationUtil.serializeValue(winner, null, null);
     var sql =
@@ -131,7 +131,8 @@ class FactoryTestServiceImpl implements FactoryTestService {
   @Workflow
   public FactoryTestService.TestResult conflictWorkflow(String user) throws SQLException {
     var winner = new FactoryTestService.TestResult(user, 99);
-    return stepFactory.txStepResult(ctx -> conflictGreeting(ctx.dsl(), user, winner), "conflictStep");
+    return stepFactory.txStepResult(
+        ctx -> conflictGreeting(ctx.dsl(), user, winner), "conflictStep");
   }
 }
 
