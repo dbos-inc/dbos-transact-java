@@ -31,8 +31,12 @@ import org.springframework.transaction.PlatformTransactionManager;
     afterName = {
       // Ensure the JDBC and JPA transaction manager auto-configurations have registered their
       // PlatformTransactionManager bean definitions before our @ConditionalOnBean check runs.
+      // Spring Boot 3.x class names:
       "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration",
-      "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+      "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",
+      // Spring Boot 4.x class names (auto-configurations moved to dedicated modules):
+      "org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration",
+      "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration"
     })
 @ConditionalOnBean({DBOS.class, PlatformTransactionManager.class, DataSource.class})
 @EnableConfigurationProperties(TransactionalStepProperties.class)
