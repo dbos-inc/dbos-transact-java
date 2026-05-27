@@ -164,13 +164,11 @@ public class NotificationsDAO {
           }
 
           for (String dest : destinations) {
-            String uuid;
-            if (msg.idempotencyKey() != null) {
-              uuid = sendToForks ? msg.idempotencyKey() + "::" + dest : msg.idempotencyKey();
-            } else {
-              uuid = UUID.randomUUID().toString();
-            }
-            rows.add(new InsertRow(dest, pair.serialized(), finalTopic, uuid));
+            var wfid =
+                msg.idempotencyKey() != null
+                    ? msg.idempotencyKey() + "::" + dest
+                    : UUID.randomUUID().toString();
+            rows.add(new InsertRow(dest, pair.serialized(), finalTopic, wfid));
           }
         }
 
