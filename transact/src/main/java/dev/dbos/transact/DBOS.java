@@ -91,16 +91,13 @@ public class DBOS implements AutoCloseable {
     // Register the built-in debouncer service workflow directly (without a proxy) so callers can
     // use Debouncer without having to declare and wire the service themselves.
     var internalWorkflows = new InternalWorkflows(this);
-    workflowRegistry.registerInstance(null, internalWorkflows);
+    workflowRegistry.registerInternalInstance(internalWorkflows);
     this.debouncerWorkflow =
-        integration.registerWorkflow(
+        integration.registerInternalWorkflow(
             Constants.DEBOUNCER_WORKFLOW_NAME,
             Constants.DEBOUNCER_SERVICE_CLASS_NAME,
-            null,
             internalWorkflows,
-            InternalWorkflows.debouncerWorkflowMethod(),
-            null,
-            null);
+            InternalWorkflows.debouncerWorkflowMethod());
   }
 
   /**
@@ -290,6 +287,8 @@ public class DBOS implements AutoCloseable {
             new HashSet<>(this.lifecycleRegistry),
             workflowRegistry.getWorkflowSnapshot(),
             workflowRegistry.getInstanceSnapshot(),
+            workflowRegistry.getInternalWorkflowSnapshot(),
+            workflowRegistry.getInternalInstanceSnapshot(),
             queueRegistry.getSnapshot(),
             alertHandler);
       }

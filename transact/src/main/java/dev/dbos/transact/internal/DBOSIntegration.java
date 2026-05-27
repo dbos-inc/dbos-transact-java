@@ -1,6 +1,5 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.ExternalState;
@@ -11,7 +10,6 @@ import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
-import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
@@ -19,7 +17,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -156,6 +153,29 @@ public class DBOSIntegration {
   }
 
   /**
+   * Register an internal DBOS system workflow. Internal workflows are tracked separately from
+   * user-registered workflows and are excluded from {@link #getRegisteredWorkflows()} and {@link
+   * #getRegisteredWorkflowInstances()}, but remain accessible to the executor for lookup, recovery,
+   * and dequeue.
+   *
+   * @param workflowName logical name of the internal workflow
+   * @param className name of the class that declares the workflow method
+   * @param target the singleton instance on which the method will be invoked
+   * @param method the workflow {@link Method}
+   * @throws IllegalStateException if called after DBOS is launched
+   */
+  public RegisteredWorkflow registerInternalWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull Object target,
+      @NonNull Method method) {
+    if (executorSupplier.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+    }
+    return workflowRegistry.registerInternalWorkflow(workflowName, className, target, method);
+  }
+
+  /**
    * Start or enqueue a workflow by its {@link RegisteredWorkflow} registration. Intended for use by
    * event listeners and other infrastructure that dispatches workflows by registration rather than
    * by direct invocation.
@@ -194,14 +214,6 @@ public class DBOSIntegration {
     return executor("runWorkflow").runWorkflow(target, instanceName, method, args, wfTag);
   }
 
-  private static boolean isInternalWorkflow(RegisteredWorkflow wf) {
-    return Constants.DEBOUNCER_WORKFLOW_NAME.equals(wf.workflowName());
-  }
-
-  private static boolean isInternalInstance(RegisteredWorkflowInstance inst) {
-    return inst.target() instanceof InternalWorkflows;
-  }
-
   /**
    * Get all user-registered workflows. Internal/system workflows registered by DBOS itself (for
    * example, the debouncer service workflow) are excluded.
@@ -210,13 +222,9 @@ public class DBOSIntegration {
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     var executor = executorSupplier.get();
-    Collection<RegisteredWorkflow> all =
-        executor != null
-            ? executor.getRegisteredWorkflows()
-            : workflowRegistry.getWorkflowSnapshot().values();
-    return all.stream()
-        .filter(wf -> !isInternalWorkflow(wf))
-        .collect(Collectors.toUnmodifiableList());
+    return executor != null
+        ? executor.getRegisteredWorkflows()
+        : workflowRegistry.getWorkflowSnapshot().values();
   }
 
   /**
@@ -227,13 +235,9 @@ public class DBOSIntegration {
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     var executor = executorSupplier.get();
-    Collection<RegisteredWorkflowInstance> all =
-        executor != null
-            ? executor.getRegisteredWorkflowInstances()
-            : workflowRegistry.getInstanceSnapshot().values();
-    return all.stream()
-        .filter(inst -> !isInternalInstance(inst))
-        .collect(Collectors.toUnmodifiableList());
+    return executor != null
+        ? executor.getRegisteredWorkflowInstances()
+        : workflowRegistry.getInstanceSnapshot().values();
   }
 
   /**

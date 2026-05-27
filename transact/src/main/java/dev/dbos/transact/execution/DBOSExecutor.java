@@ -117,6 +117,8 @@ public class DBOSExecutor implements AutoCloseable {
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
+  private Map<String, RegisteredWorkflow> internalWorkflowMap;
+  private Map<String, RegisteredWorkflowInstance> internalInstanceMap;
   private Map<String, Queue> queueMap;
   private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
@@ -161,6 +163,8 @@ public class DBOSExecutor implements AutoCloseable {
       Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,
+      Map<String, RegisteredWorkflow> internalWorkflowMap,
+      Map<String, RegisteredWorkflowInstance> internalInstanceMap,
       List<Queue> queues,
       AlertHandler alertHandler) {
 
@@ -169,6 +173,8 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = workflowMap;
       this.instanceMap = instanceMap;
+      this.internalWorkflowMap = internalWorkflowMap;
+      this.internalInstanceMap = internalInstanceMap;
       this.queueMap =
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
@@ -307,6 +313,8 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = null;
       this.instanceMap = null;
+      this.internalWorkflowMap = null;
+      this.internalInstanceMap = null;
 
       logger.debug("DBOS Executor stopped");
     }
@@ -383,7 +391,11 @@ public class DBOSExecutor implements AutoCloseable {
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       String workflowName, String className, @Nullable String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    return Optional.ofNullable(this.workflowMap.get(fqName));
+    var wf = this.workflowMap.get(fqName);
+    if (wf == null) {
+      wf = this.internalWorkflowMap.get(fqName);
+    }
+    return Optional.ofNullable(wf);
   }
 
   public Collection<Queue> getQueues() {
@@ -1335,7 +1347,9 @@ public class DBOSExecutor implements AutoCloseable {
     var wfName =
         RegisteredWorkflow.fullyQualifiedName(
             status.workflowName(), status.className(), status.instanceName());
-    RegisteredWorkflow workflow = workflowMap.get(wfName);
+    RegisteredWorkflow workflow =
+        getRegisteredWorkflow(status.workflowName(), status.className(), status.instanceName())
+            .orElse(null);
 
     if (workflow == null) {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
@@ -1400,7 +1414,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateWorkflow(String workflowName, String className, String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    if (!workflowMap.containsKey(fqName)) {
+    if (!workflowMap.containsKey(fqName) && !internalWorkflowMap.containsKey(fqName)) {
       throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
     }
   }
