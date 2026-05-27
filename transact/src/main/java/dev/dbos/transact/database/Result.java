@@ -18,7 +18,7 @@ public sealed interface Result<T> {
   }
 
   @SuppressWarnings("unchecked")
-  public static <T, E extends Exception> T process(Result<T> result) throws E {
+  static <T, E extends Exception> T process(Result<T> result) throws E {
     if (result instanceof Result.Success<T> success) {
       return success.value();
     } else if (result instanceof Result.Failure<T> failure) {

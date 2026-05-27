@@ -23,6 +23,8 @@ import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
+import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
@@ -1565,5 +1567,166 @@ public class SystemDatabaseTest {
 
     var notifications = sysdb.getAllNotifications(wfId);
     assertTrue(notifications.isEmpty());
+  }
+
+  // --- Queue CRUD tests ---
+
+  @Test
+  public void testUpsertQueueInsert() {
+    var options =
+        QueueOptions.setConcurrency(5)
+            .andWorkerConcurrency(2)
+            .andPriorityEnabled(true)
+            .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
+
+    boolean inserted = sysdb.upsertQueue("q-insert", options, true);
+    assertTrue(inserted, "upsertQueue should return true when the row is new");
+
+    var fetched = sysdb.findQueue("q-insert");
+    assertTrue(fetched.isPresent());
+    var q = fetched.get();
+    assertEquals("q-insert", q.name());
+    assertEquals(5, q.concurrency());
+    assertEquals(2, q.workerConcurrency());
+    assertTrue(q.priorityEnabled());
+    assertNotNull(q.rateLimit());
+    assertEquals(10, q.rateLimit().limit());
+    assertEquals(Duration.ofSeconds(60), q.rateLimit().period());
+  }
+
+  @Test
+  public void testUpsertQueueOptionsExisting() {
+    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true);
+
+    boolean inserted =
+        sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true);
+    assertFalse(inserted, "upsertQueue should return false when the row already existed");
+
+    var fetched = sysdb.findQueue("q-update").orElseThrow();
+    assertEquals(7, fetched.concurrency());
+    assertEquals(4, fetched.workerConcurrency());
+  }
+
+  @Test
+  public void testUpsertQueueNoUpdateExisting() {
+    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true);
+
+    boolean inserted = sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false);
+    assertFalse(inserted, "upsertQueue should return false when the row already existed");
+
+    var fetched = sysdb.findQueue("q-no-update").orElseThrow();
+    assertEquals(
+        3, fetched.concurrency(), "concurrency should be unchanged when updateExisting=false");
+  }
+
+  @Test
+  public void testGetQueueFromDBMissing() {
+    var result = sysdb.findQueue("does-not-exist");
+    assertTrue(result.isEmpty());
+  }
+
+  @Test
+  public void testListQueuesFromDB() {
+    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true);
+    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true);
+    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true);
+
+    var queues = sysdb.listQueues();
+    var names = queues.stream().map(Queue::name).toList();
+    assertTrue(names.contains("q-list-a"));
+    assertTrue(names.contains("q-list-b"));
+    assertTrue(names.contains("q-list-c"));
+  }
+
+  @Test
+  public void testDeleteQueue() {
+    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true);
+    assertTrue(sysdb.findQueue("q-delete").isPresent());
+
+    boolean deleted = sysdb.deleteQueue("q-delete");
+    assertTrue(deleted);
+    assertTrue(sysdb.findQueue("q-delete").isEmpty());
+  }
+
+  @Test
+  public void testDeleteQueueMissing() {
+    assertFalse(sysdb.deleteQueue("q-never-existed"));
+  }
+
+  @Test
+  public void testUpdateQueuePartialConcurrency() {
+    sysdb.upsertQueue(
+        "q-partial",
+        QueueOptions.setConcurrency(5)
+            .andPriorityEnabled(true)
+            .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
+        true);
+
+    sysdb.updateQueue("q-partial", QueueOptions.setConcurrency(99));
+
+    var q = sysdb.findQueue("q-partial").orElseThrow();
+    assertEquals(99, q.concurrency(), "concurrency should be updated");
+    assertTrue(q.priorityEnabled(), "priorityEnabled should be unchanged");
+    assertNotNull(q.rateLimit(), "rateLimit should be unchanged");
+    assertEquals(10, q.rateLimit().limit());
+  }
+
+  @Test
+  public void testUpdateQueueClearConcurrency() {
+    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true);
+
+    sysdb.updateQueue("q-clear-conc", QueueOptions.setConcurrency(null));
+
+    var q = sysdb.findQueue("q-clear-conc").orElseThrow();
+    assertNull(q.concurrency(), "concurrency should be cleared to null");
+  }
+
+  @Test
+  public void testUpdateQueueClearRateLimit() {
+    sysdb.upsertQueue(
+        "q-clear-rate",
+        QueueOptions.setRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
+        true);
+
+    sysdb.updateQueue("q-clear-rate", QueueOptions.setRateLimit(null, null));
+
+    var q = sysdb.findQueue("q-clear-rate").orElseThrow();
+    assertNull(q.rateLimit(), "rateLimit should be cleared to null");
+  }
+
+  @Test
+  public void testUpdateQueueEmpty() {
+    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true);
+
+    // Empty update should be a no-op (no exception, no change)
+    var emptyUpdate = QueueOptions.empty();
+    sysdb.updateQueue("q-empty-update", emptyUpdate);
+
+    var q = sysdb.findQueue("q-empty-update").orElseThrow();
+    assertEquals(5, q.concurrency());
+  }
+
+  @Test
+  public void testUpsertQueueRoundTrip() {
+    sysdb.upsertQueue(
+        "q-roundtrip",
+        QueueOptions.setConcurrency(8)
+            .andWorkerConcurrency(4)
+            .andPriorityEnabled(true)
+            .andPartitionQueue(true)
+            .andRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
+            .andPollingInterval(Duration.ofSeconds(5)),
+        true);
+    var fetched = sysdb.findQueue("q-roundtrip").orElseThrow();
+
+    assertEquals("q-roundtrip", fetched.name());
+    assertEquals(8, fetched.concurrency());
+    assertEquals(4, fetched.workerConcurrency());
+    assertTrue(fetched.priorityEnabled());
+    assertTrue(fetched.partitioningEnabled());
+    assertNotNull(fetched.rateLimit());
+    assertEquals(20, fetched.rateLimit().limit());
+    assertEquals(Duration.ofSeconds(30), fetched.rateLimit().period());
+    assertEquals(Duration.ofSeconds(5), fetched.pollingInterval());
   }
 }

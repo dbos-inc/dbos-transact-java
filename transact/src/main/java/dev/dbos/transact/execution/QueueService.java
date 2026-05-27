@@ -6,14 +6,18 @@ import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,12 +25,17 @@ import org.slf4j.LoggerFactory;
 public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
+  private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
+  private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
   private final AtomicBoolean paused = new AtomicBoolean(false);
+  private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
+  private volatile Map<String, Queue> dynamicQueueMap = Map.of();
 
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
+  private Set<String> listenQueues;
   private double speedup = 1.0;
 
   public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
@@ -46,12 +55,18 @@ public class QueueService implements AutoCloseable {
     paused.set(false);
   }
 
-  public void start(Collection<Queue> queues, Set<String> listenQueues) {
+  public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {
     if (this.execServiceRef.get() == null) {
       var procCount = Runtime.getRuntime().availableProcessors();
       var scheduler = Executors.newScheduledThreadPool(procCount);
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
-        startQueueListeners(queues, listenQueues);
+        this.listenQueues = listenQueues;
+        scheduler.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(
+            this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
+        for (var queue : staticQueues) {
+          startQueueListenerIfNeeded(queue, false);
+        }
       }
     }
   }
@@ -69,106 +84,143 @@ public class QueueService implements AutoCloseable {
     return this.execServiceRef.get() == null;
   }
 
-  private void startQueueListeners(Collection<Queue> queues, Set<String> listenQueues) {
-    logger.debug("startQueueListeners");
+  public Optional<Queue> findDynamicQueue(String queueName) {
+    return Optional.ofNullable(dynamicQueueMap.get(queueName));
+  }
 
-    final var executorId = dbosExecutor.executorId();
-    final var appVersion = dbosExecutor.appVersion();
-    final Duration minPollingInterval = Duration.ofSeconds(1);
-    final Duration maxPollingInterval = Duration.ofSeconds(120);
+  private boolean isListening(String queueName) {
+    return queueName.equals(Constants.DBOS_INTERNAL_QUEUE)
+        || listenQueues.isEmpty()
+        || listenQueues.contains(queueName);
+  }
 
-    var execService = execServiceRef.get();
-    if (execService != null) {
-      execService.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
-    }
+  private void startQueueListenerIfNeeded(Queue queue, boolean dynamic) {
+    if (!isListening(queue.name())) return;
+    if (dynamic && !dbListeningQueues.add(queue.name())) return;
+    if (execServiceRef.get() == null) return;
 
-    for (var _queue : queues) {
+    new QueueListenerTask(queue, dynamic)
+        .schedule(); // executor holds the reference via the scheduled future
+  }
 
-      var listening =
-          _queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)
-              || listenQueues.isEmpty()
-              || listenQueues.contains(_queue.name());
-      if (!listening) {
-        continue;
+  // ── Dynamic queue supervisor ──────────────────────────────────────────────
+
+  private void pollDynamicQueues() {
+    try {
+      if (execServiceRef.get() == null) return;
+
+      var dbQueues = systemDatabase.listQueues();
+      dynamicQueueMap =
+          dbQueues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, q -> q));
+      if (logger.isDebugEnabled()) {
+        logger.debug("pollDynamicQueues found {} queues", dbQueues.size());
+        for (var q : dbQueues) {
+          logger.debug(
+              "  queue: {} concurrency: {} pollingInterval: {}",
+              q.name(),
+              q.concurrency(),
+              q.pollingInterval());
+        }
       }
 
-      var task =
-          new Runnable() {
-            final Queue queue = _queue;
-            Duration pollingInterval = Duration.ofSeconds(1);
-
-            public void schedule() {
-              var randomSleepFactor = 0.95 + ThreadLocalRandom.current().nextDouble(0.1);
-              var delayMs = (long) (randomSleepFactor * pollingInterval.toMillis() * speedup);
-              var execService = execServiceRef.get();
-              if (execService != null) {
-                execService.schedule(this, delayMs, TimeUnit.MILLISECONDS);
-              }
-            }
-
-            private void processPartition(String partition) {
-              var partitionLog = Objects.requireNonNullElse(partition, "<null>");
-              if (!paused.get()) {
-                var workflowIds =
-                    systemDatabase.getAndStartQueuedWorkflows(
-                        queue, executorId, appVersion, partition);
-                if (workflowIds.size() > 0) {
-                  logger.debug(
-                      "Retrieved {} workflows from {} partition of queue {}",
-                      workflowIds.size(),
-                      partitionLog,
-                      queue.name());
-                }
-                for (var workflowId : workflowIds) {
-                  logger.debug(
-                      "Starting workflow {} from {} partition of queue {}",
-                      workflowId,
-                      partitionLog,
-                      queue.name());
-                  dbosExecutor.executeWorkflowById(workflowId, false, true);
-                }
-              }
-            }
-
-            @Override
-            public void run() {
-              // if scheduler service isn't running, the queue service was stopped so don't start
-              // the workflow or schedule the next execution
-              if (execServiceRef.get() == null) {
-                return;
-              }
-
-              try {
-                if (queue.partitioningEnabled()) {
-                  var partitions = systemDatabase.getQueuePartitions(queue.name());
-                  for (var partition : partitions) {
-                    processPartition(partition);
-                  }
-                } else {
-                  processPartition(null);
-                }
-
-                pollingInterval = Duration.ofMillis((long) (pollingInterval.toMillis() * 0.9));
-                pollingInterval =
-                    pollingInterval.compareTo(minPollingInterval) >= 0
-                        ? pollingInterval
-                        : minPollingInterval;
-              } catch (Exception e) {
-                logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
-                pollingInterval = pollingInterval.multipliedBy(2);
-                pollingInterval =
-                    pollingInterval.compareTo(maxPollingInterval) <= 0
-                        ? pollingInterval
-                        : maxPollingInterval;
-              } finally {
-                this.schedule();
-              }
-            }
-          };
-
-      task.schedule();
+      for (var queue : dbQueues) {
+        if (dbosExecutor.findStaticQueue(queue.name()).isPresent()) {
+          logger.warn(
+              "Database-backed queue {} has the same name as a static queue; "
+                  + "the static queue's configuration is being used and the database-backed queue is ignored.",
+              queue.name());
+          continue;
+        }
+        startQueueListenerIfNeeded(queue, true);
+      }
+    } catch (Exception e) {
+      logger.error("pollDynamicQueues failed", e);
     }
   }
+
+  // ── Queue listener task ───────────────────────────────────────────────────
+
+  private class QueueListenerTask implements Runnable {
+
+    Queue queue;
+    double backoffFactor = 1.0;
+    final boolean dynamic;
+    final String executorId = dbosExecutor.executorId();
+    final String appVersion = dbosExecutor.appVersion();
+
+    QueueListenerTask(Queue queue, boolean dynamic) {
+      this.queue = queue;
+      this.dynamic = dynamic;
+    }
+
+    void schedule() {
+      var randomSleepFactor = 0.95 + ThreadLocalRandom.current().nextDouble(0.1);
+      var delayMs =
+          (long) (randomSleepFactor * queue.pollingInterval().toMillis() * backoffFactor * speedup);
+      var svc = execServiceRef.get();
+      if (svc != null) {
+        svc.schedule(this, delayMs, TimeUnit.MILLISECONDS);
+      }
+    }
+
+    private void processPartition(String partition) {
+      var partitionLog = Objects.requireNonNullElse(partition, "<null>");
+      if (!paused.get()) {
+        var workflowIds =
+            systemDatabase.getAndStartQueuedWorkflows(queue, executorId, appVersion, partition);
+        if (!workflowIds.isEmpty()) {
+          logger.debug(
+              "Retrieved {} workflows from {} partition of queue {}",
+              workflowIds.size(),
+              partitionLog,
+              queue.name());
+        }
+        for (var workflowId : workflowIds) {
+          logger.debug(
+              "Starting workflow {} from {} partition of queue {}",
+              workflowId,
+              partitionLog,
+              queue.name());
+          dbosExecutor.executeWorkflowById(workflowId, false, true);
+        }
+      }
+    }
+
+    @Override
+    public void run() {
+      if (execServiceRef.get() == null) return;
+      if (dynamic) {
+        var refreshed = systemDatabase.findQueue(queue.name());
+        if (refreshed.isEmpty()) {
+          dbListeningQueues.remove(queue.name());
+          return;
+        }
+        queue = refreshed.get();
+      }
+
+      try {
+        if (queue.partitioningEnabled()) {
+          var partitions = systemDatabase.getQueuePartitions(queue.name());
+          for (var partition : partitions) {
+            processPartition(partition);
+          }
+        } else {
+          processPartition(null);
+        }
+
+        backoffFactor = Math.max(backoffFactor * 0.9, 1.0);
+      } catch (Exception e) {
+        logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
+        double maxFactor =
+            (double) MAX_POLLING_INTERVAL.toMillis() / queue.pollingInterval().toMillis();
+        backoffFactor = Math.min(backoffFactor * 2.0, maxFactor);
+      } finally {
+        this.schedule();
+      }
+    }
+  }
+
+  // ── Shared helpers ────────────────────────────────────────────────────────
 
   private void transitionDelayedWorkflows() {
     if (!paused.get()) {

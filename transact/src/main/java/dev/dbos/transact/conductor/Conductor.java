@@ -6,9 +6,11 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.ByteArrayInputStream;
@@ -567,6 +569,9 @@ public class Conductor implements AutoCloseable {
                           }
                         });
 
+                if (pingTimeout != null) {
+                  pingTimeout.cancel(false);
+                }
                 pingTimeout =
                     scheduler.schedule(
                         () -> {
@@ -698,6 +703,7 @@ public class Conductor implements AutoCloseable {
       case EXPORT_WORKFLOW -> handleExportWorkflow(this, message, ws);
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
+      case GET_QUEUE -> handleGetQueue(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
       case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
       case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, message);
@@ -707,6 +713,7 @@ public class Conductor implements AutoCloseable {
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
       case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
       case LIST_QUEUED_WORKFLOWS -> handleListQueuedWorkflows(this, message);
+      case LIST_QUEUES -> handleListQueues(this, message);
       case LIST_SCHEDULES -> handleListSchedules(this, message);
       case LIST_STEPS -> handleListSteps(this, message);
       case LIST_WORKFLOWS -> handleListWorkflows(this, message);
@@ -935,8 +942,11 @@ public class Conductor implements AutoCloseable {
           ExistPendingWorkflowsRequest request = (ExistPendingWorkflowsRequest) message;
           try {
             var pending =
-                conductor.systemDatabase.getPendingWorkflows(
-                    List.of(request.executor_id), request.application_version);
+                conductor.systemDatabase.listWorkflows(
+                    new ListWorkflowsInput()
+                        .withStatus(WorkflowState.PENDING)
+                        .withExecutorIds(List.of(request.executor_id))
+                        .withApplicationVersion(request.application_version));
             return new ExistPendingWorkflowsResponse(request, !pending.isEmpty());
           } catch (Exception e) {
             logger.error("Exception encountered when checking for pending workflows", e);
@@ -1360,6 +1370,35 @@ public class Conductor implements AutoCloseable {
             logger.error(
                 "Exception encountered when getting schedule {}", request.schedule_name, e);
             return new GetScheduleResponse(request, e.getMessage());
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleListQueues(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          try {
+            List<Queue> queues = conductor.systemDatabase.listQueues();
+            List<QueueOutput> output = queues.stream().map(QueueOutput::from).toList();
+            return new ListQueuesResponse(message, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing queues", e);
+            return new ListQueuesResponse(message, e.getMessage());
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetQueue(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetQueueRequest request = (GetQueueRequest) message;
+          try {
+            var queue = conductor.systemDatabase.findQueue(request.name);
+            return new GetQueueResponse(request, queue.map(QueueOutput::from).orElse(null));
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting queue {}", request.name, e);
+            return new GetQueueResponse(request, e.getMessage());
           }
         });
   }

@@ -30,6 +30,8 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
@@ -158,6 +160,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("removal")
   public void start(
       DBOS dbos,
       Set<DBOSLifecycleListener> listenerSet,
@@ -239,10 +242,19 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched(dbos);
       }
 
+      var recoveryQuery =
+          new ListWorkflowsInput()
+              .withStatus(WorkflowState.PENDING)
+              .withExecutorIds(List.of(executorId()))
+              .withApplicationVersion(appVersion)
+              .withEndTime(Instant.now());
       Runnable recoveryTask =
           () -> {
             try {
-              recoverPendingWorkflows(List.of(executorId()));
+              var workflows = systemDatabase.listWorkflows(recoveryQuery);
+              for (var wf : workflows) {
+                recoverWorkflow(wf.workflowId(), wf.queueName());
+              }
             } catch (Throwable t) {
               logger.error("Recovery task failed", t);
             }
@@ -398,12 +410,46 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.ofNullable(wf);
   }
 
-  public Collection<Queue> getQueues() {
+  public Optional<Queue> findQueue(String queueName) {
+    return findStaticQueue(queueName)
+        .or(() -> queueService.findDynamicQueue(queueName))
+        .or(() -> systemDatabase.findQueue(queueName));
+  }
+
+  public Collection<Queue> getStaticQueues() {
     return this.queueMap.values();
   }
 
-  public Optional<Queue> getQueue(String queueName) {
+  public Optional<Queue> findStaticQueue(String queueName) {
     return Optional.ofNullable(this.queueMap.get(queueName));
+  }
+
+  public void registerDynamicQueue(
+      String name, QueueOptions options, QueueConflictResolution onConflict) {
+    boolean updateExisting =
+        switch (onConflict) {
+          case ALWAYS_UPDATE -> true;
+          case NEVER_UPDATE -> false;
+          case UPDATE_IF_LATEST_VERSION ->
+              appVersion.equals(systemDatabase.getLatestApplicationVersion().versionName());
+        };
+    systemDatabase.upsertQueue(name, options, updateExisting);
+  }
+
+  public void updateDynamicQueue(String name, QueueOptions options) {
+    systemDatabase.updateQueue(name, options);
+  }
+
+  public Optional<Queue> findDynamicQueue(String name) {
+    return systemDatabase.findQueue(name);
+  }
+
+  public boolean deleteDynamicQueue(String name) {
+    return systemDatabase.deleteQueue(name);
+  }
+
+  public List<Queue> listDynamicQueues() {
+    return systemDatabase.listQueues();
   }
 
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
@@ -975,7 +1021,12 @@ public class DBOSExecutor implements AutoCloseable {
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
 
-    var workflows = systemDatabase.getPendingWorkflows(executorIds, appVersion);
+    var input =
+        new ListWorkflowsInput()
+            .withStatus(WorkflowState.PENDING)
+            .withExecutorIds(executorIds)
+            .withApplicationVersion(appVersion);
+    var workflows = systemDatabase.listWorkflows(input);
     return workflows.stream()
         .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
         .collect(Collectors.toList());
@@ -1158,6 +1209,14 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   // Workflow Execution Methods
+
+  // helper method to validate that @Workflow methods are not invoked from the startWorkflow lambda
+  public void validateNonWorkflowInvocation() {
+    var hook = hookHolder.get();
+    if (hook != null) {
+      throw new RuntimeException("Only @Workflow functions may run in this context");
+    }
+  }
 
   // execute a workflow via a proxy
   public Object runWorkflow(
@@ -1421,7 +1480,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateQueue(String queueName) {
     if (queueName != null) {
-      getQueue(queueName)
+      findQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
     }
@@ -1434,7 +1493,7 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS internal queue is not a partitioned queue, but a partition key was provided");
       }
     } else {
-      var queue = this.getQueue(queueName);
+      var queue = findQueue(queueName);
       if (queue.isPresent()) {
         if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
           throw new IllegalArgumentException(

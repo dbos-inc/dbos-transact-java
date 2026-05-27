@@ -448,6 +448,10 @@ public class ForkTest {
     assertNull(handle.getStatus().forkedFrom());
     assertFalse(handle.getStatus().wasForkedFrom());
 
+    // child1 and child2 are fire-and-forget; wait for them before asserting counts
+    dbos.retrieveWorkflow("child1").getResult();
+    dbos.retrieveWorkflow("child2").getResult();
+
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
     assertEquals(1, impl.child1Count);

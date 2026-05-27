@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class GetMetricsResponse extends BaseResponse {
-  public static record MetricsDataOutput(String metric_type, String metric_name, long value) {
+  public record MetricsDataOutput(String metric_type, String metric_name, long value) {
     public static MetricsDataOutput fromMetricData(MetricData m) {
       return new MetricsDataOutput(m.metricType(), m.metricName(), m.value());
     }

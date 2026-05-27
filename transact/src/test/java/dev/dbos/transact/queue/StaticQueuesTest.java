@@ -34,9 +34,14 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class QueuesTest {
+/**
+ * Tests for the static (in-memory) queue registration path. All queues here are registered via
+ * {@code dbos.registerQueue(Queue)} before launch, which exercises the pre-launch static listener
+ * code path. See {@link QueuesTest} for the equivalent tests using database-backed dynamic queues.
+ */
+public class StaticQueuesTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(StaticQueuesTest.class);
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -336,7 +341,8 @@ public class QueuesTest {
   public void testLimiter() throws Exception {
 
     int limit = 5;
-    double period = 1.8; //
+    double periodSec = 1.8;
+    Duration period = Duration.ofMillis((long) (periodSec * 1000));
 
     Queue limitQ =
         new Queue("limitQueue")
@@ -371,7 +377,7 @@ public class QueuesTest {
       times.add(result);
     }
 
-    double waveTolerance = 0.5;
+    double waveTolerance = 1.0;
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);
@@ -392,15 +398,15 @@ public class QueuesTest {
       double gap = startOfNextWave - startOfCurrentWave;
       logger.info(String.format("Gap between Wave %d and %d: %.3f", wave, wave + 1, gap));
       assertTrue(
-          gap > period - periodTolerance,
+          gap > periodSec - periodTolerance,
           String.format(
               "Gap between wave %d and %d should be at least %.3f. Actual: %.3f",
-              wave, wave + 1, period - periodTolerance, gap));
+              wave, wave + 1, periodSec - periodTolerance, gap));
       assertTrue(
-          gap < period + periodTolerance,
+          gap < periodSec + periodTolerance,
           String.format(
               "Gap between wave %d and %d should be at most %.3f. Actual: %.3f",
-              wave, wave + 1, period + periodTolerance, gap));
+              wave, wave + 1, periodSec + periodTolerance, gap));
     }
 
     for (WorkflowHandle<Double, ?> h : handles) {

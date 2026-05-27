@@ -171,7 +171,7 @@ public class WorkflowDAO {
     } // end try with resources connection closed
   }
 
-  static record InsertWorkflowResult(
+  record InsertWorkflowResult(
       int recoveryAttempts,
       String status,
       String workflowName,
@@ -847,16 +847,6 @@ public class WorkflowDAO {
             SystemDatabase.toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
             serialization);
     return info;
-  }
-
-  public static List<WorkflowStatus> getPendingWorkflows(
-      DbContext ctx, List<String> executorIds, String appVersion) throws SQLException {
-    var input =
-        new ListWorkflowsInput()
-            .withStatus(WorkflowState.PENDING)
-            .withExecutorIds(executorIds)
-            .withApplicationVersion(appVersion);
-    return listWorkflows(ctx, input);
   }
 
   @SuppressWarnings("unchecked")
