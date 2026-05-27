@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -17,6 +18,8 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.SQLException;
 import java.util.Objects;
+
+import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.jooq.DSLContext;
@@ -36,14 +39,20 @@ interface FactoryTestService {
   TestResult readWorkflow(String user);
 
   TestResult insertThenReadWorkflow(String user);
+
+  TestResult conflictWorkflow(String user) throws SQLException;
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
 
   private final JooqStepFactory stepFactory;
+  private final DataSource dataSource;
+  final String schema;
 
-  public FactoryTestServiceImpl(JooqStepFactory stepFactory) {
+  public FactoryTestServiceImpl(JooqStepFactory stepFactory, DataSource dataSource, String schema) {
     this.stepFactory = stepFactory;
+    this.dataSource = dataSource;
+    this.schema = schema;
   }
 
   FactoryTestService.TestResult insertGreeting(DSLContext ctx, String user) {
@@ -96,6 +105,39 @@ class FactoryTestServiceImpl implements FactoryTestService {
     stepFactory.txStep(ctx -> insertGreeting(ctx.dsl(), user), "insertGreeting");
     return stepFactory.txStepResult(ctx -> readGreeting(ctx.dsl(), user), "readGreeting");
   }
+
+  // Simulates a concurrent winner committing a result while this executor's transaction is still
+  // open. The separate autocommit connection represents the other executor — its INSERT persists
+  // even when jOOQ rolls back the main transaction. When recordResult subsequently tries to INSERT
+  // the same (workflowId, stepId) key, it gets a 23505 unique-constraint violation. The factory
+  // rolls back and falls back to checkExecution to return the winner's value.
+  FactoryTestService.TestResult conflictGreeting(
+      DSLContext ctx, String user, FactoryTestService.TestResult winner) throws SQLException {
+    var wfId = Objects.requireNonNull(DBOS.workflowId());
+    var value = SerializationUtil.serializeValue(winner, null, null);
+    var sql =
+        """
+        INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
+        VALUES (?, 0, ?, NULL, ?)
+        """
+            .formatted(schema);
+    try (var conn2 = dataSource.getConnection();
+        var stmt = conn2.prepareStatement(sql)) {
+      stmt.setString(1, wfId);
+      stmt.setString(2, value.serializedValue());
+      stmt.setString(3, value.serialization());
+      stmt.executeUpdate();
+    }
+    return insertGreeting(ctx, user);
+  }
+
+  @Override
+  @Workflow
+  public FactoryTestService.TestResult conflictWorkflow(String user) throws SQLException {
+    var winner = new FactoryTestService.TestResult(user, 99);
+    return stepFactory.txStepResult(
+        ctx -> conflictGreeting(ctx.dsl(), user, winner), "conflictStep");
+  }
 }
 
 public class JooqStepFactoryTest {
@@ -123,7 +165,9 @@ public class JooqStepFactoryTest {
     DSLContext dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
     stepFactory = new JooqStepFactory(dbos, dsl);
 
-    impl = new FactoryTestServiceImpl(stepFactory);
+    impl =
+        new FactoryTestServiceImpl(
+            stepFactory, dataSource, SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema()));
     proxy = dbos.registerProxy(FactoryTestService.class, impl);
 
     dbos.launch();
@@ -363,6 +407,33 @@ public class JooqStepFactoryTest {
     assertEquals(2, txSteps.size());
     assertTrue(txSteps.get(0).createdAt() < relaunchTimestamp); // step 0: original run
     assertTrue(txSteps.get(1).createdAt() >= relaunchTimestamp); // step 1: re-executed on retry
+  }
+
+  // Two executors race to write the result for the same step. The loser detects the 23505
+  // conflict on its INSERT, rolls back its transaction, and returns the winner's stored value.
+  @Test
+  public void testUpsertConflict() throws Exception {
+    var wfid = "wf-conflict";
+    var user = "testUser";
+
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      var result = proxy.conflictWorkflow(user);
+      // Returns winner's sentinel value (99), not what insertGreeting would have produced (1)
+      assertEquals(99, result.greetCount());
+      assertEquals(user, result.user());
+    }
+
+    // Main transaction was rolled back — insertGreeting's write never committed
+    assertEquals(0, getGreetCount(user));
+
+    // Exactly one tx_step_outputs row containing the winner's result
+    var rows = DBUtils.getTxStepRows(dataSource, wfid);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertNotNull(row.output());
+    assertNull(row.error());
+    var output = SerializationUtil.deserializeValue(row.output(), row.serialization(), null);
+    assertEquals(new FactoryTestService.TestResult(user, 99), output);
   }
 
   @Test

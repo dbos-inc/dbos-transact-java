@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
@@ -13,6 +14,7 @@ import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.HandleCallback;
 import org.jdbi.v3.core.HandleConsumer;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 
 /**
  * Runs idempotent transactional steps inside DBOS workflows using Jdbi3 {@link Handle} objects.
@@ -107,13 +109,25 @@ public class JdbiStepFactory extends PostgresStepFactory {
   public <R, X extends Exception> R inStep(final HandleCallback<R, X> callback, String stepName)
       throws X {
     return runTxStep(
-        (wfId, stepId) ->
-            jdbi.inTransaction(
+        (wfId, stepId) -> {
+          try {
+            return jdbi.inTransaction(
                 h -> {
                   var result = callback.withHandle(h);
                   recordOutput(h, wfId, stepId, result);
                   return result;
-                }),
+                });
+          } catch (StepConflictException e) {
+            return checkExecution(wfId, stepId, stepName)
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                .formatted(wfId, stepId, stepName),
+                            e))
+                .<R, X>toResult(serializer);
+          }
+        },
         stepName);
   }
 
@@ -144,7 +158,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
     return jdbi.withHandle(
         h ->
-            h.createQuery(checkSql())
+            h.createQuery(TxStepSchema.checkSql(schema))
                 .bind(0, workflowId)
                 .bind(1, stepId)
                 .map(
@@ -168,10 +182,13 @@ public class JdbiStepFactory extends PostgresStepFactory {
   @Override
   protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
-    jdbi.useTransaction(
-        h ->
-            recordResult(
-                h, workflowId, stepId, null, value.serializedValue(), value.serialization()));
+    try {
+      jdbi.useTransaction(
+          h ->
+              recordResult(
+                  h, workflowId, stepId, null, value.serializedValue(), value.serialization()));
+    } catch (StepConflictException ignored) {
+    }
   }
 
   private void recordResult(
@@ -181,13 +198,18 @@ public class JdbiStepFactory extends PostgresStepFactory {
       String output,
       String error,
       String serialization) {
-    handle
-        .createUpdate(upsertSql())
-        .bind(0, workflowId)
-        .bind(1, stepId)
-        .bind(2, output)
-        .bind(3, error)
-        .bind(4, serialization)
-        .execute();
+    try {
+      handle
+          .createUpdate(TxStepSchema.upsertSql(schema))
+          .bind(0, workflowId)
+          .bind(1, stepId)
+          .bind(2, output)
+          .bind(3, error)
+          .bind(4, serialization)
+          .execute();
+    } catch (UnableToExecuteStatementException e) {
+      if (isUniqueViolation(e)) throw new StepConflictException(e);
+      throw e;
+    }
   }
 }

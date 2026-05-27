@@ -4,6 +4,7 @@ include(
   "transact",
   "transact-cli",
   "transact-spring-boot-starter",
+  "transact-spring-txstep-starter",
   "transact-jdbi-step-factory",
   "transact-jooq-step-factory",
 )

@@ -19,6 +19,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
 
+import javax.sql.DataSource;
+
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,14 +36,18 @@ interface FactoryTestService {
   TestResult readWorkflow(String user) throws SQLException;
 
   TestResult insertThenReadWorkflow(String user) throws SQLException;
+
+  TestResult conflictWorkflow(String user) throws SQLException;
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
 
   private final JdbcStepFactory stepFactory;
+  private final DataSource dataSource;
 
-  public FactoryTestServiceImpl(JdbcStepFactory stepFactory) {
+  public FactoryTestServiceImpl(JdbcStepFactory stepFactory, DataSource dataSource) {
     this.stepFactory = stepFactory;
+    this.dataSource = dataSource;
   }
 
   TestResult insertGreeting(Connection conn, String user) throws SQLException {
@@ -108,6 +114,37 @@ class FactoryTestServiceImpl implements FactoryTestService {
     stepFactory.txStep((Connection c) -> insertGreeting(c, user), "insertGreeting");
     return stepFactory.txStep((Connection c) -> readGreeting(c, user), "readGreeting");
   }
+
+  // Simulates a concurrent winner committing a result while this executor's transaction is still
+  // open. The separate autocommit connection represents the other executor — its INSERT persists
+  // even when the main transaction is rolled back. When recordOutput subsequently tries to INSERT
+  // the same (workflowId, stepId) key, it gets a 23505 unique-constraint violation. The factory
+  // rolls back the main transaction and falls back to checkExecution to return the winner's value.
+  TestResult conflictGreeting(Connection conn, String user, TestResult winner) throws SQLException {
+    var wfId = Objects.requireNonNull(DBOS.workflowId());
+    var value = SerializationUtil.serializeValue(winner, null, null);
+    var sql =
+        """
+        INSERT INTO "%s".tx_step_outputs(workflow_id, step_id, output, error, serialization)
+        VALUES (?, 0, ?, NULL, ?)
+        """
+            .formatted(stepFactory.schema);
+    try (var conn2 = dataSource.getConnection();
+        var stmt = conn2.prepareStatement(sql)) {
+      stmt.setString(1, wfId);
+      stmt.setString(2, value.serializedValue());
+      stmt.setString(3, value.serialization());
+      stmt.executeUpdate();
+    }
+    return insertGreeting(conn, user);
+  }
+
+  @Override
+  @Workflow
+  public TestResult conflictWorkflow(String user) throws SQLException {
+    var winner = new TestResult(user, 99);
+    return stepFactory.txStep((Connection c) -> conflictGreeting(c, user, winner), "conflictStep");
+  }
 }
 
 public class JdbcStepFactoryTest {
@@ -139,7 +176,7 @@ public class JdbcStepFactoryTest {
     dbos = new DBOS(dbosConfig);
     stepFactory = new JdbcStepFactory(dbos, dataSource);
 
-    impl = new FactoryTestServiceImpl(stepFactory);
+    impl = new FactoryTestServiceImpl(stepFactory, dataSource);
     proxy = dbos.registerProxy(FactoryTestService.class, impl);
 
     dbos.launch();
@@ -379,6 +416,33 @@ public class JdbcStepFactoryTest {
     assertEquals(2, txSteps.size());
     assertTrue(txSteps.get(0).createdAt() < relaunchTimestamp); // step 0: original run
     assertTrue(txSteps.get(1).createdAt() >= relaunchTimestamp); // step 1: re-executed on retry
+  }
+
+  // Two executors race to write the result for the same step. The loser detects the 23505
+  // conflict on its INSERT, rolls back its transaction, and returns the winner's stored value.
+  @Test
+  public void testUpsertConflict() throws Exception {
+    var wfid = "wf-conflict";
+    var user = "testUser";
+
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      var result = proxy.conflictWorkflow(user);
+      // Returns winner's sentinel value (99), not what insertGreeting would have produced (1)
+      assertEquals(99, result.greetCount());
+      assertEquals(user, result.user());
+    }
+
+    // Main transaction was rolled back — insertGreeting's write never committed
+    assertEquals(0, getGreetCount(user));
+
+    // Exactly one tx_step_outputs row containing the winner's result
+    var rows = DBUtils.getTxStepRows(dataSource, wfid);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertNotNull(row.output());
+    assertNull(row.error());
+    var output = SerializationUtil.deserializeValue(row.output(), row.serialization(), null);
+    assertEquals(new FactoryTestService.TestResult(user, 99), output);
   }
 
   @Test

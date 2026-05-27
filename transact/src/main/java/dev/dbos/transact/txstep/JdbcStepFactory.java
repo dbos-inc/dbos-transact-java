@@ -74,20 +74,11 @@ public class JdbcStepFactory extends PostgresStepFactory {
   @Override
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
     try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(checkSql())) {
+        var stmt = conn.prepareStatement(TxStepSchema.checkSql(schema))) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
       try (var rs = stmt.executeQuery()) {
-        if (!rs.next()) return Optional.empty();
-        return Optional.of(
-            new StepResult(
-                workflowId,
-                stepId,
-                stepName,
-                rs.getString("output"),
-                rs.getString("error"),
-                null,
-                rs.getString("serialization")));
+        return TxStepSchema.readResult(rs, workflowId, stepId, stepName);
       }
     } catch (SQLException e) {
       throw new RuntimeException(e);
@@ -119,14 +110,26 @@ public class JdbcStepFactory extends PostgresStepFactory {
   public <R, X extends Exception> R txStep(
       final TransactionalFunction<R, X> callback, String stepName) throws X {
     return runTxStep(
-        (wfId, stepId) ->
-            executeTransaction(
+        (wfId, stepId) -> {
+          try {
+            return executeTransaction(
                 dataSource,
                 c -> {
                   var result = callback.execute(c);
                   recordOutput(c, wfId, stepId, result);
                   return result;
-                }),
+                });
+          } catch (StepConflictException e) {
+            return checkExecution(wfId, stepId, stepName)
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                .formatted(wfId, stepId, stepName),
+                            e))
+                .<R, X>toResult(serializer);
+          }
+        },
         stepName);
   }
 
@@ -204,13 +207,16 @@ public class JdbcStepFactory extends PostgresStepFactory {
   @Override
   protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
-    executeTransaction(
-        dataSource,
-        (Connection conn) -> {
-          recordResult(
-              conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
-          return null;
-        });
+    try {
+      executeTransaction(
+          dataSource,
+          (Connection conn) -> {
+            recordResult(
+                conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
+            return null;
+          });
+    } catch (StepConflictException ignored) {
+    }
   }
 
   private void recordResult(
@@ -220,7 +226,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
       String output,
       String error,
       String serialization) {
-    try (var stmt = conn.prepareStatement(upsertSql())) {
+    try (var stmt = conn.prepareStatement(TxStepSchema.upsertSql(schema))) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
       stmt.setString(3, output);
@@ -228,6 +234,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
       stmt.setString(5, serialization);
       stmt.executeUpdate();
     } catch (SQLException e) {
+      if (isUniqueViolation(e)) throw new StepConflictException(e);
       throw new RuntimeException(e);
     }
   }
