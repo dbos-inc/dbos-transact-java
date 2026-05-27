@@ -1,5 +1,6 @@
 package dev.dbos.transact.spring.txstep;
 
+import static org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRED;
 import static org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW;
 
 import dev.dbos.transact.DBOS;
@@ -139,6 +140,24 @@ public class TransactionalStepFactory {
   @SuppressWarnings("unchecked")
   public <E extends Exception> Object runTransactionalStep(
       ThrowingSupplier<Object, E> supplier, String stepName) throws E {
+    // If a @TransactionalStep method is called outside a workflow or inside a step, execute the
+    // supplier as a standard @Transactional method without any of the durable execution bookkeeping
+    if (!DBOS.inWorkflow() || DBOS.inStep()) {
+      var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRED);  
+      TransactionStatus status = txManager.getTransaction(txDef);
+      try {
+        Object result = supplier.execute();
+        txManager.commit(status);
+        return result;
+      } catch (RuntimeException | Error e) {
+        txManager.rollback(status);
+        throw e;
+      } catch (Exception e) {
+        txManager.commit(status);
+        throw (E) e;
+      }
+    }
+
     return dbos.<Object, E>runStep(
         () -> {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());
@@ -149,8 +168,7 @@ public class TransactionalStepFactory {
             return prev.get().<Object, E>toResult(serializer);
           }
 
-          var txDef = new DefaultTransactionDefinition();
-          txDef.setPropagationBehavior(PROPAGATION_REQUIRES_NEW);
+          var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
           TransactionStatus status = txManager.getTransaction(txDef);
           try {
             Object result = supplier.execute();
