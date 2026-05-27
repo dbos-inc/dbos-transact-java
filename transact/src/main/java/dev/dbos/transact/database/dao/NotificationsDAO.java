@@ -1,5 +1,7 @@
 package dev.dbos.transact.database.dao;
 
+import static java.util.stream.Collectors.joining;
+
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
@@ -32,8 +34,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static java.util.stream.Collectors.joining;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -57,7 +57,8 @@ public class NotificationsDAO {
           """
           SELECT workflow_uuid, forked_from FROM "%s".workflow_status
           WHERE forked_from IN (%s)
-          """.formatted(schema, placeholders);
+          """
+              .formatted(schema, placeholders);
       try (var stmt = conn.prepareStatement(sql)) {
         for (int i = 0; i < frontier.size(); i++) stmt.setString(i + 1, frontier.get(i));
         List<String> next = new ArrayList<>();
@@ -104,11 +105,7 @@ public class NotificationsDAO {
     }
 
     // Reject duplicate idempotency keys within the batch
-    var keys =
-        messages.stream()
-            .map(SendMessage::idempotencyKey)
-            .filter(Objects::nonNull)
-            .toList();
+    var keys = messages.stream().map(SendMessage::idempotencyKey).filter(Objects::nonNull).toList();
     if (keys.size() != keys.stream().distinct().count()) {
       throw new IllegalArgumentException("Duplicate idempotency keys within sendBulk batch");
     }
@@ -120,7 +117,9 @@ public class NotificationsDAO {
     record SerializedPair(SendMessage msg, SerializationUtil.SerializedResult serialized) {}
     List<SerializedPair> pairs = new ArrayList<>(messages.size());
     for (var msg : messages) {
-      pairs.add(new SerializedPair(msg, SerializationUtil.serializeValue(msg.message(), serialization, serializer)));
+      pairs.add(
+          new SerializedPair(
+              msg, SerializationUtil.serializeValue(msg.message(), serialization, serializer)));
     }
 
     try (Connection conn = ctx.getConnection()) {
@@ -140,12 +139,17 @@ public class NotificationsDAO {
         // Collect all destination IDs for fork resolution
         Map<String, Set<String>> forkDescendants = Map.of();
         if (sendToForks) {
-          List<String> destIds = pairs.stream().map(p -> p.msg().destinationId()).distinct().toList();
+          List<String> destIds =
+              pairs.stream().map(p -> p.msg().destinationId()).distinct().toList();
           forkDescendants = findForkDescendantsTxn(conn, ctx.schema(), destIds);
         }
 
         // Build insert rows: base dest + sorted descendants
-        record InsertRow(String destId, SerializationUtil.SerializedResult serialized, String topic, String messageUuid) {}
+        record InsertRow(
+            String destId,
+            SerializationUtil.SerializedResult serialized,
+            String topic,
+            String messageUuid) {}
         List<InsertRow> rows = new ArrayList<>();
         for (var pair : pairs) {
           var msg = pair.msg();
@@ -177,7 +181,8 @@ public class NotificationsDAO {
                 (destination_uuid, topic, message, serialization, message_uuid)
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT (message_uuid) DO NOTHING
-            """.formatted(ctx.schema());
+            """
+                .formatted(ctx.schema());
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           for (var row : rows) {
@@ -200,7 +205,8 @@ public class NotificationsDAO {
 
         if (workflowId != null) {
           var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-          StepsDAO.recordStepResult(conn, ctx.schema(), output, startTime, System.currentTimeMillis());
+          StepsDAO.recordStepResult(
+              conn, ctx.schema(), output, startTime, System.currentTimeMillis());
         }
 
         conn.commit();

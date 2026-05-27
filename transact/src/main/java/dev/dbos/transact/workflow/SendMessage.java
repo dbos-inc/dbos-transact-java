@@ -13,7 +13,8 @@ public record SendMessage(
     this(destinationId, message, null, null);
   }
 
-  public SendMessage(@NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
+  public SendMessage(
+      @NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
     this(destinationId, message, topic, null);
   }
 }

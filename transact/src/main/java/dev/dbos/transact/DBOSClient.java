@@ -17,6 +17,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Timeout;
@@ -647,7 +648,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /** Options for sending a message. */
-  public record SendOptions(@Nullable SerializationStrategy serialization) {
+  public record SendOptions(@Nullable SerializationStrategy serialization, boolean sendToForks) {
     /**
      * Create SendOptions with default serialization strategy. Uses the system's default
      * serialization format for message encoding.
@@ -655,7 +656,7 @@ public class DBOSClient implements AutoCloseable {
      * @return SendOptions configured with default serialization
      */
     public static SendOptions defaults() {
-      return new SendOptions(SerializationStrategy.DEFAULT);
+      return new SendOptions(SerializationStrategy.DEFAULT, false);
     }
 
     /**
@@ -665,7 +666,11 @@ public class DBOSClient implements AutoCloseable {
      * @return SendOptions configured with portable JSON serialization
      */
     public static SendOptions portable() {
-      return new SendOptions(SerializationStrategy.PORTABLE);
+      return new SendOptions(SerializationStrategy.PORTABLE, false);
+    }
+
+    public SendOptions withSendToForks(boolean v) {
+      return new SendOptions(serialization, v);
     }
   }
 
@@ -705,8 +710,28 @@ public class DBOSClient implements AutoCloseable {
         (options != null && options.serialization() != null)
             ? options.serialization().formatName()
             : null;
+    boolean sendToForks = options != null && options.sendToForks();
 
-    systemDatabase.sendDirect(destinationId, message, topic, idempotencyKey, serializationFormat);
+    systemDatabase.sendBulk(
+        List.of(new SendMessage(destinationId, message, topic, idempotencyKey)),
+        null,
+        -1,
+        "DBOS.send",
+        sendToForks,
+        serializationFormat);
+  }
+
+  public void sendBulk(@NonNull List<SendMessage> messages) {
+    sendBulk(messages, null);
+  }
+
+  public void sendBulk(@NonNull List<SendMessage> messages, @Nullable SendOptions options) {
+    String serializationFormat =
+        (options != null && options.serialization() != null)
+            ? options.serialization().formatName()
+            : null;
+    boolean sendToForks = options != null && options.sendToForks();
+    systemDatabase.sendBulk(messages, null, -1, "DBOS.sendBulk", sendToForks, serializationFormat);
   }
 
   /**

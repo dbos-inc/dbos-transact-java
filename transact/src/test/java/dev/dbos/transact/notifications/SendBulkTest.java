@@ -11,6 +11,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.SendMessage;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.Test;
 
 interface BulkService {
   String block(String topic);
+
+  void sendBulkWorkflow(List<SendMessage> messages);
 }
 
 class BulkServiceImpl implements BulkService {
@@ -36,6 +39,12 @@ class BulkServiceImpl implements BulkService {
   @Override
   public String block(String topic) {
     return dbos.<String>recv(topic, Duration.ofSeconds(30)).orElse(null);
+  }
+
+  @Workflow
+  @Override
+  public void sendBulkWorkflow(List<SendMessage> messages) {
+    dbos.sendBulk(messages);
   }
 }
 
@@ -59,8 +68,8 @@ class SendBulkTest {
     return DBOSTestAccess.getSystemDatabase(dbos);
   }
 
-  /** Starts a blocking workflow that provides a valid workflow_status row. */
-  private String startBlockingWorkflow(String id) throws Exception {
+  /** Starts a blocking recv workflow, providing a valid workflow_status row as a destination. */
+  private String startDest(String id) throws Exception {
     dbos.startWorkflow(() -> service.block(id), new StartWorkflowOptions(id));
     return id;
   }
@@ -71,174 +80,138 @@ class SendBulkTest {
 
   @Test
   void testSendBulkEmpty() {
-    // Outside workflow: should be a complete no-op
-    assertDoesNotThrow(() -> db().sendBulk(List.of(), null, -1, "DBOS.sendBulk", false, null));
+    // Outside workflow: no-op
+    assertDoesNotThrow(() -> dbos.sendBulk(List.of()));
+
+    // Inside workflow: also a no-op, no step recorded
+    String wfId = "empty-wf-" + UUID.randomUUID();
+    service.sendBulkWorkflow(List.of());
+    assertEquals(0, dbos.listWorkflowSteps(wfId).size());
   }
 
   // -------------------------------------------------------------------------
-  // testSendBulkBasic
+  // testSendBulk
   // -------------------------------------------------------------------------
 
   @Test
-  void testSendBulkBasic() throws Exception {
-    String dest1 = startBlockingWorkflow("dest1-" + UUID.randomUUID());
-    String dest2 = startBlockingWorkflow("dest2-" + UUID.randomUUID());
+  void testSendBulk() throws Exception {
+    String dest1 = startDest("dest1-" + UUID.randomUUID());
+    String dest2 = startDest("dest2-" + UUID.randomUUID());
 
-    // Two messages to dest1, one message to dest2, all in one call
-    db().sendBulk(
+    // Multi-message to one dest + one message to another, all atomic
+    dbos.sendBulk(
         List.of(
             new SendMessage(dest1, "hello-1"),
             new SendMessage(dest1, "hello-2"),
-            new SendMessage(dest2, "world")),
-        null,
-        -1,
-        "DBOS.sendBulk",
-        false,
-        null);
+            new SendMessage(dest2, "world")));
 
-    var notes1 = db().getAllNotifications(dest1);
-    assertEquals(2, notes1.size());
+    assertEquals(2, db().getAllNotifications(dest1).size());
+    assertEquals(1, db().getAllNotifications(dest2).size());
+    assertEquals("world", db().getAllNotifications(dest2).get(0).message());
 
-    var notes2 = db().getAllNotifications(dest2);
-    assertEquals(1, notes2.size());
-    assertEquals("world", notes2.get(0).message());
-  }
-
-  // -------------------------------------------------------------------------
-  // testSendBulkNonExistentDest — entire tx rolls back
-  // -------------------------------------------------------------------------
-
-  @Test
-  void testSendBulkNonExistentDest() throws Exception {
-    String validDest = startBlockingWorkflow("valid-" + UUID.randomUUID());
-
+    // Non-existent destination rolls back the entire batch
+    String validDest = startDest("valid-" + UUID.randomUUID());
     assertThrows(
         DBOSNonExistentWorkflowException.class,
         () ->
-            db().sendBulk(
+            dbos.sendBulk(
                 List.of(
                     new SendMessage(validDest, "first"),
-                    new SendMessage("nonexistent-" + UUID.randomUUID(), "second")),
-                null,
-                -1,
-                "DBOS.sendBulk",
-                false,
-                null));
-
-    // Atomicity: valid dest must have received nothing
+                    new SendMessage("nonexistent-" + UUID.randomUUID(), "second"))));
     assertEquals(0, db().getAllNotifications(validDest).size());
   }
 
   // -------------------------------------------------------------------------
-  // testSendBulkDuplicateKeyWithinBatch — rejected before transaction opens
+  // testSendBulkFromWorkflow
   // -------------------------------------------------------------------------
 
   @Test
-  void testSendBulkDuplicateKeyWithinBatch() throws Exception {
-    String dest = startBlockingWorkflow("dupkey-dest-" + UUID.randomUUID());
-    String key = UUID.randomUUID().toString();
+  void testSendBulkFromWorkflow() throws Exception {
+    String dest = startDest("wf-dest-" + UUID.randomUUID());
 
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            db().sendBulk(
-                List.of(
-                    new SendMessage(dest, "msg1", null, key),
-                    new SendMessage(dest, "msg2", null, key)),
-                null,
-                -1,
-                "DBOS.sendBulk",
-                false,
-                null));
+    // Run the sendBulk workflow and wait for it to complete
+    String senderWfId = "sender-wf-" + UUID.randomUUID();
+    var handle =
+        dbos.startWorkflow(
+            () -> service.sendBulkWorkflow(List.of(new SendMessage(dest, "from-workflow"))),
+            new StartWorkflowOptions(senderWfId));
+    handle.getResult();
 
-    // Nothing was delivered
-    assertEquals(0, db().getAllNotifications(dest).size());
+    assertEquals(1, db().getAllNotifications(dest).size());
+
+    // The entire bulk send is recorded as exactly one step
+    List<StepInfo> steps = dbos.listWorkflowSteps(senderWfId);
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.sendBulk", steps.get(0).functionName());
   }
 
   // -------------------------------------------------------------------------
-  // testSendBulkIdempotencyKey — duplicate across calls is deduped
+  // testSendBulkIdempotencyKey
   // -------------------------------------------------------------------------
 
   @Test
   void testSendBulkIdempotencyKey() throws Exception {
-    String dest = startBlockingWorkflow("idem-dest-" + UUID.randomUUID());
+    String dest = startDest("idem-dest-" + UUID.randomUUID());
     String key = UUID.randomUUID().toString();
 
     var messages = List.of(new SendMessage(dest, "hello", null, key));
-    db().sendBulk(messages, null, -1, "DBOS.sendBulk", false, null);
-    db().sendBulk(messages, null, -1, "DBOS.sendBulk", false, null);
+    dbos.sendBulk(messages);
+    dbos.sendBulk(messages);
 
     // Only one notification despite two calls
     assertEquals(1, db().getAllNotifications(dest).size());
   }
 
   // -------------------------------------------------------------------------
-  // testSendBulkFromWorkflow — step is recorded; replay skips re-delivery
+  // testSendBulkDuplicateKeyWithinBatch
   // -------------------------------------------------------------------------
 
   @Test
-  void testSendBulkFromWorkflow() throws Exception {
-    // senderWf provides a real workflow_status row to act as the sender context
-    String senderWf = startBlockingWorkflow("sender-wf-" + UUID.randomUUID());
-    String dest = startBlockingWorkflow("wf-dest-" + UUID.randomUUID());
+  void testSendBulkDuplicateKeyWithinBatch() throws Exception {
+    String dest = startDest("dupkey-dest-" + UUID.randomUUID());
+    String key = UUID.randomUUID().toString();
 
-    var messages = List.of(new SendMessage(dest, "from-workflow"));
-    // Use stepId 100 to stay clear of the recv workflow's own step IDs
-    db().sendBulk(messages, senderWf, 100, "DBOS.sendBulk", false, null);
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.sendBulk(
+                List.of(
+                    new SendMessage(dest, "msg1", null, key),
+                    new SendMessage(dest, "msg2", null, key))));
 
-    assertEquals(1, db().getAllNotifications(dest).size());
-
-    // The sendBulk step should be recorded in the sender workflow's history
-    var steps = dbos.listWorkflowSteps(senderWf);
-    assertTrue(steps.stream().anyMatch(s -> "DBOS.sendBulk".equals(s.functionName())));
-
-    // Second call with same workflowId/stepId is a replay — no new delivery
-    db().sendBulk(messages, senderWf, 100, "DBOS.sendBulk", false, null);
-    assertEquals(1, db().getAllNotifications(dest).size());
+    // Nothing was delivered
+    assertEquals(0, db().getAllNotifications(dest).size());
   }
 
   // -------------------------------------------------------------------------
-  // testSendBulkSendToForks — fan-out to recursive fork tree
+  // testSendBulkSendToForks
   // -------------------------------------------------------------------------
 
   @Test
   void testSendBulkSendToForks() throws Exception {
-    // Build the tree: parent -> child -> grandchild
     String parentId = "parent-" + UUID.randomUUID();
     String childId = "child-" + UUID.randomUUID();
     String grandchildId = "grandchild-" + UUID.randomUUID();
     String unrelatedId = "unrelated-" + UUID.randomUUID();
 
-    startBlockingWorkflow(parentId);
-    startBlockingWorkflow(unrelatedId);
+    startDest(parentId);
+    startDest(unrelatedId);
     dbos.forkWorkflow(parentId, 0, new ForkOptions(childId));
     dbos.forkWorkflow(childId, 0, new ForkOptions(grandchildId));
 
     String key = UUID.randomUUID().toString();
-    db().sendBulk(
-        List.of(new SendMessage(parentId, "fan-out", null, key)),
-        null,
-        -1,
-        "DBOS.sendBulk",
-        true,
-        null);
+    dbos.sendBulk(List.of(new SendMessage(parentId, "fan-out", null, key)), true);
 
-    // All three should have received the message
+    // Fan-out reaches all descendants
     assertEquals(1, db().getAllNotifications(parentId).size());
     assertEquals(1, db().getAllNotifications(childId).size());
     assertEquals(1, db().getAllNotifications(grandchildId).size());
 
-    // Unrelated workflow receives nothing
+    // Unrelated workflow untouched
     assertEquals(0, db().getAllNotifications(unrelatedId).size());
 
-    // Message UUIDs follow the {key}::{dest} pattern — sending again is idempotent
-    db().sendBulk(
-        List.of(new SendMessage(parentId, "fan-out", null, key)),
-        null,
-        -1,
-        "DBOS.sendBulk",
-        true,
-        null);
+    // Re-send with same key is idempotent (ON CONFLICT DO NOTHING via {key}::{dest} UUIDs)
+    dbos.sendBulk(List.of(new SendMessage(parentId, "fan-out", null, key)), true);
     assertEquals(1, db().getAllNotifications(parentId).size());
     assertEquals(1, db().getAllNotifications(childId).size());
     assertEquals(1, db().getAllNotifications(grandchildId).size());

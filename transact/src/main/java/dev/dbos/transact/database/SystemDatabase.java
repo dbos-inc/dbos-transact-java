@@ -22,9 +22,9 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -466,34 +466,6 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             NotificationsDAO.sendBulk(
                 ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
-  }
-
-  public void send(
-      String workflowId,
-      int stepId,
-      String destinationId,
-      Object message,
-      String topic,
-      String messageId,
-      String serialization) {
-    sendBulk(
-        List.of(new SendMessage(destinationId, message, topic, messageId)),
-        workflowId,
-        stepId,
-        "DBOS.send",
-        false,
-        serialization);
-  }
-
-  public void sendDirect(
-      String destinationId, Object message, String topic, String messageId, String serialization) {
-    sendBulk(
-        List.of(new SendMessage(destinationId, message, topic, messageId)),
-        null,
-        -1,
-        "DBOS.send",
-        false,
-        serialization);
   }
 
   public Object recv(

@@ -17,6 +17,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepInfo;
@@ -512,7 +513,7 @@ public class DBOS implements AutoCloseable {
       @NonNull Object message,
       @Nullable String topic,
       @Nullable String idempotencyKey) {
-    send(destinationId, message, topic, idempotencyKey, null);
+    send(destinationId, message, topic, idempotencyKey, null, false);
   }
 
   /**
@@ -523,7 +524,7 @@ public class DBOS implements AutoCloseable {
    * @param topic topic to which the message is send
    */
   public void send(@NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
-    send(destinationId, message, topic, null, null);
+    send(destinationId, message, topic, null, null, false);
   }
 
   /**
@@ -541,8 +542,35 @@ public class DBOS implements AutoCloseable {
       @Nullable String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
+    send(destinationId, message, topic, idempotencyKey, serialization, false);
+  }
+
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @Nullable String topic,
+      @Nullable String idempotencyKey,
+      @Nullable SerializationStrategy serialization,
+      boolean sendToForks) {
     if (serialization == null) serialization = SerializationStrategy.DEFAULT;
-    ensureLaunched("send").send(destinationId, message, topic, idempotencyKey, serialization);
+    ensureLaunched("send")
+        .send(destinationId, message, topic, idempotencyKey, serialization, sendToForks);
+  }
+
+  public void sendBulk(@NonNull List<SendMessage> messages) {
+    sendBulk(messages, false, null);
+  }
+
+  public void sendBulk(@NonNull List<SendMessage> messages, boolean sendToForks) {
+    sendBulk(messages, sendToForks, null);
+  }
+
+  public void sendBulk(
+      @NonNull List<SendMessage> messages,
+      boolean sendToForks,
+      @Nullable SerializationStrategy serialization) {
+    if (serialization == null) serialization = SerializationStrategy.DEFAULT;
+    ensureLaunched("sendBulk").sendBulk(messages, sendToForks, serialization);
   }
 
   /**

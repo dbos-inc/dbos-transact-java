@@ -15,10 +15,12 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -366,5 +368,22 @@ public class ClientTest {
           client.listApplicationVersions().stream().map(v -> v.versionName()).toList();
       assertEquals(dbosVersionNames, clientVersionNames);
     }
+  }
+
+  @Test
+  public void testClientSendBulk() throws Exception {
+    // Start two recv workflows to act as destinations
+    var handle1 = dbos.startWorkflow(() -> service.sendTest(1));
+    var handle2 = dbos.startWorkflow(() -> service.sendTest(2));
+
+    try (var client = pgContainer.dbosClient()) {
+      client.sendBulk(
+          List.of(
+              new SendMessage(handle1.workflowId(), "msg1", "test-topic", null),
+              new SendMessage(handle2.workflowId(), "msg2", "test-topic", null)));
+    }
+
+    assertEquals("1-msg1", handle1.getResult());
+    assertEquals("2-msg2", handle2.getResult());
   }
 }
