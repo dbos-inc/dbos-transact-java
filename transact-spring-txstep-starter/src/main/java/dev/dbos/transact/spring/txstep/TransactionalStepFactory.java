@@ -143,17 +143,19 @@ public class TransactionalStepFactory {
     // If a @TransactionalStep method is called outside a workflow or inside a step, execute the
     // supplier as a standard @Transactional method without any of the durable execution bookkeeping
     if (!DBOS.inWorkflow() || DBOS.inStep()) {
-      var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRED);  
+      var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRED);
       TransactionStatus status = txManager.getTransaction(txDef);
       try {
         Object result = supplier.execute();
         txManager.commit(status);
         return result;
       } catch (RuntimeException | Error e) {
-        txManager.rollback(status);
+        // commit() can throw (e.g. JPA flush-on-commit) and Spring internally rolls back, marking
+        // status completed — guard to avoid IllegalTransactionStateException on second rollback
+        if (!status.isCompleted()) txManager.rollback(status);
         throw e;
       } catch (Exception e) {
-        txManager.commit(status);
+        if (!status.isCompleted()) txManager.commit(status);
         throw (E) e;
       }
     }
@@ -187,7 +189,7 @@ public class TransactionalStepFactory {
                             conflict))
                 .<Object, E>toResult(serializer);
           } catch (Exception e) {
-            txManager.rollback(status);
+            if (!status.isCompleted()) txManager.rollback(status);
             recordError(workflowId, stepId, e);
             throw (E) e;
           }

@@ -86,15 +86,46 @@ public class TransactionalStepJpaIntegrationTest {
       }
       throw new RuntimeException("intentional failure");
     }
+
+    // Always persists without checking — used to trigger a commit-time PK conflict
+    @TransactionalStep
+    public String doInsertForced(String name) {
+      var em = EntityManagerFactoryUtils.getTransactionalEntityManager(emf);
+      em.persist(new Greeting(name, 99));
+      return name;
+    }
+  }
+
+  // ---- Outer step: @TransactionalStep that calls an inner @TransactionalStep via proxy ----
+
+  public static class GreetingOuterSteps {
+    private final GreetingSteps inner;
+    private final EntityManagerFactory emf;
+
+    GreetingOuterSteps(GreetingSteps inner, EntityManagerFactory emf) {
+      this.inner = inner;
+      this.emf = emf;
+    }
+
+    @TransactionalStep
+    public String insertOuterAndNested(String outerName, String innerName) {
+      var em = EntityManagerFactoryUtils.getTransactionalEntityManager(emf);
+      em.persist(new Greeting(outerName, 1));
+      return inner.doInsert(innerName);
+    }
   }
 
   // ---- Workflow bean: @Workflow methods calling the step bean through its Spring proxy ----
 
   public static class GreetingWorkflow {
+    private final DBOS dbos;
     private final GreetingSteps steps;
+    private final GreetingOuterSteps outerSteps;
 
-    GreetingWorkflow(GreetingSteps steps) {
+    GreetingWorkflow(DBOS dbos, GreetingSteps steps, GreetingOuterSteps outerSteps) {
+      this.dbos = dbos;
       this.steps = steps;
+      this.outerSteps = outerSteps;
     }
 
     @Workflow
@@ -105,6 +136,21 @@ public class TransactionalStepJpaIntegrationTest {
     @Workflow
     public String error(String name) {
       return steps.doError(name);
+    }
+
+    @Workflow
+    public String insertForced(String name) {
+      return steps.doInsertForced(name);
+    }
+
+    @Workflow
+    public String insertOuterAndNested(String outerName, String innerName) {
+      return outerSteps.insertOuterAndNested(outerName, innerName);
+    }
+
+    @Workflow
+    public String insertViaOuterDbosStep(String name) {
+      return dbos.runStep(() -> steps.doInsert(name), "insertViaOuterDbosStep");
     }
   }
 
@@ -142,8 +188,14 @@ public class TransactionalStepJpaIntegrationTest {
     }
 
     @Bean
-    GreetingWorkflow greetingWorkflow(GreetingSteps steps) {
-      return new GreetingWorkflow(steps);
+    GreetingOuterSteps greetingOuterSteps(GreetingSteps steps, EntityManagerFactory emf) {
+      return new GreetingOuterSteps(steps, emf);
+    }
+
+    @Bean
+    GreetingWorkflow greetingWorkflow(
+        DBOS dbos, GreetingSteps steps, GreetingOuterSteps outerSteps) {
+      return new GreetingWorkflow(dbos, steps, outerSteps);
     }
   }
 
@@ -263,6 +315,123 @@ public class TransactionalStepJpaIntegrationTest {
                         TransactionalStepTest.tableExists(
                             db.dataSource, SystemDatabase.sanitizeSchema(null), "tx_step_outputs"))
                     .isFalse();
+              });
+    }
+  }
+
+  // JPA flushes on commit, so a PK conflict surfaces during txManager.commit(), not
+  // supplier.execute().
+  // The transaction is already rolled back internally by Spring when commit() throws — the
+  // isCompleted() guard in the catch block prevents a second rollback attempt.
+  @Test
+  void commitTimeException_rollsBackAndRecordsError() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(GreetingWorkflow.class);
+                var wfid = "wf-jpa-commit-err";
+
+                try (var conn = db.dataSource.getConnection();
+                    var stmt =
+                        conn.prepareStatement("INSERT INTO greetings(name, count) VALUES (?, ?)")) {
+                  stmt.setString(1, "dave");
+                  stmt.setInt(2, 1);
+                  stmt.executeUpdate();
+                }
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  assertThatThrownBy(() -> workflow.insertForced("dave"))
+                      .isInstanceOf(Exception.class);
+                }
+
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "dave")).isEqualTo(1);
+                var rows = TransactionalStepTest.getTxRows(db.dataSource, wfid);
+                assertThat(rows).hasSize(1);
+                assertThat(rows.get(0).output()).isNull();
+                assertThat(rows.get(0).error()).isNotNull();
+              });
+    }
+  }
+
+  @Test
+  void outsideWorkflow_stepRunsAndCommits() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var steps = ctx.getBean(GreetingSteps.class);
+
+                assertThat(steps.doInsert("eve")).isEqualTo("eve");
+
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "eve")).isEqualTo(1);
+                assertThat(TransactionalStepTest.totalTxRows(db.dataSource)).isEqualTo(0);
+              });
+    }
+  }
+
+  @Test
+  void outsideWorkflow_runtimeException_rollsBack() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var steps = ctx.getBean(GreetingSteps.class);
+
+                assertThatThrownBy(() -> steps.doError("frank"))
+                    .isInstanceOf(RuntimeException.class);
+
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "frank")).isEqualTo(0);
+                assertThat(TransactionalStepTest.totalTxRows(db.dataSource)).isEqualTo(0);
+              });
+    }
+  }
+
+  @Test
+  void nestedTxStep_innerJoinsOuterTransaction() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(GreetingWorkflow.class);
+                var wfid = "wf-jpa-nested";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  assertThat(workflow.insertOuterAndNested("grace", "heidi")).isEqualTo("heidi");
+                }
+
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "grace")).isEqualTo(1);
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "heidi")).isEqualTo(1);
+                // Only the outer step writes to tx_step_outputs; inner runs in passthrough mode
+                var rows = TransactionalStepTest.getTxRows(db.dataSource, wfid);
+                assertThat(rows).hasSize(1);
+                assertThat(rows.get(0).output()).isNotNull();
+                assertThat(rows.get(0).error()).isNull();
+              });
+    }
+  }
+
+  @Test
+  void insideDbosStep_innerJoinsOuter() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(GreetingWorkflow.class);
+                var wfid = "wf-jpa-dbosstep";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  assertThat(workflow.insertViaOuterDbosStep("ivan")).isEqualTo("ivan");
+                }
+
+                assertThat(TransactionalStepTest.greetCount(db.dataSource, "ivan")).isEqualTo(1);
+                // Inner @TransactionalStep ran in passthrough mode — no tx_step_outputs entry
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).isEmpty();
               });
     }
   }

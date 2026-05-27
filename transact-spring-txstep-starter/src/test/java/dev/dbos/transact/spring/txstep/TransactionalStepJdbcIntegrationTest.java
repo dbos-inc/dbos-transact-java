@@ -46,11 +46,33 @@ public class TransactionalStepJdbcIntegrationTest {
     }
   }
 
-  public static class OrderWorkflowService {
-    private final OrderStepService steps;
+  // Outer @TransactionalStep that calls an inner @TransactionalStep via proxy
+  public static class OrderOuterStepService {
+    private final JdbcTemplate jdbc;
+    private final OrderStepService inner;
 
-    OrderWorkflowService(OrderStepService steps) {
+    OrderOuterStepService(JdbcTemplate jdbc, OrderStepService inner) {
+      this.jdbc = jdbc;
+      this.inner = inner;
+    }
+
+    @TransactionalStep
+    public Order placeOrderWithNested(
+        String outerOrderId, String innerOrderId, String item, int qty) {
+      jdbc.update("INSERT INTO orders(id, item, qty) VALUES (?, ?, ?)", outerOrderId, item, qty);
+      return inner.placeOrder(innerOrderId, item, qty);
+    }
+  }
+
+  public static class OrderWorkflowService {
+    private final DBOS dbos;
+    private final OrderStepService steps;
+    private final OrderOuterStepService outerSteps;
+
+    OrderWorkflowService(DBOS dbos, OrderStepService steps, OrderOuterStepService outerSteps) {
+      this.dbos = dbos;
       this.steps = steps;
+      this.outerSteps = outerSteps;
     }
 
     @Workflow
@@ -62,6 +84,17 @@ public class TransactionalStepJdbcIntegrationTest {
     public Order triggerError(String orderId, String item, int qty) {
       return steps.doError(orderId, item, qty);
     }
+
+    @Workflow
+    public Order processOrderWithNested(
+        String outerOrderId, String innerOrderId, String item, int qty) {
+      return outerSteps.placeOrderWithNested(outerOrderId, innerOrderId, item, qty);
+    }
+
+    @Workflow
+    public Order processOrderViaDbosStep(String orderId, String item, int qty) {
+      return dbos.runStep(() -> steps.placeOrder(orderId, item, qty), "processOrderViaDbosStep");
+    }
   }
 
   @Configuration(proxyBeanMethods = false)
@@ -72,8 +105,14 @@ public class TransactionalStepJdbcIntegrationTest {
     }
 
     @Bean
-    OrderWorkflowService orderWorkflow(OrderStepService steps) {
-      return new OrderWorkflowService(steps);
+    OrderOuterStepService orderOuterSteps(JdbcTemplate jdbc, OrderStepService steps) {
+      return new OrderOuterStepService(jdbc, steps);
+    }
+
+    @Bean
+    OrderWorkflowService orderWorkflow(
+        DBOS dbos, OrderStepService steps, OrderOuterStepService outerSteps) {
+      return new OrderWorkflowService(dbos, steps, outerSteps);
     }
   }
 
@@ -209,6 +248,91 @@ public class TransactionalStepJdbcIntegrationTest {
                         TransactionalStepTest.tableExists(
                             db.dataSource, SystemDatabase.sanitizeSchema(null), "tx_step_outputs"))
                     .isFalse();
+              });
+    }
+  }
+
+  @Test
+  void outsideWorkflow_stepRunsAndCommits() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var steps = ctx.getBean(OrderStepService.class);
+
+                assertThat(steps.placeOrder("ord-out-1", "Widget", 5))
+                    .isEqualTo(new Order("ord-out-1", "Widget", 5));
+
+                assertThat(orderCount(db.dataSource, "ord-out-1")).isEqualTo(1);
+                assertThat(TransactionalStepTest.totalTxRows(db.dataSource)).isEqualTo(0);
+              });
+    }
+  }
+
+  @Test
+  void outsideWorkflow_runtimeException_rollsBack() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var steps = ctx.getBean(OrderStepService.class);
+
+                assertThatThrownBy(() -> steps.doError("ord-out-2", "Gadget", 1))
+                    .isInstanceOf(RuntimeException.class);
+
+                assertThat(orderCount(db.dataSource, "ord-out-2")).isEqualTo(0);
+                assertThat(TransactionalStepTest.totalTxRows(db.dataSource)).isEqualTo(0);
+              });
+    }
+  }
+
+  @Test
+  void nestedTxStep_innerJoinsOuterTransaction() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                var wfid = "wf-jdbc-nested";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  assertThat(
+                          workflow.processOrderWithNested("ord-outer", "ord-inner", "Sprocket", 2))
+                      .isEqualTo(new Order("ord-inner", "Sprocket", 2));
+                }
+
+                assertThat(orderCount(db.dataSource, "ord-outer")).isEqualTo(1);
+                assertThat(orderCount(db.dataSource, "ord-inner")).isEqualTo(1);
+                // Only the outer step writes to tx_step_outputs; inner runs in passthrough mode
+                var rows = TransactionalStepTest.getTxRows(db.dataSource, wfid);
+                assertThat(rows).hasSize(1);
+                assertThat(rows.get(0).output()).isNotNull();
+                assertThat(rows.get(0).error()).isNull();
+              });
+    }
+  }
+
+  @Test
+  void insideDbosStep_innerJoinsOuter() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                var wfid = "wf-jdbc-dbosstep";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  assertThat(workflow.processOrderViaDbosStep("ord-dbos", "Thing", 3))
+                      .isEqualTo(new Order("ord-dbos", "Thing", 3));
+                }
+
+                assertThat(orderCount(db.dataSource, "ord-dbos")).isEqualTo(1);
+                // Inner @TransactionalStep ran in passthrough mode — no tx_step_outputs entry
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).isEmpty();
               });
     }
   }

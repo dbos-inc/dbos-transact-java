@@ -591,8 +591,7 @@ public class TransactionalStepTest {
     void nestedStep_innerRuntimeException_rollsBackBothWrites() throws SQLException {
       var wfid = "wf-nested-rt-fail";
       try (var _o = new WorkflowOptions(wfid).setContext()) {
-        assertThatThrownBy(
-                () -> proxy.insertNestedInnerRuntimeError("outer-rt", "inner-rt"))
+        assertThatThrownBy(() -> proxy.insertNestedInnerRuntimeError("outer-rt", "inner-rt"))
             .isInstanceOf(RuntimeException.class)
             .hasMessage("inner failure");
       }
@@ -657,8 +656,7 @@ public class TransactionalStepTest {
       // Checked exception: PROPAGATION_REQUIRED passthrough commits the write, rethrows.
       var wfid = "wf-dbos-step-checked-fail";
       try (var _o = new WorkflowOptions(wfid).setContext()) {
-        assertThatThrownBy(
-                () -> proxy.insertViaDbosStepWithCheckedException("dbos-step-checked"))
+        assertThatThrownBy(() -> proxy.insertViaDbosStepWithCheckedException("dbos-step-checked"))
             .isInstanceOf(Exception.class)
             .hasMessage("inner checked");
       }
