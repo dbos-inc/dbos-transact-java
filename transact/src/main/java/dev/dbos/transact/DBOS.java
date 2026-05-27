@@ -131,7 +131,7 @@ public class DBOS implements AutoCloseable {
   /**
    * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
    *
-   * @param listener
+   * @param listener the lifecycle listener to register
    */
   private void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     if (dbosExecutor.get() != null) {
@@ -545,6 +545,17 @@ public class DBOS implements AutoCloseable {
     send(destinationId, message, topic, idempotencyKey, serialization, false);
   }
 
+  /**
+   * Send a message to a workflow with all options
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is sent
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   * @param serialization serialization strategy to use (null for default)
+   * @param sendToForks if true, also deliver the message to any forked copies of the destination
+   *     workflow
+   */
   public void send(
       @NonNull String destinationId,
       @NonNull Object message,
@@ -557,14 +568,34 @@ public class DBOS implements AutoCloseable {
         .send(destinationId, message, topic, idempotencyKey, serialization, sendToForks);
   }
 
+  /**
+   * Send multiple messages to workflows using default options
+   *
+   * @param messages list of messages to send
+   */
   public void sendBulk(@NonNull List<SendMessage> messages) {
     sendBulk(messages, false, null);
   }
 
+  /**
+   * Send multiple messages to workflows
+   *
+   * @param messages list of messages to send
+   * @param sendToForks if true, also deliver each message to any forked copies of the destination
+   *     workflow
+   */
   public void sendBulk(@NonNull List<SendMessage> messages, boolean sendToForks) {
     sendBulk(messages, sendToForks, null);
   }
 
+  /**
+   * Send multiple messages to workflows with full options
+   *
+   * @param messages list of messages to send
+   * @param sendToForks if true, also deliver each message to any forked copies of the destination
+   *     workflow
+   * @param serialization serialization strategy to use (null for default)
+   */
   public void sendBulk(
       @NonNull List<SendMessage> messages,
       boolean sendToForks,

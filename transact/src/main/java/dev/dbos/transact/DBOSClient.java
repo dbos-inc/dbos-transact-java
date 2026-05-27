@@ -120,6 +120,16 @@ public class DBOSClient implements AutoCloseable {
     this(url, user, password, schema, serializer, true);
   }
 
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   */
   public DBOSClient(
       @NonNull String url,
       @NonNull String user,
@@ -565,6 +575,18 @@ public class DBOSClient implements AutoCloseable {
     }
   }
 
+  /**
+   * Enqueue a workflow with explicit serialization format and support for both positional and named
+   * arguments.
+   *
+   * @param <T> Return type of workflow function
+   * @param <E> Exception thrown by workflow function
+   * @param options {@link EnqueueOptions} for configuring the workflow enqueue
+   * @param positionalArgs Positional arguments to pass to the workflow function
+   * @param namedArgs Named arguments to pass to the workflow function (e.g., for Python kwargs)
+   * @param serializationFormat Serialization format string to use (null for default)
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
@@ -669,6 +691,12 @@ public class DBOSClient implements AutoCloseable {
       return new SendOptions(SerializationStrategy.PORTABLE, false);
     }
 
+    /**
+     * Create a new SendOptions with the sendToForks flag set.
+     *
+     * @param v if true, deliver the message to any forked copies of the destination workflow
+     * @return new SendOptions with the sendToForks flag updated
+     */
     public SendOptions withSendToForks(boolean v) {
       return new SendOptions(serialization, v);
     }
@@ -721,10 +749,22 @@ public class DBOSClient implements AutoCloseable {
         serializationFormat);
   }
 
+  /**
+   * Send multiple messages to workflows using default options
+   *
+   * @param messages list of messages to send
+   */
   public void sendBulk(@NonNull List<SendMessage> messages) {
     sendBulk(messages, null);
   }
 
+  /**
+   * Send multiple messages to workflows with serialization options
+   *
+   * @param messages list of messages to send
+   * @param options optional send options including serialization type and fork delivery; null for
+   *     defaults
+   */
   public void sendBulk(@NonNull List<SendMessage> messages, @Nullable SendOptions options) {
     String serializationFormat =
         (options != null && options.serialization() != null)
