@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
@@ -454,6 +455,19 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.checkChildWorkflow(ctx, workflowUuid, functionId));
   }
 
+  public void sendBulk(
+      List<SendMessage> messages,
+      String workflowId,
+      int stepId,
+      String functionName,
+      boolean sendToForks,
+      String serialization) {
+    dbRetry(
+        () ->
+            NotificationsDAO.sendBulk(
+                ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
+  }
+
   public void send(
       String workflowId,
       int stepId,
@@ -462,18 +476,24 @@ public class SystemDatabase implements AutoCloseable {
       String topic,
       String messageId,
       String serialization) {
-    dbRetry(
-        () ->
-            NotificationsDAO.send(
-                ctx, workflowId, stepId, destinationId, message, topic, messageId, serialization));
+    sendBulk(
+        List.of(new SendMessage(destinationId, message, topic, messageId)),
+        workflowId,
+        stepId,
+        "DBOS.send",
+        false,
+        serialization);
   }
 
   public void sendDirect(
       String destinationId, Object message, String topic, String messageId, String serialization) {
-    dbRetry(
-        () ->
-            NotificationsDAO.sendDirect(
-                ctx, destinationId, message, topic, messageId, serialization));
+    sendBulk(
+        List.of(new SendMessage(destinationId, message, topic, messageId)),
+        null,
+        -1,
+        "DBOS.send",
+        false,
+        serialization);
   }
 
   public Object recv(
