@@ -40,62 +40,34 @@ public abstract class PostgresStepFactory {
     this.serializer = serializer == null ? config.serializer() : serializer;
 
     try (var conn = opener.open()) {
-      // ensure we're running on Postgres
-      var productName = conn.getMetaData().getDatabaseProductName();
-      if (!productName.equalsIgnoreCase("PostgreSQL")) {
-        throw new IllegalArgumentException(
-            "TxStepFactory requires a PostgreSQL datasource, got: " + productName);
-      }
-
-      // ensure provided schema and tx_step_outputs table exist
-      try (var stmt = conn.createStatement()) {
-        stmt.addBatch("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(this.schema));
-        stmt.addBatch(
-            """
-            CREATE TABLE IF NOT EXISTS "%1$s".tx_step_outputs (
-              workflow_id TEXT NOT NULL,
-              step_id INT NOT NULL,
-              output TEXT,
-              error TEXT,
-              serialization TEXT,
-              created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
-              PRIMARY KEY (workflow_id, step_id)
-            )"""
-                .formatted(this.schema));
-        stmt.executeBatch();
-      }
+      TxStepSchema.verifyPostgres(conn);
+      TxStepSchema.createTable(conn, this.schema);
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
   }
 
-  protected String checkSql() {
-    return """
-        SELECT output, error, serialization
-        FROM "%s".tx_step_outputs
-        WHERE workflow_id = ? AND step_id = ?
-        """
-        .formatted(schema);
-  }
-
   protected abstract Optional<StepResult> checkExecution(
       String workflowId, int stepId, String stepName);
-
-  protected String upsertSql() {
-    return """
-        INSERT INTO "%s".tx_step_outputs
-          (workflow_id, step_id, output, error, serialization)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT DO NOTHING
-        """
-        .formatted(schema);
-  }
 
   protected abstract void recordError(String workflowId, int stepId, Exception exception);
 
   @FunctionalInterface
   protected interface TxStepFunction<R, X extends Exception> {
     R execute(String workflowId, int stepId) throws X;
+  }
+
+  public static final class StepConflictException extends RuntimeException {
+    public StepConflictException(Exception cause) {
+      super(cause);
+    }
+  }
+
+  public static boolean isUniqueViolation(Exception e) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof SQLException sq && "23505".equals(sq.getSQLState())) return true;
+    }
+    return false;
   }
 
   @SuppressWarnings("unchecked")
