@@ -128,7 +128,7 @@ public class OrderStepService {
 
 ### JPA / Hibernate
 
-Spring Boot auto-configures `JpaTransactionManager` when `spring-boot-starter-data-jpa` is present. `@TransactionalStep` detects `JpaTransactionManager` and sets its `dataSource` property automatically if not already configured, bridging JPA transactions to `DataSourceUtils`.
+Spring Boot auto-configures `JpaTransactionManager` when `spring-boot-starter-data-jpa` is present.
 
 ```kotlin
 implementation("org.springframework.boot:spring-boot-starter-data-jpa")
