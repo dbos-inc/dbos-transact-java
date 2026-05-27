@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.transaction.PlatformTransactionManager;
 
 public class TransactionalStepJdbiIntegrationTest {
 
@@ -69,6 +68,19 @@ public class TransactionalStepJdbiIntegrationTest {
   }
 
   @Configuration(proxyBeanMethods = false)
+  static class JdbiInfraConfig {
+    @Bean
+    DataSourceTransactionManager transactionManager(DataSource dataSource) {
+      return new DataSourceTransactionManager(dataSource);
+    }
+
+    @Bean
+    JdbiFactoryBean jdbi(DataSource dataSource) {
+      return new JdbiFactoryBean(dataSource);
+    }
+  }
+
+  @Configuration(proxyBeanMethods = false)
   static class OrderConfig {
     @Bean
     OrderStepService orderSteps(Jdbi jdbi) {
@@ -78,16 +90,6 @@ public class TransactionalStepJdbiIntegrationTest {
     @Bean
     OrderWorkflowService orderWorkflow(OrderStepService steps) {
       return new OrderWorkflowService(steps);
-    }
-  }
-
-  private static Jdbi buildJdbi(DataSource dataSource) {
-    try {
-      var factory = new JdbiFactoryBean(dataSource);
-      factory.afterPropertiesSet();
-      return factory.getObject();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 
@@ -102,12 +104,7 @@ public class TransactionalStepJdbiIntegrationTest {
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))
         .withPropertyValues("dbos.application.name=txstep-jdbi-test")
         .withBean("dataSource", DataSource.class, () -> db.dataSource)
-        .withBean(
-            "transactionManager",
-            PlatformTransactionManager.class,
-            () -> new DataSourceTransactionManager(db.dataSource))
-        .withBean("jdbi", Jdbi.class, () -> buildJdbi(db.dataSource))
-        .withUserConfiguration(OrderConfig.class);
+        .withUserConfiguration(JdbiInfraConfig.class, OrderConfig.class);
   }
 
   private static int orderCount(DataSource ds, String orderId) throws SQLException {

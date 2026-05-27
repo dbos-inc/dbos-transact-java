@@ -29,7 +29,6 @@ import org.springframework.orm.jpa.EntityManagerFactoryUtils;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
-import org.springframework.transaction.PlatformTransactionManager;
 
 public class TransactionalStepJpaIntegrationTest {
 
@@ -109,7 +108,31 @@ public class TransactionalStepJpaIntegrationTest {
     }
   }
 
-  // ---- Spring configuration registering the two beans ----
+  // ---- Infrastructure: mirrors Spring Boot's JPA auto-configuration ----
+
+  @Configuration(proxyBeanMethods = false)
+  static class JpaInfraConfig {
+    @Bean
+    LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
+      var emfBean = new LocalContainerEntityManagerFactoryBean();
+      emfBean.setDataSource(dataSource);
+      emfBean.setPackagesToScan("dev.dbos.transact.spring.txstep");
+      emfBean.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+      emfBean.setPersistenceProviderClass(HibernatePersistenceProvider.class);
+      var props = new Properties();
+      props.put("hibernate.hbm2ddl.auto", "update");
+      props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+      emfBean.setJpaProperties(props);
+      return emfBean;
+    }
+
+    @Bean
+    JpaTransactionManager transactionManager(EntityManagerFactory emf) {
+      return new JpaTransactionManager(emf);
+    }
+  }
+
+  // ---- Spring configuration registering the application beans ----
 
   @Configuration(proxyBeanMethods = false)
   static class GreetingConfig {
@@ -124,43 +147,16 @@ public class TransactionalStepJpaIntegrationTest {
     }
   }
 
-  // ---- Infrastructure helpers ----
+  // ---- Runner ----
 
-  private static EntityManagerFactory buildEmf(DataSource dataSource) {
-    var emfBean = new LocalContainerEntityManagerFactoryBean();
-    emfBean.setDataSource(dataSource);
-    emfBean.setPackagesToScan("dev.dbos.transact.spring.txstep");
-    emfBean.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-    emfBean.setPersistenceProviderClass(HibernatePersistenceProvider.class);
-    var props = new Properties();
-    props.put("hibernate.hbm2ddl.auto", "update");
-    props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-    emfBean.setJpaProperties(props);
-    emfBean.afterPropertiesSet();
-    return emfBean.getObject();
-  }
-
-  private static JpaTransactionManager buildJpaTransactionManager(
-      DataSource dataSource, EntityManagerFactory emf) {
-    var txManager = new JpaTransactionManager(emf);
-    txManager.setDataSource(dataSource);
-    txManager.afterPropertiesSet();
-    return txManager;
-  }
-
-  private static ApplicationContextRunner runner(
-      TransactionalStepTest.TestDatabase db,
-      EntityManagerFactory emf,
-      JpaTransactionManager jpaManager) {
+  private static ApplicationContextRunner runner(TransactionalStepTest.TestDatabase db) {
     return new ApplicationContextRunner()
         .withConfiguration(
             AutoConfigurations.of(
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))
         .withPropertyValues("dbos.application.name=txstep-jpa-test")
         .withBean("dataSource", DataSource.class, () -> db.dataSource)
-        .withBean("entityManagerFactory", EntityManagerFactory.class, () -> emf)
-        .withBean("transactionManager", PlatformTransactionManager.class, () -> jpaManager)
-        .withUserConfiguration(GreetingConfig.class);
+        .withUserConfiguration(JpaInfraConfig.class, GreetingConfig.class);
   }
 
   // ---- Tests ----
@@ -168,9 +164,7 @@ public class TransactionalStepJpaIntegrationTest {
   @Test
   void autoConfig_createsExpectedBeans() {
     try (var db = new TransactionalStepTest.TestDatabase()) {
-      var emf = buildEmf(db.dataSource);
-      var jpaManager = buildJpaTransactionManager(db.dataSource, emf);
-      runner(db, emf, jpaManager)
+      runner(db)
           .run(
               ctx -> {
                 assertThat(ctx).hasNotFailed();
@@ -179,16 +173,13 @@ public class TransactionalStepJpaIntegrationTest {
                 assertThat(ctx).hasSingleBean(TransactionalStepAspect.class);
                 assertThat(ctx).hasSingleBean(TransactionalStepRegistrar.class);
               });
-      emf.close();
     }
   }
 
   @Test
   void goldenPath() throws SQLException {
     try (var db = new TransactionalStepTest.TestDatabase()) {
-      var emf = buildEmf(db.dataSource);
-      var jpaManager = buildJpaTransactionManager(db.dataSource, emf);
-      runner(db, emf, jpaManager)
+      runner(db)
           .run(
               ctx -> {
                 assertThat(ctx).hasNotFailed();
@@ -205,16 +196,13 @@ public class TransactionalStepJpaIntegrationTest {
                 assertThat(rows.get(0).output()).isNotNull();
                 assertThat(rows.get(0).error()).isNull();
               });
-      emf.close();
     }
   }
 
   @Test
   void idempotency() throws SQLException {
     try (var db = new TransactionalStepTest.TestDatabase()) {
-      var emf = buildEmf(db.dataSource);
-      var jpaManager = buildJpaTransactionManager(db.dataSource, emf);
-      runner(db, emf, jpaManager)
+      runner(db)
           .run(
               ctx -> {
                 assertThat(ctx).hasNotFailed();
@@ -232,16 +220,13 @@ public class TransactionalStepJpaIntegrationTest {
                 assertThat(TransactionalStepTest.greetCount(db.dataSource, "bob")).isEqualTo(1);
                 assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).hasSize(1);
               });
-      emf.close();
     }
   }
 
   @Test
   void atomicityOnFailure() throws SQLException {
     try (var db = new TransactionalStepTest.TestDatabase()) {
-      var emf = buildEmf(db.dataSource);
-      var jpaManager = buildJpaTransactionManager(db.dataSource, emf);
-      runner(db, emf, jpaManager)
+      runner(db)
           .run(
               ctx -> {
                 assertThat(ctx).hasNotFailed();
@@ -259,16 +244,13 @@ public class TransactionalStepJpaIntegrationTest {
                 assertThat(rows.get(0).output()).isNull();
                 assertThat(rows.get(0).error()).isNotNull();
               });
-      emf.close();
     }
   }
 
   @Test
   void customSchema_property_tableCreatedInCustomSchema() throws SQLException {
     try (var db = new TransactionalStepTest.TestDatabase()) {
-      var emf = buildEmf(db.dataSource);
-      var jpaManager = buildJpaTransactionManager(db.dataSource, emf);
-      runner(db, emf, jpaManager)
+      runner(db)
           .withPropertyValues("dbos.txstep.schema=custom_schema")
           .run(
               ctx -> {
@@ -282,7 +264,6 @@ public class TransactionalStepJpaIntegrationTest {
                             db.dataSource, SystemDatabase.sanitizeSchema(null), "tx_step_outputs"))
                     .isFalse();
               });
-      emf.close();
     }
   }
 }

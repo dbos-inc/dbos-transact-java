@@ -9,10 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
@@ -21,10 +19,6 @@ import org.springframework.transaction.PlatformTransactionManager;
  * <p>Activates when a {@link DBOS} bean, a {@link PlatformTransactionManager} bean, and a {@link
  * DataSource} bean are all present. Creates {@link TransactionalStepFactory}, {@link
  * TransactionalStepAspect}, and {@link TransactionalStepRegistrar} beans.
- *
- * <p>If {@code JpaTransactionManager} is detected and its {@code dataSource} property is not yet
- * set, it is set automatically so that {@code DataSourceUtils.getConnection()} returns the
- * transaction-bound connection inside {@code @TransactionalStep} methods.
  */
 @AutoConfiguration(
     after = DBOSAutoConfiguration.class,
@@ -66,26 +60,5 @@ public class TransactionalStepAutoConfiguration {
   @Bean
   public TransactionalStepRegistrar transactionalStepRegistrar(TransactionalStepFactory factory) {
     return new TransactionalStepRegistrar(factory);
-  }
-
-  /**
-   * Applies the JPA bridge when {@code spring-orm} is on the classpath. If a {@code
-   * JpaTransactionManager} is in use and its {@code dataSource} property is not set, sets it so
-   * that {@code DataSourceUtils.getConnection(dataSource)} returns the transaction-bound connection
-   * inside {@code @TransactionalStep} methods.
-   */
-  @Configuration(proxyBeanMethods = false)
-  @ConditionalOnClass(name = "org.springframework.orm.jpa.JpaTransactionManager")
-  static class JpaBridgeConfiguration {
-    @Bean
-    JpaBridgeApplier jpaBridgeApplier(PlatformTransactionManager txManager, DataSource dataSource) {
-      if (txManager instanceof org.springframework.orm.jpa.JpaTransactionManager jpa
-          && jpa.getDataSource() == null) {
-        jpa.setDataSource(dataSource);
-      }
-      return new JpaBridgeApplier();
-    }
-
-    record JpaBridgeApplier() {}
   }
 }
