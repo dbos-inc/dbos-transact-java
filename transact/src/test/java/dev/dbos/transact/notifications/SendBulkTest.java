@@ -85,7 +85,8 @@ class SendBulkTest {
 
     // Inside workflow: also a no-op, no step recorded
     String wfId = "empty-wf-" + UUID.randomUUID();
-    service.sendBulkWorkflow(List.of());
+    dbos.startWorkflow(() -> service.sendBulkWorkflow(List.of()), new StartWorkflowOptions(wfId))
+        .getResult();
     assertEquals(0, dbos.listWorkflowSteps(wfId).size());
   }
 

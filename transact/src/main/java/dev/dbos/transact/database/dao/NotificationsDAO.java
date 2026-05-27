@@ -196,9 +196,9 @@ public class NotificationsDAO {
           stmt.executeBatch();
         } catch (SQLException e) {
           if ("23503".equals(e.getSQLState())) {
-            // Find which destination was missing
-            String missingDest = rows.stream().map(InsertRow::destId).findFirst().orElse("unknown");
-            throw new DBOSNonExistentWorkflowException(missingDest);
+            var distinctDests = rows.stream().map(InsertRow::destId).distinct().toList();
+            throw new DBOSNonExistentWorkflowException(
+                distinctDests.size() == 1 ? distinctDests.get(0) : null);
           }
           throw e;
         }
