@@ -14,11 +14,14 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -366,5 +369,70 @@ public class ClientTest {
           client.listApplicationVersions().stream().map(v -> v.versionName()).toList();
       assertEquals(dbosVersionNames, clientVersionNames);
     }
+  }
+
+  @Test
+  public void testClientSendBulk() throws Exception {
+    // Start two recv workflows to act as destinations
+    var handle1 = dbos.startWorkflow(() -> service.sendTest(1));
+    var handle2 = dbos.startWorkflow(() -> service.sendTest(2));
+
+    try (var client = pgContainer.dbosClient()) {
+      client.sendBulk(
+          List.of(
+              new SendMessage(handle1.workflowId(), "msg1", "test-topic", null),
+              new SendMessage(handle2.workflowId(), "msg2", "test-topic", null)));
+    }
+
+    assertEquals("1-msg1", handle1.getResult());
+    assertEquals("2-msg2", handle2.getResult());
+  }
+
+  @Test
+  public void testClientSendBulkSendToForks() throws Exception {
+    // Parent is a running workflow; child is a fork (ENQUEUED, not executing)
+    var parent = dbos.startWorkflow(() -> service.sendTest(99));
+    var childId = "fork-child-" + UUID.randomUUID();
+    dbos.forkWorkflow(parent.workflowId(), 0, new ForkOptions(childId));
+
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    String key = UUID.randomUUID().toString();
+
+    try (var client = pgContainer.dbosClient()) {
+      client.sendBulk(
+          List.of(new SendMessage(parent.workflowId(), "fan-out", "test-topic", key)),
+          DBOSClient.SendOptions.defaults().withSendToForks(true));
+    }
+
+    // Parent receives the message and completes
+    assertEquals("99-fan-out", parent.getResult());
+
+    // Fork also received the notification (verified via DB since it is not executing)
+    assertEquals(1, sysdb.getAllNotifications(childId).size());
+
+    // Re-send with same key is idempotent — {key}::{dest} UUIDs dedup via ON CONFLICT DO NOTHING
+    try (var client = pgContainer.dbosClient()) {
+      client.sendBulk(
+          List.of(new SendMessage(parent.workflowId(), "fan-out", "test-topic", key)),
+          DBOSClient.SendOptions.defaults().withSendToForks(true));
+    }
+    assertEquals(1, sysdb.getAllNotifications(childId).size());
+  }
+
+  @Test
+  public void testClientSendBulkPortableSerialization() throws Exception {
+    var handle1 = dbos.startWorkflow(() -> service.sendTest(1));
+    var handle2 = dbos.startWorkflow(() -> service.sendTest(2));
+
+    try (var client = pgContainer.dbosClient()) {
+      client.sendBulk(
+          List.of(
+              new SendMessage(handle1.workflowId(), "hello", "test-topic", null),
+              new SendMessage(handle2.workflowId(), "world", "test-topic", null)),
+          DBOSClient.SendOptions.portable());
+    }
+
+    assertEquals("1-hello", handle1.getResult());
+    assertEquals("2-world", handle2.getResult());
   }
 }

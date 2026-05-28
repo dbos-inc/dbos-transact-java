@@ -33,6 +33,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
@@ -466,28 +467,54 @@ public class DBOSExecutor implements AutoCloseable {
 
   // DBOS / DBOSClient API methods
 
+  private void sendBulkInternal(
+      List<SendMessage> messages,
+      boolean sendToForks,
+      SerializationStrategy serialization,
+      String functionName) {
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      int stepId = ctx.getAndIncrementFunctionId();
+      systemDatabase.sendBulk(
+          messages,
+          ctx.getWorkflowId(),
+          stepId,
+          functionName,
+          sendToForks,
+          serialization.formatName());
+    } else {
+      systemDatabase.sendBulk(
+          messages, null, -1, functionName, sendToForks, serialization.formatName());
+    }
+  }
+
+  public void sendBulk(
+      List<SendMessage> messages, boolean sendToForks, SerializationStrategy serialization) {
+    sendBulkInternal(messages, sendToForks, serialization, "DBOS.sendBulk");
+  }
+
+  public void send(
+      String destinationId,
+      Object message,
+      String topic,
+      String idempotencyKey,
+      SerializationStrategy serialization,
+      boolean sendToForks) {
+    sendBulkInternal(
+        List.of(new SendMessage(destinationId, message, topic, idempotencyKey)),
+        sendToForks,
+        serialization,
+        "DBOS.send");
+  }
+
   public void send(
       String destinationId,
       Object message,
       String topic,
       String idempotencyKey,
       SerializationStrategy serialization) {
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepId = ctx.getAndIncrementFunctionId();
-      systemDatabase.send(
-          ctx.getWorkflowId(),
-          stepId,
-          destinationId,
-          message,
-          topic,
-          idempotencyKey,
-          serialization.formatName());
-    } else {
-      systemDatabase.sendDirect(
-          destinationId, message, topic, idempotencyKey, serialization.formatName());
-    }
+    send(destinationId, message, topic, idempotencyKey, serialization, false);
   }
 
   public Object recv(String topic, Duration timeout) {

@@ -19,6 +19,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepInfo;
@@ -144,7 +145,7 @@ public class DBOS implements AutoCloseable {
   /**
    * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
    *
-   * @param listener
+   * @param listener the lifecycle listener to register
    */
   private void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     if (dbosExecutor.get() != null) {
@@ -543,7 +544,7 @@ public class DBOS implements AutoCloseable {
       @NonNull Object message,
       @Nullable String topic,
       @Nullable String idempotencyKey) {
-    send(destinationId, message, topic, idempotencyKey, null);
+    send(destinationId, message, topic, idempotencyKey, null, false);
   }
 
   /**
@@ -554,7 +555,7 @@ public class DBOS implements AutoCloseable {
    * @param topic topic to which the message is send
    */
   public void send(@NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
-    send(destinationId, message, topic, null, null);
+    send(destinationId, message, topic, null, null, false);
   }
 
   /**
@@ -572,8 +573,66 @@ public class DBOS implements AutoCloseable {
       @Nullable String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
+    send(destinationId, message, topic, idempotencyKey, serialization, false);
+  }
+
+  /**
+   * Send a message to a workflow with all options
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is sent
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   * @param serialization serialization strategy to use (null for default)
+   * @param sendToForks if true, also deliver the message to any forked copies of the destination
+   *     workflow
+   */
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @Nullable String topic,
+      @Nullable String idempotencyKey,
+      @Nullable SerializationStrategy serialization,
+      boolean sendToForks) {
     if (serialization == null) serialization = SerializationStrategy.DEFAULT;
-    ensureLaunched("send").send(destinationId, message, topic, idempotencyKey, serialization);
+    ensureLaunched("send")
+        .send(destinationId, message, topic, idempotencyKey, serialization, sendToForks);
+  }
+
+  /**
+   * Send multiple messages to workflows using default options
+   *
+   * @param messages list of messages to send
+   */
+  public void sendBulk(@NonNull List<SendMessage> messages) {
+    sendBulk(messages, false, null);
+  }
+
+  /**
+   * Send multiple messages to workflows
+   *
+   * @param messages list of messages to send
+   * @param sendToForks if true, also deliver each message to any forked copies of the destination
+   *     workflow
+   */
+  public void sendBulk(@NonNull List<SendMessage> messages, boolean sendToForks) {
+    sendBulk(messages, sendToForks, null);
+  }
+
+  /**
+   * Send multiple messages to workflows with full options
+   *
+   * @param messages list of messages to send
+   * @param sendToForks if true, also deliver each message to any forked copies of the destination
+   *     workflow
+   * @param serialization serialization strategy to use (null for default)
+   */
+  public void sendBulk(
+      @NonNull List<SendMessage> messages,
+      boolean sendToForks,
+      @Nullable SerializationStrategy serialization) {
+    if (serialization == null) serialization = SerializationStrategy.DEFAULT;
+    ensureLaunched("sendBulk").sendBulk(messages, sendToForks, serialization);
   }
 
   /**

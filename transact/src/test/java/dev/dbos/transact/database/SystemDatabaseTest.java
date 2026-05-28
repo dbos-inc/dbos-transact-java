@@ -26,6 +26,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -1547,8 +1548,20 @@ public class SystemDatabaseTest {
     var wfId = "get-all-notifications-wf-1";
     sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
 
-    sysdb.sendDirect(wfId, "message1", "topic1", "notif-uuid-1", null);
-    sysdb.sendDirect(wfId, "message2", "topic2", "notif-uuid-2", null);
+    sysdb.sendBulk(
+        List.of(new SendMessage(wfId, "message1", "topic1", "notif-uuid-1")),
+        null,
+        -1,
+        "DBOS.send",
+        false,
+        null);
+    sysdb.sendBulk(
+        List.of(new SendMessage(wfId, "message2", "topic2", "notif-uuid-2")),
+        null,
+        -1,
+        "DBOS.send",
+        false,
+        null);
 
     var notifications = sysdb.getAllNotifications(wfId);
 

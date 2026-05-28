@@ -24,6 +24,7 @@ import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -469,26 +470,17 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.checkChildWorkflow(ctx, workflowUuid, functionId));
   }
 
-  public void send(
+  public void sendBulk(
+      List<SendMessage> messages,
       String workflowId,
       int stepId,
-      String destinationId,
-      Object message,
-      String topic,
-      String messageId,
+      String functionName,
+      boolean sendToForks,
       String serialization) {
     dbRetry(
         () ->
-            NotificationsDAO.send(
-                ctx, workflowId, stepId, destinationId, message, topic, messageId, serialization));
-  }
-
-  public void sendDirect(
-      String destinationId, Object message, String topic, String messageId, String serialization) {
-    dbRetry(
-        () ->
-            NotificationsDAO.sendDirect(
-                ctx, destinationId, message, topic, messageId, serialization));
+            NotificationsDAO.sendBulk(
+                ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
   }
 
   public Object recv(

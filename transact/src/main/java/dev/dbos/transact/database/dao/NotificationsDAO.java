@@ -1,5 +1,7 @@
 package dev.dbos.transact.database.dao;
 
+import static java.util.stream.Collectors.joining;
+
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
@@ -10,6 +12,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -18,10 +21,17 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.jspecify.annotations.NonNull;
@@ -35,48 +45,134 @@ public class NotificationsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
-  public static void send(
+  private static Map<String, Set<String>> findForkDescendantsTxn(
+      Connection conn, String schema, List<String> workflowIds) throws SQLException {
+    Map<String, List<String>> children = new HashMap<>();
+    Set<String> seen = new LinkedHashSet<>(workflowIds);
+    List<String> frontier = new ArrayList<>(new LinkedHashSet<>(workflowIds));
+
+    while (!frontier.isEmpty()) {
+      String placeholders = frontier.stream().map(x -> "?").collect(joining(","));
+      String sql =
+          """
+          SELECT workflow_uuid, forked_from FROM "%s".workflow_status
+          WHERE forked_from IN (%s)
+          """
+              .formatted(schema, placeholders);
+      try (var stmt = conn.prepareStatement(sql)) {
+        for (int i = 0; i < frontier.size(); i++) stmt.setString(i + 1, frontier.get(i));
+        List<String> next = new ArrayList<>();
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            String forkedId = rs.getString("workflow_uuid");
+            String forkedFrom = rs.getString("forked_from");
+            children.computeIfAbsent(forkedFrom, k -> new ArrayList<>()).add(forkedId);
+            if (seen.add(forkedId)) next.add(forkedId);
+          }
+        }
+        frontier = next;
+      }
+    }
+
+    Map<String, Set<String>> result = new LinkedHashMap<>();
+    for (String root : workflowIds) {
+      if (result.containsKey(root)) continue;
+      Set<String> descendants = new LinkedHashSet<>();
+      Deque<String> stack = new ArrayDeque<>(children.getOrDefault(root, List.of()));
+      while (!stack.isEmpty()) {
+        String node = stack.pop();
+        if (!node.equals(root) && descendants.add(node)) {
+          stack.addAll(children.getOrDefault(node, List.of()));
+        }
+      }
+      result.put(root, descendants);
+    }
+    return result;
+  }
+
+  public static void sendBulk(
       DbContext ctx,
+      List<SendMessage> messages,
       String workflowId,
       int stepId,
-      String destinationId,
-      Object message,
-      String topic,
-      String messageId,
+      String functionName,
+      boolean sendToForks,
       String serialization)
       throws SQLException {
 
+    if (messages.isEmpty()) {
+      return;
+    }
+
+    // Reject duplicate idempotency keys within the batch
+    var keys = messages.stream().map(SendMessage::idempotencyKey).filter(Objects::nonNull).toList();
+    if (keys.size() != keys.stream().distinct().count()) {
+      throw new IllegalArgumentException("Duplicate idempotency keys within sendBulk batch");
+    }
+
     DBOSSerializer serializer = ctx.serializer();
     var startTime = System.currentTimeMillis();
-    String functionName = "DBOS.send";
-    String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
+
+    // Serialize each message once
+    record SerializedPair(SendMessage msg, SerializationUtil.SerializedResult serialized) {}
+    List<SerializedPair> pairs = new ArrayList<>(messages.size());
+    for (var msg : messages) {
+      pairs.add(
+          new SerializedPair(
+              msg, SerializationUtil.serializeValue(msg.message(), serialization, serializer)));
+    }
 
     try (Connection conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
-
       try {
-        StepResult recordedOutput =
-            StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
-
-        if (recordedOutput != null) {
-          logger.debug(
-              "Replaying send, id: {}, destination_uuid: {}, topic: {}",
-              stepId,
-              destinationId,
-              finalTopic);
-          conn.commit();
-          return;
-        } else {
-          logger.debug(
-              "Running send, id: {}, destination_uuid: {}, topic: {}",
-              stepId,
-              destinationId,
-              finalTopic);
+        // Check for replay if inside a workflow
+        if (workflowId != null) {
+          StepResult recorded =
+              StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
+          if (recorded != null) {
+            logger.debug("Replaying sendBulk, workflowId: {}, stepId: {}", workflowId, stepId);
+            conn.commit();
+            return;
+          }
         }
 
-        var finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
-        var serializedMsg = SerializationUtil.serializeValue(message, serialization, serializer);
+        // Collect all destination IDs for fork resolution
+        Map<String, Set<String>> forkDescendants = Map.of();
+        if (sendToForks) {
+          List<String> destIds =
+              pairs.stream().map(p -> p.msg().destinationId()).distinct().toList();
+          forkDescendants = findForkDescendantsTxn(conn, ctx.schema(), destIds);
+        }
 
+        // Build insert rows: base dest + sorted descendants
+        record InsertRow(
+            String destId,
+            SerializationUtil.SerializedResult serialized,
+            String topic,
+            String messageUuid) {}
+        List<InsertRow> rows = new ArrayList<>();
+        for (var pair : pairs) {
+          var msg = pair.msg();
+          String baseDest = msg.destinationId();
+          String finalTopic = (msg.topic() != null) ? msg.topic() : Constants.DBOS_NULL_TOPIC;
+
+          List<String> destinations = new ArrayList<>();
+          destinations.add(baseDest);
+          if (sendToForks) {
+            var desc = forkDescendants.getOrDefault(baseDest, Set.of());
+            desc.stream().sorted().forEach(destinations::add);
+          }
+
+          for (String dest : destinations) {
+            var wfid =
+                msg.idempotencyKey() != null
+                    ? msg.idempotencyKey() + "::" + dest
+                    : UUID.randomUUID().toString();
+            rows.add(new InsertRow(dest, pair.serialized(), finalTopic, wfid));
+          }
+        }
+
+        // Batch-insert all rows
         final String sql =
             """
               INSERT INTO "%s".notifications
@@ -87,25 +183,31 @@ public class NotificationsDAO {
                 .formatted(ctx.schema());
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, destinationId);
-          stmt.setString(2, finalTopic);
-          stmt.setString(3, serializedMsg.serializedValue());
-          stmt.setString(4, serializedMsg.serialization());
-          stmt.setString(5, finalMessageId);
-          stmt.executeUpdate();
+          for (var row : rows) {
+            stmt.setString(1, row.destId());
+            stmt.setString(2, row.topic());
+            stmt.setString(3, row.serialized().serializedValue());
+            stmt.setString(4, row.serialized().serialization());
+            stmt.setString(5, row.messageUuid());
+            stmt.addBatch();
+          }
+          stmt.executeBatch();
         } catch (SQLException e) {
           if ("23503".equals(e.getSQLState())) {
-            throw new DBOSNonExistentWorkflowException(destinationId);
+            var distinctDests = rows.stream().map(InsertRow::destId).distinct().toList();
+            throw new DBOSNonExistentWorkflowException(
+                distinctDests.size() == 1 ? distinctDests.get(0) : null);
           }
           throw e;
         }
 
-        var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-        StepsDAO.recordStepResult(
-            conn, ctx.schema(), output, startTime, System.currentTimeMillis());
+        if (workflowId != null) {
+          var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
+          StepsDAO.recordStepResult(
+              conn, ctx.schema(), output, startTime, System.currentTimeMillis());
+        }
 
         conn.commit();
-
       } catch (Exception e) {
         try {
           conn.rollback();
@@ -114,44 +216,6 @@ public class NotificationsDAO {
         }
         throw e;
       }
-    }
-  }
-
-  public static void sendDirect(
-      DbContext ctx,
-      String destinationId,
-      Object message,
-      String topic,
-      String messageId,
-      String serialization)
-      throws SQLException {
-    DBOSSerializer serializer = ctx.serializer();
-    String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
-    String finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
-    var serializedMsg = SerializationUtil.serializeValue(message, serialization, serializer);
-
-    final String sql =
-        """
-          INSERT INTO "%s".notifications
-            (destination_uuid, topic, message, message_uuid, serialization)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT (message_uuid) DO NOTHING
-        """
-            .formatted(ctx.schema());
-
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, destinationId);
-      stmt.setString(2, finalTopic);
-      stmt.setString(3, serializedMsg.serializedValue());
-      stmt.setString(4, finalMessageId);
-      stmt.setString(5, serializedMsg.serialization());
-      stmt.executeUpdate();
-    } catch (SQLException e) {
-      if ("23503".equals(e.getSQLState())) {
-        throw new DBOSNonExistentWorkflowException(destinationId);
-      }
-      throw e;
     }
   }
 
