@@ -46,12 +46,23 @@ public class DebouncerTest {
   public static class DebouncedServiceImpl implements DebouncedService {
     private final AtomicInteger callCount = new AtomicInteger();
     private final ConcurrentLinkedQueue<String> callArgs = new ConcurrentLinkedQueue<>();
+    // When set, the workflow blocks here while running so tests can inspect its in-flight status.
+    volatile CountDownLatch gate;
 
     @Override
     @Workflow
     public String process(String input) {
       callCount.incrementAndGet();
       callArgs.add(input);
+      if (gate != null) {
+        try {
+          // Ceiling only; the test counts the gate down as soon as it has observed the status.
+          // Must exceed the observation window so the workflow stays in-flight until then.
+          gate.await(60, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      }
       return "result:" + input;
     }
 
@@ -381,8 +392,10 @@ public class DebouncerTest {
 
     // Simulate a crash where the debouncer ran but did not durably record completion: flip only
     // the debouncer workflow back to PENDING (the user workflow stays SUCCESS) and recover it.
+    // The debouncer finishes asynchronously after starting the user workflow, so wait until it is
+    // SUCCESS before flipping — otherwise the flip would race its own completion.
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    markDebouncerPending();
+    awaitDebouncerFlippedToPending(Duration.ofSeconds(30));
 
     var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
     assertEquals(1, recovered.size());
@@ -390,7 +403,10 @@ public class DebouncerTest {
       h.getResult();
     }
 
-    // Replay reused the same user workflow id and did not run the user workflow again.
+    // Replay reused the same user workflow id and did not run the user workflow again. The count
+    // check is independent of timing: a second user workflow would create a row at enqueue/start
+    // time, before it could execute, so it would be caught even if its body had not run yet.
+    assertEquals(1, countWorkflowsByName("process"));
     assertEquals(1, serviceImpl.callCount());
     assertEquals(List.of("v1"), serviceImpl.callArgs());
     WorkflowHandle<String, Exception> userHandle = dbos.retrieveWorkflow(userWorkflowId);
@@ -398,15 +414,81 @@ public class DebouncerTest {
     assertEquals(WorkflowState.SUCCESS, userHandle.getStatus().status());
   }
 
-  private void markDebouncerPending() throws SQLException {
-    var sql =
-        "UPDATE dbos.workflow_status SET status = ?, queue_name = NULL, updated_at = ? WHERE name = ?";
+  private int countWorkflowsByName(String name) throws SQLException {
+    var sql = "SELECT count(*) FROM dbos.workflow_status WHERE name = ?";
     try (Connection conn = pgContainer.dataSource().getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, WorkflowState.PENDING.name());
-      stmt.setLong(2, Instant.now().toEpochMilli());
-      stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
-      stmt.executeUpdate();
+      stmt.setString(1, name);
+      try (var rs = stmt.executeQuery()) {
+        rs.next();
+        return rs.getInt(1);
+      }
     }
+  }
+
+  // withDeduplicationId must forward the id to the queued user workflow.
+  @Test
+  public void deduplicationIdForwardedToQueuedUserWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    Queue userQueue = new Queue("dedup-user-queue");
+    dbos.registerQueue(userQueue);
+    serviceImpl.gate = new CountDownLatch(1);
+    dbos.launch();
+
+    String dedupId = "user-dedup-1";
+    var handle =
+        dbos.<String>debouncer()
+            .withQueue(userQueue)
+            .withDeduplicationId(dedupId)
+            .debounce("dd-key", Duration.ofMillis(300), () -> svc.process("v1"));
+
+    // The user workflow blocks on the gate while running, so its deduplication_id is still set
+    // (it is cleared only on completion). Wait for it to appear, then assert it was forwarded.
+    String observed = awaitDeduplicationId(handle, Duration.ofSeconds(30));
+    assertEquals(dedupId, observed);
+
+    serviceImpl.gate.countDown();
+    assertEquals("result:v1", handle.getResult());
+    assertEquals(1, serviceImpl.callCount());
+  }
+
+  private String awaitDeduplicationId(WorkflowHandle<String, ?> handle, Duration timeout)
+      throws InterruptedException {
+    long deadline = System.currentTimeMillis() + timeout.toMillis();
+    while (System.currentTimeMillis() < deadline) {
+      try {
+        var status = handle.getStatus();
+        if (status != null && status.deduplicationId() != null) {
+          return status.deduplicationId();
+        }
+      } catch (RuntimeException ignored) {
+        // status row not present yet
+      }
+      Thread.sleep(50);
+    }
+    throw new AssertionError("user workflow deduplicationId not observed within timeout");
+  }
+
+  // Flip the (completed) debouncer workflow back to PENDING, retrying until it has reached SUCCESS
+  // so the result is deterministic regardless of how the debouncer's async completion interleaves.
+  private void awaitDebouncerFlippedToPending(Duration timeout) throws Exception {
+    var sql =
+        "UPDATE dbos.workflow_status SET status = ?, queue_name = NULL, updated_at = ?"
+            + " WHERE name = ? AND status = ?";
+    long deadline = System.currentTimeMillis() + timeout.toMillis();
+    while (System.currentTimeMillis() < deadline) {
+      try (Connection conn = pgContainer.dataSource().getConnection();
+          PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, WorkflowState.PENDING.name());
+        stmt.setLong(2, Instant.now().toEpochMilli());
+        stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
+        stmt.setString(4, WorkflowState.SUCCESS.name());
+        if (stmt.executeUpdate() == 1) {
+          return;
+        }
+      }
+      Thread.sleep(50);
+    }
+    throw new AssertionError("debouncer workflow did not reach SUCCESS within timeout");
   }
 }
