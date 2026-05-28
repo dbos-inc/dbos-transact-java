@@ -97,7 +97,7 @@ public class DBOS implements AutoCloseable {
     this.debouncerWorkflow =
         integration.registerInternalWorkflow(
             Constants.DEBOUNCER_WORKFLOW_NAME,
-            Constants.DEBOUNCER_SERVICE_CLASS_NAME,
+            Constants.DEBOUNCER_CLASS_NAME,
             internalWorkflows,
             InternalWorkflows.debouncerWorkflowMethod());
   }

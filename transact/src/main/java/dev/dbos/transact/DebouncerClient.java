@@ -261,7 +261,7 @@ public final class DebouncerClient<R> {
     var enqueueOpts =
         new DBOSClient.EnqueueOptions(
                 Constants.DEBOUNCER_WORKFLOW_NAME,
-                Constants.DEBOUNCER_SERVICE_CLASS_NAME,
+                Constants.DEBOUNCER_CLASS_NAME,
                 Constants.DBOS_INTERNAL_QUEUE)
             .withDeduplicationId(deduplicationId);
 
