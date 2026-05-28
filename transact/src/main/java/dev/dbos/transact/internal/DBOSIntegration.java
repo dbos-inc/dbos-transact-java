@@ -13,7 +13,6 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -193,29 +192,29 @@ public class DBOSIntegration {
   }
 
   /**
-   * Get all workflows registered with DBOS.
+   * Get all user-registered workflows. Internal/system workflows registered by DBOS itself (for
+   * example, the debouncer service workflow) are excluded.
    *
-   * @return list of all registered workflow methods
+   * @return list of all user-registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     var executor = executorSupplier.get();
-    if (executor != null) {
-      return executor.getRegisteredWorkflows();
-    }
-    return Collections.unmodifiableCollection(workflowRegistry.getWorkflowSnapshot().values());
+    return executor != null
+        ? executor.getRegisteredWorkflows()
+        : workflowRegistry.getWorkflowSnapshot().values();
   }
 
   /**
-   * Get all workflow instances registered with DBOS.
+   * Get all user-registered workflow instances. Internal/system instances registered by DBOS itself
+   * (for example, the debouncer service) are excluded.
    *
-   * @return list of all class instances containing registered workflow methods
+   * @return list of all user-registered class instances containing workflow methods
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     var executor = executorSupplier.get();
-    if (executor != null) {
-      return executor.getRegisteredWorkflowInstances();
-    }
-    return Collections.unmodifiableCollection(workflowRegistry.getInstanceSnapshot().values());
+    return executor != null
+        ? executor.getRegisteredWorkflowInstances()
+        : workflowRegistry.getInstanceSnapshot().values();
   }
 
   /**
@@ -241,7 +240,7 @@ public class DBOSIntegration {
    * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
    */
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
     var executor = executorSupplier.get();
     if (executor != null) {
       return executor.getRegisteredWorkflow(workflowName, className, instanceName);

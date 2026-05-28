@@ -16,6 +16,13 @@ public class Constants {
 
   public static final String DBOS_INTERNAL_QUEUE = "_dbos_internal_queue";
 
+  public static final String DEBOUNCER_WORKFLOW_NAME = "debouncerWorkflow";
+  public static final String DEBOUNCER_CLASS_NAME = "DBOS.InternalWorkflows";
+  public static final String DEBOUNCER_TOPIC = "_dbos_debouncer_topic";
+  // Event key published by the debouncer-workflow so callers can retrieve the pre-assigned
+  // user workflow id without relying on Jackson deserialization of workflow inputs.
+  public static final String DEBOUNCER_CHILD_ID_KEY = "_dbos_debouncer_child_id";
+
   public static final String SYSTEM_JDBC_URL_ENV_VAR = "DBOS_SYSTEM_JDBC_URL";
 
   public static final int DEFAULT_MAX_RECOVERY_ATTEMPTS = 100;

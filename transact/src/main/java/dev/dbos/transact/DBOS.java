@@ -4,6 +4,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -11,6 +12,7 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.workflow.Debouncer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -28,6 +30,7 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -65,6 +68,7 @@ public class DBOS implements AutoCloseable {
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
+  private final RegisteredWorkflow debouncerWorkflow;
 
   private AlertHandler alertHandler;
 
@@ -87,6 +91,16 @@ public class DBOS implements AutoCloseable {
     this.integration =
         new DBOSIntegration(
             this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
+    // Register the built-in debouncer service workflow directly (without a proxy) so callers can
+    // use Debouncer without having to declare and wire the service themselves.
+    var internalWorkflows = new InternalWorkflows(this, dbosExecutor::get);
+    workflowRegistry.registerInternalInstance(internalWorkflows);
+    this.debouncerWorkflow =
+        workflowRegistry.registerInternalWorkflow(
+            Constants.DEBOUNCER_WORKFLOW_NAME,
+            Constants.DEBOUNCER_CLASS_NAME,
+            internalWorkflows,
+            InternalWorkflows.debouncerWorkflowMethod());
   }
 
   /**
@@ -346,6 +360,8 @@ public class DBOS implements AutoCloseable {
             new HashSet<>(this.lifecycleRegistry),
             workflowRegistry.getWorkflowSnapshot(),
             workflowRegistry.getInstanceSnapshot(),
+            workflowRegistry.getInternalWorkflowSnapshot(),
+            workflowRegistry.getInternalInstanceSnapshot(),
             queueRegistry.getSnapshot(),
             alertHandler);
       }
@@ -460,6 +476,21 @@ public class DBOS implements AutoCloseable {
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, null);
+  }
+
+  /**
+   * Build a {@link Debouncer} that consolidates a series of calls on the same key into one
+   * execution of the targeted workflow using the most recent arguments.
+   *
+   * <p>The returned debouncer is immutable; configuration helpers like {@link
+   * Debouncer#withQueue(String)} and {@link Debouncer#withDebounceTimeout(java.time.Duration)}
+   * return new instances.
+   *
+   * @param <R> the return type of the debounced workflow (used only for type inference)
+   * @return a fresh debouncer bound to this DBOS instance
+   */
+  public <R> @NonNull Debouncer<R> debouncer() {
+    return new Debouncer<>(this, ensureLaunched("debouncer"), debouncerWorkflow);
   }
 
   /**

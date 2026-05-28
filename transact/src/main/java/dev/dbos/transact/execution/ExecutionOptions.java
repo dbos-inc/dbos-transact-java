@@ -126,6 +126,38 @@ public record ExecutionOptions(
         serialization);
   }
 
+  public ExecutionOptions withPriority(Integer priority) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization);
+  }
+
+  public ExecutionOptions withAppVersion(String appVersion) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization);
+  }
+
   public Duration timeoutDuration() {
     if (timeout instanceof Timeout.Explicit e) {
       return e.value();

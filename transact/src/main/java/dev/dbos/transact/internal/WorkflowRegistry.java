@@ -34,12 +34,27 @@ public class WorkflowRegistry {
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, RegisteredWorkflow> wfRegistry =
       new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, RegisteredWorkflowInstance> internalWfInstRegistry =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, RegisteredWorkflow> internalWfRegistry =
+      new ConcurrentHashMap<>();
 
   public void registerInstance(@Nullable String instanceName, @NonNull Object target) {
+    registerInstance(instanceName, target, wfInstRegistry);
+  }
+
+  public void registerInternalInstance(@NonNull Object target) {
+    registerInstance(null, target, internalWfInstRegistry);
+  }
+
+  private static void registerInstance(
+      @Nullable String instanceName,
+      @NonNull Object target,
+      ConcurrentHashMap<String, RegisteredWorkflowInstance> registry) {
     var className = getWorkflowClassName(target);
     var fqName = RegisteredWorkflowInstance.fullyQualifiedInstName(className, instanceName);
     var regClass = new RegisteredWorkflowInstance(className, instanceName, target);
-    var previous = wfInstRegistry.putIfAbsent(fqName, regClass);
+    var previous = registry.putIfAbsent(fqName, regClass);
     if (previous != null) {
       throw new IllegalStateException("Workflow class already registered with name: " + fqName);
     }
@@ -53,6 +68,35 @@ public class WorkflowRegistry {
       @NonNull Method method,
       @Nullable Integer maxRecoveryAttempts,
       @Nullable SerializationStrategy serializationStrategy) {
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        maxRecoveryAttempts,
+        serializationStrategy,
+        wfRegistry);
+  }
+
+  public RegisteredWorkflow registerInternalWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull Object target,
+      @NonNull Method method) {
+    return registerWorkflow(
+        workflowName, className, null, target, method, null, null, internalWfRegistry);
+  }
+
+  private static RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy,
+      ConcurrentHashMap<String, RegisteredWorkflow> registry) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
 
     var regWorkflow =
@@ -65,7 +109,7 @@ public class WorkflowRegistry {
             Objects.requireNonNullElse(maxRecoveryAttempts, -1),
             Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT));
 
-    var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);
+    var previous = registry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
     }
@@ -78,5 +122,13 @@ public class WorkflowRegistry {
 
   public Map<String, RegisteredWorkflowInstance> getInstanceSnapshot() {
     return Map.copyOf(wfInstRegistry);
+  }
+
+  public Map<String, RegisteredWorkflow> getInternalWorkflowSnapshot() {
+    return Map.copyOf(internalWfRegistry);
+  }
+
+  public Map<String, RegisteredWorkflowInstance> getInternalInstanceSnapshot() {
+    return Map.copyOf(internalWfInstRegistry);
   }
 }

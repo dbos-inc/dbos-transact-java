@@ -78,7 +78,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -95,7 +94,7 @@ public class DBOSExecutor implements AutoCloseable {
   // Invocation and hookHolder are used by startWorkflow to capture
   // workflow information w/o executing workflow function
 
-  record Invocation(
+  public record Invocation(
       DBOSExecutor executor,
       String workflowName,
       String className,
@@ -121,6 +120,7 @@ public class DBOSExecutor implements AutoCloseable {
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
+  private Map<String, RegisteredWorkflow> internalWorkflowMap;
   private Map<String, Queue> queueMap;
   private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
@@ -166,6 +166,8 @@ public class DBOSExecutor implements AutoCloseable {
       Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,
+      Map<String, RegisteredWorkflow> internalWorkflowMap,
+      Map<String, RegisteredWorkflowInstance> internalInstanceMap,
       List<Queue> queues,
       AlertHandler alertHandler) {
 
@@ -174,6 +176,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = workflowMap;
       this.instanceMap = instanceMap;
+      this.internalWorkflowMap = internalWorkflowMap;
       this.queueMap =
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
@@ -321,6 +324,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = null;
       this.instanceMap = null;
+      this.internalWorkflowMap = null;
 
       logger.debug("DBOS Executor stopped");
     }
@@ -349,6 +353,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   SystemDatabase getSystemDatabase() {
     return systemDatabase;
+  }
+
+  public @Nullable String findWorkflowIdByDeduplicationId(
+      String queueName, String deduplicationId) {
+    return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
   }
 
   QueueService getQueueService() {
@@ -390,9 +399,13 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      String workflowName, String className, String instanceName) {
+      String workflowName, String className, @Nullable String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    return Optional.ofNullable(this.workflowMap.get(fqName));
+    var wf = this.workflowMap.get(fqName);
+    if (wf == null) {
+      wf = this.internalWorkflowMap.get(fqName);
+    }
+    return Optional.ofNullable(wf);
   }
 
   public Optional<Queue> findQueue(String queueName) {
@@ -1083,7 +1096,7 @@ public class DBOSExecutor implements AutoCloseable {
     return runStepInternal(step, options, childWorkflowId);
   }
 
-  private <T, E extends Exception> T runDbosFunctionAsStep(
+  public <T, E extends Exception> T runDbosFunctionAsStep(
       @NonNull ThrowingSupplier<T, E> step,
       @NonNull String stepName,
       @Nullable String childWorkflowId)
@@ -1291,6 +1304,36 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  /**
+   * Capture the workflow invocation triggered by the supplied lambda without executing the
+   * workflow. The lambda must call exactly one @Workflow method on a registered proxy on this
+   * executor.
+   */
+  public <T, E extends Exception> Invocation captureInvocation(ThrowingSupplier<T, E> wfLambda) {
+    AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
+    DBOSExecutor.hookHolder.set(
+        (invocation) -> {
+          if (!capturedInvocation.compareAndSet(null, invocation)) {
+            throw new RuntimeException("Only one @Workflow can be called in the captured lambda");
+          }
+        });
+    try {
+      wfLambda.execute();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      DBOSExecutor.hookHolder.remove();
+    }
+    var invocation =
+        Objects.requireNonNull(
+            capturedInvocation.get(), "The lambda must call exactly one @Workflow");
+    if (invocation.executor() != this) {
+      throw new IllegalStateException(
+          "The @Workflow method must be called on the DBOS instance passed to the lambda");
+    }
+    return invocation;
+  }
+
   // execute a workflow via startWorkflow
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> wfLambda, StartWorkflowOptions options) {
@@ -1303,35 +1346,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
 
-    // set the invocation hook holder and invoke the lambda to retrieve the invocation information
-    Function<ThrowingSupplier<T, E>, Invocation> invocationSupplier =
-        (lambda) -> {
-          AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
-          DBOSExecutor.hookHolder.set(
-              (invocation) -> {
-                if (!capturedInvocation.compareAndSet(null, invocation)) {
-                  throw new RuntimeException(
-                      "Only one @Workflow can be called in the startWorkflow lambda");
-                }
-              });
-
-          try {
-            lambda.execute();
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          } finally {
-            DBOSExecutor.hookHolder.remove();
-          }
-
-          return Objects.requireNonNull(
-              capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
-        };
-
-    var invocation = invocationSupplier.apply(wfLambda);
-    if (invocation.executor() != this) {
-      throw new IllegalStateException(
-          "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
-    }
+    var invocation = captureInvocation(wfLambda);
     var workflow =
         getRegisteredWorkflow(
                 invocation.workflowName(), invocation.className(), invocation.instanceName())
@@ -1415,7 +1430,9 @@ public class DBOSExecutor implements AutoCloseable {
     var wfName =
         RegisteredWorkflow.fullyQualifiedName(
             status.workflowName(), status.className(), status.instanceName());
-    RegisteredWorkflow workflow = workflowMap.get(wfName);
+    RegisteredWorkflow workflow =
+        getRegisteredWorkflow(status.workflowName(), status.className(), status.instanceName())
+            .orElse(null);
 
     if (workflow == null) {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
@@ -1480,7 +1497,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateWorkflow(String workflowName, String className, String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    if (!workflowMap.containsKey(fqName)) {
+    if (!workflowMap.containsKey(fqName) && !internalWorkflowMap.containsKey(fqName)) {
       throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
     }
   }
@@ -1569,15 +1586,12 @@ public class DBOSExecutor implements AutoCloseable {
     if (options.deduplicationId() != null) {
       badOptionList.add("deduplicationId");
     }
-
     if (options.priority() != null) {
       badOptionList.add("priority");
     }
-
     if (options.queuePartitionKey() != null) {
       badOptionList.add("queuePartitionKey");
     }
-
     if (options.delay() != null) {
       badOptionList.add("delay");
     }
@@ -1891,5 +1905,51 @@ public class DBOSExecutor implements AutoCloseable {
   private void persistWorkflowError(String workflowId, Throwable error, String serialization) {
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
     systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
+  }
+
+  /**
+   * Record an ERROR result for a workflow that was never started, so that handles awaiting it fail
+   * fast instead of polling forever. Used by internal workflows (e.g. the debouncer) that take
+   * responsibility for starting a user workflow and must surface their own failures to the caller's
+   * handle when they cannot.
+   */
+  public void recordErrorForUnstartedWorkflow(
+      String workflowId,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      @Nullable Object[] args,
+      Throwable error) {
+    String serialization = this.serializer.name();
+    var serializedArgs =
+        SerializationUtil.serializeArgs(
+            Objects.requireNonNullElseGet(args, () -> new Object[0]),
+            null,
+            serialization,
+            this.serializer);
+    var serializedError = SerializationUtil.serializeError(error, serialization, this.serializer);
+    var initStatus =
+        new WorkflowStatusInternal(
+            workflowId,
+            workflowName,
+            className,
+            instanceName,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            serializedArgs.serializedValue(),
+            executorId(),
+            appVersion(),
+            appId(),
+            null,
+            null,
+            null,
+            serializedArgs.serialization());
+    systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }
 }

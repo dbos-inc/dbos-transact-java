@@ -51,6 +51,7 @@ import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -373,6 +374,28 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Insert a workflow_status row and immediately mark it ERROR, for a workflow that was never
+   * actually started. Used when an internal workflow that is responsible for starting a user
+   * workflow fails before it can do so: without a status row, any handle awaiting the user workflow
+   * would poll {@link #awaitWorkflowResult} forever.
+   *
+   * @param initStatus metadata for the workflow that will be recorded as failed
+   * @param error the error serialized as json
+   */
+  public static void recordErrorForUnstartedWorkflow(
+      DbContext ctx, WorkflowStatusInternal initStatus, String error) throws SQLException {
+
+    // No explicit transaction: the calling debouncer workflow is itself durable, so a crash
+    // between these two statements is replayed and retried. ON CONFLICT makes the insert
+    // idempotent and the outcome update is safe to repeat.
+    try (var conn = ctx.getConnection()) {
+      insertWorkflowStatus(conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false);
+      updateWorkflowOutcome(
+          conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
+    }
+  }
+
   public static String getWorkflowSerialization(DbContext ctx, String workflowId)
       throws SQLException {
     var sql =
@@ -419,6 +442,32 @@ public class WorkflowDAO {
     }
 
     return null;
+  }
+
+  /**
+   * Look up the workflow_uuid of the currently-enqueued or running workflow with a given
+   * (queue_name, deduplication_id) pair. Uses the UNIQUE index on that pair for O(1) lookup.
+   * Returns {@code null} if no active workflow with that deduplication id exists.
+   */
+  public static @Nullable String findWorkflowIdByDeduplicationId(
+      DbContext ctx, String queueName, String deduplicationId) throws SQLException {
+    var sql =
+        """
+          SELECT workflow_uuid
+            FROM "%s".workflow_status
+           WHERE queue_name = ?
+             AND deduplication_id = ?
+           LIMIT 1
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, queueName);
+      stmt.setString(2, deduplicationId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString("workflow_uuid") : null;
+      }
+    }
   }
 
   public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)

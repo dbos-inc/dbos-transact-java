@@ -816,6 +816,29 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Find the workflow ID of the active workflow with the given queue and deduplication ID.
+   *
+   * @param queueName name of the queue to search
+   * @param deduplicationId deduplication ID to look up
+   * @return the workflow ID, or {@code null} if not found
+   */
+  public @Nullable String findWorkflowIdByDeduplicationId(
+      @NonNull String queueName, @NonNull String deduplicationId) {
+    return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
+  }
+
+  /**
+   * Create a {@link DebouncerClient} that coalesces repeated calls on the same key into a single
+   * execution of the named workflow.
+   *
+   * @param workflowName name of the workflow function to debounce
+   * @return a new DebouncerClient bound to this client
+   */
+  public <R> @NonNull DebouncerClient<R> debouncer(@NonNull String workflowName) {
+    return new DebouncerClient<>(this, workflowName);
+  }
+
+  /**
    * Cancel a worflow
    *
    * @param workflowId ID of the workflow to cancel
