@@ -69,6 +69,10 @@ public class InternalWorkflows {
     Object[] latestArgs = initial.args();
     Duration debouncePeriod = initial.debouncePeriod();
 
+    DBOSExecutor executor = executorSupplier.get();
+    if (executor == null) {
+      throw new IllegalStateException("DBOS has not been launched. debounceWorkflow cannot run.");
+    }
     while (true) {
       long nowEpochMs = dbos.runStep(() -> Instant.now().toEpochMilli(), "DBOS.debouncerNow");
       Duration remaining = Duration.ofMillis(deadlineEpochMs - nowEpochMs);
@@ -88,7 +92,6 @@ public class InternalWorkflows {
       dbos.setEvent(next.messageId(), next.messageId());
     }
 
-    DBOSExecutor executor = executorSupplier.get();
     Optional<RegisteredWorkflow> optWorkflow =
         executor.getRegisteredWorkflow(
             options.workflowName(), options.className(), options.instanceName());
