@@ -5,11 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -358,5 +364,49 @@ public class DebouncerTest {
 
     // Each window produces an independent user workflow.
     assertNotEquals(h1.workflowId(), h2.workflowId());
+  }
+
+  // Recovering/replaying the internal debouncer workflow must be idempotent: it reuses the
+  // pre-assigned user workflow id and must not start a second user workflow execution.
+  @Test
+  public void recoveryDoesNotRestartUserWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    var handle =
+        dbos.<String>debouncer().debounce("rec-key", Duration.ofMillis(300), () -> svc.process("v1"));
+    String userWorkflowId = handle.workflowId();
+    assertEquals("result:v1", handle.getResult());
+    assertEquals(1, serviceImpl.callCount());
+
+    // Simulate a crash where the debouncer ran but did not durably record completion: flip only
+    // the debouncer workflow back to PENDING (the user workflow stays SUCCESS) and recover it.
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    markDebouncerPending();
+
+    var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    assertEquals(1, recovered.size());
+    for (var h : recovered) {
+      h.getResult();
+    }
+
+    // Replay reused the same user workflow id and did not run the user workflow again.
+    assertEquals(1, serviceImpl.callCount());
+    assertEquals(List.of("v1"), serviceImpl.callArgs());
+    WorkflowHandle<String, Exception> userHandle = dbos.retrieveWorkflow(userWorkflowId);
+    assertEquals("result:v1", userHandle.getResult());
+    assertEquals(WorkflowState.SUCCESS, userHandle.getStatus().status());
+  }
+
+  private void markDebouncerPending() throws SQLException {
+    var sql =
+        "UPDATE dbos.workflow_status SET status = ?, queue_name = NULL, updated_at = ? WHERE name = ?";
+    try (Connection conn = pgContainer.dataSource().getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, WorkflowState.PENDING.name());
+      stmt.setLong(2, Instant.now().toEpochMilli());
+      stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
+      stmt.executeUpdate();
+    }
   }
 }
