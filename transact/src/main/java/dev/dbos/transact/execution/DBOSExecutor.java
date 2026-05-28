@@ -121,7 +121,6 @@ public class DBOSExecutor implements AutoCloseable {
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
   private Map<String, RegisteredWorkflow> internalWorkflowMap;
-  private Map<String, RegisteredWorkflowInstance> internalInstanceMap;
   private Map<String, Queue> queueMap;
   private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
@@ -178,7 +177,6 @@ public class DBOSExecutor implements AutoCloseable {
       this.workflowMap = workflowMap;
       this.instanceMap = instanceMap;
       this.internalWorkflowMap = internalWorkflowMap;
-      this.internalInstanceMap = internalInstanceMap;
       this.queueMap =
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
@@ -327,7 +325,6 @@ public class DBOSExecutor implements AutoCloseable {
       this.workflowMap = null;
       this.instanceMap = null;
       this.internalWorkflowMap = null;
-      this.internalInstanceMap = null;
 
       logger.debug("DBOS Executor stopped");
     }
