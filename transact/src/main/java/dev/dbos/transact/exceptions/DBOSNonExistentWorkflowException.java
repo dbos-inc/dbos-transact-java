@@ -11,7 +11,10 @@ public class DBOSNonExistentWorkflowException extends RuntimeException {
   private final String workflowId;
 
   public DBOSNonExistentWorkflowException(String workflowId) {
-    super(String.format("Workflow does not exist %s", workflowId));
+    super(
+        workflowId != null
+            ? String.format("Workflow does not exist %s", workflowId)
+            : "One or more destination workflows do not exist");
     this.workflowId = workflowId;
   }
 
