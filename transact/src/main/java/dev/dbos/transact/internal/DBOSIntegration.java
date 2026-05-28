@@ -153,29 +153,6 @@ public class DBOSIntegration {
   }
 
   /**
-   * Register an internal DBOS system workflow. Internal workflows are tracked separately from
-   * user-registered workflows and are excluded from {@link #getRegisteredWorkflows()} and {@link
-   * #getRegisteredWorkflowInstances()}, but remain accessible to the executor for lookup, recovery,
-   * and dequeue.
-   *
-   * @param workflowName logical name of the internal workflow
-   * @param className name of the class that declares the workflow method
-   * @param target the singleton instance on which the method will be invoked
-   * @param method the workflow {@link Method}
-   * @throws IllegalStateException if called after DBOS is launched
-   */
-  public RegisteredWorkflow registerInternalWorkflow(
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull Object target,
-      @NonNull Method method) {
-    if (executorSupplier.get() != null) {
-      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-    }
-    return workflowRegistry.registerInternalWorkflow(workflowName, className, target, method);
-  }
-
-  /**
    * Start or enqueue a workflow by its {@link RegisteredWorkflow} registration. Intended for use by
    * event listeners and other infrastructure that dispatches workflows by registration rather than
    * by direct invocation.
@@ -193,23 +170,6 @@ public class DBOSIntegration {
       @NonNull Object[] args,
       @Nullable StartWorkflowOptions options) {
     return executor("startRegisteredWorkflow").startRegisteredWorkflow(regWorkflow, args, options);
-  }
-
-  /**
-   * Record a terminal ERROR for a workflow that was never started, so handles awaiting it fail fast
-   * instead of polling forever. Used by the built-in debouncer workflow when it cannot start the
-   * user workflow it is responsible for.
-   */
-  public void recordErrorForUnstartedWorkflow(
-      String workflowId,
-      String workflowName,
-      String className,
-      @Nullable String instanceName,
-      @Nullable Object[] args,
-      Throwable error) {
-    executor("recordErrorForUnstartedWorkflow")
-        .recordErrorForUnstartedWorkflow(
-            workflowId, workflowName, className, instanceName, args, error);
   }
 
   /**

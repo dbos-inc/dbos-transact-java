@@ -4,12 +4,14 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +26,11 @@ public class InternalWorkflows {
   private static final Logger logger = LoggerFactory.getLogger(InternalWorkflows.class);
 
   private final DBOS dbos;
+  private final Supplier<DBOSExecutor> executorSupplier;
 
-  public InternalWorkflows(DBOS dbos) {
+  public InternalWorkflows(DBOS dbos, Supplier<DBOSExecutor> executorSupplier) {
     this.dbos = dbos;
+    this.executorSupplier = executorSupplier;
   }
 
   /**
@@ -84,10 +88,10 @@ public class InternalWorkflows {
       dbos.setEvent(next.messageId(), next.messageId());
     }
 
+    DBOSExecutor executor = executorSupplier.get();
     Optional<RegisteredWorkflow> optWorkflow =
-        dbos.integration()
-            .getRegisteredWorkflow(
-                options.workflowName(), options.className(), options.instanceName());
+        executor.getRegisteredWorkflow(
+            options.workflowName(), options.className(), options.instanceName());
     if (optWorkflow.isEmpty()) {
       // The user workflow is not registered in this process (e.g. it was renamed/removed, or we
       // are recovering on a build that no longer declares it). We can never start it, so record
@@ -100,14 +104,13 @@ public class InternalWorkflows {
           options.workflowName(),
           ctx.userWorkflowId(),
           notFound);
-      dbos.integration()
-          .recordErrorForUnstartedWorkflow(
-              ctx.userWorkflowId(),
-              options.workflowName(),
-              options.className(),
-              options.instanceName(),
-              latestArgs,
-              notFound);
+      executor.recordErrorForUnstartedWorkflow(
+          ctx.userWorkflowId(),
+          options.workflowName(),
+          options.className(),
+          options.instanceName(),
+          latestArgs,
+          notFound);
       return;
     }
     var workflow = optWorkflow.get();
@@ -130,6 +133,6 @@ public class InternalWorkflows {
         "Debouncer starting user workflow {} (id={})",
         options.workflowName(),
         ctx.userWorkflowId());
-    dbos.integration().startRegisteredWorkflow(workflow, latestArgs, startOpts);
+    executor.startRegisteredWorkflow(workflow, latestArgs, startOpts);
   }
 }
