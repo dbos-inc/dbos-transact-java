@@ -377,8 +377,8 @@ public class WorkflowDAO {
   /**
    * Insert a workflow_status row and immediately mark it ERROR, for a workflow that was never
    * actually started. Used when an internal workflow that is responsible for starting a user
-   * workflow fails before it can do so: without a status row, any handle awaiting the user
-   * workflow would poll {@link #awaitWorkflowResult} forever.
+   * workflow fails before it can do so: without a status row, any handle awaiting the user workflow
+   * would poll {@link #awaitWorkflowResult} forever.
    *
    * @param initStatus metadata for the workflow that will be recorded as failed
    * @param error the error serialized as json

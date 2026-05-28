@@ -385,7 +385,8 @@ public class DebouncerTest {
     dbos.launch();
 
     var handle =
-        dbos.<String>debouncer().debounce("rec-key", Duration.ofMillis(300), () -> svc.process("v1"));
+        dbos.<String>debouncer()
+            .debounce("rec-key", Duration.ofMillis(300), () -> svc.process("v1"));
     String userWorkflowId = handle.workflowId();
     assertEquals("result:v1", handle.getResult());
     assertEquals(1, serviceImpl.callCount());

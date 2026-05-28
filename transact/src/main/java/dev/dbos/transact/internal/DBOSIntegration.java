@@ -196,9 +196,9 @@ public class DBOSIntegration {
   }
 
   /**
-   * Record a terminal ERROR for a workflow that was never started, so handles awaiting it fail
-   * fast instead of polling forever. Used by the built-in debouncer workflow when it cannot start
-   * the user workflow it is responsible for.
+   * Record a terminal ERROR for a workflow that was never started, so handles awaiting it fail fast
+   * instead of polling forever. Used by the built-in debouncer workflow when it cannot start the
+   * user workflow it is responsible for.
    */
   public void recordErrorForUnstartedWorkflow(
       String workflowId,
