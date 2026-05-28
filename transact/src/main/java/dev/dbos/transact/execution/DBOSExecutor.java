@@ -1882,4 +1882,50 @@ public class DBOSExecutor implements AutoCloseable {
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
     systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
   }
+
+  /**
+   * Record an ERROR result for a workflow that was never started, so that handles awaiting it fail
+   * fast instead of polling forever. Used by internal workflows (e.g. the debouncer) that take
+   * responsibility for starting a user workflow and must surface their own failures to the caller's
+   * handle when they cannot.
+   */
+  public void recordErrorForUnstartedWorkflow(
+      String workflowId,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      @Nullable Object[] args,
+      Throwable error) {
+    String serialization = this.serializer.name();
+    var serializedArgs =
+        SerializationUtil.serializeArgs(
+            Objects.requireNonNullElseGet(args, () -> new Object[0]),
+            null,
+            serialization,
+            this.serializer);
+    var serializedError = SerializationUtil.serializeError(error, serialization, this.serializer);
+    var initStatus =
+        new WorkflowStatusInternal(
+            workflowId,
+            workflowName,
+            className,
+            instanceName,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            serializedArgs.serializedValue(),
+            executorId(),
+            appVersion(),
+            appId(),
+            null,
+            null,
+            null,
+            serializedArgs.serialization());
+    systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
+  }
 }

@@ -196,6 +196,23 @@ public class DBOSIntegration {
   }
 
   /**
+   * Record a terminal ERROR for a workflow that was never started, so handles awaiting it fail
+   * fast instead of polling forever. Used by the built-in debouncer workflow when it cannot start
+   * the user workflow it is responsible for.
+   */
+  public void recordErrorForUnstartedWorkflow(
+      String workflowId,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      @Nullable Object[] args,
+      Throwable error) {
+    executor("recordErrorForUnstartedWorkflow")
+        .recordErrorForUnstartedWorkflow(
+            workflowId, workflowName, className, instanceName, args, error);
+  }
+
+  /**
    * Execute a workflow method via its reflective {@link Method} handle. Intended for use by AOP
    * interceptors that capture workflow invocations at the proxy boundary.
    *

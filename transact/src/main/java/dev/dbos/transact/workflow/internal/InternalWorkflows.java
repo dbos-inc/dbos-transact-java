@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -82,20 +84,33 @@ public class InternalWorkflows {
       dbos.setEvent(next.messageId(), next.messageId());
     }
 
-    var workflow =
+    Optional<RegisteredWorkflow> optWorkflow =
         dbos.integration()
             .getRegisteredWorkflow(
-                options.workflowName(), options.className(), options.instanceName())
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "Debouncer cannot find registered user workflow: "
-                            + options.workflowName()
-                            + " / "
-                            + options.className()
-                            + (options.instanceName() == null
-                                ? ""
-                                : " / " + options.instanceName())));
+                options.workflowName(), options.className(), options.instanceName());
+    if (optWorkflow.isEmpty()) {
+      // The user workflow is not registered in this process (e.g. it was renamed/removed, or we
+      // are recovering on a build that no longer declares it). We can never start it, so record
+      // a terminal ERROR for the pre-assigned user workflow id. Otherwise any handle returned to
+      // the caller would poll getResult() forever, since the status row would never appear.
+      var notFound =
+          new DBOSWorkflowFunctionNotFoundException(ctx.userWorkflowId(), options.workflowName());
+      logger.error(
+          "Debouncer cannot find registered user workflow {} (id={}); recording ERROR",
+          options.workflowName(),
+          ctx.userWorkflowId(),
+          notFound);
+      dbos.integration()
+          .recordErrorForUnstartedWorkflow(
+              ctx.userWorkflowId(),
+              options.workflowName(),
+              options.className(),
+              options.instanceName(),
+              latestArgs,
+              notFound);
+      return;
+    }
+    var workflow = optWorkflow.get();
 
     // priority and deduplicationId are only valid for queued workflows; the executor
     // throws IllegalArgumentException if they are set without a queue name.

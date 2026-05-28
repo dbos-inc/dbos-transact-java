@@ -108,7 +108,7 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void reDebouncAfterWindowCloses() throws Exception {
+  void reDebounceAfterWindowCloses() throws Exception {
     var d = debouncer();
 
     var h1 = d.debounce("key-r", Duration.ofMillis(300), "first");

@@ -337,7 +337,7 @@ public class DebouncerTest {
   // Regression test for: deduplication_id is cleared to NULL on completion, so the UNIQUE
   // constraint no longer blocks a new enqueue with the same key.
   @Test
-  public void reDebouncAfterWindowCloses() throws Exception {
+  public void reDebounceAfterWindowCloses() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
 

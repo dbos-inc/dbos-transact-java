@@ -374,6 +374,28 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Insert a workflow_status row and immediately mark it ERROR, for a workflow that was never
+   * actually started. Used when an internal workflow that is responsible for starting a user
+   * workflow fails before it can do so: without a status row, any handle awaiting the user
+   * workflow would poll {@link #awaitWorkflowResult} forever.
+   *
+   * @param initStatus metadata for the workflow that will be recorded as failed
+   * @param error the error serialized as json
+   */
+  public static void recordErrorForUnstartedWorkflow(
+      DbContext ctx, WorkflowStatusInternal initStatus, String error) throws SQLException {
+
+    // No explicit transaction: the calling debouncer workflow is itself durable, so a crash
+    // between these two statements is replayed and retried. ON CONFLICT makes the insert
+    // idempotent and the outcome update is safe to repeat.
+    try (var conn = ctx.getConnection()) {
+      insertWorkflowStatus(conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false);
+      updateWorkflowOutcome(
+          conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
+    }
+  }
+
   public static String getWorkflowSerialization(DbContext ctx, String workflowId)
       throws SQLException {
     var sql =

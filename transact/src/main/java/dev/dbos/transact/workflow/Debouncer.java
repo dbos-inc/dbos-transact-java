@@ -5,6 +5,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
@@ -250,6 +251,15 @@ public final class Debouncer<R> {
     }
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
+
+    // Fail fast for the common programmer error of debouncing an unregistered workflow. Without
+    // this the call would still succeed here and only fail later inside the debouncer workflow.
+    if (executor
+        .getRegisteredWorkflow(
+            invocation.workflowName(), invocation.className(), invocation.instanceName())
+        .isEmpty()) {
+      throw new DBOSWorkflowFunctionNotFoundException(userWorkflowId, invocation.workflowName());
+    }
     String debouncerDeduplicationId = invocation.workflowName() + "-" + debounceKey;
 
     DebouncerOptions options =

@@ -359,6 +359,14 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
   }
 
+  /**
+   * Insert a workflow_status row already in the ERROR state, for a workflow that was never started.
+   * See {@link WorkflowDAO#recordErrorForUnstartedWorkflow}.
+   */
+  public void recordErrorForUnstartedWorkflow(WorkflowStatusInternal initStatus, String error) {
+    dbRetry(() -> WorkflowDAO.recordErrorForUnstartedWorkflow(ctx, initStatus, error));
+  }
+
   public WorkflowStatus getWorkflowStatus(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowStatus(ctx, workflowId));
   }
