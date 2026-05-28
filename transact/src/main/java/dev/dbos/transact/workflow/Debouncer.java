@@ -232,23 +232,16 @@ public final class Debouncer<R> {
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);
 
-    // Inside a workflow, ID generation is wrapped in a step so replay is deterministic.
-    DebounceIds ids;
-    if (DBOS.inWorkflow() && !DBOS.inStep()) {
-      ids =
-          executor.runDbosFunctionAsStep(
-              () ->
-                  new DebounceIds(
-                      DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
-                      UUID.randomUUID().toString()),
-              "DBOS.assignDebounceIds",
-              null);
-    } else {
-      ids =
-          new DebounceIds(
-              DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
-              UUID.randomUUID().toString());
-    }
+    // Inside a workflow, ID generation is wrapped in a step so replay is deterministic;
+    // runDbosFunctionAsStep runs the lambda directly when not in a workflow.
+    DebounceIds ids =
+        executor.runDbosFunctionAsStep(
+            () ->
+                new DebounceIds(
+                    DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
+                    UUID.randomUUID().toString()),
+            "DBOS.assignDebounceIds",
+            null);
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
 
@@ -292,12 +285,10 @@ public final class Debouncer<R> {
         // replay returns the same debouncer id and the subsequent send/getEvent steps stay
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
         String existingDebouncerId =
-            (DBOS.inWorkflow() && !DBOS.inStep())
-                ? executor.runDbosFunctionAsStep(
-                    () -> lookupExistingDebouncerId(debouncerDeduplicationId),
-                    "DBOS.lookupDebouncer",
-                    null)
-                : lookupExistingDebouncerId(debouncerDeduplicationId);
+            executor.runDbosFunctionAsStep(
+                () -> lookupExistingDebouncerId(debouncerDeduplicationId),
+                "DBOS.lookupDebouncer",
+                null);
         if (existingDebouncerId == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
