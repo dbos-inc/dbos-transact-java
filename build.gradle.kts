@@ -91,6 +91,10 @@ spotless {
   }
 }
 
+val pmdVersion = libs.versions.pmd.get()
+
+extensions.configure<org.gradle.api.plugins.quality.PmdExtension> { toolVersion = pmdVersion }
+
 subprojects {
   apply(plugin = "java")
   apply(plugin = "pmd")
@@ -99,7 +103,7 @@ subprojects {
 
   // PMD configuration
   extensions.configure<org.gradle.api.plugins.quality.PmdExtension> {
-    toolVersion = "7.16.0"
+    toolVersion = pmdVersion
     ruleSets = listOf() // disable defaults
     ruleSetFiles = files("${rootDir}/config/pmd/ruleset.xml")
     isConsoleOutput = true
@@ -133,17 +137,11 @@ subprojects {
 
   tasks.withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
     rejectVersionIf {
-      val isUnstable =
+      fun isUnstable(version: String) =
         listOf("alpha", "beta", "rc", "cr", "m", "preview", "b", "ea").any { qualifier ->
-          candidate.version.lowercase().contains(qualifier)
+          version.lowercase().contains(qualifier)
         }
-
-      val isStable =
-        listOf("release", "final", "ga").any { qualifier ->
-          currentVersion.lowercase().contains(qualifier)
-        }
-
-      isUnstable && !isStable
+      isUnstable(candidate.version) && !isUnstable(currentVersion)
     }
   }
 
