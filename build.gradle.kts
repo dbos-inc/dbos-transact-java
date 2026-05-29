@@ -1,3 +1,5 @@
+import com.vanniktech.maven.publish.DeploymentValidation
+
 plugins {
   id("pmd")
   alias(libs.plugins.spotless)
@@ -152,9 +154,12 @@ subprojects {
       targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Allow the compiler to see higher-version APIs for reflection but keep the bytecode target at
-    // 17.
-    tasks.withType<JavaCompile> { options.release.set(17) }
+    tasks.withType<JavaCompile> {
+      options.release.set(17)
+      options.compilerArgs.addAll(
+        listOf("-Xlint:unchecked", "-Xlint:deprecation", "-Xlint:rawtypes", "-Werror")
+      )
+    }
 
     // use the environment's JDK instead of the toolchain's JDK for tests
     tasks.withType<Test> { javaLauncher.set(null as JavaLauncher?) }
@@ -208,6 +213,51 @@ subprojects {
         attributes["Implementation-Vendor"] = "DBOS, Inc"
         attributes["Implementation-Vendor-Id"] = project.group
         attributes["SCM-Revision"] = gitHash
+      }
+    }
+  }
+
+  plugins.withId("com.vanniktech.maven.publish") {
+    val publishingToMavenCentral =
+      gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
+
+    tasks.withType<Javadoc> {
+      (options as StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+        encoding = "UTF-8"
+      }
+    }
+
+    tasks.named("build") { dependsOn("javadoc") }
+
+    extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+      publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)
+      if (publishingToMavenCentral) signAllPublications()
+
+      pom {
+        inceptionYear.set("2025")
+        url.set("https://github.com/dbos-inc/dbos-transact-java")
+
+        licenses {
+          license {
+            name.set("MIT License")
+            url.set("https://opensource.org/licenses/MIT")
+          }
+        }
+
+        developers {
+          developer {
+            id.set("dbos-inc")
+            name.set("DBOS Inc")
+            email.set("support@dbos.dev")
+          }
+        }
+
+        scm {
+          connection.set("scm:git:git://github.com/dbos-inc/dbos-transact-java.git")
+          developerConnection.set("scm:git:ssh://github.com:dbos-inc/dbos-transact-java.git")
+          url.set("https://github.com/dbos-inc/dbos-transact-java/tree/main")
+        }
       }
     }
   }
