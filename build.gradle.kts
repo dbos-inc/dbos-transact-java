@@ -1,3 +1,5 @@
+import com.vanniktech.maven.publish.DeploymentValidation
+
 plugins {
   id("pmd")
   alias(libs.plugins.spotless)
@@ -91,6 +93,10 @@ spotless {
   }
 }
 
+val pmdVersion = libs.versions.pmd.get()
+
+extensions.configure<org.gradle.api.plugins.quality.PmdExtension> { toolVersion = pmdVersion }
+
 subprojects {
   apply(plugin = "java")
   apply(plugin = "pmd")
@@ -99,7 +105,7 @@ subprojects {
 
   // PMD configuration
   extensions.configure<org.gradle.api.plugins.quality.PmdExtension> {
-    toolVersion = "7.16.0"
+    toolVersion = pmdVersion
     ruleSets = listOf() // disable defaults
     ruleSetFiles = files("${rootDir}/config/pmd/ruleset.xml")
     isConsoleOutput = true
@@ -133,17 +139,11 @@ subprojects {
 
   tasks.withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
     rejectVersionIf {
-      val isUnstable =
+      fun isUnstable(version: String) =
         listOf("alpha", "beta", "rc", "cr", "m", "preview", "b", "ea").any { qualifier ->
-          candidate.version.lowercase().contains(qualifier)
+          version.lowercase().contains(qualifier)
         }
-
-      val isStable =
-        listOf("release", "final", "ga").any { qualifier ->
-          currentVersion.lowercase().contains(qualifier)
-        }
-
-      isUnstable && !isStable
+      isUnstable(candidate.version) && !isUnstable(currentVersion)
     }
   }
 
@@ -154,9 +154,12 @@ subprojects {
       targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Allow the compiler to see higher-version APIs for reflection but keep the bytecode target at
-    // 17.
-    tasks.withType<JavaCompile> { options.release.set(17) }
+    tasks.withType<JavaCompile> {
+      options.release.set(17)
+      options.compilerArgs.addAll(
+        listOf("-Xlint:unchecked", "-Xlint:deprecation", "-Xlint:rawtypes", "-Werror")
+      )
+    }
 
     // use the environment's JDK instead of the toolchain's JDK for tests
     tasks.withType<Test> { javaLauncher.set(null as JavaLauncher?) }
@@ -210,6 +213,51 @@ subprojects {
         attributes["Implementation-Vendor"] = "DBOS, Inc"
         attributes["Implementation-Vendor-Id"] = project.group
         attributes["SCM-Revision"] = gitHash
+      }
+    }
+  }
+
+  plugins.withId("com.vanniktech.maven.publish") {
+    val publishingToMavenCentral =
+      gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
+
+    tasks.withType<Javadoc> {
+      (options as StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+        encoding = "UTF-8"
+      }
+    }
+
+    tasks.named("build") { dependsOn("javadoc") }
+
+    extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+      publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)
+      if (publishingToMavenCentral) signAllPublications()
+
+      pom {
+        inceptionYear.set("2025")
+        url.set("https://github.com/dbos-inc/dbos-transact-java")
+
+        licenses {
+          license {
+            name.set("MIT License")
+            url.set("https://opensource.org/licenses/MIT")
+          }
+        }
+
+        developers {
+          developer {
+            id.set("dbos-inc")
+            name.set("DBOS Inc")
+            email.set("support@dbos.dev")
+          }
+        }
+
+        scm {
+          connection.set("scm:git:git://github.com/dbos-inc/dbos-transact-java.git")
+          developerConnection.set("scm:git:ssh://github.com:dbos-inc/dbos-transact-java.git")
+          url.set("https://github.com/dbos-inc/dbos-transact-java/tree/main")
+        }
       }
     }
   }

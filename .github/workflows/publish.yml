@@ -65,6 +65,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
           files: |
-            transact/build/libs/*.jar
-            transact-cli/build/libs/dbos.jar
+            transact*/build/libs/*.jar
 

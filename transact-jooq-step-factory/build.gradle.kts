@@ -1,10 +1,13 @@
-plugins { id("java-library") }
+plugins {
+  id("java-library")
+  alias(libs.plugins.maven.publish)
+}
 
-tasks.withType<JavaCompile> {
-  options.compilerArgs.add("-Xlint:unchecked")
-  options.compilerArgs.add("-Xlint:deprecation")
-  options.compilerArgs.add("-Xlint:rawtypes")
-  options.compilerArgs.add("-Werror")
+mavenPublishing {
+  pom {
+    name.set("DBOS Transact jOOQ Step Factory")
+    description.set("jOOQ step factory for DBOS Transact Java SDK")
+  }
 }
 
 dependencies {

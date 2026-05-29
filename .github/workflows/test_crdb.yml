@@ -32,7 +32,7 @@ jobs:
       - name: Test Summary
         uses: test-summary/action@v2
         with:
-          paths: "transact/build/test-results/test/TEST-*.xml"
+          paths: "transact*/build/test-results/test/TEST-*.xml"
           show: "fail, skip"
         if: always()
 
@@ -42,5 +42,5 @@ jobs:
         with:
           name: test-results-crdb-temurin-25
           path: |
-            transact/build/reports/tests/
-            transact/build/test-results/
+            transact*/build/reports/tests/
+            transact*/build/test-results/
