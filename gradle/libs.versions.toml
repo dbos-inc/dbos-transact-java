@@ -9,8 +9,8 @@ jackson = "2.21.3"
 java-websocket = "1.6.0"
 jaxb-api = "4.0.5"
 jdbi = "3.53.0"
-# jOOQ pinned to 3.19.x for JDK 17 compatibility
-jooq = "3.21.4"
+# jOOQ pinned to 3.19.x for JDK 17 compat https://www.jooq.org/download/support-matrix-jdk
+jooq = "3.19.34"
 jspecify = "1.0.0"
 junit = "6.1.0"
 junit-pioneer = "2.3.0"
@@ -27,10 +27,11 @@ rest-assured = "6.0.0"
 shadow = "9.4.2"
 slf4j = "2.0.18"
 spotless = "8.6.0"
-# Spring Boot pinned to 3.5.x. Enterprise support for 3.5 lasts until 2032
+# Spring Boot pinned to 3.5.x for LTS https://spring.io/projects/spring-boot#support
 spring-boot = "3.5.14"
 # Spring Boot 4.0.x binaries for test purposes
 spring-boot4 = "4.0.6"
+# Spring Framework pinned to 6.2.x for LTS https://spring.io/projects/spring-framework#support
 spring-framework = "6.2.18"
 sqlite-jdbc = "3.53.1.0"
 system-stubs = "2.1.8"
