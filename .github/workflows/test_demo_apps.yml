@@ -54,6 +54,8 @@ jobs:
         include:
           - app: java/dbos-starter
             build_file: app/build.gradle.kts
+          - app: java/dbos-toolbox
+            build_file: app/build.gradle.kts
           - app: java/widget-store
             build_file: build.gradle.kts
           - app: kotlin/dbos-starter
