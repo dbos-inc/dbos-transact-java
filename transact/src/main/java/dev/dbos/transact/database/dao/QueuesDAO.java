@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -310,8 +311,8 @@ public class QueuesDAO {
         """
         INSERT INTO "%s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
-            priority_enabled, partition_queue, polling_interval_sec, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            priority_enabled, partition_queue, polling_interval_sec, updated_at, queue_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema());
@@ -334,6 +335,8 @@ public class QueuesDAO {
       boolean inserted;
       try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
         bindQueueParams(ps, queue, 1);
+        ps.setString(10, UUID.randomUUID().toString());
+        ps.setLong(11, System.currentTimeMillis());
         inserted = ps.executeUpdate() == 1;
       }
       if (!inserted && updateExisting) {

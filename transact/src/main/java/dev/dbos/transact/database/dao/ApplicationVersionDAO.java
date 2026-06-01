@@ -17,15 +17,18 @@ public class ApplicationVersionDAO {
       throws SQLException {
     String sql =
         """
-          INSERT INTO "%s".application_versions (version_id, version_name)
-          VALUES (?, ?)
+          INSERT INTO "%s".application_versions (version_id, version_name, version_timestamp, created_at)
+          VALUES (?, ?, ?, ?)
           ON CONFLICT (version_name) DO NOTHING
         """
             .formatted(ctx.schema());
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
+      var now = System.currentTimeMillis();
       stmt.setString(1, UUID.randomUUID().toString());
       stmt.setString(2, versionName);
+      stmt.setLong(3, now);
+      stmt.setLong(4, now);
       stmt.executeUpdate();
     }
   }
