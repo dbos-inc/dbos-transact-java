@@ -23,6 +23,9 @@ mockito = "5.23.0"
 picocli = "4.7.7"
 pmd = "7.24.0"
 postgresql = "42.7.11"
+scala-3 = "3.3.5"
+scala-213 = "2.13.16"
+
 rest-assured = "6.0.0"
 shadow = "9.4.2"
 slf4j = "2.0.18"
@@ -77,6 +80,9 @@ spring-boot-test = { module = "org.springframework.boot:spring-boot-test", versi
 spring-boot4-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot4" }
 spring-boot4-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot4" }
 spring-boot4-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot4" }
+scala-library = { module = "org.scala-lang:scala-library", version.ref = "scala-213" }
+scala3-library = { module = "org.scala-lang:scala3-library_3", version.ref = "scala-3" }
+scala3-compiler = { module = "org.scala-lang:scala3-compiler_3", version.ref = "scala-3" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
 testcontainers-cockroachdb = { module = "org.testcontainers:testcontainers-cockroachdb", version.ref = "testcontainers" }

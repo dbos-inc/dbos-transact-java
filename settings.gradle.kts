@@ -7,6 +7,7 @@ include(
   "transact-spring-txstep-starter",
   "transact-jdbi-step-factory",
   "transact-jooq-step-factory",
+  "transact-scala",
 )
 
 plugins { id("org.gradle.toolchains.foojay-resolver") version "1.0.0" }
