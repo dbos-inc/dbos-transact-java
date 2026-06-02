@@ -27,7 +27,7 @@ dependencies {
   testImplementation(libs.java.websocket)
   testImplementation(libs.logback.classic)
   testImplementation(libs.mockito.core)
-  testImplementation(libs.sqlite.jdbc)
+  implementation(libs.sqlite.jdbc)
   testImplementation(libs.rest.assured)
   testImplementation(libs.kryo)
   testImplementation(libs.maven.artifact)

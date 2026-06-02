@@ -31,7 +31,15 @@ public class MigrationManager {
     Objects.requireNonNull(config, "DBOS Config must not be null");
 
     if (config.dataSource() != null) {
-      runMigrations(config.dataSource(), config.databaseSchema(), config.useListenNotify());
+      if (isSqlite(config.dataSource())) {
+        SqliteMigrationManager.runMigrations(config.dataSource());
+      } else {
+        runMigrations(config.dataSource(), config.databaseSchema(), config.useListenNotify());
+      }
+    } else if (SystemDatabase.isSqliteUrl(config.databaseUrl())) {
+      try (var ds = SystemDatabase.createDataSource(config.databaseUrl(), null, null)) {
+        SqliteMigrationManager.runMigrations(ds);
+      }
     } else {
       createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
       try (var ds =
@@ -45,12 +53,27 @@ public class MigrationManager {
   public static void runMigrations(
       String url, String user, String password, String schema, boolean useListenNotify) {
     Objects.requireNonNull(url, "database url must not be null");
+
+    if (SystemDatabase.isSqliteUrl(url)) {
+      try (var ds = SystemDatabase.createDataSource(url, null, null)) {
+        SqliteMigrationManager.runMigrations(ds);
+      }
+      return;
+    }
+
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
-
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password)) {
       runMigrations(ds, schema, useListenNotify);
+    }
+  }
+
+  static boolean isSqlite(DataSource dataSource) {
+    try (var conn = dataSource.getConnection()) {
+      return conn.getMetaData().getDatabaseProductName().toLowerCase().contains("sqlite");
+    } catch (SQLException e) {
+      return false;
     }
   }
 

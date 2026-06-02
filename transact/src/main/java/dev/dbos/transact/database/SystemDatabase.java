@@ -179,24 +179,38 @@ public class SystemDatabase implements AutoCloseable {
     return createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
+  public static boolean isSqliteUrl(String url) {
+    return url != null && url.startsWith("jdbc:sqlite:");
+  }
+
   public static HikariDataSource createDataSource(String url, String user, String password) {
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl(url);
-    config.setUsername(user);
-    config.setPassword(password);
 
-    config.setMaxLifetime(60_000);
-    config.setKeepaliveTime(30000);
-    config.setConnectionTimeout(10000);
-    config.setValidationTimeout(2000);
-    config.setInitializationFailTimeout(-1);
-    config.setMaximumPoolSize(10);
-    config.setMinimumIdle(10);
-
-    config.addDataSourceProperty("tcpKeepAlive", "true");
-    config.addDataSourceProperty("connectTimeout", "10");
-    config.addDataSourceProperty("socketTimeout", "60");
-    config.addDataSourceProperty("reWriteBatchedInserts", "true");
+    if (isSqliteUrl(url)) {
+      config.setMaximumPoolSize(8);
+      config.setMinimumIdle(1);
+      // xerial SQLite JDBC reads these as connection properties
+      config.addDataSourceProperty("journal_mode", "WAL");
+      config.addDataSourceProperty("synchronous", "NORMAL");
+      config.addDataSourceProperty("busy_timeout", "5000");
+      config.addDataSourceProperty("foreign_keys", "true");
+      config.addDataSourceProperty("transaction_mode", "IMMEDIATE");
+    } else {
+      config.setUsername(user);
+      config.setPassword(password);
+      config.setMaxLifetime(60_000);
+      config.setKeepaliveTime(30000);
+      config.setConnectionTimeout(10000);
+      config.setValidationTimeout(2000);
+      config.setInitializationFailTimeout(-1);
+      config.setMaximumPoolSize(10);
+      config.setMinimumIdle(10);
+      config.addDataSourceProperty("tcpKeepAlive", "true");
+      config.addDataSourceProperty("connectTimeout", "10");
+      config.addDataSourceProperty("socketTimeout", "60");
+      config.addDataSourceProperty("reWriteBatchedInserts", "true");
+    }
 
     return new HikariDataSource(config);
   }
