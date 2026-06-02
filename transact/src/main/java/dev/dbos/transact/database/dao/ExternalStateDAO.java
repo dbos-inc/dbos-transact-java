@@ -5,7 +5,9 @@ import dev.dbos.transact.database.ExternalState;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -32,7 +34,8 @@ public class ExternalStateDAO {
           var value = rs.getString("value");
           BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
           BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
-          BigDecimal time = rs.getBigDecimal("update_time");
+          BigDecimal timeDecimal = rs.getBigDecimal("update_time");
+          Instant time = timeDecimal != null ? bigDecimalToInstant(timeDecimal) : null;
           return Optional.of(new ExternalState(service, workflowName, key, value, time, seq));
         } else {
           return Optional.empty();
@@ -67,7 +70,8 @@ public class ExternalStateDAO {
           2, Objects.requireNonNull(state.workflowName(), "workflowName must not be null"));
       stmt.setString(3, Objects.requireNonNull(state.key(), "key must not be null"));
       stmt.setString(4, state.value());
-      stmt.setObject(5, state.updateTime());
+      Instant updateTime = state.updateTime();
+      stmt.setBigDecimal(5, updateTime != null ? instantToBigDecimal(updateTime) : null);
       stmt.setObject(6, state.updateSeq());
 
       try (var rs = stmt.executeQuery()) {
@@ -75,7 +79,8 @@ public class ExternalStateDAO {
           var value = rs.getString("value");
           BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
           BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
-          BigDecimal time = rs.getBigDecimal("update_time");
+          BigDecimal timeDecimal = rs.getBigDecimal("update_time");
+          Instant time = timeDecimal != null ? bigDecimalToInstant(timeDecimal) : null;
           return new ExternalState(
               state.service(), state.workflowName(), state.key(), value, time, seq);
         } else {
@@ -85,5 +90,17 @@ public class ExternalStateDAO {
         }
       }
     }
+  }
+
+  private static BigDecimal instantToBigDecimal(Instant instant) {
+    return BigDecimal.valueOf(instant.getEpochSecond())
+        .add(BigDecimal.valueOf(instant.getNano(), 9));
+  }
+
+  private static Instant bigDecimalToInstant(BigDecimal value) {
+    BigDecimal floor = value.setScale(0, RoundingMode.FLOOR);
+    long seconds = floor.longValue();
+    int nanos = value.subtract(floor).movePointRight(9).intValue();
+    return Instant.ofEpochSecond(seconds, nanos);
   }
 }
