@@ -1,7 +1,7 @@
 package dev.dbos.transact.database;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -19,8 +19,8 @@ import java.util.Objects;
  * @param key The key under which the external state is stored, allowing multiple values per service
  *     and workflow combination.
  * @param value The current value associated with the key.
- * @param updateTime The timestamp of the last update, represented as a decimal (e.g., UNIX epoch
- *     seconds), or {@code null} if unused.
+ * @param updateTime The timestamp of the last update, stored as epoch milliseconds in the database,
+ *     or {@code null} if unused.
  * @param updateSeq A monotonic sequence number for updates, used to detect the latest version, or
  *     {@code null} if not applicable.
  */
@@ -29,7 +29,7 @@ public record ExternalState(
     String workflowName,
     String key,
     String value,
-    BigDecimal updateTime,
+    Instant updateTime,
     BigInteger updateSeq) {
 
   public ExternalState {
@@ -61,9 +61,9 @@ public record ExternalState(
   /**
    * Create an {@code ExternalState} like this one, but with a new update time
    *
-   * @param updateTime update time to use, as a decimal number of seconds since the Unix epoch
+   * @param updateTime update time to use
    */
-  public ExternalState withUpdateTime(BigDecimal updateTime) {
+  public ExternalState withUpdateTime(Instant updateTime) {
     return new ExternalState(service, workflowName, key, value, updateTime, updateSeq);
   }
 
