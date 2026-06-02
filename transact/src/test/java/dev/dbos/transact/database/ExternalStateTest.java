@@ -8,7 +8,9 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -144,5 +146,65 @@ public class ExternalStateTest {
     assertEquals(newValue, state.value());
     assertEquals(newSeq, state.updateSeq());
     assertNull(state.updateTime());
+  }
+
+  @Test
+  public void backwardCompatibleWithEpochMs() throws SQLException {
+    var service = "backward-service";
+    var workflow = "backward-workflow";
+    var key = "backward-key";
+
+    // Insert old-format row: epoch ms as whole number (no fractional part)
+    try (var conn = pgContainer.dataSource().getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "INSERT INTO \"dbos\".event_dispatch_kv (service_name, workflow_fn_name, key, value, update_time) VALUES (?, ?, ?, ?, ?)")) {
+      stmt.setString(1, service);
+      stmt.setString(2, workflow);
+      stmt.setString(3, key);
+      stmt.setString(4, "old-value");
+      stmt.setBigDecimal(5, BigDecimal.valueOf(1000));
+      stmt.executeUpdate();
+    }
+
+    // Upsert with a newer Instant (epoch ms = 2000, larger integer part)
+    var newInstant = Instant.ofEpochMilli(2000);
+    var result =
+        systemDatabase.upsertExternalState(
+            new ExternalState(service, workflow, key)
+                .withValue("new-value")
+                .withUpdateTime(newInstant));
+    assertEquals("new-value", result.value());
+    assertEquals(newInstant, result.updateTime());
+
+    // Verify via get
+    var getResult = systemDatabase.getExternalState(service, workflow, key);
+    assertTrue(getResult.isPresent());
+    assertEquals("new-value", getResult.get().value());
+    assertEquals(newInstant, getResult.get().updateTime());
+
+    // Insert another old-format row
+    key = "backward-key-older";
+    try (var conn = pgContainer.dataSource().getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "INSERT INTO \"dbos\".event_dispatch_kv (service_name, workflow_fn_name, key, value, update_time) VALUES (?, ?, ?, ?, ?)")) {
+      stmt.setString(1, service);
+      stmt.setString(2, workflow);
+      stmt.setString(3, key);
+      stmt.setString(4, "old-value");
+      stmt.setBigDecimal(5, BigDecimal.valueOf(2000));
+      stmt.executeUpdate();
+    }
+
+    // Upsert with an older Instant (epoch ms = 1500) — value should NOT change
+    var olderInstant = Instant.ofEpochMilli(1500);
+    var noChange =
+        systemDatabase.upsertExternalState(
+            new ExternalState(service, workflow, key)
+                .withValue("should-not-appear")
+                .withUpdateTime(olderInstant));
+    assertEquals("old-value", noChange.value());
+    assertEquals(Instant.ofEpochMilli(2000), noChange.updateTime());
   }
 }

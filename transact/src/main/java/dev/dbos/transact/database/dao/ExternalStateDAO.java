@@ -93,14 +93,17 @@ public class ExternalStateDAO {
   }
 
   private static BigDecimal instantToBigDecimal(Instant instant) {
-    return BigDecimal.valueOf(instant.getEpochSecond())
-        .add(BigDecimal.valueOf(instant.getNano(), 9));
+    long epochMs = instant.toEpochMilli();
+    int subMsNanos = instant.getNano() % 1_000_000;
+    return BigDecimal.valueOf(epochMs).add(BigDecimal.valueOf(subMsNanos, 9));
   }
 
   private static Instant bigDecimalToInstant(BigDecimal value) {
     BigDecimal floor = value.setScale(0, RoundingMode.FLOOR);
-    long seconds = floor.longValue();
-    int nanos = value.subtract(floor).movePointRight(9).intValue();
-    return Instant.ofEpochSecond(seconds, nanos);
+    long epochMs = floor.longValue();
+    int subMsNanos = value.subtract(floor).movePointRight(9).intValue();
+    long epochSec = epochMs / 1000;
+    int nanos = (int) (epochMs % 1000) * 1_000_000 + subMsNanos;
+    return Instant.ofEpochSecond(epochSec, nanos);
   }
 }
