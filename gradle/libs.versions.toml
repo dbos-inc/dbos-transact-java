@@ -5,7 +5,7 @@ assertj = "3.27.7"
 cron-utils = "9.2.1"
 hibernate = "7.4.0.Final"
 hikaricp = "7.0.2"
-jackson = "2.21.3"
+jackson = "3.1.3"
 java-websocket = "1.6.0"
 jaxb-api = "4.0.5"
 jdbi = "3.53.0"
@@ -44,8 +44,7 @@ aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" 
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
-jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
-jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
 jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
 jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
@@ -83,7 +82,7 @@ testcontainers-cockroachdb = { module = "org.testcontainers:testcontainers-cockr
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 
 [bundles]
-jackson = ["jackson-databind", "jackson-jsr310"]
+jackson = ["jackson-databind"]
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -19,11 +19,11 @@ import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.util.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Cross-language interoperability tests for portable workflow serialization.
@@ -47,7 +47,7 @@ public class InteropTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  private static final ObjectMapper mapper = new ObjectMapper();
+  private static final JsonMapper mapper = new JsonMapper();
 
   private DBOSConfig dbosConfig;
   @AutoClose private DBOS dbos;

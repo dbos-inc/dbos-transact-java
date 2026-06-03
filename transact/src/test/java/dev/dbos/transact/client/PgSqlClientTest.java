@@ -24,17 +24,16 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
+import tools.jackson.databind.json.JsonMapper;
 
 public class PgSqlClientTest {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final JsonMapper MAPPER = new JsonMapper();
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -185,17 +184,7 @@ public class PgSqlClientTest {
   String enqueueWorkflow(
       String workflowName, String dedupId, Duration timeout, Instant deadline, Object... args)
       throws SQLException {
-    var jsonArgs =
-        Arrays.stream(args)
-            .map(
-                o -> {
-                  try {
-                    return MAPPER.writeValueAsString(o);
-                  } catch (JsonProcessingException e) {
-                    throw new RuntimeException(e);
-                  }
-                })
-            .toArray(String[]::new);
+    var jsonArgs = Arrays.stream(args).map(MAPPER::writeValueAsString).toArray(String[]::new);
     var sql =
         """
         SELECT dbos.enqueue_workflow(
@@ -241,7 +230,7 @@ public class PgSqlClientTest {
   }
 
   void sendMessage(String destinationId, Object message, String topic, String idempotencyKey)
-      throws SQLException, JsonProcessingException {
+      throws SQLException {
     String jsonMessage = MAPPER.writeValueAsString(Objects.requireNonNull(message));
 
     var sql = "SELECT dbos.send_message(?, ?::json, ?, ?)";

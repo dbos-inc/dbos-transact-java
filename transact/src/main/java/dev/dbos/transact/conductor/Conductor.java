@@ -49,16 +49,15 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.core.StreamReadConstraints;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.core.StreamReadConstraints;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 public class Conductor implements AutoCloseable {
 
@@ -70,7 +69,7 @@ public class Conductor implements AutoCloseable {
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
   private final HttpClient httpClient;
-  private final ObjectMapper mapper;
+  private final JsonMapper mapper;
   private final int pingPeriodMs;
   private final int pingTimeoutMs;
   private final int reconnectDelayMs;
@@ -116,14 +115,14 @@ public class Conductor implements AutoCloseable {
     this.mapper = buildObjectMapper();
   }
 
-  static ObjectMapper buildObjectMapper() {
-    return new ObjectMapper(
+  static JsonMapper buildObjectMapper() {
+    return JsonMapper.builder(
             JsonFactory.builder()
                 .streamReadConstraints(
                     StreamReadConstraints.builder().maxStringLength(1_000_000_000).build())
                 .build())
-        .registerModule(new JavaTimeModule())
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .build();
   }
 
   // TODO: do we need the insecure connection?
@@ -386,7 +385,7 @@ public class Conductor implements AutoCloseable {
   }
 
   private static void writeFragmentedResponse(
-      WebSocket ws, BaseResponse response, ObjectMapper mapper) throws Exception {
+      WebSocket ws, BaseResponse response, JsonMapper mapper) throws Exception {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
         "Starting to write fragmented response: type={}, id={}",
@@ -1112,7 +1111,7 @@ public class Conductor implements AutoCloseable {
             TypeReference<List<ExportedWorkflow>> typeRef = new TypeReference<>() {};
             JsonToken token;
             while ((token = parser.nextToken()) != null && token != JsonToken.END_OBJECT) {
-              if (token != JsonToken.FIELD_NAME) {
+              if (token != JsonToken.PROPERTY_NAME) {
                 continue;
               }
               String fieldName = parser.currentName();
@@ -1243,7 +1242,7 @@ public class Conductor implements AutoCloseable {
    * through GZIPOutputStream and Base64 encoding into 128 KB WebSocket frames.
    */
   private static void streamExportResponse(
-      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows, ObjectMapper mapper)
+      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows, JsonMapper mapper)
       throws IOException {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
@@ -1301,7 +1300,7 @@ public class Conductor implements AutoCloseable {
   }
 
   static List<ExportedWorkflow> deserializeExportedWorkflows(
-      String serializedWorkflow, ObjectMapper mapper) throws IOException {
+      String serializedWorkflow, JsonMapper mapper) throws IOException {
     var compressed = Base64.getDecoder().decode(serializedWorkflow);
     try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
       var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
@@ -1310,7 +1309,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // Used by tests to create import payloads and verify export output
-  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows, ObjectMapper mapper)
+  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows, JsonMapper mapper)
       throws IOException {
     var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {

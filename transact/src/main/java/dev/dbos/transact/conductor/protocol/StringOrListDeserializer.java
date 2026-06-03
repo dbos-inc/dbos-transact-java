@@ -1,26 +1,26 @@
 package dev.dbos.transact.conductor.protocol;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 
-public class StringOrListDeserializer extends JsonDeserializer<List<String>> {
+public class StringOrListDeserializer extends ValueDeserializer<List<String>> {
   @Override
-  public List<String> deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
-    JsonNode node = p.getCodec().readTree(p);
-    List<String> result = new ArrayList<>();
-    if (node.isArray()) {
-      for (JsonNode element : node) {
-        result.add(element.asText());
+  public List<String> deserialize(JsonParser p, DeserializationContext ctxt) {
+    if (p.currentToken() == JsonToken.START_ARRAY) {
+      List<String> result = new ArrayList<>();
+      while (p.nextToken() != JsonToken.END_ARRAY) {
+        result.add(p.getString());
       }
-    } else if (node.isTextual()) {
-      result.add(node.asText());
+      return result;
+    } else if (p.currentToken() == JsonToken.VALUE_STRING) {
+      return List.of(p.getString());
     }
-    return result;
+    return ctxt.reportInputMismatch(
+        String.class, "Expected a string or an array of strings, got %s", p.currentToken());
   }
 }
