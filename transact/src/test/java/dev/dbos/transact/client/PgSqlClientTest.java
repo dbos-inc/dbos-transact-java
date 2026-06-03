@@ -24,8 +24,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,7 +33,7 @@ import org.postgresql.util.PSQLException;
 
 public class PgSqlClientTest {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final JsonMapper MAPPER = new JsonMapper();
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -187,14 +186,7 @@ public class PgSqlClientTest {
       throws SQLException {
     var jsonArgs =
         Arrays.stream(args)
-            .map(
-                o -> {
-                  try {
-                    return MAPPER.writeValueAsString(o);
-                  } catch (JsonProcessingException e) {
-                    throw new RuntimeException(e);
-                  }
-                })
+            .map(MAPPER::writeValueAsString)
             .toArray(String[]::new);
     var sql =
         """
@@ -241,7 +233,7 @@ public class PgSqlClientTest {
   }
 
   void sendMessage(String destinationId, Object message, String topic, String idempotencyKey)
-      throws SQLException, JsonProcessingException {
+      throws SQLException {
     String jsonMessage = MAPPER.writeValueAsString(Objects.requireNonNull(message));
 
     var sql = "SELECT dbos.send_message(?, ?::json, ?, ?)";

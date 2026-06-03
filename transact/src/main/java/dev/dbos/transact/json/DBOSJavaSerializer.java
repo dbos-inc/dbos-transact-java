@@ -1,13 +1,13 @@
 package dev.dbos.transact.json;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.DefaultTyping;
+import tools.jackson.databind.JavaType;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.impl.DefaultTypeResolverBuilder;
 
 /**
  * Native Java serializer using Jackson with type information. This is the default serializer for
@@ -19,26 +19,25 @@ public class DBOSJavaSerializer implements DBOSSerializer {
 
   public static final DBOSJavaSerializer INSTANCE = new DBOSJavaSerializer();
 
-  private final ObjectMapper mapper;
+  private final JsonMapper mapper;
 
   public DBOSJavaSerializer() {
     PolymorphicTypeValidator ptv =
         BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build();
-    var typer =
-        new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL, ptv) {
+
+    DefaultTypeResolverBuilder typer =
+        new DefaultTypeResolverBuilder(ptv, DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY, JsonTypeInfo.Id.CLASS, null) {
           @Override
           public boolean useForType(JavaType t) {
             return !t.isPrimitive();
           }
         };
-    typer.init(JsonTypeInfo.Id.CLASS, null);
-    typer.inclusion(JsonTypeInfo.As.PROPERTY);
 
     this.mapper =
-        new ObjectMapper()
+        JsonMapper.builder()
             .setDefaultTyping(typer)
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .build();
   }
 
   @Override
@@ -48,11 +47,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
 
   @Override
   public String serialize(Object value) {
-    try {
-      return mapper.writeValueAsString(value);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return mapper.writeValueAsString(value);
   }
 
   @Override
@@ -60,11 +55,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    try {
-      return mapper.readValue(text, Object.class);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return mapper.readValue(text, Object.class);
   }
 
   @Override
@@ -81,11 +72,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    try {
-      var wt = mapper.readValue(text, WireThrowable.class);
-      return wt.toThrowable();
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    var wt = mapper.readValue(text, WireThrowable.class);
+    return wt.toThrowable();
   }
 }

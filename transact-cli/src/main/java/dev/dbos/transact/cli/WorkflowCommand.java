@@ -1,6 +1,5 @@
 package dev.dbos.transact.cli;
 
-import dev.dbos.transact.json.JsonRuntimeException;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -9,8 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -46,13 +44,9 @@ public class WorkflowCommand implements Runnable {
   }
 
   public static String prettyPrint(Object object) {
-    var mapper = new ObjectMapper();
+    var mapper = new JsonMapper();
     var writer = mapper.writerWithDefaultPrettyPrinter();
-    try {
-      return writer.writeValueAsString(Objects.requireNonNull(object));
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return writer.writeValueAsString(Objects.requireNonNull(object));
   }
 }
 

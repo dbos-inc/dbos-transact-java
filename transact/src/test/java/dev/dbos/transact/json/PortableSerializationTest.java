@@ -27,7 +27,7 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -731,7 +731,7 @@ public class PortableSerializationTest {
 
   /** A test custom serializer that base64-encodes JSON. */
   static class TestBase64Serializer implements DBOSSerializer {
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final JsonMapper mapper = new JsonMapper();
 
     @Override
     public String name() {

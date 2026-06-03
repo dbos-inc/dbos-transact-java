@@ -24,6 +24,7 @@ public class JavaSerializerTest {
   public void testFloat() throws Exception {
     float value = 3.3f;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"java.lang.Float\",3.3]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Float.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -33,6 +34,7 @@ public class JavaSerializerTest {
   public void testPrimitiveObjectArray() throws Exception {
     Object[] values = {42, 1234567890123L, 3.3f, 3.14159, true, false};
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(values);
+    assertEquals("[\"[Ljava.lang.Object;\",[42,[\"java.lang.Long\",1234567890123],[\"java.lang.Float\",3.3],3.14159,true,false]]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     // Should deserialize to Object[]
     assertEquals(Object[].class, deserialized.getClass());
@@ -53,6 +55,7 @@ public class JavaSerializerTest {
   public void testInt() throws Exception {
     int value = 42;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("42", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Integer.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -62,6 +65,7 @@ public class JavaSerializerTest {
   public void testLong() throws Exception {
     long value = 1234567890123L;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"java.lang.Long\",1234567890123]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Long.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -71,6 +75,7 @@ public class JavaSerializerTest {
   public void testDouble() throws Exception {
     double value = 3.14159;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("3.14159", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Double.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -80,6 +85,7 @@ public class JavaSerializerTest {
   public void testBooleanTrue() throws Exception {
     boolean value = true;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("true", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Boolean.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -89,6 +95,7 @@ public class JavaSerializerTest {
   public void testBooleanFalse() throws Exception {
     boolean value = false;
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("false", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Boolean.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -105,6 +112,7 @@ public class JavaSerializerTest {
   public void testString() throws Exception {
     String value = "hello world";
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("\"hello world\"", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(String.class, deserialized.getClass());
     assertEquals(value, deserialized);
@@ -114,6 +122,7 @@ public class JavaSerializerTest {
   public void testList() throws Exception {
     List<String> value = Arrays.asList("apple", "banana", "cherry");
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"java.util.Arrays$ArrayList\",[\"apple\",\"banana\",\"cherry\"]]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(List.class, deserialized);
     assertEquals(value, deserialized);
@@ -125,6 +134,7 @@ public class JavaSerializerTest {
     value.put("one", 1);
     value.put("two", 2);
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("{\"@class\":\"java.util.HashMap\",\"one\":1,\"two\":2}", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(Map.class, deserialized);
     assertEquals(value, deserialized);
@@ -134,6 +144,7 @@ public class JavaSerializerTest {
   public void testNestedPojo() throws Exception {
     Person value = new Person("Alice", 30, new Address("Seattle", "98101"));
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("{\"@class\":\"dev.dbos.transact.json.JavaSerializerTest$Person\",\"name\":\"Alice\",\"age\":30,\"address\":{\"@class\":\"dev.dbos.transact.json.JavaSerializerTest$Address\",\"city\":\"Seattle\",\"zip\":\"98101\"}}", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(Person.class, deserialized);
     assertEquals(value, deserialized);
@@ -143,6 +154,7 @@ public class JavaSerializerTest {
   public void testIntArray() throws Exception {
     int[] value = {1, 2, 3, 4};
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"[I\",[1,2,3,4]]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(int[].class, deserialized);
     assertArrayEquals(value, (int[]) deserialized);
@@ -152,6 +164,7 @@ public class JavaSerializerTest {
   public void testInstantInObjectArray() throws Exception {
     Object[] value = {Instant.parse("2024-01-01T00:00:00Z"), Instant.parse("2024-01-02T00:00:00Z")};
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"[Ljava.lang.Object;\",[[\"java.time.Instant\",\"2024-01-01T00:00:00Z\"],[\"java.time.Instant\",\"2024-01-02T00:00:00Z\"]]]", serialized);
     var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(2, deserialized.length);
     assertInstanceOf(Instant.class, deserialized[0]);
@@ -167,6 +180,7 @@ public class JavaSerializerTest {
     m1.put("age", 30);
     List<Map<String, Object>> value = List.of(m1);
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"java.util.ImmutableCollections$List12\",[{\"@class\":\"java.util.HashMap\",\"name\":\"Alice\",\"age\":30}]]", serialized);
     var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(List.class, deserialized);
     assertEquals(value, deserialized);
@@ -176,6 +190,7 @@ public class JavaSerializerTest {
   public void testMixedObjectArrayWithList() throws Exception {
     Object[] value = {"abc", 123, true, Arrays.asList("x", "y")};
     var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    assertEquals("[\"[Ljava.lang.Object;\",[\"abc\",123,true,[\"java.util.Arrays$ArrayList\",[\"x\",\"y\"]]]]", serialized);
     var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertArrayEquals(value, deserialized);
   }
