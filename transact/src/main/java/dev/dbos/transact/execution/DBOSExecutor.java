@@ -113,9 +113,10 @@ public class DBOSExecutor implements AutoCloseable {
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   private boolean dbosCloud;
+  private String appId;
+  private String appName;
   private String appVersion;
   private String executorId;
-  private String appId;
 
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
@@ -142,12 +143,14 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOSConfig.executorId cannot be specified when using Conductor");
     }
 
-    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
-    appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
-    executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
     dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+    appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
+    appName = Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "");
+    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
 
     if (!dbosCloud) {
+      appName = config.appName();
       if (config.enablePatching()) {
         appVersion = "PATCHING_ENABLED";
       }
@@ -370,20 +373,20 @@ public class DBOSExecutor implements AutoCloseable {
 
   // executor metadata
 
-  public String executorId() {
-    return this.executorId;
+  public String appId() {
+    return this.appId;
+  }
+
+  public String appName() {
+    return appName;
   }
 
   public String appVersion() {
     return this.appVersion;
   }
 
-  public String appId() {
-    return this.appId;
-  }
-
-  public String appName() {
-    return config.appName();
+  public String executorId() {
+    return this.executorId;
   }
 
   public Map<String, Object> executorMetadata() {

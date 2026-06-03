@@ -36,13 +36,14 @@ public class ConfigEnvTest {
     var envVars =
         new EnvironmentVariables("DBOS__VMID", "test-env-executor-id")
             .and("DBOS__APPVERSION", "test-env-app-version")
-            .and("DBOS__APPID", "test-env-app-id");
+            .and("DBOS__APPID", "test-env-app-id")
+            .and("DBOS_APP_NAME", "test-env-app-name");
 
     envVars.execute(
         () -> {
           var config =
               pgContainer
-                  .dbosConfig()
+                  .dbosConfig("test-app-name")
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
           var dbos = new DBOS(config);
@@ -50,6 +51,7 @@ public class ConfigEnvTest {
           try {
             dbos.launch();
             var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertEquals("test-app-name", dbosExecutor.appName());
             assertEquals("test-app-version", dbosExecutor.appVersion());
             assertEquals("test-executor-id", dbosExecutor.executorId());
             assertEquals("test-env-app-id", dbosExecutor.appId());
@@ -241,6 +243,27 @@ public class ConfigEnvTest {
     } finally {
       d.shutdown();
     }
+  }
+
+  @Test
+  public void cloudEnvOverridesAppName() throws Exception {
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true").and("DBOS_APP_NAME", "env-app-name");
+
+    envVars.execute(
+        () -> {
+          var config = pgContainer.dbosConfig("local-app-name");
+          assertEquals("local-app-name", config.appName());
+          var dbos = new DBOS(config);
+
+          try {
+            dbos.launch();
+            var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertEquals("env-app-name", dbosExecutor.appName());
+          } finally {
+            dbos.shutdown();
+          }
+        });
   }
 
   @Test
