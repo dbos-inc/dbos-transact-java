@@ -27,11 +27,11 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
-import tools.jackson.databind.json.JsonMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Tests for portable serialization format. These tests verify that workflows can be triggered via

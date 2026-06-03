@@ -62,8 +62,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 import org.java_websocket.WebSocket;
 import org.java_websocket.enums.Opcode;
 import org.java_websocket.framing.Framedata;
@@ -76,6 +74,8 @@ import org.mockito.Captor;
 import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 public class ConductorTest {
 

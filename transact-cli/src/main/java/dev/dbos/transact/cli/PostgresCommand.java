@@ -8,12 +8,12 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
-import tools.jackson.databind.json.JsonMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
+import tools.jackson.databind.json.JsonMapper;
 
 @Command(
     name = "postgres",

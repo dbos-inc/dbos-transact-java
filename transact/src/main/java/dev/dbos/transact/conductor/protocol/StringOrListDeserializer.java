@@ -20,7 +20,7 @@ public class StringOrListDeserializer extends ValueDeserializer<List<String>> {
     } else if (p.currentToken() == JsonToken.VALUE_STRING) {
       return List.of(p.getString());
     }
-    return ctxt.reportInputMismatch(String.class,
-        "Expected a string or an array of strings, got %s", p.currentToken());
+    return ctxt.reportInputMismatch(
+        String.class, "Expected a string or an array of strings, got %s", p.currentToken());
   }
 }

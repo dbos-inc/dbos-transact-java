@@ -24,12 +24,12 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
-import tools.jackson.databind.json.JsonMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
+import tools.jackson.databind.json.JsonMapper;
 
 public class PgSqlClientTest {
 
@@ -184,10 +184,7 @@ public class PgSqlClientTest {
   String enqueueWorkflow(
       String workflowName, String dedupId, Duration timeout, Instant deadline, Object... args)
       throws SQLException {
-    var jsonArgs =
-        Arrays.stream(args)
-            .map(MAPPER::writeValueAsString)
-            .toArray(String[]::new);
+    var jsonArgs = Arrays.stream(args).map(MAPPER::writeValueAsString).toArray(String[]::new);
     var sql =
         """
         SELECT dbos.enqueue_workflow(

@@ -8,7 +8,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-import tools.jackson.databind.json.JsonMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -16,6 +15,7 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
+import tools.jackson.databind.json.JsonMapper;
 
 @Command(
     name = "workflow",

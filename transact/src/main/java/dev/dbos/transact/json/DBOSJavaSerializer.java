@@ -3,8 +3,8 @@ package dev.dbos.transact.json;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.JavaType;
-import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 import tools.jackson.databind.jsontype.impl.DefaultTypeResolverBuilder;
@@ -26,7 +26,8 @@ public class DBOSJavaSerializer implements DBOSSerializer {
         BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build();
 
     DefaultTypeResolverBuilder typer =
-        new DefaultTypeResolverBuilder(ptv, DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY, JsonTypeInfo.Id.CLASS, null) {
+        new DefaultTypeResolverBuilder(
+            ptv, DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY, JsonTypeInfo.Id.CLASS, null) {
           @Override
           public boolean useForType(JavaType t) {
             return !t.isPrimitive();

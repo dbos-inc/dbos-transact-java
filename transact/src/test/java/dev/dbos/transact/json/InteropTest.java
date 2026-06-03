@@ -19,11 +19,11 @@ import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.util.*;
 
-import tools.jackson.databind.json.JsonMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Cross-language interoperability tests for portable workflow serialization.
