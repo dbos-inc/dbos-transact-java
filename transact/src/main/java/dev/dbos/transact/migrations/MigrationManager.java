@@ -22,7 +22,7 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37);
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
@@ -437,7 +437,11 @@ public class MigrationManager {
             migration32(isCockroach),
             MIGRATION_33,
             migration34(isCockroach),
-            migration35(isCockroach));
+            migration35(isCockroach),
+            MIGRATION_36,
+            migration37(isCockroach),
+            migration38(isCockroach),
+            migration39(useListenNotify));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -935,5 +939,151 @@ public class MigrationManager {
     return "DROP INDEX "
         + concurrently(isCockroach)
         + " IF EXISTS \"%1$s\".\"idx_workflow_status_queue_status_started\"";
+  }
+
+  // ADD COLUMN with no default is catalog-only; partial index covers zero rows so no CONCURRENTLY.
+  static final String MIGRATION_36 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "completed_at" BIGINT;
+      CREATE INDEX IF NOT EXISTS "idx_workflow_status_completed_at" ON "%1$s"."workflow_status" ("completed_at") WHERE "completed_at" IS NOT NULL;
+      """;
+
+  static String migration37(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_started_at\""
+        + " ON \"%1$s\".\"workflow_status\" (\"started_at_epoch_ms\")"
+        + " WHERE \"started_at_epoch_ms\" IS NOT NULL";
+  }
+
+  static String migration38(boolean isCockroach) {
+    var migration =
+        """
+        DROP FUNCTION IF EXISTS "%1$s".enqueue_workflow(
+            TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT
+        );
+
+        CREATE OR REPLACE FUNCTION "%1$s".enqueue_workflow(
+            workflow_name TEXT,
+            queue_name TEXT,
+            positional_args JSON[] DEFAULT ARRAY[]::JSON[],
+            named_args JSON DEFAULT '{}'::JSON,
+            class_name TEXT DEFAULT NULL,
+            config_name TEXT DEFAULT NULL,
+            workflow_id TEXT DEFAULT NULL,
+            app_version TEXT DEFAULT NULL,
+            timeout_ms BIGINT DEFAULT NULL,
+            deadline_epoch_ms BIGINT DEFAULT NULL,
+            deduplication_id TEXT DEFAULT NULL,
+            priority INT4 DEFAULT NULL,
+            queue_partition_key TEXT DEFAULT NULL,
+            authenticated_user TEXT DEFAULT NULL,
+            authenticated_roles TEXT DEFAULT NULL,
+            delay_until_epoch_ms BIGINT DEFAULT NULL
+        ) RETURNS TEXT AS $$
+        DECLARE
+            v_workflow_id TEXT;
+            v_serialized_inputs TEXT;
+            v_owner_xid TEXT;
+            v_now BIGINT;
+            v_recovery_attempts INT4 := 0;
+            v_priority INT4;
+            v_status TEXT;
+        BEGIN
+
+            -- Validate required parameters
+            IF workflow_name IS NULL OR workflow_name = '' THEN
+                RAISE EXCEPTION 'Workflow name cannot be null or empty';
+            END IF;
+            IF queue_name IS NULL OR queue_name = '' THEN
+                RAISE EXCEPTION 'Queue name cannot be null or empty';
+            END IF;
+            IF named_args IS NOT NULL AND jsonb_typeof(named_args::jsonb) != 'object' THEN
+                RAISE EXCEPTION 'Named args must be a JSON object';
+            END IF;
+            IF workflow_id IS NOT NULL AND workflow_id = '' THEN
+                RAISE EXCEPTION 'Workflow ID cannot be an empty string if provided.';
+            END IF;
+            IF delay_until_epoch_ms IS NOT NULL AND delay_until_epoch_ms < 0 THEN
+                RAISE EXCEPTION 'delay_until_epoch_ms must be >= 0';
+            END IF;
+
+            v_workflow_id := COALESCE(workflow_id, gen_random_uuid()::TEXT);
+            v_owner_xid := gen_random_uuid()::TEXT;
+            v_priority := COALESCE(priority, 0);
+            v_serialized_inputs := json_build_object(
+                'positionalArgs', positional_args,
+                'namedArgs', named_args
+            )::TEXT;
+            v_now := EXTRACT(epoch FROM now()) * 1000;
+            v_status := CASE WHEN delay_until_epoch_ms IS NULL THEN 'ENQUEUED' ELSE 'DELAYED' END;
+
+            INSERT INTO "%1$s".workflow_status (
+                workflow_uuid, status, inputs,
+                name, class_name, config_name,
+                queue_name, deduplication_id, priority, queue_partition_key,
+                application_version,
+                created_at, updated_at, recovery_attempts,
+                workflow_timeout_ms, workflow_deadline_epoch_ms,
+                parent_workflow_id, owner_xid, serialization,
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms
+            ) VALUES (
+                v_workflow_id, v_status, v_serialized_inputs,
+                workflow_name, class_name, config_name,
+                queue_name, deduplication_id, v_priority, queue_partition_key,
+                app_version,
+                v_now, v_now, v_recovery_attempts,
+                timeout_ms, deadline_epoch_ms,
+                NULL, v_owner_xid, 'portable_json',
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms
+            )
+            ON CONFLICT (workflow_uuid)
+            DO UPDATE SET
+                updated_at = EXCLUDED.updated_at;
+
+            RETURN v_workflow_id;
+
+        EXCEPTION
+            WHEN unique_violation THEN
+                RAISE EXCEPTION 'DBOS queue duplicated'
+                   USING DETAIL = format('Workflow %%s with queue %%s and deduplication ID %%s already exists', v_workflow_id, queue_name, deduplication_id),
+                        ERRCODE = 'unique_violation';
+        END;
+        $$ LANGUAGE plpgsql;
+        """;
+    if (!isCockroach) {
+      migration +=
+          """
+          ALTER FUNCTION "%1$s".enqueue_workflow(
+              TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT, TEXT, TEXT, BIGINT
+          ) SET search_path = pg_catalog, pg_temp;
+          """;
+    }
+    return migration;
+  }
+
+  static String migration39(boolean useListenNotify) {
+    if (!useListenNotify) return "";
+    return """
+        -- Create streams notification function
+        CREATE OR REPLACE FUNCTION "%1$s".streams_function() RETURNS TRIGGER AS $$
+        DECLARE
+            payload text := NEW.workflow_uuid || '::' || NEW.key;
+        BEGIN
+            PERFORM pg_notify('dbos_streams_channel', payload);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        ALTER FUNCTION "%1$s".streams_function() SET search_path = pg_catalog, pg_temp;
+
+        -- Create streams trigger
+        DROP TRIGGER IF EXISTS dbos_streams_trigger ON "%1$s".streams;
+        CREATE TRIGGER dbos_streams_trigger
+        AFTER INSERT ON "%1$s".streams
+        FOR EACH ROW EXECUTE FUNCTION "%1$s".streams_function();
+        """;
   }
 }
