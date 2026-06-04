@@ -21,8 +21,8 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.StepAggregateRow;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -729,14 +729,13 @@ public class WorkflowDAO {
     boolean hasBucket = input.timeBucketSizeMs() != null;
     if (hasBucket) {
       String bucketExpr =
-          "(floor(created_at / %d) * %d)::bigint".formatted(
-              input.timeBucketSizeMs(), input.timeBucketSizeMs());
+          "(floor(created_at / %d) * %d)::bigint"
+              .formatted(input.timeBucketSizeMs(), input.timeBucketSizeMs());
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
     if (dims.isEmpty()) {
-      throw new IllegalArgumentException(
-          "At least one group_by flag must be set to True");
+      throw new IllegalArgumentException("At least one group_by flag must be set to True");
     }
 
     // --- SELECT metrics ---
@@ -745,14 +744,12 @@ public class WorkflowDAO {
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
     if (input.selectMinCreatedAt()) metrics.add(new Metric("min_created_at", "MIN(created_at)"));
     if (input.selectMaxQueueWaitMs())
-      metrics.add(
-          new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
+      metrics.add(new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
     if (input.selectMaxTotalLatencyMs())
       metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
 
     if (metrics.isEmpty()) {
-      throw new IllegalArgumentException(
-          "At least one select_ flag must be set to True");
+      throw new IllegalArgumentException("At least one select_ flag must be set to True");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -867,7 +864,9 @@ public class WorkflowDAO {
                 case "max_total_latency_ms" -> maxTotalLatencyMs = lv;
               }
             }
-            results.add(new WorkflowAggregateRow(group, count, minCreatedAt, maxQueueWaitMs, maxTotalLatencyMs));
+            results.add(
+                new WorkflowAggregateRow(
+                    group, count, minCreatedAt, maxQueueWaitMs, maxTotalLatencyMs));
           }
         }
       } finally {
@@ -901,14 +900,13 @@ public class WorkflowDAO {
     if (input.groupByStatus()) dims.add(new GroupDim("status", statusExpr));
     if (input.timeBucketSizeMs() != null) {
       String bucketExpr =
-          "(floor(completed_at_epoch_ms / %d) * %d)::bigint".formatted(
-              input.timeBucketSizeMs(), input.timeBucketSizeMs());
+          "(floor(completed_at_epoch_ms / %d) * %d)::bigint"
+              .formatted(input.timeBucketSizeMs(), input.timeBucketSizeMs());
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
     if (dims.isEmpty()) {
-      throw new IllegalArgumentException(
-          "At least one group_by flag must be set to True");
+      throw new IllegalArgumentException("At least one group_by flag must be set to True");
     }
 
     // --- SELECT metrics ---
@@ -916,12 +914,11 @@ public class WorkflowDAO {
     var metrics = new ArrayList<Metric>();
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
     if (input.selectMaxDurationMs())
-      metrics.add(new Metric("max_duration_ms",
-          "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
+      metrics.add(
+          new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
 
     if (metrics.isEmpty()) {
-      throw new IllegalArgumentException(
-          "At least one select_ flag must be set to True");
+      throw new IllegalArgumentException("At least one select_ flag must be set to True");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -930,8 +927,7 @@ public class WorkflowDAO {
     StringJoiner selectCols = new StringJoiner(", ");
     for (var dim : dims) selectCols.add(dim.expr() + " AS " + dim.name());
     for (var m : metrics) selectCols.add(m.expr() + " AS " + m.alias());
-    sqlBuilder.append(selectCols)
-        .append(" FROM \"%s\".operation_outputs".formatted(ctx.schema()));
+    sqlBuilder.append(selectCols).append(" FROM \"%s\".operation_outputs".formatted(ctx.schema()));
 
     // --- WHERE ---
     StringJoiner whereConditions = new StringJoiner(" AND ");

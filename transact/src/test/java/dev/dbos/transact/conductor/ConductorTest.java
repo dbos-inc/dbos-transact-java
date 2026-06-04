@@ -32,8 +32,8 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -3017,8 +3017,10 @@ public class ConductorTest {
 
     List<WorkflowAggregateRow> rows =
         List.of(
-            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
-            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
+            new WorkflowAggregateRow(
+                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {

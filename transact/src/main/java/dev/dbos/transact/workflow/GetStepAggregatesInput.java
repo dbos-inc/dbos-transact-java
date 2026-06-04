@@ -34,61 +34,141 @@ public record GetStepAggregatesInput(
 
   public GetStepAggregatesInput withGroupByFunctionName(boolean groupByFunctionName) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withGroupByStatus(boolean groupByStatus) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withSelectCount(boolean selectCount) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withSelectMaxDurationMs(boolean selectMaxDurationMs) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withTimeBucketSizeMs(Long timeBucketSizeMs) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withStatus(List<String> status) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withFunctionName(List<String> functionName) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withCompletedAfter(Instant completedAfter) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 
   public GetStepAggregatesInput withCompletedBefore(Instant completedBefore) {
     return new GetStepAggregatesInput(
-        groupByFunctionName, groupByStatus, selectCount, selectMaxDurationMs, timeBucketSizeMs,
-        status, functionName, workflowIdPrefix, completedAfter, completedBefore);
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDurationMs,
+        timeBucketSizeMs,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore);
   }
 }

@@ -24,12 +24,11 @@ import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
-import dev.dbos.transact.workflow.StepAggregateRow;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -1531,10 +1530,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetWorkflowAggregatesTimeBucketInvalidThrows() {
-    var input =
-        new GetWorkflowAggregatesInput()
-            .withTimeBucketSizeMs(0L)
-            .withSelectCount(true);
+    var input = new GetWorkflowAggregatesInput().withTimeBucketSizeMs(0L).withSelectCount(true);
     assertThrows(IllegalArgumentException.class, () -> sysdb.getWorkflowAggregates(input));
   }
 
@@ -1546,9 +1542,7 @@ public class SystemDatabaseTest {
             buildNamedWorkflow("agg-sel-2", "WorkflowA", WorkflowState.SUCCESS)));
 
     // count=true, min_created_at=false → min_created_at must be null
-    var rows =
-        sysdb.getWorkflowAggregates(
-            new GetWorkflowAggregatesInput().withGroupByName(true));
+    var rows = sysdb.getWorkflowAggregates(new GetWorkflowAggregatesInput().withGroupByName(true));
     assertEquals(1, rows.size());
     assertNotNull(rows.get(0).count());
     assertEquals(2L, rows.get(0).count());
@@ -1579,9 +1573,7 @@ public class SystemDatabaseTest {
     long bucketMs = 3_600_000L; // 1 hour
     var rows =
         sysdb.getWorkflowAggregates(
-            new GetWorkflowAggregatesInput()
-                .withTimeBucketSizeMs(bucketMs)
-                .withSelectCount(true));
+            new GetWorkflowAggregatesInput().withTimeBucketSizeMs(bucketMs).withSelectCount(true));
     assertFalse(rows.isEmpty());
     for (var r : rows) {
       assertTrue(r.group().containsKey("time_bucket"));
@@ -1616,9 +1608,7 @@ public class SystemDatabaseTest {
     // No match: completed_before=before (before the workflows were created)
     var noRows =
         sysdb.getWorkflowAggregates(
-            new GetWorkflowAggregatesInput()
-                .withGroupByStatus(true)
-                .withCompletedBefore(before));
+            new GetWorkflowAggregatesInput().withGroupByStatus(true).withCompletedBefore(before));
     assertTrue(noRows.isEmpty());
   }
 
@@ -1647,7 +1637,15 @@ public class SystemDatabaseTest {
         List.of(
             new StepInfo(0, "stepA", "ok", null, null, now.minusMillis(10), now, null),
             new StepInfo(1, "stepA", "ok", null, null, now.minusMillis(5), now, null),
-            new StepInfo(2, "stepB", null, new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null), null, now.minusMillis(3), now, null));
+            new StepInfo(
+                2,
+                "stepB",
+                null,
+                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null),
+                null,
+                now.minusMillis(3),
+                now,
+                null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-agg-wf-1", "WF", WorkflowState.ERROR, steps)));
 
@@ -1655,7 +1653,11 @@ public class SystemDatabaseTest {
     var rows =
         sysdb.getStepAggregates(
             new GetStepAggregatesInput().withGroupByFunctionName(true).withSelectCount(true));
-    var byFn = rows.stream().collect(java.util.stream.Collectors.toMap(r -> r.group().get("function_name"), r -> r.count()));
+    var byFn =
+        rows.stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    r -> r.group().get("function_name"), r -> r.count()));
     assertEquals(2L, byFn.get("stepA"));
     assertEquals(1L, byFn.get("stepB"));
 
@@ -1663,7 +1665,10 @@ public class SystemDatabaseTest {
     var statusRows =
         sysdb.getStepAggregates(
             new GetStepAggregatesInput().withGroupByStatus(true).withSelectCount(true));
-    var byStatus = statusRows.stream().collect(java.util.stream.Collectors.toMap(r -> r.group().get("status"), r -> r.count()));
+    var byStatus =
+        statusRows.stream()
+            .collect(
+                java.util.stream.Collectors.toMap(r -> r.group().get("status"), r -> r.count()));
     assertEquals(2L, byStatus.get("SUCCESS"));
     assertEquals(1L, byStatus.get("ERROR"));
   }
@@ -1674,7 +1679,15 @@ public class SystemDatabaseTest {
     var steps =
         List.of(
             new StepInfo(0, "stepX", "ok", null, null, now.minusMillis(10), now, null),
-            new StepInfo(1, "stepY", null, new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null), null, now.minusMillis(5), now, null));
+            new StepInfo(
+                1,
+                "stepY",
+                null,
+                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null),
+                null,
+                now.minusMillis(5),
+                now,
+                null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-filter-wf-1", "WF", WorkflowState.ERROR, steps)));
 
@@ -1754,17 +1767,18 @@ public class SystemDatabaseTest {
   public void testGetStepAggregatesNoGroupByThrows() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> sysdb.getStepAggregates(new GetStepAggregatesInput().withSelectCount(true).withGroupByFunctionName(false)));
+        () ->
+            sysdb.getStepAggregates(
+                new GetStepAggregatesInput().withSelectCount(true).withGroupByFunctionName(false)));
   }
 
   @Test
   public void testGetStepAggregatesNoSelectThrows() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> sysdb.getStepAggregates(
-            new GetStepAggregatesInput()
-                .withGroupByFunctionName(true)
-                .withSelectCount(false)));
+        () ->
+            sysdb.getStepAggregates(
+                new GetStepAggregatesInput().withGroupByFunctionName(true).withSelectCount(false)));
   }
 
   @Test
@@ -1777,9 +1791,7 @@ public class SystemDatabaseTest {
     long bucketMs = 3_600_000L;
     var rows =
         sysdb.getStepAggregates(
-            new GetStepAggregatesInput()
-                .withTimeBucketSizeMs(bucketMs)
-                .withSelectCount(true));
+            new GetStepAggregatesInput().withTimeBucketSizeMs(bucketMs).withSelectCount(true));
     assertFalse(rows.isEmpty());
     for (var r : rows) {
       assertTrue(r.group().containsKey("time_bucket"));
@@ -1790,10 +1802,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetStepAggregatesTimeBucketInvalidThrows() {
-    var input =
-        new GetStepAggregatesInput()
-            .withTimeBucketSizeMs(0L)
-            .withSelectCount(true);
+    var input = new GetStepAggregatesInput().withTimeBucketSizeMs(0L).withSelectCount(true);
     assertThrows(IllegalArgumentException.class, () -> sysdb.getStepAggregates(input));
   }
 

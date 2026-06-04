@@ -8,8 +8,7 @@ import java.util.Map;
 
 public class GetStepAggregatesResponse extends BaseResponse {
 
-  public record StepAggregateOutput(
-      Map<String, String> group, Long count, Long max_duration_ms) {
+  public record StepAggregateOutput(Map<String, String> group, Long count, Long max_duration_ms) {
 
     public static StepAggregateOutput from(StepAggregateRow row) {
       return new StepAggregateOutput(row.group(), row.count(), row.maxDurationMs());
