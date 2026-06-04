@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -989,6 +990,188 @@ public class DynamicQueuesTest {
       assertEquals("oneone", h1.getResult());
       assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
     }
+  }
+
+  @Test
+  public void testCancellingQueuedWorkflows() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+
+    var blockedHandle =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0),
+            new StartWorkflowOptions("blocked").withQueue("test_queue"));
+    var regularHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(42),
+            new StartWorkflowOptions().withQueue("test_queue"));
+
+    impl.wfSemaphore.acquire(1);
+    assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
+
+    dbos.cancelWorkflow("blocked");
+    assertEquals(WorkflowState.CANCELLED, blockedHandle.getStatus().status());
+    assertEquals(42, (int) regularHandle.getResult());
+
+    impl.latch.countDown();
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testResumingQueuedWorkflows() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+
+    var blockedHandle =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue("test_queue"));
+    var regularHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(99),
+            new StartWorkflowOptions("resumable").withQueue("test_queue"));
+
+    impl.wfSemaphore.acquire(1);
+    assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
+
+    var resumedHandle = dbos.<Integer, Exception>resumeWorkflow("resumable");
+    assertEquals(99, (int) resumedHandle.getResult());
+
+    impl.latch.countDown();
+    blockedHandle.getResult();
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testOneAtATimeWithWorkerConcurrency() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue("test_queue", QueueOptions.setWorkerConcurrency(1));
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue("test_queue"));
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(1), new StartWorkflowOptions().withQueue("test_queue"));
+
+    impl.wfSemaphore.acquire(1);
+    Thread.sleep(2000);
+    assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
+    assertEquals(1, impl.counter.get());
+
+    impl.latch.countDown();
+    assertEquals(0, h1.getResult());
+    assertEquals(1, h2.getResult());
+    assertEquals(1, impl.counter.get());
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testTimeoutQueue() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0),
+            new StartWorkflowOptions().withQueue("test_queue").withTimeout(500, TimeUnit.MILLISECONDS));
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(1),
+            new StartWorkflowOptions().withQueue("test_queue").withTimeout(500, TimeUnit.MILLISECONDS));
+    var normalHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(42),
+            new StartWorkflowOptions().withQueue("test_queue").withTimeout(10, TimeUnit.SECONDS));
+
+    assertThrows(Exception.class, h1::getResult);
+    assertThrows(Exception.class, h2::getResult);
+    assertEquals(42, (int) normalHandle.getResult());
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testMultipleExecutorWorkerConcurrency() throws Exception {
+    int workerConcurrency = 2;
+    int globalConcurrency = workerConcurrency * 2;
+
+    ConcurrencyTestServiceImpl impl1 = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl1);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue(
+        "multi_exec_queue",
+        QueueOptions.setWorkerConcurrency(workerConcurrency).andConcurrency(globalConcurrency));
+
+    for (int i = 0; i < workerConcurrency; i++) {
+      final int fi = i;
+      dbos.startWorkflow(
+          () -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue("multi_exec_queue"));
+    }
+    impl1.wfSemaphore.acquire(workerConcurrency);
+
+    ConcurrencyTestServiceImpl impl2 = new ConcurrencyTestServiceImpl();
+    try (var dbos2 = new DBOS(dbosConfig.withExecutorId("executor2"))) {
+      dbos2.registerProxy(ConcurrencyTestService.class, impl2);
+      dbos2.launch();
+
+      var qs2 = DBOSTestAccess.getQueueService(dbos2);
+      qs2.setSpeedupForTest();
+      dbos2.registerQueue(
+          "multi_exec_queue",
+          QueueOptions.setWorkerConcurrency(workerConcurrency).andConcurrency(globalConcurrency));
+
+      List<WorkflowHandle<Integer, ?>> handles2 = new ArrayList<>();
+      for (int i = 0; i < workerConcurrency; i++) {
+        final int fi = i;
+        handles2.add(
+            dbos.startWorkflow(
+                () -> service.blockedWorkflow(fi),
+                new StartWorkflowOptions().withQueue("multi_exec_queue")));
+      }
+      impl2.wfSemaphore.acquire(workerConcurrency);
+      for (var h : handles2) {
+        assertEquals("executor2", h.getStatus().executorId());
+      }
+
+      var extra =
+          dbos.startWorkflow(
+              () -> service.noopWorkflow(99),
+              new StartWorkflowOptions().withQueue("multi_exec_queue"));
+      Thread.sleep(2000);
+      assertEquals(WorkflowState.ENQUEUED, extra.getStatus().status());
+
+      impl2.latch.countDown();
+      for (var h : handles2) {
+        h.getResult();
+      }
+      assertEquals(99, (int) extra.getResult());
+    }
+
+    impl1.latch.countDown();
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }
 
   private static void awaitCondition(BooleanSupplier condition) throws InterruptedException {
