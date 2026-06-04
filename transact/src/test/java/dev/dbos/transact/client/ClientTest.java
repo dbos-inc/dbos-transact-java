@@ -1,5 +1,6 @@
 package dev.dbos.transact.client;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -44,7 +45,9 @@ public class ClientTest {
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));
-    service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
+    var impl = new ClientServiceImpl(dbos);
+    service = dbos.registerProxy(ClientService.class, impl);
+    impl.setProxy(service);
 
     dbos.launch();
   }
@@ -466,6 +469,43 @@ public class ClientTest {
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
       assertNull(row.timeoutMs());
       assertEquals(deadline.toEpochMilli(), row.deadlineEpochMs());
+    }
+  }
+
+  @Test
+  public void enqueueOptionsAuthWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withAuthentication("alice", "admin", "editor");
+      var handle = client.enqueueWorkflow(options, new Object[] {1, "test"});
+
+      var status = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
+      assertEquals("alice", status.authenticatedUser());
+      assertArrayEquals(new String[] {"admin", "editor"}, status.authenticatedRoles());
+      assertNull(status.assumedRole());
+    }
+  }
+
+  @Test
+  public void authFlowsFromEnqueuedParentToChild() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("parentWorkflow", "ClientServiceImpl", "testQueue")
+              .withAuthentication("bob", "viewer");
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+      handle.getResult();
+
+      var parentStatus = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
+      assertEquals("bob", parentStatus.authenticatedUser());
+      assertArrayEquals(new String[] {"viewer"}, parentStatus.authenticatedRoles());
+
+      var childStatus = client.getWorkflowStatus(handle.workflowId() + "-0").orElseThrow();
+      assertEquals("bob", childStatus.authenticatedUser());
+      assertArrayEquals(new String[] {"viewer"}, childStatus.authenticatedRoles());
     }
   }
 

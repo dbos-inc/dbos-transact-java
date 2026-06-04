@@ -228,7 +228,10 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Integer priority,
       @Nullable String queuePartitionKey,
       @Nullable Duration delay,
-      @Nullable SerializationStrategy serialization) {
+      @Nullable SerializationStrategy serialization,
+      @Nullable String authenticatedUser,
+      @Nullable String assumedRole,
+      @Nullable String[] authenticatedRoles) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -287,6 +290,9 @@ public class DBOSClient implements AutoCloseable {
           null,
           null,
           null,
+          null,
+          null,
+          null,
           null);
     }
 
@@ -297,6 +303,9 @@ public class DBOSClient implements AutoCloseable {
           className,
           null,
           queueName,
+          null,
+          null,
+          null,
           null,
           null,
           null,
@@ -328,7 +337,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -352,7 +364,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -376,7 +391,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -400,7 +418,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -424,7 +445,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -448,7 +472,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -472,7 +499,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -495,7 +525,10 @@ public class DBOSClient implements AutoCloseable {
           priority,
           this.queuePartitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -520,7 +553,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           partitionKey,
           this.delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -544,7 +580,10 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           delay,
-          this.serialization);
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -570,7 +609,84 @@ public class DBOSClient implements AutoCloseable {
           this.priority,
           this.queuePartitionKey,
           this.delay,
-          serialization);
+          serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
+    }
+
+    /**
+     * Specify the authenticated user to associate with the workflow.
+     *
+     * @param authenticatedUser the authenticated user
+     * @return New `EnqueueOptions` with the authenticated user set
+     */
+    public @NonNull EnqueueOptions withAuthenticatedUser(@Nullable String authenticatedUser) {
+      return withAuthentication(authenticatedUser, this.authenticatedRoles);
+    }
+
+    /**
+     * Specify the assumed role to associate with the workflow.
+     *
+     * @param assumedRole the assumed role
+     * @return New `EnqueueOptions` with the assumed role set
+     */
+    public @NonNull EnqueueOptions withAssumedRole(@Nullable String assumedRole) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          assumedRole,
+          this.authenticatedRoles);
+    }
+
+    /**
+     * Specify the authenticated roles to associate with the workflow.
+     *
+     * @param authenticatedRoles the authenticated roles
+     * @return New `EnqueueOptions` with the authenticated roles set
+     */
+    public @NonNull EnqueueOptions withAuthenticatedRoles(@Nullable String... authenticatedRoles) {
+      return withAuthentication(this.authenticatedUser, authenticatedRoles);
+    }
+
+    /**
+     * Specify the authenticated user and roles to associate with the workflow.
+     *
+     * @param authenticatedUser the authenticated user
+     * @param authenticatedRoles the authenticated roles
+     * @return New `EnqueueOptions` with the authenticated user and roles set
+     */
+    public @NonNull EnqueueOptions withAuthentication(
+        @Nullable String authenticatedUser, @Nullable String... authenticatedRoles) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          authenticatedUser,
+          this.assumedRole,
+          authenticatedRoles);
     }
   }
 

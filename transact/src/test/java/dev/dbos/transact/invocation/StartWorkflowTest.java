@@ -1,5 +1,6 @@
 package dev.dbos.transact.invocation;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -264,5 +265,34 @@ public class StartWorkflowTest {
 
     var status = handle.getStatus();
     assertEquals(exec.appVersion(), status.appVersion());
+  }
+
+  @Test
+  void startWorkflowOptionsAuthFlowsToStatus() throws Exception {
+    String workflowId = "authViaStartOptions";
+    String[] roles = {"admin", "editor"};
+    var options = new StartWorkflowOptions(workflowId).withAuthentication("alice", roles);
+
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    handle.getResult();
+
+    var status = handle.getStatus();
+    assertEquals("alice", status.authenticatedUser());
+    assertArrayEquals(roles, status.authenticatedRoles());
+    assertNull(status.assumedRole());
+  }
+
+  @Test
+  void nullAuthFlowsToStatus() throws Exception {
+    String workflowId = "authNull";
+    var options = new StartWorkflowOptions(workflowId);
+
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    handle.getResult();
+
+    var status = handle.getStatus();
+    assertNull(status.authenticatedUser());
+    assertNull(status.assumedRole());
+    assertNull(status.authenticatedRoles());
   }
 }

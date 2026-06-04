@@ -153,9 +153,9 @@ public record ExecutionOptions(
         this.isRecoveryRequest,
         this.isDequeuedRequest,
         this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles);
+        options.authenticatedUser(),
+        options.assumedRole(),
+        options.authenticatedRoles());
   }
 
   public ExecutionOptions withOptions(StartWorkflowOptions options) {
@@ -175,9 +175,9 @@ public record ExecutionOptions(
         this.isRecoveryRequest,
         this.isDequeuedRequest,
         this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles);
+        options.authenticatedUser(),
+        options.assumedRole(),
+        options.authenticatedRoles());
   }
 
   public ExecutionOptions withSerialization(String serialization) {

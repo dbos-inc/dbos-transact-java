@@ -14,6 +14,9 @@ public class DBOSContext {
   String nextWorkflowId;
   Timeout nextTimeout;
   Instant nextDeadline;
+  String nextAuthenticatedUser;
+  String nextAssumedRole;
+  String[] nextAuthenticatedRoles;
 
   // current workflow fields
   private final String workflowId;
@@ -22,6 +25,9 @@ public class DBOSContext {
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
+  private final String authenticatedUser;
+  private final String assumedRole;
+  private final String[] authenticatedRoles;
   private SerializationStrategy serialization;
 
   // private StepStatus stepStatus;
@@ -32,11 +38,10 @@ public class DBOSContext {
     parent = null;
     timeout = null;
     deadline = null;
+    authenticatedUser = null;
+    assumedRole = null;
+    authenticatedRoles = null;
     serialization = SerializationStrategy.DEFAULT;
-  }
-
-  public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
-    this(workflowId, parent, timeout, deadline, null);
   }
 
   public DBOSContext(
@@ -44,12 +49,18 @@ public class DBOSContext {
       WorkflowInfo parent,
       Duration timeout,
       Instant deadline,
+      String authenticatedUser,
+      String assumedRole,
+      String[] authenticatedRoles,
       SerializationStrategy serialization) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
     this.timeout = timeout;
     this.deadline = deadline;
+    this.authenticatedUser = authenticatedUser;
+    this.assumedRole = assumedRole;
+    this.authenticatedRoles = authenticatedRoles;
     this.serialization = serialization;
   }
 
@@ -61,12 +72,18 @@ public class DBOSContext {
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
     this.nextDeadline = other.nextDeadline;
+    this.nextAuthenticatedUser = other.nextAuthenticatedUser;
+    this.nextAssumedRole = other.nextAssumedRole;
+    this.nextAuthenticatedRoles = other.nextAuthenticatedRoles;
     this.workflowId = other.workflowId;
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
     this.parent = other.parent;
     this.timeout = other.timeout;
     this.deadline = other.deadline;
+    this.authenticatedUser = other.authenticatedUser;
+    this.assumedRole = other.assumedRole;
+    this.authenticatedRoles = other.authenticatedRoles;
     this.serialization = other.serialization;
   }
 
@@ -140,33 +157,24 @@ public class DBOSContext {
     return serialization;
   }
 
-  public void setSerializationStrategy(SerializationStrategy strat) {
-    this.serialization = strat;
-  }
-
   public static String workflowId() {
-    var ctx = DBOSContextHolder.get();
-    return ctx == null ? null : ctx.workflowId;
+    return DBOSContextHolder.get().workflowId;
   }
 
   public static Integer stepId() {
-    var ctx = DBOSContextHolder.get();
-    return ctx == null ? null : ctx.stepFunctionId;
+    return DBOSContextHolder.get().stepFunctionId;
   }
 
   public static boolean inWorkflow() {
-    var ctx = DBOSContextHolder.get();
-    return ctx == null ? false : ctx.isInWorkflow();
+    return DBOSContextHolder.get().isInWorkflow();
   }
 
   public static boolean inStep() {
-    var ctx = DBOSContextHolder.get();
-    return ctx == null ? false : ctx.isInStep();
+    return DBOSContextHolder.get().isInStep();
   }
 
   public static SerializationStrategy serializationStrategy() {
-    var ctx = DBOSContextHolder.get();
-    return ctx != null ? ctx.getSerialization() : null;
+    return DBOSContextHolder.get().getSerialization();
   }
 
   public record TimeoutAndDeadline(Duration timeout, Instant deadline) {}
@@ -190,5 +198,17 @@ public class DBOSContext {
       resolvedDeadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
     }
     return new TimeoutAndDeadline(resolvedTimeout, resolvedDeadline);
+  }
+
+  public String getAuthenticatedUser() {
+    return nextAuthenticatedUser != null ? nextAuthenticatedUser : authenticatedUser;
+  }
+
+  public String getAssumedRole() {
+    return nextAssumedRole != null ? nextAssumedRole : assumedRole;
+  }
+
+  public String[] getAuthenticatedRoles() {
+    return nextAuthenticatedRoles != null ? nextAuthenticatedRoles : authenticatedRoles;
   }
 }

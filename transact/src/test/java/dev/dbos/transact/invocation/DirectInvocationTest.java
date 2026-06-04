@@ -1,5 +1,6 @@
 package dev.dbos.transact.invocation;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -415,6 +416,61 @@ public class DirectInvocationTest {
     assertNotNull(row0.deadlineEpochMs());
     assertNotNull(row1.deadlineEpochMs());
     assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
+  }
+
+  @Test
+  void authFlowsFromParentToChildViaDirectInvoke() throws Exception {
+    String parentId = "authParentDirect";
+    String[] roles = {"admin"};
+
+    try (var _i = new WorkflowOptions(parentId).withAuthentication("alice", roles).setContext()) {
+      proxy.parentWorkflow();
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("alice", parentStatus.authenticatedUser());
+    assertArrayEquals(roles, parentStatus.authenticatedRoles());
+    assertNull(parentStatus.assumedRole());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("alice", childStatus.authenticatedUser());
+    assertArrayEquals(roles, childStatus.authenticatedRoles());
+    assertNull(childStatus.assumedRole());
+  }
+
+  @Test
+  void authFlowsFromParentToChildViaStartWorkflow() throws Exception {
+    String parentId = "authParentStart";
+    String[] roles = {"editor"};
+
+    try (var _i = new WorkflowOptions(parentId).withAuthentication("bob", roles).setContext()) {
+      proxy.parentStartWorkflow();
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("bob", parentStatus.authenticatedUser());
+    assertArrayEquals(roles, parentStatus.authenticatedRoles());
+    assertNull(parentStatus.assumedRole());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("bob", childStatus.authenticatedUser());
+    assertArrayEquals(roles, childStatus.authenticatedRoles());
+    assertNull(childStatus.assumedRole());
+  }
+
+  @Test
+  void workflowOptionsAuthFlowsToStatus() throws Exception {
+    String workflowId = "authViaWorkflowOptions";
+    String[] roles = {"viewer"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("bob", roles).setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("bob", status.authenticatedUser());
+    assertArrayEquals(roles, status.authenticatedRoles());
+    assertNull(status.assumedRole());
   }
 
   @Test
