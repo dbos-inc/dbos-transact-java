@@ -1520,11 +1520,11 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    // executed workflows always use the current app version.
-    // Option.appVersion is only used for enqueue
-    options = options.withAppVersion(appVersion());
-
     if (options.queueName() != null) {
+      // enqueue with the current app version if it's not explicitly set
+      if (options.appVersion() == null) {
+        options = options.withAppVersion(appVersion());
+      }
 
       validateQueue(options.queueName(), options.queuePartitionKey());
 
@@ -1543,6 +1543,9 @@ public class DBOSExecutor implements AutoCloseable {
           this.serializer);
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
+
+    // executing workflows always use the current app version.
+    options = options.withAppVersion(appVersion());
 
     var badOptionList = new ArrayList<String>();
     if (options.deduplicationId() != null) {

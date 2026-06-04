@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AutoClose;
@@ -239,5 +240,29 @@ public class StartWorkflowTest {
     assertTrue(
         elapsed >= delay.toMillis(),
         "Expected at least 5s delay but elapsed was " + elapsed + "ms");
+  }
+
+  @Test
+  void startWorkflowWithAppVersion() throws Exception {
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    var version = UUID.randomUUID().toString();
+    var options = new StartWorkflowOptions().withQueue("queue").withAppVersion(version);
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+
+    var status = handle.getStatus();
+    assertEquals(version, status.appVersion());
+  }
+
+  @Test
+  void startWorkflowWithNoAppVersion() throws Exception {
+    DBOSTestAccess.getQueueService(dbos).pause();
+    var exec = DBOSTestAccess.getDbosExecutor(dbos);
+
+    var options = new StartWorkflowOptions().withQueue("queue");
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+
+    var status = handle.getStatus();
+    assertEquals(exec.appVersion(), status.appVersion());
   }
 }
