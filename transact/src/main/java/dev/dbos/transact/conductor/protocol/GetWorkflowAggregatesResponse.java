@@ -8,9 +8,20 @@ import java.util.Map;
 
 public class GetWorkflowAggregatesResponse extends BaseResponse {
 
-  public record WorkflowAggregateOutput(Map<String, String> group, long count) {
+  public record WorkflowAggregateOutput(
+      Map<String, String> group,
+      Long count,
+      Long min_created_at,
+      Long max_queue_wait_ms,
+      Long max_total_latency_ms) {
+
     public static WorkflowAggregateOutput from(WorkflowAggregateRow row) {
-      return new WorkflowAggregateOutput(row.group(), row.count());
+      return new WorkflowAggregateOutput(
+          row.group(),
+          row.count(),
+          row.minCreatedAt(),
+          row.maxQueueWaitMs(),
+          row.maxTotalLatencyMs());
     }
   }
 

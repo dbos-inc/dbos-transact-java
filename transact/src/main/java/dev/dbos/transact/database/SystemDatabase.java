@@ -18,6 +18,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
@@ -27,6 +28,7 @@ import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -388,6 +390,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
+  }
+
+  public List<StepAggregateRow> getStepAggregates(GetStepAggregatesInput input) {
+    return dbRetry(() -> WorkflowDAO.getStepAggregates(ctx, input));
   }
 
   public boolean clearQueueAssignment(String workflowId) {
