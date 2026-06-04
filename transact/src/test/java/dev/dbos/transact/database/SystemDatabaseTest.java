@@ -1646,7 +1646,7 @@ public class SystemDatabaseTest {
                 2,
                 "stepB",
                 null,
-                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null),
+                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", "{\"message\":\"err\"}", null, null),
                 null,
                 now.minusMillis(3),
                 now,
@@ -1654,10 +1654,13 @@ public class SystemDatabaseTest {
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-agg-wf-1", "WF", WorkflowState.ERROR, steps)));
 
-    // Group by function_name
+    // Group by function_name - scope to this test's workflow
     var rows =
         sysdb.getStepAggregates(
-            new GetStepAggregatesInput().withGroupByFunctionName(true).withSelectCount(true));
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withWorkflowIdPrefix(List.of("step-agg-wf-"))
+                .withSelectCount(true));
     var byFn =
         rows.stream()
             .collect(
@@ -1666,10 +1669,13 @@ public class SystemDatabaseTest {
     assertEquals(2L, byFn.get("stepA"));
     assertEquals(1L, byFn.get("stepB"));
 
-    // Group by status (derived from error IS NULL)
+    // Group by status (derived from error IS NULL) - scope to this test's workflow
     var statusRows =
         sysdb.getStepAggregates(
-            new GetStepAggregatesInput().withGroupByStatus(true).withSelectCount(true));
+            new GetStepAggregatesInput()
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("step-agg-wf-"))
+                .withSelectCount(true));
     var byStatus =
         statusRows.stream()
             .collect(
@@ -1688,7 +1694,7 @@ public class SystemDatabaseTest {
                 1,
                 "stepY",
                 null,
-                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", null, null, null),
+                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", "{\"message\":\"err\"}", null, null),
                 null,
                 now.minusMillis(5),
                 now,
@@ -1696,22 +1702,24 @@ public class SystemDatabaseTest {
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-filter-wf-1", "WF", WorkflowState.ERROR, steps)));
 
-    // Filter by function_name
+    // Filter by function_name - scope to this test's workflow
     var rows =
         sysdb.getStepAggregates(
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
+                .withWorkflowIdPrefix(List.of("step-filter-wf-"))
                 .withFunctionName(List.of("stepX"))
                 .withSelectCount(true));
     assertEquals(1, rows.size());
     assertEquals("stepX", rows.get(0).group().get("function_name"));
     assertEquals(1L, rows.get(0).count());
 
-    // Filter by status=ERROR
+    // Filter by status=ERROR - scope to this test's workflow
     var errRows =
         sysdb.getStepAggregates(
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
+                .withWorkflowIdPrefix(List.of("step-filter-wf-"))
                 .withStatus(List.of("ERROR"))
                 .withSelectCount(true));
     assertEquals(1, errRows.size());
