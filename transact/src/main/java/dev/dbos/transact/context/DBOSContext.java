@@ -168,4 +168,27 @@ public class DBOSContext {
     var ctx = DBOSContextHolder.get();
     return ctx != null ? ctx.getSerialization() : null;
   }
+
+  public record TimeoutAndDeadline(Duration timeout, Instant deadline) {}
+
+  public TimeoutAndDeadline resolveTimeoutAndDeadline() {
+    return resolveTimeoutAndDeadline(null, null);
+  }
+
+  public TimeoutAndDeadline resolveTimeoutAndDeadline(Timeout nextTimeout, Instant nextDeadline) {
+    if (nextTimeout == null) nextTimeout = this.nextTimeout;
+    if (nextDeadline == null) nextDeadline = this.nextDeadline;
+    Duration resolvedTimeout = this.timeout;
+    Instant resolvedDeadline = this.deadline;
+    if (nextDeadline != null) {
+      resolvedDeadline = nextDeadline;
+    } else if (nextTimeout instanceof Timeout.None) {
+      resolvedTimeout = null;
+      resolvedDeadline = null;
+    } else if (nextTimeout instanceof Timeout.Explicit e) {
+      resolvedTimeout = e.value();
+      resolvedDeadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    }
+    return new TimeoutAndDeadline(resolvedTimeout, resolvedDeadline);
+  }
 }

@@ -1287,7 +1287,7 @@ public class DBOSExecutor implements AutoCloseable {
         Objects.requireNonNullElseGet(
             ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
 
-    var td = resolveTimeoutAndDeadline(ctx, ctx.getNextTimeout(), ctx.getNextDeadline());
+    var td = ctx.resolveTimeoutAndDeadline();
 
     var options = new ExecutionOptions(workflowId, td.timeout(), td.deadline());
     if (workflow.serializationStrategy() != null) {
@@ -1366,11 +1366,10 @@ public class DBOSExecutor implements AutoCloseable {
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    var nextTimeout =
-        options != null && options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
-    var nextDeadline =
-        options != null && options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
-    var td = resolveTimeoutAndDeadline(ctx, nextTimeout, nextDeadline);
+    var td =
+        options == null
+            ? ctx.resolveTimeoutAndDeadline()
+            : ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
 
     var workflowId =
         Objects.requireNonNullElseGet(
@@ -1456,24 +1455,6 @@ public class DBOSExecutor implements AutoCloseable {
     if (isRecoveryRequest) options = options.asRecoveryRequest();
     if (isDequeuedRequest) options = options.asDequeuedRequest();
     return executeWorkflow(workflow, inputs, options, null);
-  }
-
-  private record TimeoutAndDeadline(Duration timeout, Instant deadline) {}
-
-  private static TimeoutAndDeadline resolveTimeoutAndDeadline(
-      DBOSContext ctx, Timeout nextTimeout, Instant nextDeadline) {
-    Duration timeout = ctx.getTimeout();
-    Instant deadline = ctx.getDeadline();
-    if (nextDeadline != null) {
-      deadline = nextDeadline;
-    } else if (nextTimeout instanceof Timeout.None) {
-      timeout = null;
-      deadline = null;
-    } else if (nextTimeout instanceof Timeout.Explicit e) {
-      timeout = e.value();
-      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-    }
-    return new TimeoutAndDeadline(timeout, deadline);
   }
 
   // helper workflow execution methods
