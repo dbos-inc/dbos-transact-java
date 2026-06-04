@@ -792,7 +792,8 @@ public class StaticQueuesTest {
     // Fill exec1 to its local workerConcurrency limit.
     for (int i = 0; i < workerConcurrency; i++) {
       final int fi = i;
-      dbos.startWorkflow(() -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue));
+      dbos.startWorkflow(
+          () -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue));
     }
     impl1.wfSemaphore.acquire(workerConcurrency);
 

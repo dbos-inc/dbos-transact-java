@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -1008,8 +1009,7 @@ public class DynamicQueuesTest {
             new StartWorkflowOptions("blocked").withQueue("test_queue"));
     var regularHandle =
         dbos.startWorkflow(
-            () -> service.noopWorkflow(42),
-            new StartWorkflowOptions().withQueue("test_queue"));
+            () -> service.noopWorkflow(42), new StartWorkflowOptions().withQueue("test_queue"));
 
     impl.wfSemaphore.acquire(1);
     assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
@@ -1094,11 +1094,15 @@ public class DynamicQueuesTest {
     var h1 =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(0),
-            new StartWorkflowOptions().withQueue("test_queue").withTimeout(500, TimeUnit.MILLISECONDS));
+            new StartWorkflowOptions()
+                .withQueue("test_queue")
+                .withTimeout(500, TimeUnit.MILLISECONDS));
     var h2 =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(1),
-            new StartWorkflowOptions().withQueue("test_queue").withTimeout(500, TimeUnit.MILLISECONDS));
+            new StartWorkflowOptions()
+                .withQueue("test_queue")
+                .withTimeout(500, TimeUnit.MILLISECONDS));
     var normalHandle =
         dbos.startWorkflow(
             () -> service.noopWorkflow(42),
@@ -1128,7 +1132,8 @@ public class DynamicQueuesTest {
     for (int i = 0; i < workerConcurrency; i++) {
       final int fi = i;
       dbos.startWorkflow(
-          () -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue("multi_exec_queue"));
+          () -> service.blockedWorkflow(fi),
+          new StartWorkflowOptions().withQueue("multi_exec_queue"));
     }
     impl1.wfSemaphore.acquire(workerConcurrency);
 
@@ -1171,6 +1176,93 @@ public class DynamicQueuesTest {
     }
 
     impl1.latch.countDown();
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testQueueChildWorkflow() throws Exception {
+    // A workflow can enqueue child workflows on a queue and await their results.
+    // With concurrency=3 and 4 children, the 4th waits for a slot.
+    QueueChildServiceImpl impl = new QueueChildServiceImpl(dbos);
+    QueueChildService service = dbos.registerProxy(QueueChildService.class, impl);
+    impl.setSelf(service);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    dbos.registerQueue("child_queue", QueueOptions.setConcurrency(3));
+
+    var handle =
+        dbos.startWorkflow(() -> service.parentWorkflow("a", "b"), new StartWorkflowOptions());
+    assertEquals("adbdadbd", handle.getResult());
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testQueueDeduplication() throws Exception {
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+    qs.pause();
+    dbos.registerQueue("test_queue", QueueOptions.empty());
+
+    String deduplicationId = "my-dedup-id";
+    String wfid1 = "wf-dedup-1";
+
+    // Enqueue with a deduplication ID.
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(1),
+            new StartWorkflowOptions(wfid1)
+                .withQueue("test_queue")
+                .withDeduplicationId(deduplicationId));
+    assertEquals(deduplicationId, h1.getStatus().deduplicationId());
+    assertEquals(WorkflowState.ENQUEUED, h1.getStatus().status());
+
+    // Same dedup ID with a different workflow ID → exception.
+    assertThrows(
+        DBOSQueueDuplicatedException.class,
+        () ->
+            dbos.startWorkflow(
+                () -> service.noopWorkflow(2),
+                new StartWorkflowOptions()
+                    .withQueue("test_queue")
+                    .withDeduplicationId(deduplicationId)));
+
+    // Re-enqueue the same workflow ID → idempotent, no exception.
+    var h1again =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(1),
+            new StartWorkflowOptions(wfid1)
+                .withQueue("test_queue")
+                .withDeduplicationId(deduplicationId));
+    assertEquals(wfid1, h1again.workflowId());
+
+    // Different dedup ID is fine.
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(3),
+            new StartWorkflowOptions()
+                .withQueue("test_queue")
+                .withDeduplicationId("other-dedup-id"));
+
+    // Unpause and let both run.
+    qs.unpause();
+    assertEquals(1, (int) h1.getResult());
+    assertEquals(3, (int) h2.getResult());
+
+    // After completion the same dedup ID can be reused.
+    var h3 =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(4),
+            new StartWorkflowOptions()
+                .withQueue("test_queue")
+                .withDeduplicationId(deduplicationId));
+    assertEquals(4, (int) h3.getResult());
+
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }
 
