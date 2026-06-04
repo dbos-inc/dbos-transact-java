@@ -166,8 +166,10 @@ public class QueueService implements AutoCloseable {
     private void processPartition(String partition) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       if (!paused.get()) {
+        long localRunningCount = dbosExecutor.queueActiveCount(queue.name(), partition);
         var workflowIds =
-            systemDatabase.getAndStartQueuedWorkflows(queue, executorId, appVersion, partition);
+            systemDatabase.startQueuedWorkflows(
+                queue, executorId, appVersion, partition, localRunningCount);
         if (!workflowIds.isEmpty()) {
           logger.debug(
               "Retrieved {} workflows from {} partition of queue {}",

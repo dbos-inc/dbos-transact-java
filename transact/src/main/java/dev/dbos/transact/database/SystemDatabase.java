@@ -453,11 +453,16 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
   }
 
-  public List<String> getAndStartQueuedWorkflows(
-      Queue queue, String executorId, String appVersion, String partitionKey) {
+  public List<String> startQueuedWorkflows(
+      Queue queue,
+      String executorId,
+      String appVersion,
+      String partitionKey,
+      long localRunningCount) {
     return dbRetry(
         () ->
-            QueuesDAO.getAndStartQueuedWorkflows(ctx, queue, executorId, appVersion, partitionKey));
+            QueuesDAO.startQueuedWorkflows(
+                ctx, queue, executorId, appVersion, partitionKey, localRunningCount));
   }
 
   public void recordChildWorkflow(
