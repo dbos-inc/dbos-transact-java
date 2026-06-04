@@ -317,7 +317,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent2() throws Exception {
+  void workflowOptionsTimeoutAppliedToParentAndChild() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -338,7 +338,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent3() throws Exception {
+  void workflowOptionsTimeoutNotInheritedByChild() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -415,5 +415,14 @@ public class DirectInvocationTest {
     assertNotNull(row0.deadlineEpochMs());
     assertNotNull(row1.deadlineEpochMs());
     assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
+  }
+
+  @Test
+  void workflowOptionsTimeoutAndDeadlineBothSetThrows() {
+    var options =
+        new WorkflowOptions()
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now().plus(Duration.ofDays(1)));
+    assertThrows(IllegalArgumentException.class, options::setContext);
   }
 }

@@ -435,4 +435,52 @@ public class ClientTest {
     assertEquals("1-hello", handle1.getResult());
     assertEquals("2-world", handle2.getResult());
   }
+
+  @Test
+  public void enqueueOptionsTimeoutWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var timeout = Duration.ofSeconds(30);
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withTimeout(timeout);
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertEquals(timeout.toMillis(), row.timeoutMs());
+      assertNull(row.deadlineEpochMs()); // deadline set at dequeue time, not enqueue
+    }
+  }
+
+  @Test
+  public void enqueueOptionsDeadlineWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var deadline = Instant.now().plus(Duration.ofMinutes(5));
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withDeadline(deadline);
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertNull(row.timeoutMs());
+      assertEquals(deadline.toEpochMilli(), row.deadlineEpochMs());
+    }
+  }
+
+  @Test
+  public void enqueueOptionsNoTimeoutOrDeadlineWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertNull(row.timeoutMs());
+      assertNull(row.deadlineEpochMs());
+    }
+  }
 }
