@@ -1573,23 +1573,13 @@ public class DBOSExecutor implements AutoCloseable {
             maxRetries,
             args,
             null,
-            workflowId,
-            null,
-            null,
-            null,
-            null,
-            null,
             executorId(),
             // executed workflows always use the current app version.
             // Option.appVersion is only used for enqueue
             appVersion(),
             appId(),
             parent,
-            options.timeoutDuration(),
-            options.deadline(),
-            options.isRecoveryRequest(),
-            options.isDequeuedRequest(),
-            options.serialization(),
+            options,
             this.serializer);
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
@@ -1746,21 +1736,11 @@ public class DBOSExecutor implements AutoCloseable {
           maxRetries,
           positionalArgs,
           namedArgs,
-          options.workflowId(),
-          options.queueName(),
-          options.deduplicationId(),
-          options.priority(),
-          options.queuePartitionKey(),
-          options.delay(),
           executorId,
           appVersion,
           appId,
           parent,
-          options.timeoutDuration(),
-          options.deadline(),
-          options.isRecoveryRequest(),
-          options.isDequeuedRequest(),
-          options.serialization(),
+          options,
           serializer);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
@@ -1786,21 +1766,11 @@ public class DBOSExecutor implements AutoCloseable {
       // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
       // Typical Java workflow invocations do not use named args
       Map<String, Object> namedArgs,
-      String workflowId,
-      String queueName,
-      String deduplicationId,
-      Integer priority,
-      String queuePartitionKey,
-      Duration delay,
       String executorId,
       String appVersion,
       String appId,
       WorkflowInfo parentWorkflow,
-      Duration timeout,
-      Instant deadline,
-      boolean isRecoveryRequest,
-      boolean isDequeuedRequest,
-      String serialization,
+      ExecutionOptions options,
       DBOSSerializer serializer) {
 
     // Serialize inputs using the specified serialization format
@@ -1808,34 +1778,37 @@ public class DBOSExecutor implements AutoCloseable {
         SerializationUtil.serializeArgs(
             Objects.requireNonNullElseGet(positionalArgs, () -> new Object[0]),
             namedArgs,
-            serialization,
+            options.serialization(),
             serializer);
     String inputString = serializedArgs.serializedValue();
     String actualSerialization = serializedArgs.serialization();
     var startTime = System.currentTimeMillis();
 
-    Instant effectiveDeadline = (queueName != null && timeout != null) ? null : deadline;
+    Instant effectiveDeadline =
+        (options.queueName() != null && options.timeoutDuration() != null)
+            ? null
+            : options.deadline();
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
-            workflowId,
+            options.workflowId(),
             workflowName,
             className,
             instanceName,
-            queueName,
-            deduplicationId,
-            priority,
-            queuePartitionKey,
-            delay,
-            null,
-            null,
-            null,
+            options.queueName(),
+            options.deduplicationId(),
+            options.priority(),
+            options.queuePartitionKey(),
+            options.delay(),
+            options.authenticatedUser(),
+            options.assumedRole(),
+            options.authenticatedRoles(),
             inputString,
             executorId,
             appVersion,
             appId,
-            timeout,
+            options.timeoutDuration(),
             effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
@@ -1843,12 +1816,15 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
         systemDatabase.initWorkflowStatus(
-            workflowStatusInternal, retries, isRecoveryRequest, isDequeuedRequest);
+            workflowStatusInternal,
+            retries,
+            options.isRecoveryRequest(),
+            options.isDequeuedRequest());
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
           parentWorkflow.workflowId(),
-          workflowId,
+          options.workflowId(),
           parentWorkflow.functionId(),
           workflowName,
           startTime);
