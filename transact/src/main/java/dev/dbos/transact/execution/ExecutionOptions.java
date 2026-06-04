@@ -3,6 +3,8 @@ package dev.dbos.transact.execution;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
+import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -23,7 +25,10 @@ public record ExecutionOptions(
     String appVersion,
     boolean isRecoveryRequest,
     boolean isDequeuedRequest,
-    String serialization) {
+    String serialization,
+    String authenticatedUser,
+    String assumedRole,
+    String[] authenticatedRoles) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -59,7 +64,22 @@ public record ExecutionOptions(
   }
 
   public ExecutionOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null, false, false, null);
+    this(
+        workflowId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        false,
+        false,
+        null,
+        null,
+        null,
+        null);
   }
 
   public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
@@ -75,6 +95,9 @@ public record ExecutionOptions(
         null,
         false,
         false,
+        null,
+        null,
+        null,
         null);
   }
 
@@ -91,7 +114,10 @@ public record ExecutionOptions(
         this.appVersion,
         true,
         false,
-        this.serialization);
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   public ExecutionOptions asDequeuedRequest() {
@@ -107,7 +133,51 @@ public record ExecutionOptions(
         this.appVersion,
         false,
         true,
-        this.serialization);
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withOptions(DBOSClient.EnqueueOptions options) {
+    return new ExecutionOptions(
+        this.workflowId,
+        Timeout.of(options.timeout()),
+        options.deadline(),
+        options.queueName(),
+        options.deduplicationId(),
+        options.priority(),
+        options.queuePartitionKey(),
+        options.delay(),
+        options.appVersion(),
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withOptions(StartWorkflowOptions options) {
+    if (options == null) {
+      return this;
+    }
+    return new ExecutionOptions(
+        this.workflowId,
+        options.timeout(),
+        options.deadline(),
+        options.queueName(),
+        options.deduplicationId(),
+        options.priority(),
+        options.queuePartitionKey(),
+        options.delay(),
+        options.appVersion(),
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -123,7 +193,10 @@ public record ExecutionOptions(
         this.appVersion,
         this.isRecoveryRequest,
         this.isDequeuedRequest,
-        serialization);
+        serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   public ExecutionOptions withPriority(Integer priority) {
@@ -139,7 +212,10 @@ public record ExecutionOptions(
         this.appVersion,
         this.isRecoveryRequest,
         this.isDequeuedRequest,
-        this.serialization);
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -155,7 +231,143 @@ public record ExecutionOptions(
         appVersion,
         this.isRecoveryRequest,
         this.isDequeuedRequest,
-        this.serialization);
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withAssumedRole(String assumedRole) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withAuthenticatedRoles(String[] authenticatedRoles) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        authenticatedRoles);
+  }
+
+  public ExecutionOptions withQueueName(String queueName) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withTimeout(Duration timeout) {
+    return new ExecutionOptions(
+        this.workflowId,
+        Timeout.of(timeout),
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withTimeout(Timeout timeout) {
+    return new ExecutionOptions(
+        this.workflowId,
+        timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  public ExecutionOptions withDeadline(Instant deadline) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   public Duration timeoutDuration() {

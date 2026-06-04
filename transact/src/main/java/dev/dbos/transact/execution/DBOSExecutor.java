@@ -922,19 +922,7 @@ public class DBOSExecutor implements AutoCloseable {
     var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
 
     var options =
-        new ExecutionOptions(
-            workflowId,
-            null,
-            null,
-            queueName,
-            null,
-            null,
-            null,
-            null,
-            latestAppVersion,
-            false,
-            false,
-            null);
+        new ExecutionOptions(workflowId).withQueueName(queueName).withAppVersion(latestAppVersion);
     enqueueWorkflow(
         workflowName,
         className,
@@ -1379,19 +1367,10 @@ public class DBOSExecutor implements AutoCloseable {
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
 
     var execOptions =
-        new ExecutionOptions(
-            workflowId,
-            Timeout.of(td.timeout()),
-            td.deadline(),
-            options != null ? options.queueName() : null,
-            options != null ? options.deduplicationId() : null,
-            options != null ? options.priority() : null,
-            options != null ? options.queuePartitionKey() : null,
-            options != null ? options.delay() : null,
-            options != null ? options.appVersion() : null,
-            false,
-            false,
-            null);
+        new ExecutionOptions(workflowId)
+            .withOptions(options)
+            .withTimeout(td.timeout)
+            .withDeadline(td.deadline);
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 

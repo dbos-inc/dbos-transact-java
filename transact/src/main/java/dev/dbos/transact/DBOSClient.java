@@ -20,7 +20,6 @@ import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
-import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -604,6 +603,10 @@ public class DBOSClient implements AutoCloseable {
     var workflowId =
         Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
 
+    var execOptions =
+        new ExecutionOptions(workflowId)
+            .withOptions(options)
+            .withSerialization(serializationFormat);
     DBOSExecutor.enqueueWorkflow(
         options.workflowName(),
         options.className(),
@@ -611,19 +614,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         positionalArgs,
         namedArgs,
-        new ExecutionOptions(
-            workflowId,
-            Timeout.of(options.timeout()),
-            options.deadline,
-            options.queueName(),
-            options.deduplicationId,
-            options.priority,
-            options.queuePartitionKey,
-            options.delay,
-            options.appVersion,
-            false,
-            false,
-            serializationFormat),
+        execOptions,
         null,
         null,
         null,
