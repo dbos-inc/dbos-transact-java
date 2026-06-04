@@ -31,6 +31,7 @@ import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -48,6 +49,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
@@ -1511,6 +1513,22 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testGetWorkflowAggregatesIdPrefixNoMatch() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("pref-neg-aaa-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("pref-neg-aaa-2", "WorkflowA", WorkflowState.SUCCESS)));
+
+    var rows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByName(true)
+                .withWorkflowIdPrefix(List.of("prefix-xyz"))
+                .withSelectCount(true));
+    assertTrue(rows.isEmpty());
+  }
+
+  @Test
   public void testGetWorkflowAggregatesNoGroupByThrows() {
     assertThrows(
         IllegalArgumentException.class,
@@ -1566,6 +1584,16 @@ public class SystemDatabaseTest {
     assertNull(rows2.get(0).count());
     assertNotNull(rows2.get(0).minCreatedAt());
     assertTrue(rows2.get(0).minCreatedAt() > 0);
+
+    // Both count and min_created_at → both populated
+    var rows3 =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput().withGroupByName(true).withSelectMinCreatedAt(true));
+    assertEquals(1, rows3.size());
+    assertNotNull(rows3.get(0).count());
+    assertEquals(2L, rows3.get(0).count());
+    assertNotNull(rows3.get(0).minCreatedAt());
+    assertTrue(rows3.get(0).minCreatedAt() > 0);
   }
 
   @Test
@@ -1587,6 +1615,102 @@ public class SystemDatabaseTest {
     }
     long total = rows.stream().mapToLong(r -> r.count()).sum();
     assertTrue(total >= 2);
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesTimeBucketWithFilters() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("agg-tbf-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-tbf-2", "WorkflowA", WorkflowState.ERROR)));
+
+    long bucketMs = 3_600_000L;
+
+    // Time bucket + group_by_status combined
+    var rows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withTimeBucketSizeMs(bucketMs)
+                .withGroupByStatus(true)
+                .withSelectCount(true)
+                .withWorkflowIdPrefix(List.of("agg-tbf-")));
+    assertEquals(2, rows.size());
+    for (var r : rows) {
+      assertTrue(r.group().containsKey("status"));
+      assertTrue(r.group().containsKey("time_bucket"));
+      long tb = Long.parseLong(r.group().get("time_bucket"));
+      assertEquals(0, tb % bucketMs);
+    }
+
+    // Time bucket + status filter (no status group-by)
+    var errRows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withTimeBucketSizeMs(bucketMs)
+                .withStatus(List.of("ERROR"))
+                .withSelectCount(true)
+                .withWorkflowIdPrefix(List.of("agg-tbf-")));
+    assertEquals(1, errRows.size());
+    assertTrue(errRows.get(0).group().containsKey("time_bucket"));
+    assertEquals(1L, errRows.get(0).count());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesQueueGroupBy() throws Exception {
+    var now = Instant.now();
+
+    var q1Status =
+        new WorkflowStatusBuilder("agg-q-1")
+            .status(WorkflowState.SUCCESS)
+            .workflowName("WorkflowA")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .queueName("queue1")
+            .build();
+    var q2Status =
+        new WorkflowStatusBuilder("agg-q-2")
+            .status(WorkflowState.SUCCESS)
+            .workflowName("WorkflowA")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .queueName("queue1")
+            .build();
+    var q3Status =
+        new WorkflowStatusBuilder("agg-q-3")
+            .status(WorkflowState.SUCCESS)
+            .workflowName("WorkflowB")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .queueName("queue2")
+            .build();
+    sysdb.importWorkflow(
+        List.of(
+            new ExportedWorkflow(q1Status, List.of(), List.of(), List.of(), List.of()),
+            new ExportedWorkflow(q2Status, List.of(), List.of(), List.of(), List.of()),
+            new ExportedWorkflow(q3Status, List.of(), List.of(), List.of(), List.of())));
+
+    // Group by queue_name with select_min_created_at (common "oldest item" pattern)
+    var rows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByQueueName(true)
+                .withQueueName(List.of("queue1"))
+                .withSelectCount(false)
+                .withSelectMinCreatedAt(true));
+    assertEquals(1, rows.size());
+    assertEquals("queue1", rows.get(0).group().get("queue_name"));
+    assertNull(rows.get(0).count());
+    assertNotNull(rows.get(0).minCreatedAt());
+    assertTrue(rows.get(0).minCreatedAt() > 0);
   }
 
   @Test
@@ -1615,6 +1739,156 @@ public class SystemDatabaseTest {
         sysdb.getWorkflowAggregates(
             new GetWorkflowAggregatesInput().withGroupByStatus(true).withCompletedBefore(before));
     assertTrue(noRows.isEmpty());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesDequeuedFilters() throws Exception {
+    var beforeAll = Instant.now().minusMillis(10_000);
+
+    // 3 sync SUCCESS (started_at=null), 2 sync ERROR (started_at=null)
+    for (int i = 0; i < 3; i++) {
+      sysdb.importWorkflow(
+          List.of(buildNamedWorkflow("agg-dq-ok-" + i, "WorkflowA", WorkflowState.SUCCESS)));
+    }
+    for (int i = 0; i < 2; i++) {
+      sysdb.importWorkflow(
+          List.of(buildNamedWorkflow("agg-dq-fail-" + i, "WorkflowA", WorkflowState.ERROR)));
+    }
+    var afterSync = Instant.now();
+
+    // 1 queued SUCCESS (started_at set strictly after afterSync)
+    var queuedStartedAt = afterSync.plusMillis(1);
+    var queuedStatus =
+        new WorkflowStatusBuilder("agg-dq-queued-1")
+            .status(WorkflowState.SUCCESS)
+            .workflowName("WorkflowB")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(queuedStartedAt)
+            .updatedAt(queuedStartedAt)
+            .startedAt(queuedStartedAt)
+            .build();
+    sysdb.importWorkflow(
+        List.of(new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of())));
+    var afterAll = Instant.now();
+
+    // completed_after/completed_before covers all 6
+    var rows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("agg-dq-"))
+                .withCompletedAfter(beforeAll)
+                .withCompletedBefore(afterAll)
+                .withSelectCount(true));
+    var byStatusSum = rows.stream().mapToLong(r -> r.count()).sum();
+    assertEquals(6, byStatusSum);
+
+    // completed_before before all → no match
+    var noRows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("agg-dq-"))
+                .withCompletedBefore(beforeAll)
+                .withSelectCount(true));
+    assertTrue(noRows.isEmpty());
+
+    // dequeued_after/dequeued_before: only queued workflow has started_at
+    var deqRows =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("agg-dq-"))
+                .withDequeuedAfter(beforeAll)
+                .withDequeuedBefore(afterAll)
+                .withSelectCount(true));
+    var deqTotal = deqRows.stream().mapToLong(r -> r.count()).sum();
+    assertEquals(1, deqTotal);
+
+    // dequeued window before the enqueue → no match
+    var noDeq =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("agg-dq-"))
+                .withDequeuedAfter(beforeAll)
+                .withDequeuedBefore(afterSync)
+                .withSelectCount(true));
+    assertTrue(noDeq.isEmpty());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesSelectMaxDurations() throws Exception {
+    var now = Instant.now();
+
+    // 2 sync SUCCESS (started_at=null → max_queue_wait_ms will be NULL)
+    // Use different names so we can group by name and distinguish sync vs queued
+    for (int i = 0; i < 2; i++) {
+      var status =
+          new WorkflowStatusBuilder("agg-md-sync-" + i)
+              .status(WorkflowState.SUCCESS)
+              .workflowName("syncWorkflow")
+              .appVersion("1.0.0")
+              .recoveryAttempts(0)
+              .priority(0)
+              .createdAt(now)
+              .updatedAt(now)
+              .build();
+      sysdb.importWorkflow(
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+    }
+
+    // 2 queued SUCCESS (started_at set → max_queue_wait_ms populated)
+    for (int i = 0; i < 2; i++) {
+      var status =
+          new WorkflowStatusBuilder("agg-md-q-" + i)
+              .status(WorkflowState.SUCCESS)
+              .workflowName("queuedWorkflow")
+              .appVersion("1.0.0")
+              .recoveryAttempts(0)
+              .priority(0)
+              .createdAt(now)
+              .updatedAt(now)
+              .startedAt(now)
+              .build();
+      sysdb.importWorkflow(
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+    }
+
+    // Only select max_queue_wait_ms + max_total_latency_ms — count must be null
+    var results =
+        sysdb.getWorkflowAggregates(
+            new GetWorkflowAggregatesInput()
+                .withGroupByName(true)
+                .withSelectCount(false)
+                .withSelectMaxQueueWaitMs(true)
+                .withSelectMaxTotalLatencyMs(true)
+                .withWorkflowIdPrefix(List.of("agg-md-"))
+                .withStatus(List.of("SUCCESS")));
+    assertEquals(2, results.size());
+    WorkflowAggregateRow syncRow = null;
+    WorkflowAggregateRow queuedRow = null;
+    for (var r : results) {
+      if ("syncWorkflow".equals(r.group().get("name"))) syncRow = r;
+      if ("queuedWorkflow".equals(r.group().get("name"))) queuedRow = r;
+    }
+
+    // Sync workflow: count=null, max_queue_wait_ms=null, max_total_latency_ms>=0
+    assertNotNull(syncRow);
+    assertNull(syncRow.count());
+    assertNull(syncRow.maxQueueWaitMs());
+    assertNotNull(syncRow.maxTotalLatencyMs());
+    assertTrue(syncRow.maxTotalLatencyMs() >= 0);
+
+    // Queued workflow: count=null, both maxes populated, total >= wait
+    assertNotNull(queuedRow);
+    assertNull(queuedRow.count());
+    assertNotNull(queuedRow.maxQueueWaitMs());
+    assertTrue(queuedRow.maxQueueWaitMs() >= 0);
+    assertNotNull(queuedRow.maxTotalLatencyMs());
+    assertTrue(queuedRow.maxTotalLatencyMs() >= queuedRow.maxQueueWaitMs());
   }
 
   // ── Step aggregates ────────────────────────────────────────────────────────
@@ -1646,7 +1920,8 @@ public class SystemDatabaseTest {
                 2,
                 "stepB",
                 null,
-                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", "{\"message\":\"err\"}", null, null),
+                new dev.dbos.transact.workflow.ErrorResult(
+                    "Exception", "err", "{\"message\":\"err\"}", null, null),
                 null,
                 now.minusMillis(3),
                 now,
@@ -1663,9 +1938,7 @@ public class SystemDatabaseTest {
                 .withSelectCount(true));
     var byFn =
         rows.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    r -> r.group().get("function_name"), r -> r.count()));
+            .collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r.count()));
     assertEquals(2L, byFn.get("stepA"));
     assertEquals(1L, byFn.get("stepB"));
 
@@ -1677,11 +1950,31 @@ public class SystemDatabaseTest {
                 .withWorkflowIdPrefix(List.of("step-agg-wf-"))
                 .withSelectCount(true));
     var byStatus =
-        statusRows.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(r -> r.group().get("status"), r -> r.count()));
+        statusRows.stream().collect(Collectors.toMap(r -> r.group().get("status"), r -> r.count()));
     assertEquals(2L, byStatus.get("SUCCESS"));
     assertEquals(1L, byStatus.get("ERROR"));
+
+    // Combined group by function_name and status
+    var combined =
+        sysdb.getStepAggregates(
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withGroupByStatus(true)
+                .withWorkflowIdPrefix(List.of("step-agg-wf-"))
+                .withSelectCount(true));
+    assertEquals(2, combined.size());
+    for (var r : combined) {
+      assertTrue(r.group().containsKey("function_name"));
+      assertTrue(r.group().containsKey("status"));
+    }
+    var byFnStatus =
+        combined.stream()
+            .collect(
+                Collectors.toMap(
+                    r -> r.group().get("function_name") + "/" + r.group().get("status"),
+                    r -> r.count()));
+    assertEquals(2L, byFnStatus.get("stepA/SUCCESS"));
+    assertEquals(1L, byFnStatus.get("stepB/ERROR"));
   }
 
   @Test
@@ -1694,7 +1987,8 @@ public class SystemDatabaseTest {
                 1,
                 "stepY",
                 null,
-                new dev.dbos.transact.workflow.ErrorResult("Exception", "err", "{\"message\":\"err\"}", null, null),
+                new dev.dbos.transact.workflow.ErrorResult(
+                    "Exception", "err", "{\"message\":\"err\"}", null, null),
                 null,
                 now.minusMillis(5),
                 now,
@@ -1848,6 +2142,86 @@ public class SystemDatabaseTest {
                 .withCompletedBefore(before)
                 .withSelectCount(true));
     assertTrue(noRows.isEmpty());
+  }
+
+  @Test
+  public void testGetStepAggregatesCompletedWindowAndMax() throws Exception {
+    var now = Instant.now();
+
+    // Real steps with timestamps
+    var quickStep = new StepInfo(0, "quickStep", "ok", null, null, now.minusMillis(20), now, null);
+    var slowStep = new StepInfo(1, "slowStep", "ok", null, null, now.minusMillis(100), now, null);
+
+    // Bookkeeping rows (child workflow markers) have NULL timestamps
+    var childMarker = new StepInfo(2, "childWorkflow", null, null, "child-wf-id", null, null, null);
+
+    var steps = List.of(quickStep, slowStep, childMarker);
+    sysdb.importWorkflow(
+        List.of(buildWorkflowWithSteps("step-max-cw-1", "WF", WorkflowState.SUCCESS, steps)));
+
+    var beforeAll = now.minusMillis(10_000);
+    var afterAll = now.plusMillis(10_000);
+
+    // completed_after/completed_before window → only real steps appear (bookkeeping
+    // rows have NULL completed_at_epoch_ms and are filtered out by WHERE clause)
+    var rows =
+        sysdb.getStepAggregates(
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withCompletedAfter(beforeAll)
+                .withCompletedBefore(afterAll)
+                .withSelectCount(true)
+                .withSelectMaxDurationMs(true));
+    var byFn = rows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
+
+    // Real steps have count=1 and max_duration_ms populated
+    var quickRow = byFn.get("quickStep");
+    assertEquals(1L, quickRow.count());
+    assertNotNull(quickRow.maxDurationMs());
+    assertTrue(quickRow.maxDurationMs() >= 0);
+
+    var slowRow = byFn.get("slowStep");
+    assertEquals(1L, slowRow.count());
+    assertNotNull(slowRow.maxDurationMs());
+    assertTrue(slowRow.maxDurationMs() >= 80);
+
+    // Bookkeeping rows are excluded from the completed window
+    assertNull(byFn.get("childWorkflow"));
+
+    // Without completed_at filter, bookkeeping rows appear but have null duration
+    var allRows =
+        sysdb.getStepAggregates(
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withSelectCount(true)
+                .withSelectMaxDurationMs(true));
+    var allByFn =
+        allRows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
+    var childRow = allByFn.get("childWorkflow");
+    assertEquals(1L, childRow.count());
+    assertNull(childRow.maxDurationMs());
+
+    // completed_before before all → no match
+    var noRows =
+        sysdb.getStepAggregates(
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withCompletedBefore(beforeAll)
+                .withSelectCount(true));
+    assertTrue(noRows.isEmpty());
+
+    // select_max_duration_ms alone → count is null
+    var maxOnly =
+        sysdb.getStepAggregates(
+            new GetStepAggregatesInput()
+                .withGroupByFunctionName(true)
+                .withFunctionName(List.of("quickStep", "slowStep"))
+                .withSelectCount(false)
+                .withSelectMaxDurationMs(true));
+    for (var r : maxOnly) {
+      assertNull(r.count());
+      assertNotNull(r.maxDurationMs());
+    }
   }
 
   // ── F-4: Workflow Data Queries ────────────────────────────────────────────
