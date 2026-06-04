@@ -467,7 +467,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public long queueActiveCount(String queueName, String partitionKey) {
     var target = new QueueBucket(queueName, partitionKey);
-    return (int) activeWorkflows.values().stream().filter(target::equals).count();
+    return activeWorkflows.values().stream().filter(target::equals).count();
   }
 
   // DBOS / DBOSClient API methods

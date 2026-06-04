@@ -1139,7 +1139,7 @@ public class DynamicQueuesTest {
 
     ConcurrencyTestServiceImpl impl2 = new ConcurrencyTestServiceImpl();
     try (var dbos2 = new DBOS(dbosConfig.withExecutorId("executor2"))) {
-      dbos2.registerProxy(ConcurrencyTestService.class, impl2);
+      ConcurrencyTestService service2 = dbos2.registerProxy(ConcurrencyTestService.class, impl2);
       dbos2.launch();
 
       var qs2 = DBOSTestAccess.getQueueService(dbos2);
@@ -1152,8 +1152,8 @@ public class DynamicQueuesTest {
       for (int i = 0; i < workerConcurrency; i++) {
         final int fi = i;
         handles2.add(
-            dbos.startWorkflow(
-                () -> service.blockedWorkflow(fi),
+            dbos2.startWorkflow(
+                () -> service2.blockedWorkflow(fi),
                 new StartWorkflowOptions().withQueue("multi_exec_queue")));
       }
       impl2.wfSemaphore.acquire(workerConcurrency);
@@ -1162,8 +1162,8 @@ public class DynamicQueuesTest {
       }
 
       var extra =
-          dbos.startWorkflow(
-              () -> service.noopWorkflow(99),
+          dbos2.startWorkflow(
+              () -> service2.noopWorkflow(99),
               new StartWorkflowOptions().withQueue("multi_exec_queue"));
       Thread.sleep(2000);
       assertEquals(WorkflowState.ENQUEUED, extra.getStatus().status());

@@ -800,7 +800,7 @@ public class StaticQueuesTest {
     // Start exec2 against the same database; exec1 is full so exec2 picks up new work.
     ConcurrencyTestServiceImpl impl2 = new ConcurrencyTestServiceImpl();
     try (var dbos2 = new DBOS(dbosConfig.withExecutorId("executor2"))) {
-      dbos2.registerProxy(ConcurrencyTestService.class, impl2);
+      ConcurrencyTestService service2 = dbos2.registerProxy(ConcurrencyTestService.class, impl2);
       dbos2.registerQueue(queue);
       dbos2.launch();
 
@@ -808,8 +808,8 @@ public class StaticQueuesTest {
       for (int i = 0; i < workerConcurrency; i++) {
         final int fi = i;
         handles2.add(
-            dbos.startWorkflow(
-                () -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue)));
+            dbos2.startWorkflow(
+                () -> service2.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue)));
       }
       impl2.wfSemaphore.acquire(workerConcurrency);
       for (var h : handles2) {
@@ -818,8 +818,8 @@ public class StaticQueuesTest {
 
       // Global limit reached: one more workflow must stay ENQUEUED.
       var extra =
-          dbos.startWorkflow(
-              () -> service.noopWorkflow(99), new StartWorkflowOptions().withQueue(queue));
+          dbos2.startWorkflow(
+              () -> service2.noopWorkflow(99), new StartWorkflowOptions().withQueue(queue));
       Thread.sleep(2000);
       assertEquals(WorkflowState.ENQUEUED, extra.getStatus().status());
 

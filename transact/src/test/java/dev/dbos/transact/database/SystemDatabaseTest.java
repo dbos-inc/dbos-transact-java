@@ -34,6 +34,7 @@ import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.io.PrintWriter;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
@@ -1755,7 +1756,7 @@ public class SystemDatabaseTest {
    */
   private static class IsolationRecordingDataSource implements DataSource {
     private final DataSource delegate;
-    int lastIsolationLevel = Connection.TRANSACTION_READ_COMMITTED; // postgres default
+    volatile int lastIsolationLevel = Connection.TRANSACTION_READ_COMMITTED; // postgres default
 
     IsolationRecordingDataSource(DataSource delegate) {
       this.delegate = delegate;
@@ -1764,291 +1765,20 @@ public class SystemDatabaseTest {
     @Override
     public Connection getConnection() throws SQLException {
       Connection real = delegate.getConnection();
-      return new java.sql.Connection() {
-        // Intercept setTransactionIsolation; delegate everything else.
-        @Override
-        public void setTransactionIsolation(int level) throws SQLException {
-          lastIsolationLevel = level;
-          real.setTransactionIsolation(level);
-        }
-
-        @Override
-        public int getTransactionIsolation() throws SQLException {
-          return real.getTransactionIsolation();
-        }
-
-        @Override
-        public void setAutoCommit(boolean a) throws SQLException {
-          real.setAutoCommit(a);
-        }
-
-        @Override
-        public boolean getAutoCommit() throws SQLException {
-          return real.getAutoCommit();
-        }
-
-        @Override
-        public void commit() throws SQLException {
-          real.commit();
-        }
-
-        @Override
-        public void rollback() throws SQLException {
-          real.rollback();
-        }
-
-        @Override
-        public void close() throws SQLException {
-          real.close();
-        }
-
-        @Override
-        public boolean isClosed() throws SQLException {
-          return real.isClosed();
-        }
-
-        @Override
-        public java.sql.Statement createStatement() throws SQLException {
-          return real.createStatement();
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s) throws SQLException {
-          return real.prepareStatement(s);
-        }
-
-        @Override
-        public java.sql.CallableStatement prepareCall(String s) throws SQLException {
-          return real.prepareCall(s);
-        }
-
-        @Override
-        public String nativeSQL(String s) throws SQLException {
-          return real.nativeSQL(s);
-        }
-
-        @Override
-        public DatabaseMetaData getMetaData() throws SQLException {
-          return real.getMetaData();
-        }
-
-        @Override
-        public void setReadOnly(boolean r) throws SQLException {
-          real.setReadOnly(r);
-        }
-
-        @Override
-        public boolean isReadOnly() throws SQLException {
-          return real.isReadOnly();
-        }
-
-        @Override
-        public void setCatalog(String c) throws SQLException {
-          real.setCatalog(c);
-        }
-
-        @Override
-        public String getCatalog() throws SQLException {
-          return real.getCatalog();
-        }
-
-        @Override
-        public java.sql.SQLWarning getWarnings() throws SQLException {
-          return real.getWarnings();
-        }
-
-        @Override
-        public void clearWarnings() throws SQLException {
-          real.clearWarnings();
-        }
-
-        @Override
-        public java.sql.Statement createStatement(int r, int c) throws SQLException {
-          return real.createStatement(r, c);
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s, int r, int c)
-            throws SQLException {
-          return real.prepareStatement(s, r, c);
-        }
-
-        @Override
-        public java.sql.CallableStatement prepareCall(String s, int r, int c) throws SQLException {
-          return real.prepareCall(s, r, c);
-        }
-
-        @Override
-        public Map<String, Class<?>> getTypeMap() throws SQLException {
-          return real.getTypeMap();
-        }
-
-        @Override
-        public void setTypeMap(Map<String, Class<?>> m) throws SQLException {
-          real.setTypeMap(m);
-        }
-
-        @Override
-        public void setHoldability(int h) throws SQLException {
-          real.setHoldability(h);
-        }
-
-        @Override
-        public int getHoldability() throws SQLException {
-          return real.getHoldability();
-        }
-
-        @Override
-        public java.sql.Savepoint setSavepoint() throws SQLException {
-          return real.setSavepoint();
-        }
-
-        @Override
-        public java.sql.Savepoint setSavepoint(String n) throws SQLException {
-          return real.setSavepoint(n);
-        }
-
-        @Override
-        public void rollback(java.sql.Savepoint s) throws SQLException {
-          real.rollback(s);
-        }
-
-        @Override
-        public void releaseSavepoint(java.sql.Savepoint s) throws SQLException {
-          real.releaseSavepoint(s);
-        }
-
-        @Override
-        public java.sql.Statement createStatement(int r, int c, int h) throws SQLException {
-          return real.createStatement(r, c, h);
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s, int r, int c, int h)
-            throws SQLException {
-          return real.prepareStatement(s, r, c, h);
-        }
-
-        @Override
-        public java.sql.CallableStatement prepareCall(String s, int r, int c, int h)
-            throws SQLException {
-          return real.prepareCall(s, r, c, h);
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s, int[] ci) throws SQLException {
-          return real.prepareStatement(s, ci);
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s, String[] cn)
-            throws SQLException {
-          return real.prepareStatement(s, cn);
-        }
-
-        @Override
-        public java.sql.PreparedStatement prepareStatement(String s, int ag) throws SQLException {
-          return real.prepareStatement(s, ag);
-        }
-
-        @Override
-        public java.sql.Clob createClob() throws SQLException {
-          return real.createClob();
-        }
-
-        @Override
-        public java.sql.Blob createBlob() throws SQLException {
-          return real.createBlob();
-        }
-
-        @Override
-        public java.sql.NClob createNClob() throws SQLException {
-          return real.createNClob();
-        }
-
-        @Override
-        public java.sql.SQLXML createSQLXML() throws SQLException {
-          return real.createSQLXML();
-        }
-
-        @Override
-        public boolean isValid(int t) throws SQLException {
-          return real.isValid(t);
-        }
-
-        @Override
-        public void setClientInfo(String n, String v) throws java.sql.SQLClientInfoException {
-          try {
-            real.setClientInfo(n, v);
-          } catch (java.sql.SQLClientInfoException e) {
-            throw e;
-          }
-        }
-
-        @Override
-        public void setClientInfo(java.util.Properties p) throws java.sql.SQLClientInfoException {
-          try {
-            real.setClientInfo(p);
-          } catch (java.sql.SQLClientInfoException e) {
-            throw e;
-          }
-        }
-
-        @Override
-        public String getClientInfo(String n) throws SQLException {
-          return real.getClientInfo(n);
-        }
-
-        @Override
-        public java.util.Properties getClientInfo() throws SQLException {
-          return real.getClientInfo();
-        }
-
-        @Override
-        public java.sql.Array createArrayOf(String t, Object[] e) throws SQLException {
-          return real.createArrayOf(t, e);
-        }
-
-        @Override
-        public java.sql.Struct createStruct(String t, Object[] a) throws SQLException {
-          return real.createStruct(t, a);
-        }
-
-        @Override
-        public void setSchema(String s) throws SQLException {
-          real.setSchema(s);
-        }
-
-        @Override
-        public String getSchema() throws SQLException {
-          return real.getSchema();
-        }
-
-        @Override
-        public void abort(java.util.concurrent.Executor e) throws SQLException {
-          real.abort(e);
-        }
-
-        @Override
-        public void setNetworkTimeout(java.util.concurrent.Executor e, int ms) throws SQLException {
-          real.setNetworkTimeout(e, ms);
-        }
-
-        @Override
-        public int getNetworkTimeout() throws SQLException {
-          return real.getNetworkTimeout();
-        }
-
-        @Override
-        public <T> T unwrap(Class<T> i) throws SQLException {
-          return real.unwrap(i);
-        }
-
-        @Override
-        public boolean isWrapperFor(Class<?> i) throws SQLException {
-          return real.isWrapperFor(i);
-        }
-      };
+      return (Connection)
+          Proxy.newProxyInstance(
+              Connection.class.getClassLoader(),
+              new Class<?>[] {Connection.class},
+              (proxy, method, args) -> {
+                if ("setTransactionIsolation".equals(method.getName())) {
+                  lastIsolationLevel = (int) args[0];
+                }
+                try {
+                  return method.invoke(real, args);
+                } catch (java.lang.reflect.InvocationTargetException e) {
+                  throw e.getCause();
+                }
+              });
     }
 
     @Override
