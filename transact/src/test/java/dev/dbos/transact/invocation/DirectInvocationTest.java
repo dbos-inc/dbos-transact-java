@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
@@ -474,11 +475,84 @@ public class DirectInvocationTest {
   }
 
   @Test
+  void authSurvivesRecovery() throws Exception {
+    String workflowId = "authRecovery";
+    String[] roles = {"admin"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("alice", roles).setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.PENDING.name());
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    executor.executeWorkflowById(workflowId, true, false).getResult();
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("alice", status.authenticatedUser());
+    assertArrayEquals(roles, status.authenticatedRoles());
+    assertNull(status.assumedRole());
+  }
+
+  @Test
   void workflowOptionsTimeoutAndDeadlineBothSetThrows() {
     var options =
         new WorkflowOptions()
             .withTimeout(Duration.ofSeconds(10))
             .withDeadline(Instant.now().plus(Duration.ofDays(1)));
     assertThrows(IllegalArgumentException.class, options::setContext);
+  }
+
+  @Test
+  void authContextMethodsReturnValuesInsideWorkflow() throws Exception {
+    String workflowId = "authContextMethods";
+    String[] roles = {"admin", "editor"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("carol", roles).setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("carol|null|admin,editor", result);
+    }
+  }
+
+  @Test
+  void authContextMethodsReturnNullWhenNotSet() throws Exception {
+    String workflowId = "authContextMethodsNull";
+
+    try (var _i = new WorkflowOptions(workflowId).setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("null|null|null", result);
+    }
+  }
+
+  @Test
+  void workflowOptionsAssumedRoleFlowsToStatus() throws Exception {
+    String workflowId = "authAssumedRole";
+    String[] roles = {"admin"};
+
+    try (var _i =
+        new WorkflowOptions(workflowId)
+            .withAuthentication("dave", roles)
+            .withAssumedRole("admin")
+            .setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("dave", status.authenticatedUser());
+    assertArrayEquals(roles, status.authenticatedRoles());
+    assertEquals("admin", status.assumedRole());
+  }
+
+  @Test
+  void assumedRoleVisibleInsideWorkflowContext() throws Exception {
+    String workflowId = "authAssumedRoleContext";
+
+    try (var _i =
+        new WorkflowOptions(workflowId)
+            .withAuthentication("eve", new String[] {"mod"})
+            .withAssumedRole("mod")
+            .setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("eve|mod|mod", result);
+    }
   }
 }

@@ -177,6 +177,18 @@ public class DBOSContext {
     return DBOSContextHolder.get().getSerialization();
   }
 
+  public static String authenticatedUser() {
+    return DBOSContextHolder.get().getAuthenticatedUser();
+  }
+
+  public static String assumedRole() {
+    return DBOSContextHolder.get().getAssumedRole();
+  }
+
+  public static String[] authenticatedRoles() {
+    return DBOSContextHolder.get().getAuthenticatedRoles();
+  }
+
   public record TimeoutAndDeadline(Duration timeout, Instant deadline) {}
 
   public TimeoutAndDeadline resolveTimeoutAndDeadline() {

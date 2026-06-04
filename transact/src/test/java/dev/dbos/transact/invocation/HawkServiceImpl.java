@@ -91,4 +91,14 @@ public class HawkServiceImpl implements HawkService {
   public String illegalWorkflow() {
     return proxy.illegalStep();
   }
+
+  @Workflow
+  @Override
+  public String authContextWorkflow() {
+    String user = DBOS.authenticatedUser();
+    String role = DBOS.assumedRole();
+    String[] roles = DBOS.authenticatedRoles();
+    String rolesStr = roles == null ? "null" : String.join(",", roles);
+    return user + "|" + role + "|" + rolesStr;
+  }
 }

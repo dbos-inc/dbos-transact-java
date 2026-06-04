@@ -21,4 +21,7 @@ public interface HawkService {
   String illegalStep();
 
   String illegalWorkflow();
+
+  // returns "user|assumedRole|role0,role1,..." (or "null" for absent fields) for auth context tests
+  String authContextWorkflow();
 }
