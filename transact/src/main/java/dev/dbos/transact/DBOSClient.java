@@ -618,7 +618,6 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         null,
-        null,
         systemDatabase,
         this.serializer);
 

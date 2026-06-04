@@ -934,7 +934,6 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         null,
-        null,
         systemDatabase,
         serializer);
   }
@@ -1521,6 +1520,10 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
+    // executed workflows always use the current app version.
+    // Option.appVersion is only used for enqueue
+    options = options.withAppVersion(appVersion());
+
     if (options.queueName() != null) {
 
       validateQueue(options.queueName(), options.queuePartitionKey());
@@ -1535,7 +1538,6 @@ public class DBOSExecutor implements AutoCloseable {
           options,
           parent,
           executorId(),
-          appVersion(),
           appId(),
           systemDatabase,
           this.serializer);
@@ -1574,9 +1576,6 @@ public class DBOSExecutor implements AutoCloseable {
             args,
             null,
             executorId(),
-            // executed workflows always use the current app version.
-            // Option.appVersion is only used for enqueue
-            appVersion(),
             appId(),
             parent,
             options,
@@ -1697,7 +1696,6 @@ public class DBOSExecutor implements AutoCloseable {
       ExecutionOptions options,
       WorkflowInfo parent,
       String executorId,
-      String appVersion,
       String appId,
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
@@ -1720,13 +1718,6 @@ public class DBOSExecutor implements AutoCloseable {
         RegisteredWorkflow.fullyQualifiedName(
             workflowName, Objects.requireNonNullElse(className, ""), instanceName));
 
-    // Note, options.appVesion specifies the appVersion the workflow starter may have set
-    // app version parameter specifies the current running code app version, if known.
-    // options.appVersion takes presidence if specified
-    if (options.appVersion() != null) {
-      appVersion = options.appVersion();
-    }
-
     try {
       persistWorkflow(
           systemDatabase,
@@ -1737,7 +1728,6 @@ public class DBOSExecutor implements AutoCloseable {
           positionalArgs,
           namedArgs,
           executorId,
-          appVersion,
           appId,
           parent,
           options,
@@ -1767,7 +1757,6 @@ public class DBOSExecutor implements AutoCloseable {
       // Typical Java workflow invocations do not use named args
       Map<String, Object> namedArgs,
       String executorId,
-      String appVersion,
       String appId,
       WorkflowInfo parentWorkflow,
       ExecutionOptions options,
@@ -1806,7 +1795,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.authenticatedRoles(),
             inputString,
             executorId,
-            appVersion,
+            options.appVersion(),
             appId,
             options.timeoutDuration(),
             effectiveDeadline,
