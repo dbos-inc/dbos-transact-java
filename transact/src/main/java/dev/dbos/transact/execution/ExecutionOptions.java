@@ -21,9 +21,11 @@ public record ExecutionOptions(
     String queuePartitionKey,
     Duration delay,
     String appVersion,
+    String serialization,
+    // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
     boolean isRecoveryRequest,
-    boolean isDequeuedRequest,
-    String serialization) {
+    // True when the workflow was pulled off a queue by this executor, not started directly.
+    boolean isDequeuedRequest) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -58,24 +60,38 @@ public record ExecutionOptions(
     }
   }
 
+  public ExecutionOptions(
+      String workflowId,
+      Timeout timeout,
+      Instant deadline,
+      String queueName,
+      String deduplicationId,
+      Integer priority,
+      String queuePartitionKey,
+      Duration delay,
+      String appVersion,
+      String serialization) {
+    this(
+        workflowId,
+        timeout,
+        deadline,
+        queueName,
+        deduplicationId,
+        priority,
+        queuePartitionKey,
+        delay,
+        appVersion,
+        serialization,
+        false,
+        false);
+  }
+
   public ExecutionOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null, false, false, null);
+    this(workflowId, null, null, null, null, null, null, null, null, null);
   }
 
   public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
-    this(
-        workflowId,
-        Timeout.of(timeout),
-        deadline,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        false,
-        false,
-        null);
+    this(workflowId, Timeout.of(timeout), deadline, null, null, null, null, null, null, null);
   }
 
   public ExecutionOptions asRecoveryRequest() {
@@ -89,25 +105,25 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
+        this.serialization,
         true,
-        false,
-        this.serialization);
+        false);
   }
 
-  public ExecutionOptions asDequeuedRequest() {
+  public ExecutionOptions asDequeuedRequest(String queueName, String partitionKey) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
         this.deadline,
-        this.queueName,
+        queueName,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey,
+        queuePartitionKey,
         this.delay,
         this.appVersion,
+        this.serialization,
         false,
-        true,
-        this.serialization);
+        true);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -121,9 +137,9 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
+        serialization,
         this.isRecoveryRequest,
-        this.isDequeuedRequest,
-        serialization);
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withPriority(Integer priority) {
@@ -137,9 +153,9 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
+        this.serialization,
         this.isRecoveryRequest,
-        this.isDequeuedRequest,
-        this.serialization);
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -153,9 +169,9 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         appVersion,
+        this.serialization,
         this.isRecoveryRequest,
-        this.isDequeuedRequest,
-        this.serialization);
+        this.isDequeuedRequest);
   }
 
   public Duration timeoutDuration() {

@@ -621,8 +621,6 @@ public class DBOSClient implements AutoCloseable {
             options.queuePartitionKey,
             options.delay,
             options.appVersion,
-            false,
-            false,
             serializationFormat),
         null,
         null,

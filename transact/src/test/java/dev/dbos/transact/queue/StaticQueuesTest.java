@@ -463,14 +463,13 @@ public class StaticQueuesTest {
     assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
 
     assertEquals(2, idsToRun.size());
 
-    // run the same above 2 are in Pending.
+    // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -478,15 +477,14 @@ public class StaticQueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null);
+        systemDatabase.startQueuedWorkflows(
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
     assertEquals(0, idsToRun.size());
   }
 
@@ -546,19 +544,20 @@ public class StaticQueuesTest {
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(
+        systemDatabase.startQueuedWorkflows(
             qwithWCLimit,
             // executorId,
             executor2,
             appVersion,
-            null);
+            null,
+            0);
     assertEquals(2, idsToRun.size());
   }
 

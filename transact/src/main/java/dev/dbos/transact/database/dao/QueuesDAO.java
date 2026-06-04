@@ -10,13 +10,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -28,8 +25,13 @@ public class QueuesDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  public static List<String> getAndStartQueuedWorkflows(
-      DbContext ctx, Queue queue, String executorId, String appVersion, String partitionKey)
+  public static List<String> startQueuedWorkflows(
+      DbContext ctx,
+      Queue queue,
+      String executorId,
+      String appVersion,
+      String partitionKey,
+      long localRunningCount)
       throws SQLException {
 
     if (partitionKey != null && partitionKey.isEmpty()) {
@@ -38,22 +40,24 @@ public class QueuesDAO {
 
     try (Connection connection = ctx.getConnection()) {
       connection.setAutoCommit(false);
-
-      try (Statement stmt = connection.createStatement()) {
-        stmt.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+      // Use REPEATABLE READ only when global flow control (concurrency or rate limit) is active.
+      // Local worker concurrency is tracked in-memory and does not need a consistent DB snapshot.
+      if (queue.concurrency() != null || queue.rateLimit() != null) {
+        connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
       }
 
       int numRecentQueries = 0;
 
-      var rateLimit = queue.rateLimit();
-      if (rateLimit != null) {
-        var cutoffTime = Instant.now().minus(rateLimit.period());
+      // If there is a rate limit, compute how many functions have started in its period.
+      if (queue.rateLimit() != null) {
+        var rateLimit = queue.rateLimit();
 
         var limiterQuery =
             """
               SELECT COUNT(*)
               FROM "%s".workflow_status
               WHERE queue_name = ?
+              AND rate_limited = true
               AND status NOT IN (?, ?)
               AND started_at_epoch_ms > ?
             """
@@ -66,7 +70,7 @@ public class QueuesDAO {
           ps.setString(1, queue.name());
           ps.setString(2, WorkflowState.ENQUEUED.name());
           ps.setString(3, WorkflowState.DELAYED.name());
-          ps.setLong(4, cutoffTime.toEpochMilli());
+          ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
           if (partitionKey != null) {
             ps.setString(5, partitionKey);
           }
@@ -78,28 +82,33 @@ public class QueuesDAO {
           }
         }
 
-        if (numRecentQueries >= queue.rateLimit().limit()) {
-          return new ArrayList<>();
+        if (numRecentQueries >= rateLimit.limit()) {
+          return List.of();
         }
       }
 
-      int maxTasks = 100;
+      long maxTasks = Integer.MAX_VALUE;
 
-      if (queue.workerConcurrency() != null || queue.concurrency() != null) {
-        String pendingQuery =
+      // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
+      if (queue.workerConcurrency() != null) {
+        maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
+      }
+
+      // Global concurrency still requires a DB query — other workers may be running workflows too.
+      if (queue.concurrency() != null) {
+        String globalPendingQuery =
             """
-              SELECT executor_id, COUNT(*) as task_count
+              SELECT COUNT(*)
               FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
                 .formatted(ctx.schema());
         if (partitionKey != null) {
-          pendingQuery += " AND queue_partition_key = ?";
+          globalPendingQuery += " AND queue_partition_key = ?";
         }
-        pendingQuery += " GROUP BY executor_id";
 
-        Map<String, Integer> pendingWorkflows = new HashMap<>();
-        try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
+        int globalPendingWorkflows = 0;
+        try (PreparedStatement ps = connection.prepareStatement(globalPendingQuery)) {
           ps.setString(1, queue.name());
           ps.setString(2, WorkflowState.PENDING.name());
           if (partitionKey != null) {
@@ -107,70 +116,38 @@ public class QueuesDAO {
           }
 
           try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-              var executor = rs.getString("executor_id");
-              var count = rs.getInt("task_count");
-              pendingWorkflows.put(executor, count);
+            if (rs.next()) {
+              globalPendingWorkflows = rs.getInt(1);
             }
           }
         }
 
-        int localPendingWorkflows = pendingWorkflows.getOrDefault(executorId, 0);
-
-        if (queue.workerConcurrency() != null) {
-          if (localPendingWorkflows > queue.workerConcurrency()) {
-            logger.warn(
-                "Local pending workflows ({}) on queue {} exceeds worker concurrency limit ({})",
-                localPendingWorkflows,
-                queue.name(),
-                queue.workerConcurrency());
-          }
-          maxTasks = Math.max(queue.workerConcurrency() - localPendingWorkflows, 0);
+        if (globalPendingWorkflows > queue.concurrency()) {
+          logger.warn(
+              "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
+              globalPendingWorkflows,
+              queue.name(),
+              queue.concurrency());
         }
 
-        if (queue.concurrency() != null) {
-          var globalPendingWorkflows = 0;
-          for (var count : pendingWorkflows.values()) {
-            globalPendingWorkflows += count;
-          }
-
-          if (globalPendingWorkflows > queue.concurrency()) {
-            logger.warn(
-                "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
-                globalPendingWorkflows,
-                queue.name(),
-                queue.concurrency());
-          }
-
-          int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
-          if (availableTasks < maxTasks) {
-            maxTasks = availableTasks;
-          }
-        }
-      }
-
-      if (maxTasks <= 0) {
-        return new ArrayList<>();
+        int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
+        maxTasks = Math.min(maxTasks, availableTasks);
       }
 
       var query =
           """
-              SELECT workflow_uuid
-              FROM "%s".workflow_status
-              WHERE queue_name = ?
-                AND status = ?
-                AND (application_version = ? OR application_version IS NULL)
+            SELECT workflow_uuid
+            FROM "%s".workflow_status
+            WHERE queue_name = ?
+              AND status = ?
+              AND (application_version = ? OR application_version IS NULL)
           """
               .formatted(ctx.schema());
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
 
-      if (queue.priorityEnabled()) {
-        query += " ORDER BY priority ASC, created_at ASC";
-      } else {
-        query += " ORDER BY created_at ASC";
-      }
+      query += " ORDER BY priority ASC, created_at ASC";
 
       if (queue.concurrency() == null) {
         query += " FOR UPDATE SKIP LOCKED";
@@ -178,7 +155,9 @@ public class QueuesDAO {
         query += " FOR UPDATE NOWAIT";
       }
 
-      query += " LIMIT %d".formatted(maxTasks);
+      if (maxTasks != Integer.MAX_VALUE) {
+        query += " LIMIT %d".formatted(maxTasks);
+      }
 
       List<String> dequeuedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(query)) {
@@ -203,27 +182,30 @@ public class QueuesDAO {
             queue.name());
       }
 
-      var now = System.currentTimeMillis();
-      List<String> updatedWorkflowIds = new ArrayList<>();
       String updateQuery =
           """
-        UPDATE "%s".workflow_status
-        SET status = ?,
-            application_version = ?,
-            executor_id = ?,
-            started_at_epoch_ms = ?,
-            workflow_deadline_epoch_ms = CASE
-                WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                THEN (EXTRACT(epoch FROM now()) * 1000)::bigint + workflow_timeout_ms
-                ELSE workflow_deadline_epoch_ms
-            END
-        WHERE workflow_uuid = ?
+            UPDATE "%s".workflow_status
+            SET status = ?,
+                application_version = ?,
+                executor_id = ?,
+                started_at_epoch_ms = ?,
+                rate_limited = ?,
+                workflow_deadline_epoch_ms = CASE
+                    WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
+                    THEN (EXTRACT(epoch FROM now()) * 1000)::bigint + workflow_timeout_ms
+                    ELSE workflow_deadline_epoch_ms
+                END
+            WHERE workflow_uuid = ?
+              AND status = ?
           """
               .formatted(ctx.schema());
 
+      List<String> updatedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(updateQuery)) {
+        var now = System.currentTimeMillis();
+        var hasRateLimit = queue.rateLimit() != null;
         for (var id : dequeuedWorkflowIds) {
-          if (queue.rateLimit() != null) {
+          if (hasRateLimit) {
             if (updatedWorkflowIds.size() + numRecentQueries >= queue.rateLimit().limit()) {
               break;
             }
@@ -233,9 +215,12 @@ public class QueuesDAO {
           ps.setString(2, appVersion);
           ps.setString(3, executorId);
           ps.setLong(4, now);
-          ps.setString(5, id);
-          ps.executeUpdate();
-          updatedWorkflowIds.add(id);
+          ps.setBoolean(5, hasRateLimit);
+          ps.setString(6, id);
+          ps.setString(7, WorkflowState.ENQUEUED.name());
+          if (ps.executeUpdate() > 0) {
+            updatedWorkflowIds.add(id);
+          }
         }
       }
 
