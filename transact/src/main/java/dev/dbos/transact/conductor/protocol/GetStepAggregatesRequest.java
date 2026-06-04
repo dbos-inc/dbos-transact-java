@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.GetStepAggregatesInput;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -38,7 +39,7 @@ public class GetStepAggregatesRequest extends BaseMessage {
         body.group_by_status,
         selectCount,
         Boolean.TRUE.equals(body.select_max_duration_ms),
-        body.time_bucket_size_ms,
+        body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.status,
         body.function_name,
         body.workflow_id_prefix,

@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -62,7 +63,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         Boolean.TRUE.equals(body.select_min_created_at),
         Boolean.TRUE.equals(body.select_max_queue_wait_ms),
         Boolean.TRUE.equals(body.select_max_total_latency_ms),
-        body.time_bucket_size_ms,
+        body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.name,
         body.status,
         body.queue_name,

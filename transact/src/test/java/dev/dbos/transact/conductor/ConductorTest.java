@@ -3101,7 +3101,11 @@ public class ConductorTest {
     List<WorkflowAggregateRow> rows =
         List.of(
             new WorkflowAggregateRow(
-                Map.of("status", "SUCCESS"), null, 1_700_000_000_000L, 50L, 200L));
+                Map.of("status", "SUCCESS"),
+                null,
+                Instant.ofEpochMilli(1_700_000_000_000L),
+                Duration.ofMillis(50),
+                Duration.ofMillis(200)));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3150,7 +3154,8 @@ public class ConductorTest {
 
     List<StepAggregateRow> rows =
         List.of(
-            new StepAggregateRow(Map.of("function_name", "stepA", "status", "SUCCESS"), 5L, 120L),
+            new StepAggregateRow(
+                Map.of("function_name", "stepA", "status", "SUCCESS"), 5L, Duration.ofMillis(120)),
             new StepAggregateRow(Map.of("function_name", "stepB", "status", "ERROR"), 2L, null));
     when(mockDB.getStepAggregates(any(GetStepAggregatesInput.class))).thenReturn(rows);
 

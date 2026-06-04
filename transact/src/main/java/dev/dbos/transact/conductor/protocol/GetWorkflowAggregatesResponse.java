@@ -19,9 +19,9 @@ public class GetWorkflowAggregatesResponse extends BaseResponse {
       return new WorkflowAggregateOutput(
           row.group(),
           row.count(),
-          row.minCreatedAt(),
-          row.maxQueueWaitMs(),
-          row.maxTotalLatencyMs());
+          row.minCreatedAt() != null ? row.minCreatedAt().toEpochMilli() : null,
+          row.maxQueueWait() != null ? row.maxQueueWait().toMillis() : null,
+          row.maxTotalLatency() != null ? row.maxTotalLatency().toMillis() : null);
     }
   }
 

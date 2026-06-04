@@ -712,10 +712,6 @@ public class WorkflowDAO {
       input = new GetWorkflowAggregatesInput();
     }
 
-    if (input.timeBucketSizeMs() != null && input.timeBucketSizeMs() <= 0) {
-      throw new IllegalArgumentException("timeBucketSizeMs must be > 0");
-    }
-
     // --- GROUP BY dimensions (stable order) ---
     record GroupDim(String name, String expr) {}
     var dims = new ArrayList<GroupDim>();
@@ -726,11 +722,10 @@ public class WorkflowDAO {
     if (input.groupByApplicationVersion())
       dims.add(new GroupDim("application_version", "application_version"));
     // Time bucket: floor(created_at / bucket) * bucket
-    boolean hasBucket = input.timeBucketSizeMs() != null;
+    boolean hasBucket = input.timeBucketSize() != null;
     if (hasBucket) {
-      String bucketExpr =
-          "(floor(created_at / %d) * %d)::bigint"
-              .formatted(input.timeBucketSizeMs(), input.timeBucketSizeMs());
+      long ms = input.timeBucketSize().toMillis();
+      String bucketExpr = "(floor(created_at / %d) * %d)::bigint".formatted(ms, ms);
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
@@ -851,22 +846,25 @@ public class WorkflowDAO {
               group.put(dims.get(i).name(), val);
             }
             Long count = null;
-            Long minCreatedAt = null;
-            Long maxQueueWaitMs = null;
-            Long maxTotalLatencyMs = null;
+            Instant minCreatedAt = null;
+            Duration maxQueueWait = null;
+            Duration maxTotalLatency = null;
             for (var m : metrics) {
               Object v = rs.getObject(m.alias());
               Long lv = v == null ? null : ((Number) v).longValue();
               switch (m.alias()) {
                 case "count" -> count = lv;
-                case "min_created_at" -> minCreatedAt = lv;
-                case "max_queue_wait_ms" -> maxQueueWaitMs = lv;
-                case "max_total_latency_ms" -> maxTotalLatencyMs = lv;
+                case "min_created_at" ->
+                    minCreatedAt = lv != null ? Instant.ofEpochMilli(lv) : null;
+                case "max_queue_wait_ms" ->
+                    maxQueueWait = lv != null ? Duration.ofMillis(lv) : null;
+                case "max_total_latency_ms" ->
+                    maxTotalLatency = lv != null ? Duration.ofMillis(lv) : null;
               }
             }
             results.add(
                 new WorkflowAggregateRow(
-                    group, count, minCreatedAt, maxQueueWaitMs, maxTotalLatencyMs));
+                    group, count, minCreatedAt, maxQueueWait, maxTotalLatency));
           }
         }
       } finally {
@@ -886,10 +884,6 @@ public class WorkflowDAO {
       input = new GetStepAggregatesInput();
     }
 
-    if (input.timeBucketSizeMs() != null && input.timeBucketSizeMs() <= 0) {
-      throw new IllegalArgumentException("timeBucketSizeMs must be > 0");
-    }
-
     // Status is derived: error IS NULL → SUCCESS, otherwise ERROR
     String statusExpr = "CASE WHEN error IS NULL THEN 'SUCCESS' ELSE 'ERROR' END";
 
@@ -898,10 +892,9 @@ public class WorkflowDAO {
     var dims = new ArrayList<GroupDim>();
     if (input.groupByFunctionName()) dims.add(new GroupDim("function_name", "function_name"));
     if (input.groupByStatus()) dims.add(new GroupDim("status", statusExpr));
-    if (input.timeBucketSizeMs() != null) {
-      String bucketExpr =
-          "(floor(completed_at_epoch_ms / %d) * %d)::bigint"
-              .formatted(input.timeBucketSizeMs(), input.timeBucketSizeMs());
+    if (input.timeBucketSize() != null) {
+      long ms = input.timeBucketSize().toMillis();
+      String bucketExpr = "(floor(completed_at_epoch_ms / %d) * %d)::bigint".formatted(ms, ms);
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
@@ -999,16 +992,16 @@ public class WorkflowDAO {
               group.put(dims.get(i).name(), val);
             }
             Long count = null;
-            Long maxDurationMs = null;
+            Duration maxDuration = null;
             for (var m : metrics) {
               Object v = rs.getObject(m.alias());
               Long lv = v == null ? null : ((Number) v).longValue();
               switch (m.alias()) {
                 case "count" -> count = lv;
-                case "max_duration_ms" -> maxDurationMs = lv;
+                case "max_duration_ms" -> maxDuration = lv != null ? Duration.ofMillis(lv) : null;
               }
             }
-            results.add(new StepAggregateRow(group, count, maxDurationMs));
+            results.add(new StepAggregateRow(group, count, maxDuration));
           }
         }
       } finally {

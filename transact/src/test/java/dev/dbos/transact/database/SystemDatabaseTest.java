@@ -1553,8 +1553,12 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetWorkflowAggregatesTimeBucketInvalidThrows() {
-    var input = new GetWorkflowAggregatesInput().withTimeBucketSizeMs(0L).withSelectCount(true);
-    assertThrows(IllegalArgumentException.class, () -> sysdb.getWorkflowAggregates(input));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new GetWorkflowAggregatesInput()
+                .withTimeBucketSize(Duration.ZERO)
+                .withSelectCount(true));
   }
 
   @Test
@@ -1570,8 +1574,8 @@ public class SystemDatabaseTest {
     assertNotNull(rows.get(0).count());
     assertEquals(2L, rows.get(0).count());
     assertNull(rows.get(0).minCreatedAt());
-    assertNull(rows.get(0).maxQueueWaitMs());
-    assertNull(rows.get(0).maxTotalLatencyMs());
+    assertNull(rows.get(0).maxQueueWait());
+    assertNull(rows.get(0).maxTotalLatency());
 
     // min_created_at=true, count=false
     var rows2 =
@@ -1583,7 +1587,7 @@ public class SystemDatabaseTest {
     assertEquals(1, rows2.size());
     assertNull(rows2.get(0).count());
     assertNotNull(rows2.get(0).minCreatedAt());
-    assertTrue(rows2.get(0).minCreatedAt() > 0);
+    assertTrue(rows2.get(0).minCreatedAt().toEpochMilli() > 0);
 
     // Both count and min_created_at → both populated
     var rows3 =
@@ -1593,7 +1597,7 @@ public class SystemDatabaseTest {
     assertNotNull(rows3.get(0).count());
     assertEquals(2L, rows3.get(0).count());
     assertNotNull(rows3.get(0).minCreatedAt());
-    assertTrue(rows3.get(0).minCreatedAt() > 0);
+    assertTrue(rows3.get(0).minCreatedAt().toEpochMilli() > 0);
   }
 
   @Test
@@ -1606,7 +1610,9 @@ public class SystemDatabaseTest {
     long bucketMs = 3_600_000L; // 1 hour
     var rows =
         sysdb.getWorkflowAggregates(
-            new GetWorkflowAggregatesInput().withTimeBucketSizeMs(bucketMs).withSelectCount(true));
+            new GetWorkflowAggregatesInput()
+                .withTimeBucketSize(Duration.ofMillis(bucketMs))
+                .withSelectCount(true));
     assertFalse(rows.isEmpty());
     for (var r : rows) {
       assertTrue(r.group().containsKey("time_bucket"));
@@ -1630,7 +1636,7 @@ public class SystemDatabaseTest {
     var rows =
         sysdb.getWorkflowAggregates(
             new GetWorkflowAggregatesInput()
-                .withTimeBucketSizeMs(bucketMs)
+                .withTimeBucketSize(Duration.ofMillis(bucketMs))
                 .withGroupByStatus(true)
                 .withSelectCount(true)
                 .withWorkflowIdPrefix(List.of("agg-tbf-")));
@@ -1646,7 +1652,7 @@ public class SystemDatabaseTest {
     var errRows =
         sysdb.getWorkflowAggregates(
             new GetWorkflowAggregatesInput()
-                .withTimeBucketSizeMs(bucketMs)
+                .withTimeBucketSize(Duration.ofMillis(bucketMs))
                 .withStatus(List.of("ERROR"))
                 .withSelectCount(true)
                 .withWorkflowIdPrefix(List.of("agg-tbf-")));
@@ -1710,7 +1716,7 @@ public class SystemDatabaseTest {
     assertEquals("queue1", rows.get(0).group().get("queue_name"));
     assertNull(rows.get(0).count());
     assertNotNull(rows.get(0).minCreatedAt());
-    assertTrue(rows.get(0).minCreatedAt() > 0);
+    assertTrue(rows.get(0).minCreatedAt().toEpochMilli() > 0);
   }
 
   @Test
@@ -1875,20 +1881,20 @@ public class SystemDatabaseTest {
       if ("queuedWorkflow".equals(r.group().get("name"))) queuedRow = r;
     }
 
-    // Sync workflow: count=null, max_queue_wait_ms=null, max_total_latency_ms>=0
+    // Sync workflow: count=null, max_queue_wait=null, max_total_latency>=0
     assertNotNull(syncRow);
     assertNull(syncRow.count());
-    assertNull(syncRow.maxQueueWaitMs());
-    assertNotNull(syncRow.maxTotalLatencyMs());
-    assertTrue(syncRow.maxTotalLatencyMs() >= 0);
+    assertNull(syncRow.maxQueueWait());
+    assertNotNull(syncRow.maxTotalLatency());
+    assertTrue(syncRow.maxTotalLatency().toMillis() >= 0);
 
     // Queued workflow: count=null, both maxes populated, total >= wait
     assertNotNull(queuedRow);
     assertNull(queuedRow.count());
-    assertNotNull(queuedRow.maxQueueWaitMs());
-    assertTrue(queuedRow.maxQueueWaitMs() >= 0);
-    assertNotNull(queuedRow.maxTotalLatencyMs());
-    assertTrue(queuedRow.maxTotalLatencyMs() >= queuedRow.maxQueueWaitMs());
+    assertNotNull(queuedRow.maxQueueWait());
+    assertTrue(queuedRow.maxQueueWait().toMillis() >= 0);
+    assertNotNull(queuedRow.maxTotalLatency());
+    assertTrue(queuedRow.maxTotalLatency().toMillis() >= queuedRow.maxQueueWait().toMillis());
   }
 
   // ── Step aggregates ────────────────────────────────────────────────────────
@@ -2066,8 +2072,8 @@ public class SystemDatabaseTest {
                 .withSelectMaxDurationMs(true));
     assertEquals(1, rows.size());
     assertNull(rows.get(0).count());
-    assertNotNull(rows.get(0).maxDurationMs());
-    assertTrue(rows.get(0).maxDurationMs() >= 100); // at least the longer step
+    assertNotNull(rows.get(0).maxDuration());
+    assertTrue(rows.get(0).maxDuration().toMillis() >= 100); // at least the longer step
   }
 
   @Test
@@ -2098,7 +2104,9 @@ public class SystemDatabaseTest {
     long bucketMs = 3_600_000L;
     var rows =
         sysdb.getStepAggregates(
-            new GetStepAggregatesInput().withTimeBucketSizeMs(bucketMs).withSelectCount(true));
+            new GetStepAggregatesInput()
+                .withTimeBucketSize(Duration.ofMillis(bucketMs))
+                .withSelectCount(true));
     assertFalse(rows.isEmpty());
     for (var r : rows) {
       assertTrue(r.group().containsKey("time_bucket"));
@@ -2109,8 +2117,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetStepAggregatesTimeBucketInvalidThrows() {
-    var input = new GetStepAggregatesInput().withTimeBucketSizeMs(0L).withSelectCount(true);
-    assertThrows(IllegalArgumentException.class, () -> sysdb.getStepAggregates(input));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new GetStepAggregatesInput().withTimeBucketSize(Duration.ZERO).withSelectCount(true));
   }
 
   @Test
@@ -2174,16 +2183,16 @@ public class SystemDatabaseTest {
                 .withSelectMaxDurationMs(true));
     var byFn = rows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
 
-    // Real steps have count=1 and max_duration_ms populated
+    // Real steps have count=1 and max_duration populated
     var quickRow = byFn.get("quickStep");
     assertEquals(1L, quickRow.count());
-    assertNotNull(quickRow.maxDurationMs());
-    assertTrue(quickRow.maxDurationMs() >= 0);
+    assertNotNull(quickRow.maxDuration());
+    assertTrue(quickRow.maxDuration().toMillis() >= 0);
 
     var slowRow = byFn.get("slowStep");
     assertEquals(1L, slowRow.count());
-    assertNotNull(slowRow.maxDurationMs());
-    assertTrue(slowRow.maxDurationMs() >= 80);
+    assertNotNull(slowRow.maxDuration());
+    assertTrue(slowRow.maxDuration().toMillis() >= 80);
 
     // Bookkeeping rows are excluded from the completed window
     assertNull(byFn.get("childWorkflow"));
@@ -2199,7 +2208,7 @@ public class SystemDatabaseTest {
         allRows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
     var childRow = allByFn.get("childWorkflow");
     assertEquals(1L, childRow.count());
-    assertNull(childRow.maxDurationMs());
+    assertNull(childRow.maxDuration());
 
     // completed_before before all → no match
     var noRows =
@@ -2220,7 +2229,7 @@ public class SystemDatabaseTest {
                 .withSelectMaxDurationMs(true));
     for (var r : maxOnly) {
       assertNull(r.count());
-      assertNotNull(r.maxDurationMs());
+      assertNotNull(r.maxDuration());
     }
   }
 
