@@ -1368,8 +1368,8 @@ public class DBOSExecutor implements AutoCloseable {
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)
-            .withTimeout(td.timeout)
-            .withDeadline(td.deadline);
+            .withTimeout(td.timeout())
+            .withDeadline(td.deadline());
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
