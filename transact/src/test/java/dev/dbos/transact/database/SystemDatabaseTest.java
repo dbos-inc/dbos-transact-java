@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.dao.QueuesDAO;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -32,15 +33,19 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.io.PrintWriter;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
@@ -1741,5 +1746,126 @@ public class SystemDatabaseTest {
     assertEquals(20, fetched.rateLimit().limit());
     assertEquals(Duration.ofSeconds(30), fetched.rateLimit().period());
     assertEquals(Duration.ofSeconds(5), fetched.pollingInterval());
+  }
+
+  // --- Transaction isolation tests ---
+
+  /**
+   * Wraps a real DataSource and records the isolation level passed to {@link
+   * Connection#setTransactionIsolation} on each connection it vends.
+   */
+  private static class IsolationRecordingDataSource implements DataSource {
+    private final DataSource delegate;
+    volatile int lastIsolationLevel = Connection.TRANSACTION_READ_COMMITTED; // postgres default
+
+    IsolationRecordingDataSource(DataSource delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public Connection getConnection() throws SQLException {
+      Connection real = delegate.getConnection();
+      return (Connection)
+          Proxy.newProxyInstance(
+              Connection.class.getClassLoader(),
+              new Class<?>[] {Connection.class},
+              (proxy, method, args) -> {
+                if ("setTransactionIsolation".equals(method.getName())) {
+                  lastIsolationLevel = (int) args[0];
+                }
+                try {
+                  return method.invoke(real, args);
+                } catch (java.lang.reflect.InvocationTargetException e) {
+                  throw e.getCause();
+                }
+              });
+    }
+
+    @Override
+    public Connection getConnection(String u, String p) throws SQLException {
+      return delegate.getConnection(u, p);
+    }
+
+    @Override
+    public PrintWriter getLogWriter() throws SQLException {
+      return delegate.getLogWriter();
+    }
+
+    @Override
+    public void setLogWriter(PrintWriter w) throws SQLException {
+      delegate.setLogWriter(w);
+    }
+
+    @Override
+    public void setLoginTimeout(int s) throws SQLException {
+      delegate.setLoginTimeout(s);
+    }
+
+    @Override
+    public int getLoginTimeout() throws SQLException {
+      return delegate.getLoginTimeout();
+    }
+
+    @Override
+    public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+      return delegate.getParentLogger();
+    }
+
+    @Override
+    public <T> T unwrap(Class<T> i) throws SQLException {
+      return delegate.unwrap(i);
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> i) throws SQLException {
+      return delegate.isWrapperFor(i);
+    }
+  }
+
+  private DbContext recordingCtx(IsolationRecordingDataSource ds) {
+    String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
+    return new DbContext(ds, schema, null, () -> false);
+  }
+
+  @Test
+  public void testWorkerConcurrencyOnlyUsesReadCommitted() throws SQLException {
+    // workerConcurrency only → local in-memory tracking, no global state → READ COMMITTED
+    Queue queue = new Queue("iso-wc").withWorkerConcurrency(2);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_READ_COMMITTED,
+        ds.lastIsolationLevel,
+        "workerConcurrency-only queue must not escalate to REPEATABLE READ");
+  }
+
+  @Test
+  public void testGlobalConcurrencyUsesRepeatableRead() throws SQLException {
+    // concurrency (global) → needs a consistent snapshot across workers → REPEATABLE READ
+    Queue queue = new Queue("iso-gc").withConcurrency(3);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_REPEATABLE_READ,
+        ds.lastIsolationLevel,
+        "global-concurrency queue must use REPEATABLE READ");
+  }
+
+  @Test
+  public void testRateLimitUsesRepeatableRead() throws SQLException {
+    // rateLimit → count must be consistent across concurrent dequeue attempts → REPEATABLE READ
+    Queue queue = new Queue("iso-rl").withRateLimit(5, Duration.ofSeconds(1));
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_REPEATABLE_READ,
+        ds.lastIsolationLevel,
+        "rate-limited queue must use REPEATABLE READ");
   }
 }
