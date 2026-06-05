@@ -67,12 +67,12 @@ public class WorkflowDAO {
       """
         workflow_uuid, status,
         name, class_name, config_name,
-        queue_name, deduplication_id, priority, queue_partition_key,
+        queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
         executor_id, application_version, application_id,
         authenticated_user, assumed_role, authenticated_roles,
-        created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-        workflow_timeout_ms, workflow_deadline_epoch_ms,
-        forked_from, parent_workflow_id, was_forked_from, delay_until_epoch_ms
+        created_at, updated_at, completed_at, started_at_epoch_ms,
+        recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
+        forked_from, parent_workflow_id, was_forked_from
       """;
 
   private WorkflowDAO() {}
@@ -341,7 +341,7 @@ public class WorkflowDAO {
             .formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
-      long now = Instant.now().toEpochMilli();
+      long now = System.currentTimeMillis();
       stmt.setString(1, status.name());
       stmt.setString(2, output);
       stmt.setString(3, error);
@@ -1074,6 +1074,7 @@ public class WorkflowDAO {
             rs.getString("parent_workflow_id"),
             rs.getObject("was_forked_from", Boolean.class),
             SystemDatabase.toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("completed_at", Long.class)),
             serialization);
     return info;
   }
@@ -1205,7 +1206,7 @@ public class WorkflowDAO {
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      long now = Instant.now().toEpochMilli();
+      long now = System.currentTimeMillis();
       Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
@@ -1881,14 +1882,7 @@ public class WorkflowDAO {
           wfStmt.setString(26, status.parentWorkflowId());
           wfStmt.setString(27, status.serialization());
           wfStmt.setObject(28, status.delayUntilEpochMs());
-          // Set completed_at to updatedAt for terminal states (best-effort for imported workflows)
-          Long completedAt =
-              (status.status() == WorkflowState.SUCCESS
-                      || status.status() == WorkflowState.ERROR
-                      || status.status() == WorkflowState.CANCELLED)
-                  ? status.updatedAtEpochMs()
-                  : null;
-          wfStmt.setObject(29, completedAt);
+          wfStmt.setObject(29, status.completedAtEpochMs());
           wfStmt.addBatch();
 
           for (var step : workflow.steps()) {

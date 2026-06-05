@@ -1153,7 +1153,11 @@ public class SystemDatabaseTest {
   private static ExportedWorkflow buildNamedWorkflow(
       String wfId, String workflowName, WorkflowState state) {
     var now = Instant.now();
-    var status =
+    boolean isTerminal =
+        state == WorkflowState.SUCCESS
+            || state == WorkflowState.ERROR
+            || state == WorkflowState.CANCELLED;
+    var builder =
         new WorkflowStatusBuilder(wfId)
             .status(state)
             .workflowName(workflowName)
@@ -1161,9 +1165,11 @@ public class SystemDatabaseTest {
             .recoveryAttempts(0)
             .priority(0)
             .createdAt(now)
-            .updatedAt(now)
-            .build();
-    return new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
+            .updatedAt(now);
+    if (isTerminal) {
+      builder.completedAt(now);
+    }
+    return new ExportedWorkflow(builder.build(), List.of(), List.of(), List.of(), List.of());
   }
 
   // ── Workflow state based on queue/delay ──────────────────────────────────
@@ -1721,7 +1727,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetWorkflowAggregatesCompletedFilters() throws Exception {
-    // Workflows imported with updatedAt=now have completed_at set to that value for terminal states
+    // Workflows imported with completedAt=now for terminal states
     Instant before = Instant.now().minusMillis(60_000);
     sysdb.importWorkflow(
         List.of(
@@ -1774,6 +1780,7 @@ public class SystemDatabaseTest {
             .createdAt(queuedStartedAt)
             .updatedAt(queuedStartedAt)
             .startedAt(queuedStartedAt)
+            .completedAt(queuedStartedAt)
             .build();
     sysdb.importWorkflow(
         List.of(new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of())));
@@ -1841,6 +1848,7 @@ public class SystemDatabaseTest {
               .priority(0)
               .createdAt(now)
               .updatedAt(now)
+              .completedAt(now)
               .build();
       sysdb.importWorkflow(
           List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
@@ -1858,6 +1866,7 @@ public class SystemDatabaseTest {
               .createdAt(now)
               .updatedAt(now)
               .startedAt(now)
+              .completedAt(now)
               .build();
       sysdb.importWorkflow(
           List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
