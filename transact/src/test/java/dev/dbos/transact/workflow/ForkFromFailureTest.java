@@ -3,14 +3,13 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.util.List;
@@ -117,8 +116,7 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step2Count);
     assertEquals(1, impl.step3Count);
 
-    var handle =
-        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -141,8 +139,7 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step3Count);
 
     // Fork from function_id=1 (step2): step1 copied, step2 and step3 re-executed
-    var handle =
-        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromStep(1));
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromStep(1));
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -217,8 +214,7 @@ public class ForkFromFailureTest {
         IllegalArgumentException.class,
         () ->
             dbos.forkFromFailure(
-                workflowId,
-                new ForkFromFailureOptions().withFromLastFailure().withFromLastStep()));
+                workflowId, new ForkFromFailureOptions().withFromLastFailure().withFromLastStep()));
   }
 
   @Test
@@ -231,8 +227,7 @@ public class ForkFromFailureTest {
         Exception.class,
         () ->
             dbos.forkFromFailure(
-                workflowId,
-                new ForkFromFailureOptions().withFromStepName("nonExistentStep")));
+                workflowId, new ForkFromFailureOptions().withFromStepName("nonExistentStep")));
   }
 
   @Test

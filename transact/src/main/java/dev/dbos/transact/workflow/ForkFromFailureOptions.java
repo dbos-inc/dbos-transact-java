@@ -75,8 +75,8 @@ public record ForkFromFailureOptions(
   }
 
   /**
-   * Fork from the last step that recorded an error. If no step has an error, falls back to the
-   * last step executed.
+   * Fork from the last step that recorded an error. If no step has an error, falls back to the last
+   * step executed.
    */
   public ForkFromFailureOptions withFromLastFailure() {
     return new ForkFromFailureOptions(

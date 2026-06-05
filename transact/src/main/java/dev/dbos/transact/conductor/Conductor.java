@@ -857,18 +857,18 @@ public class Conductor implements AutoCloseable {
         () -> {
           ForkFromFailureRequest request = (ForkFromFailureRequest) message;
           if (request.body == null || request.body.workflow_ids == null) {
-            return new ForkFromFailureResponse(
-                request, null, "Invalid Fork From Failure Request");
+            return new ForkFromFailureResponse(request, null, "Invalid Fork From Failure Request");
           }
           try {
-            ForkFromFailureOptions options =
-                buildForkFromFailureOptions(request.body);
+            ForkFromFailureOptions options = buildForkFromFailureOptions(request.body);
             var handles =
                 conductor.dbosExecutor.forkFromFailure(request.body.workflow_ids, options);
-            var forkedIds = handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
+            var forkedIds =
+                handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
             return new ForkFromFailureResponse(request, forkedIds);
           } catch (Exception e) {
-            logger.error("Exception encountered when forking workflows from failure {}", request, e);
+            logger.error(
+                "Exception encountered when forking workflows from failure {}", request, e);
             return new ForkFromFailureResponse(request, e);
           }
         });

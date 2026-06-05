@@ -921,8 +921,9 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Fork a single workflow from the point determined by the given options. The mode (fromLastFailure,
-   * fromLastStep, fromStep, or fromStepName) controls which step the fork re-executes from.
+   * Fork a single workflow from the point determined by the given options. The mode
+   * (fromLastFailure, fromLastStep, fromStep, or fromStepName) controls which step the fork
+   * re-executes from.
    *
    * @param workflowId ID of the workflow to fork
    * @param options Fork-from-failure options; exactly one mode must be set

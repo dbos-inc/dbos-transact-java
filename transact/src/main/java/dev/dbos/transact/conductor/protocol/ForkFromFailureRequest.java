@@ -1,8 +1,8 @@
 package dev.dbos.transact.conductor.protocol;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 public class ForkFromFailureRequest extends BaseMessage {
   public ForkFromFailureBody body;

@@ -1334,9 +1334,20 @@ public class WorkflowDAO {
     return children;
   }
 
+  private record RawStatusData(
+      String name,
+      String className,
+      String configName,
+      String applicationId,
+      String authenticatedUser,
+      String authenticatedRoles,
+      String assumedRole,
+      String inputs,
+      String serialization,
+      Long timeoutMs) {}
+
   public static List<String> forkFromFailure(
-      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options)
-      throws SQLException {
+      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options) throws SQLException {
 
     Objects.requireNonNull(options, "ForkFromFailureOptions must not be null");
 
@@ -1347,14 +1358,14 @@ public class WorkflowDAO {
             + (options.fromStepName() != null ? 1 : 0);
     if (modesCount != 1) {
       throw new IllegalArgumentException(
-          "Exactly one of fromLastFailure, fromLastStep, fromStep, or fromStepName must be"
-              + " specified");
+          "Exactly one of fromLastFailure, fromLastStep, fromStep, or fromStepName must be specified");
     }
 
     if (workflowIds.isEmpty()) {
       return List.of();
     }
 
+    // Resolve start steps outside the main transaction (read-only)
     List<Integer> startSteps;
     if (options.fromStep() != null) {
       int step = options.fromStep();
@@ -1363,19 +1374,53 @@ public class WorkflowDAO {
       startSteps = resolveStartSteps(ctx, workflowIds, options);
     }
 
-    ForkOptions forkOptions =
-        new ForkOptions(null, options.applicationVersion(), null, options.queueName(), options.queuePartitionKey());
-
     List<String> forkedIds = new ArrayList<>(workflowIds.size());
     for (int i = 0; i < workflowIds.size(); i++) {
-      forkedIds.add(forkWorkflow(ctx, workflowIds.get(i), startSteps.get(i), forkOptions));
+      forkedIds.add(UUID.randomUUID().toString());
     }
-    return forkedIds;
+
+    // Execute all fork operations atomically in a single transaction
+    try (var conn = ctx.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        Map<String, RawStatusData> rawDataById =
+            fetchRawStatusData(conn, ctx.schema(), workflowIds);
+        for (String wid : workflowIds) {
+          if (!rawDataById.containsKey(wid)) {
+            throw new DBOSNonExistentWorkflowException(wid);
+          }
+        }
+
+        batchInsertForkedStatuses(conn, ctx.schema(), workflowIds, forkedIds, rawDataById, options);
+
+        batchMarkWasForkedFrom(conn, ctx.schema(), workflowIds);
+
+        // Build lists of only the workflows that need data copied (startStep > 0)
+        List<String> copyOrigIds = new ArrayList<>();
+        List<String> copyForkIds = new ArrayList<>();
+        List<Integer> copyStartSteps = new ArrayList<>();
+        for (int i = 0; i < workflowIds.size(); i++) {
+          if (startSteps.get(i) > 0) {
+            copyOrigIds.add(workflowIds.get(i));
+            copyForkIds.add(forkedIds.get(i));
+            copyStartSteps.add(startSteps.get(i));
+          }
+        }
+        if (!copyOrigIds.isEmpty()) {
+          batchCopyWorkflowData(conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps);
+        }
+
+        conn.commit();
+        return forkedIds;
+      } catch (SQLException e) {
+        conn.rollback();
+        throw e;
+      }
+    }
   }
 
   private static List<Integer> resolveStartSteps(
-      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options)
-      throws SQLException {
+      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options) throws SQLException {
 
     String sql;
     if (Boolean.TRUE.equals(options.fromLastFailure())) {
@@ -1401,7 +1446,6 @@ public class WorkflowDAO {
             """
               .formatted(ctx.schema());
     } else {
-      // fromStepName
       sql =
           """
               SELECT workflow_uuid, MAX(function_id) AS start_step
@@ -1439,6 +1483,207 @@ public class WorkflowDAO {
       startSteps.add(startStepByWorkflowId.get(wid));
     }
     return startSteps;
+  }
+
+  private static Map<String, RawStatusData> fetchRawStatusData(
+      Connection conn, String schema, List<String> workflowIds) throws SQLException {
+    String sql =
+        """
+            SELECT workflow_uuid, name, class_name, config_name, application_id,
+                   authenticated_user, authenticated_roles, assumed_role,
+                   inputs, serialization, workflow_timeout_ms
+            FROM "%s".workflow_status
+            WHERE workflow_uuid = ANY(?)
+          """
+            .formatted(schema);
+
+    Map<String, RawStatusData> result = new HashMap<>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+      stmt.setArray(1, array);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          long timeoutMsRaw = rs.getLong("workflow_timeout_ms");
+          Long timeoutMs = rs.wasNull() ? null : timeoutMsRaw;
+          result.put(
+              rs.getString("workflow_uuid"),
+              new RawStatusData(
+                  rs.getString("name"),
+                  rs.getString("class_name"),
+                  rs.getString("config_name"),
+                  rs.getString("application_id"),
+                  rs.getString("authenticated_user"),
+                  rs.getString("authenticated_roles"),
+                  rs.getString("assumed_role"),
+                  rs.getString("inputs"),
+                  rs.getString("serialization"),
+                  timeoutMs));
+        }
+      }
+    }
+    return result;
+  }
+
+  private static void batchInsertForkedStatuses(
+      Connection conn,
+      String schema,
+      List<String> origIds,
+      List<String> forkIds,
+      Map<String, RawStatusData> rawDataById,
+      ForkFromFailureOptions options)
+      throws SQLException {
+
+    StringBuilder sql =
+        new StringBuilder(
+            """
+                INSERT INTO "%s".workflow_status (
+                  workflow_uuid, status, name, class_name, config_name,
+                  application_version, application_id, authenticated_user,
+                  authenticated_roles, assumed_role, queue_name, queue_partition_key,
+                  inputs, workflow_timeout_ms, forked_from, serialization
+                ) VALUES\s
+              """
+                .formatted(schema));
+
+    StringJoiner rows = new StringJoiner(", ");
+    for (int i = 0; i < origIds.size(); i++) {
+      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    }
+    sql.append(rows);
+
+    try (var stmt = conn.prepareStatement(sql.toString())) {
+      int p = 1;
+      for (int i = 0; i < origIds.size(); i++) {
+        RawStatusData rd = rawDataById.get(origIds.get(i));
+        stmt.setString(p++, forkIds.get(i));
+        stmt.setString(p++, WorkflowState.ENQUEUED.name());
+        stmt.setString(p++, rd.name());
+        stmt.setString(p++, rd.className());
+        stmt.setString(p++, rd.configName());
+        stmt.setString(p++, options.applicationVersion());
+        stmt.setString(p++, rd.applicationId());
+        stmt.setString(p++, rd.authenticatedUser());
+        stmt.setString(p++, rd.authenticatedRoles());
+        stmt.setString(p++, rd.assumedRole());
+        stmt.setString(
+            p++, Objects.requireNonNullElse(options.queueName(), Constants.DBOS_INTERNAL_QUEUE));
+        stmt.setString(p++, options.queuePartitionKey());
+        stmt.setString(p++, rd.inputs());
+        stmt.setObject(p++, rd.timeoutMs());
+        stmt.setString(p++, origIds.get(i));
+        stmt.setString(p++, rd.serialization());
+      }
+      stmt.executeUpdate();
+    }
+  }
+
+  private static void batchMarkWasForkedFrom(Connection conn, String schema, List<String> origIds)
+      throws SQLException {
+    String sql =
+        """
+            UPDATE "%s".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ANY(?)
+          """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setArray(1, conn.createArrayOf("text", origIds.toArray(String[]::new)));
+      stmt.executeUpdate();
+    }
+  }
+
+  private static void batchCopyWorkflowData(
+      Connection conn,
+      String schema,
+      List<String> origIds,
+      List<String> forkIds,
+      List<Integer> startSteps)
+      throws SQLException {
+
+    // Use UNNEST to build a set-returning mapping of (orig_id, fork_id, start_step)
+    // so that each table copy is a single SQL statement regardless of batch size.
+    String mappingCTE =
+        """
+            WITH mapping AS (
+              SELECT UNNEST(?::text[]) AS orig_id,
+                     UNNEST(?::text[]) AS fork_id,
+                     UNNEST(?::int[])  AS start_step
+            )
+          """;
+
+    Array origArr = conn.createArrayOf("text", origIds.toArray(String[]::new));
+    Array forkArr = conn.createArrayOf("text", forkIds.toArray(String[]::new));
+    Array stepArr = conn.createArrayOf("integer", startSteps.toArray(Integer[]::new));
+
+    String ooSql =
+        mappingCTE
+            + """
+                INSERT INTO "%1$s".operation_outputs
+                  (workflow_uuid, function_id, output, error, function_name,
+                   child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization)
+                SELECT m.fork_id, oo.function_id, oo.output, oo.error, oo.function_name,
+                       oo.child_workflow_id, oo.started_at_epoch_ms, oo.completed_at_epoch_ms,
+                       oo.serialization
+                FROM mapping m
+                JOIN "%1$s".operation_outputs oo
+                  ON oo.workflow_uuid = m.orig_id AND oo.function_id < m.start_step
+              """
+                .formatted(schema);
+
+    String wehSql =
+        mappingCTE
+            + """
+                INSERT INTO "%1$s".workflow_events_history
+                  (workflow_uuid, function_id, key, value, serialization)
+                SELECT m.fork_id, weh.function_id, weh.key, weh.value, weh.serialization
+                FROM mapping m
+                JOIN "%1$s".workflow_events_history weh
+                  ON weh.workflow_uuid = m.orig_id AND weh.function_id < m.start_step
+              """
+                .formatted(schema);
+
+    // Copy latest value per event key using a window function
+    String weSql =
+        mappingCTE
+            + """
+                , ranked AS (
+                  SELECT m.fork_id,
+                         weh.key,
+                         weh.value,
+                         weh.serialization,
+                         ROW_NUMBER() OVER (
+                           PARTITION BY weh.workflow_uuid, weh.key
+                           ORDER BY weh.function_id DESC
+                         ) AS rn
+                  FROM mapping m
+                  JOIN "%1$s".workflow_events_history weh
+                    ON weh.workflow_uuid = m.orig_id AND weh.function_id < m.start_step
+                )
+                INSERT INTO "%1$s".workflow_events (workflow_uuid, key, value, serialization)
+                SELECT fork_id, key, value, serialization
+                FROM ranked
+                WHERE rn = 1
+              """
+                .formatted(schema);
+
+    String streamSql =
+        mappingCTE
+            + """
+                INSERT INTO "%1$s".streams
+                  (workflow_uuid, function_id, key, value, "offset", serialization)
+                SELECT m.fork_id, s.function_id, s.key, s.value, s."offset", s.serialization
+                FROM mapping m
+                JOIN "%1$s".streams s
+                  ON s.workflow_uuid = m.orig_id AND s.function_id < m.start_step
+              """
+                .formatted(schema);
+
+    for (String sql : List.of(ooSql, wehSql, weSql, streamSql)) {
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setArray(1, origArr);
+        stmt.setArray(2, forkArr);
+        stmt.setArray(3, stepArr);
+        stmt.executeUpdate();
+      }
+    }
   }
 
   public static String forkWorkflow(
