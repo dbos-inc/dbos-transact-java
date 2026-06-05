@@ -1,14 +1,22 @@
 package dev.dbos.transact.workflow;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
 /**
- * Input for {@code getWorkflowAggregates}. At least one {@code groupBy*} flag must be {@code true}
- * or the call will throw {@link IllegalArgumentException}.
+ * Input for {@code getWorkflowAggregates}.
+ *
+ * <p>At least one {@code groupBy*} flag must be {@code true}, or the call will throw {@link
+ * IllegalArgumentException}. At least one {@code select*} flag must be {@code true}, or the call
+ * will throw {@link IllegalArgumentException}.
  *
  * <p>The {@code workflowIdPrefix} list is OR'd: a row matches if its workflow UUID starts with any
  * of the supplied prefixes.
+ *
+ * <p>Time bucket: when {@code timeBucketSize} is set, an additional {@code "time_bucket"} dimension
+ * is added to every group, containing the bucket start (ms since epoch, aligned to the bucket
+ * size). {@code timeBucketSize} must be {@code > 0}.
  */
 public record GetWorkflowAggregatesInput(
     // group-by dimension flags
@@ -17,6 +25,13 @@ public record GetWorkflowAggregatesInput(
     boolean groupByQueueName,
     boolean groupByExecutorId,
     boolean groupByApplicationVersion,
+    // select metric flags
+    boolean selectCount,
+    boolean selectMinCreatedAt,
+    boolean selectMaxQueueWaitMs,
+    boolean selectMaxTotalLatencyMs,
+    // optional time bucketing; null = no bucketing
+    Duration timeBucketSize,
     // filters
     List<String> workflowName,
     List<String> status,
@@ -25,10 +40,23 @@ public record GetWorkflowAggregatesInput(
     List<String> applicationVersion,
     List<String> workflowIdPrefix,
     Instant startTime,
-    Instant endTime) {
+    Instant endTime,
+    Instant completedAfter,
+    Instant completedBefore,
+    Instant dequeuedAfter,
+    Instant dequeuedBefore) {
 
+  public GetWorkflowAggregatesInput {
+    if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
+      throw new IllegalArgumentException("timeBucketSize must be > 0");
+    }
+  }
+
+  /** Constructs a default input with {@code selectCount=true} and no group-by or filter flags. */
   public GetWorkflowAggregatesInput() {
-    this(false, false, false, false, false, null, null, null, null, null, null, null, null);
+    this(
+        false, false, false, false, false, true, false, false, false, null, null, null, null, null,
+        null, null, null, null, null, null, null, null);
   }
 
   public GetWorkflowAggregatesInput withGroupByStatus(boolean groupByStatus) {
@@ -38,6 +66,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -45,7 +78,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withGroupByName(boolean groupByName) {
@@ -55,6 +92,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -62,7 +104,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withGroupByQueueName(boolean groupByQueueName) {
@@ -72,6 +118,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -79,7 +130,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withGroupByExecutorId(boolean groupByExecutorId) {
@@ -89,6 +144,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -96,7 +156,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withGroupByApplicationVersion(
@@ -107,6 +171,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -114,7 +183,141 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withSelectCount(boolean selectCount) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withSelectMinCreatedAt(boolean selectMinCreatedAt) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withSelectMaxQueueWaitMs(boolean selectMaxQueueWaitMs) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withSelectMaxTotalLatencyMs(boolean selectMaxTotalLatencyMs) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withTimeBucketSize(Duration timeBucketSize) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withWorkflowName(List<String> workflowName) {
@@ -124,6 +327,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -131,7 +339,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withStatus(List<String> status) {
@@ -141,6 +353,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -148,7 +365,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withQueueName(List<String> queueName) {
@@ -158,6 +379,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -165,7 +391,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withExecutorIds(List<String> executorIds) {
@@ -175,6 +405,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -182,7 +417,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withApplicationVersion(List<String> applicationVersion) {
@@ -192,6 +431,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -199,7 +443,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -209,6 +457,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -216,7 +469,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withStartTime(Instant startTime) {
@@ -226,6 +483,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -233,7 +495,11 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public GetWorkflowAggregatesInput withEndTime(Instant endTime) {
@@ -243,6 +509,11 @@ public record GetWorkflowAggregatesInput(
         groupByQueueName,
         groupByExecutorId,
         groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
         workflowName,
         status,
         queueName,
@@ -250,6 +521,114 @@ public record GetWorkflowAggregatesInput(
         applicationVersion,
         workflowIdPrefix,
         startTime,
-        endTime);
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withCompletedAfter(Instant completedAfter) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withCompletedBefore(Instant completedBefore) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withDequeuedAfter(Instant dequeuedAfter) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withDequeuedBefore(Instant dequeuedBefore) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWaitMs,
+        selectMaxTotalLatencyMs,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 }

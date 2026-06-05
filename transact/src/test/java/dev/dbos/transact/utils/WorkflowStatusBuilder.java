@@ -44,6 +44,7 @@ public class WorkflowStatusBuilder {
   private String parentWorkflowId;
   private Boolean wasForkedFrom;
   private Instant delayUntil;
+  private Instant completedAt;
   private String serialization;
 
   public WorkflowStatus build() {
@@ -76,6 +77,7 @@ public class WorkflowStatusBuilder {
         parentWorkflowId,
         wasForkedFrom,
         delayUntil,
+        completedAt,
         serialization);
   }
 
@@ -220,6 +222,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder delayUntil(Instant delayUntil) {
     this.delayUntil = delayUntil;
+    return this;
+  }
+
+  public WorkflowStatusBuilder completedAt(Instant completedAt) {
+    this.completedAt = completedAt;
     return this;
   }
 
