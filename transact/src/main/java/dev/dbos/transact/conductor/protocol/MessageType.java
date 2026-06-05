@@ -13,6 +13,7 @@ public enum MessageType {
   GET_METRICS("get_metrics"),
   GET_QUEUE("get_queue"),
   GET_SCHEDULE("get_schedule"),
+  GET_STEP_AGGREGATES("get_step_aggregates"),
   GET_WORKFLOW_AGGREGATES("get_workflow_aggregates"),
   GET_WORKFLOW_EVENTS("get_workflow_events"),
   GET_WORKFLOW_NOTIFICATIONS("get_workflow_notifications"),

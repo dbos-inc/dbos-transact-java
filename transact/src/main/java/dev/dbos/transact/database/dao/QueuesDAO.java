@@ -192,7 +192,7 @@ public class QueuesDAO {
                 rate_limited = ?,
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN (EXTRACT(epoch FROM now()) * 1000)::bigint + workflow_timeout_ms
+                    THEN ? + workflow_timeout_ms
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE workflow_uuid = ?
@@ -216,8 +216,9 @@ public class QueuesDAO {
           ps.setString(3, executorId);
           ps.setLong(4, now);
           ps.setBoolean(5, hasRateLimit);
-          ps.setString(6, id);
-          ps.setString(7, WorkflowState.ENQUEUED.name());
+          ps.setLong(6, now);
+          ps.setString(7, id);
+          ps.setString(8, WorkflowState.ENQUEUED.name());
           if (ps.executeUpdate() > 0) {
             updatedWorkflowIds.add(id);
           }

@@ -29,9 +29,11 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -3015,8 +3017,10 @@ public class ConductorTest {
 
     List<WorkflowAggregateRow> rows =
         List.of(
-            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10),
-            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3));
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
+            new WorkflowAggregateRow(
+                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3084,6 +3088,143 @@ public class ConductorTest {
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesWithSelectFields() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS"),
+                null,
+                Instant.ofEpochMilli(1_700_000_000_000L),
+                Duration.ofMillis(50),
+                Duration.ofMillis(200)));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-sel",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_status", true,
+                  "select_count", false,
+                  "select_min_created_at", true,
+                  "select_max_queue_wait_ms", true,
+                  "select_max_total_latency_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertFalse(captured.selectCount());
+      assertTrue(captured.selectMinCreatedAt());
+      assertTrue(captured.selectMaxQueueWaitMs());
+      assertTrue(captured.selectMaxTotalLatencyMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode out = json.get("output");
+      assertEquals(1, out.size());
+      assertTrue(out.get(0).get("count").isNull());
+      assertEquals(1_700_000_000_000L, out.get(0).get("min_created_at").asLong());
+      assertEquals(50L, out.get(0).get("max_queue_wait_ms").asLong());
+      assertEquals(200L, out.get(0).get("max_total_latency_ms").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregates() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<StepAggregateRow> rows =
+        List.of(
+            new StepAggregateRow(
+                Map.of("function_name", "stepA", "status", "SUCCESS"), 5L, Duration.ofMillis(120)),
+            new StepAggregateRow(Map.of("function_name", "stepB", "status", "ERROR"), 2L, null));
+    when(mockDB.getStepAggregates(any(GetStepAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_function_name", true,
+                  "group_by_status", true,
+                  "select_count", true,
+                  "select_max_duration_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetStepAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetStepAggregatesInput.class);
+      verify(mockDB).getStepAggregates(inputCaptor.capture());
+      GetStepAggregatesInput captured = inputCaptor.getValue();
+      assertTrue(captured.groupByFunctionName());
+      assertTrue(captured.groupByStatus());
+      assertTrue(captured.selectCount());
+      assertTrue(captured.selectMaxDurationMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
+      assertEquals("req-step-agg", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("stepA", output.get(0).get("group").get("function_name").stringValue());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
+      assertEquals(5L, output.get(0).get("count").asLong());
+      assertEquals(120L, output.get(0).get("max_duration_ms").asLong());
+      assertEquals("stepB", output.get(1).get("group").get("function_name").stringValue());
+      assertEquals(2L, output.get(1).get("count").asLong());
+      assertTrue(output.get(1).get("max_duration_ms").isNull());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregatesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canGetStepAggregatesThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .getStepAggregates(any(GetStepAggregatesInput.class));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg-err",
+          Map.of("body", Map.of("group_by_function_name", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
       assertEquals(errorMessage, json.get("error_message").stringValue());
       assertEquals(0, json.get("output").size());
     }
