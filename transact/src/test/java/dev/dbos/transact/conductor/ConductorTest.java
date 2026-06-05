@@ -778,32 +778,6 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
-  public void canCancelWithChildren() throws Exception {
-    MessageListener listener = new MessageListener();
-    testServer.setListener(listener);
-    String workflowId = "sample-wf-id";
-
-    try (Conductor conductor = builder.build()) {
-      conductor.start();
-
-      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
-
-      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", true);
-      listener.send(MessageType.CANCEL, "12345", message);
-
-      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(List.of(workflowId), true);
-
-      JsonNode jsonNode = mapper.readTree(listener.message);
-      assertNotNull(jsonNode);
-      assertEquals("cancel", jsonNode.get("type").stringValue());
-      assertEquals("12345", jsonNode.get("request_id").stringValue());
-      assertNull(jsonNode.get("error_message"));
-      assertTrue(jsonNode.get("success").asBoolean());
-    }
-  }
-
-  @RetryingTest(3)
   public void canCancelBulkWithChildren() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
