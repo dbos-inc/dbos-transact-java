@@ -314,20 +314,18 @@ public class SystemDatabaseTest {
     for (var i = 0; i < 3; i++) {
       var childId = "child-%d".formatted(i);
       sysdb.initWorkflowStatus(
-          WorkflowStatusInternalBuilder.create(childId).build(), 5, false, false);
-      sysdb.recordChildWorkflow(
-          "parent", childId, i, "child-step-%d".formatted(i), System.currentTimeMillis());
+          WorkflowStatusInternalBuilder.create(childId).parentWorkflowId("parent").build(),
+          5,
+          false,
+          false);
 
       for (var j = 0; j < 2; j++) {
         var grandchildId = "grandchild-%d-%d".formatted(i, j);
         sysdb.initWorkflowStatus(
-            WorkflowStatusInternalBuilder.create(grandchildId).build(), 5, false, false);
-        sysdb.recordChildWorkflow(
-            childId,
-            grandchildId,
-            j,
-            "grandchild-step-%d-%d".formatted(i, j),
-            System.currentTimeMillis());
+            WorkflowStatusInternalBuilder.create(grandchildId).parentWorkflowId(childId).build(),
+            5,
+            false,
+            false);
       }
     }
 
@@ -399,21 +397,23 @@ public class SystemDatabaseTest {
     }
 
     for (var i = 0; i < 5; i++) {
-      var parentWfId = "wfid-2";
       var wfid = "childwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid).build();
-      sysdb.initWorkflowStatus(status, 5, false, false);
-      sysdb.recordChildWorkflow(
-          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid).parentWorkflowId("wfid-2").build(),
+          5,
+          false,
+          false);
     }
 
     for (var i = 0; i < 5; i++) {
-      var parentWfId = "childwfid-%d".formatted(i);
       var wfid = "grandchildwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid).build();
-      sysdb.initWorkflowStatus(status, 5, false, false);
-      sysdb.recordChildWorkflow(
-          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid)
+              .parentWorkflowId("childwfid-%d".formatted(i))
+              .build(),
+          5,
+          false,
+          false);
     }
 
     var children = sysdb.getWorkflowChildren("wfid-2");

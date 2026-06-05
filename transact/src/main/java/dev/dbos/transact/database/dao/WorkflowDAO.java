@@ -11,6 +11,7 @@ import dev.dbos.transact.exceptions.DBOSConflictingWorkflowException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
@@ -40,7 +41,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -332,12 +332,13 @@ public class WorkflowDAO {
           "updateWorkflowOutcome called with non-terminal status: " + status);
     }
 
-    // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
+    // Never overwrite a CANCELLED workflow: a workflow cancelled during its final step must not
+    // subsequently complete.
     var sql =
         """
           UPDATE "%s".workflow_status
           SET status = ?, output = ?, error = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
-          WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
+          WHERE workflow_uuid = ? AND status != ?
         """
             .formatted(schema);
 
@@ -350,11 +351,24 @@ public class WorkflowDAO {
       stmt.setLong(5, now);
       stmt.setString(6, workflowId);
       stmt.setString(7, WorkflowState.CANCELLED.name());
-      stmt.setString(8, status.name());
-      stmt.setString(9, WorkflowState.SUCCESS.name());
-      stmt.setString(10, WorkflowState.ERROR.name());
 
-      stmt.executeUpdate();
+      if (stmt.executeUpdate() == 0) {
+        // The guarded UPDATE matched no rows. Re-read status to check whether the workflow
+        // was cancelled; if so, raise so it ends as CANCELLED rather than completing.
+        var readSql =
+            """
+            SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+            """
+                .formatted(schema);
+        try (var readStmt = conn.prepareStatement(readSql)) {
+          readStmt.setString(1, workflowId);
+          try (var rs = readStmt.executeQuery()) {
+            if (rs.next() && WorkflowState.CANCELLED.name().equals(rs.getString(1))) {
+              throw new DBOSWorkflowCancelledException(workflowId);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1189,18 +1203,29 @@ public class WorkflowDAO {
 
   public static void cancelWorkflows(
       DbContext ctx, List<String> workflowIds, boolean cancelChildren) throws SQLException {
-    Collection<String> allIds = filterNullsAndBlanks(workflowIds);
-    if (cancelChildren) {
-      var set = new HashSet<>(allIds);
-      for (var wfid : allIds) {
-        set.addAll(getWorkflowChildren(ctx, wfid));
-      }
-      allIds = filterNullsAndBlanks(set);
-    }
-
-    if (allIds.isEmpty()) {
+    var roots = filterNullsAndBlanks(workflowIds);
+    if (roots.isEmpty()) {
       return;
     }
+
+    if (!cancelChildren) {
+      cancelBatch(ctx, roots);
+      return;
+    }
+
+    // Cancel level-by-level so newly-spawned children are also caught
+    var visited = new HashSet<>(roots);
+    List<String> frontier = new ArrayList<>(roots);
+    while (!frontier.isEmpty()) {
+      cancelBatch(ctx, frontier);
+      var children = getDirectChildren(ctx, frontier);
+      frontier = children.stream().filter(c -> !visited.contains(c)).toList();
+      visited.addAll(frontier);
+    }
+  }
+
+  private static void cancelBatch(DbContext ctx, Collection<String> workflowIds)
+      throws SQLException {
     String sql =
         """
           UPDATE "%s".workflow_status
@@ -1217,7 +1242,7 @@ public class WorkflowDAO {
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", allIds.toArray(String[]::new));
+      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
       long now = System.currentTimeMillis();
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
@@ -1307,38 +1332,47 @@ public class WorkflowDAO {
     }
   }
 
-  public static Set<String> getWorkflowChildren(DbContext ctx, String workflowId)
+  private static List<String> getDirectChildren(DbContext ctx, Collection<String> workflowIds)
       throws SQLException {
-    var children = new HashSet<String>();
-    var toProcess = new ArrayDeque<String>();
-    toProcess.add(workflowId);
-
+    if (workflowIds.isEmpty()) {
+      return List.of();
+    }
     var sql =
         """
-          SELECT child_workflow_id
-          FROM "%s".operation_outputs
-          WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
+          SELECT workflow_uuid
+          FROM "%s".workflow_status
+          WHERE parent_workflow_id = ANY(?)
         """
             .formatted(ctx.schema());
 
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
-      while (!toProcess.isEmpty()) {
-        var wfid = toProcess.poll();
-        stmt.setString(1, wfid);
-
+      var array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+      try {
+        stmt.setArray(1, array);
         try (var rs = stmt.executeQuery()) {
+          var result = new ArrayList<String>();
           while (rs.next()) {
-            var childWorkflowId = rs.getString(1);
-            if (!children.contains(childWorkflowId)) {
-              children.add(childWorkflowId);
-              toProcess.add(childWorkflowId);
-            }
+            result.add(rs.getString(1));
           }
+          return result;
         }
+      } finally {
+        array.free();
       }
     }
-    return children;
+  }
+
+  public static Set<String> getWorkflowChildren(DbContext ctx, String workflowId)
+      throws SQLException {
+    var descendants = new HashSet<String>();
+    List<String> frontier = List.of(workflowId);
+    while (!frontier.isEmpty()) {
+      var children = getDirectChildren(ctx, frontier);
+      frontier = children.stream().filter(c -> !descendants.contains(c)).toList();
+      descendants.addAll(frontier);
+    }
+    return descendants;
   }
 
   public static String forkWorkflow(
