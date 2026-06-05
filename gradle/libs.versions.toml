@@ -1,5 +1,4 @@
 [versions]
-asm = "9.10.1"
 aspectj = "1.9.25.1"
 assertj = "3.27.7"
 cron-utils = "9.2.1"
@@ -39,7 +38,6 @@ testcontainers = "2.0.5"
 versions = "0.54.0"
 
 [libraries]
-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
