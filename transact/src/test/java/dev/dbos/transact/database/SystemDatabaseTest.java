@@ -1784,7 +1784,7 @@ public class SystemDatabaseTest {
             .build();
     sysdb.importWorkflow(
         List.of(new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of())));
-    var afterAll = Instant.now();
+    var afterAll = queuedStartedAt.plusMillis(1);
 
     // completed_after/completed_before covers all 6
     var rows =
