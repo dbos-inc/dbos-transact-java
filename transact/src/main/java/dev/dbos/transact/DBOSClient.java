@@ -11,6 +11,7 @@ import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -32,6 +33,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -979,6 +981,34 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String originalWorkflowId, int startStep, @NonNull ForkOptions options) {
     var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
     return retrieveWorkflow(forkedWorkflowId);
+  }
+
+  /**
+   * Fork a single workflow from the point determined by the given options.
+   *
+   * @param workflowId ID of the workflow to fork
+   * @param options Fork-from-failure options; exactly one mode must be set
+   * @return handle to the newly forked workflow
+   */
+  public @NonNull WorkflowHandle<Object, Exception> forkFromFailure(
+      @NonNull String workflowId, @NonNull ForkFromFailureOptions options) {
+    var forkedIds = systemDatabase.forkFromFailure(List.of(workflowId), options);
+    return retrieveWorkflow(forkedIds.get(0));
+  }
+
+  /**
+   * Fork multiple workflows from the point determined by the given options.
+   *
+   * @param workflowIds IDs of the workflows to fork
+   * @param options Fork-from-failure options; exactly one mode must be set
+   * @return handles to the newly forked workflows, in the same order as workflowIds
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> forkFromFailure(
+      @NonNull List<String> workflowIds, @NonNull ForkFromFailureOptions options) {
+    var forkedIds = systemDatabase.forkFromFailure(workflowIds, options);
+    return forkedIds.stream()
+        .map(id -> (WorkflowHandle<Object, Exception>) retrieveWorkflow(id))
+        .collect(Collectors.toList());
   }
 
   /**

@@ -17,6 +17,7 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -543,6 +544,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
     return dbRetry(() -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+  }
+
+  public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
+    return dbRetry(() -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
   }
 
   public void createApplicationVersion(String versionName) {

@@ -17,6 +17,7 @@ import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -40,6 +41,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +51,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
@@ -1114,6 +1117,113 @@ public class WorkflowDAO {
       }
     }
     return children;
+  }
+
+  public static List<String> forkFromFailure(
+      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options)
+      throws SQLException {
+
+    Objects.requireNonNull(options, "ForkFromFailureOptions must not be null");
+
+    int modesCount =
+        (Boolean.TRUE.equals(options.fromLastFailure()) ? 1 : 0)
+            + (Boolean.TRUE.equals(options.fromLastStep()) ? 1 : 0)
+            + (options.fromStep() != null ? 1 : 0)
+            + (options.fromStepName() != null ? 1 : 0);
+    if (modesCount != 1) {
+      throw new IllegalArgumentException(
+          "Exactly one of fromLastFailure, fromLastStep, fromStep, or fromStepName must be"
+              + " specified");
+    }
+
+    if (workflowIds.isEmpty()) {
+      return List.of();
+    }
+
+    List<Integer> startSteps;
+    if (options.fromStep() != null) {
+      int step = options.fromStep();
+      startSteps = workflowIds.stream().map(ignored -> step).collect(Collectors.toList());
+    } else {
+      startSteps = resolveStartSteps(ctx, workflowIds, options);
+    }
+
+    ForkOptions forkOptions =
+        new ForkOptions(null, options.applicationVersion(), null, options.queueName(), options.queuePartitionKey());
+
+    List<String> forkedIds = new ArrayList<>(workflowIds.size());
+    for (int i = 0; i < workflowIds.size(); i++) {
+      forkedIds.add(forkWorkflow(ctx, workflowIds.get(i), startSteps.get(i), forkOptions));
+    }
+    return forkedIds;
+  }
+
+  private static List<Integer> resolveStartSteps(
+      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options)
+      throws SQLException {
+
+    String sql;
+    if (Boolean.TRUE.equals(options.fromLastFailure())) {
+      sql =
+          """
+              SELECT workflow_uuid,
+                     COALESCE(
+                       MAX(function_id) FILTER (WHERE error IS NOT NULL),
+                       MAX(function_id)
+                     ) AS start_step
+              FROM "%s".operation_outputs
+              WHERE workflow_uuid = ANY(?)
+              GROUP BY workflow_uuid
+            """
+              .formatted(ctx.schema());
+    } else if (Boolean.TRUE.equals(options.fromLastStep())) {
+      sql =
+          """
+              SELECT workflow_uuid, MAX(function_id) AS start_step
+              FROM "%s".operation_outputs
+              WHERE workflow_uuid = ANY(?)
+              GROUP BY workflow_uuid
+            """
+              .formatted(ctx.schema());
+    } else {
+      // fromStepName
+      sql =
+          """
+              SELECT workflow_uuid, MAX(function_id) AS start_step
+              FROM "%s".operation_outputs
+              WHERE workflow_uuid = ANY(?) AND function_name = ?
+              GROUP BY workflow_uuid
+            """
+              .formatted(ctx.schema());
+    }
+
+    Map<String, Integer> startStepByWorkflowId = new HashMap<>();
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+      stmt.setArray(1, array);
+      if (options.fromStepName() != null) {
+        stmt.setString(2, options.fromStepName());
+      }
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          startStepByWorkflowId.put(rs.getString("workflow_uuid"), rs.getInt("start_step"));
+        }
+      }
+    }
+
+    List<Integer> startSteps = new ArrayList<>(workflowIds.size());
+    for (String wid : workflowIds) {
+      if (!startStepByWorkflowId.containsKey(wid)) {
+        if (options.fromStepName() != null) {
+          throw new IllegalArgumentException(
+              "Workflow " + wid + " has no step named '" + options.fromStepName() + "'");
+        }
+        throw new IllegalArgumentException("Workflow " + wid + " has no steps");
+      }
+      startSteps.add(startStepByWorkflowId.get(wid));
+    }
+    return startSteps;
   }
 
   public static String forkWorkflow(

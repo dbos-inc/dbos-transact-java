@@ -8,6 +8,7 @@ public enum MessageType {
   EXECUTOR_INFO("executor_info"),
   EXIST_PENDING_WORKFLOWS("exist_pending_workflows"),
   EXPORT_WORKFLOW("export_workflow"),
+  FORK_FROM_FAILURE("fork_from_failure"),
   FORK_WORKFLOW("fork_workflow"),
   GET_METRICS("get_metrics"),
   GET_QUEUE("get_queue"),
