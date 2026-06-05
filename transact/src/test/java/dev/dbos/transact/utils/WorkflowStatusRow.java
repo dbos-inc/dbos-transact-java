@@ -32,7 +32,8 @@ public record WorkflowStatusRow(
     Long delayUntilEpochMs,
     String forkedFrom,
     String parentWorkflowId,
-    String serialization) {
+    String serialization,
+    Long completedAt) {
 
   public WorkflowStatusRow(ResultSet rs) throws SQLException {
     this(
@@ -64,6 +65,7 @@ public record WorkflowStatusRow(
         rs.getObject("delay_until_epoch_ms", Long.class),
         rs.getString("forked_from"),
         rs.getString("parent_workflow_id"),
-        rs.getString("serialization"));
+        rs.getString("serialization"),
+        rs.getObject("completed_at", Long.class));
   }
 }

@@ -704,6 +704,7 @@ public class Conductor implements AutoCloseable {
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_QUEUE -> handleGetQueue(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
+      case GET_STEP_AGGREGATES -> handleGetStepAggregates(this, message);
       case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
       case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, message);
       case GET_WORKFLOW_NOTIFICATIONS -> handleGetWorkflowNotifications(this, message);
@@ -1034,6 +1035,21 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when getting workflow aggregates", e);
             return new GetWorkflowAggregatesResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetStepAggregates(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetStepAggregatesRequest request = (GetStepAggregatesRequest) message;
+          try {
+            var rows = conductor.systemDatabase.getStepAggregates(request.toInput());
+            return new GetStepAggregatesResponse(request, rows);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting step aggregates", e);
+            return new GetStepAggregatesResponse(request, e);
           }
         });
   }

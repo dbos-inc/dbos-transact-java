@@ -18,8 +18,10 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
@@ -66,12 +68,12 @@ public class WorkflowDAO {
       """
         workflow_uuid, status,
         name, class_name, config_name,
-        queue_name, deduplication_id, priority, queue_partition_key,
+        queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
         executor_id, application_version, application_id,
         authenticated_user, assumed_role, authenticated_roles,
-        created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-        workflow_timeout_ms, workflow_deadline_epoch_ms,
-        forked_from, parent_workflow_id, was_forked_from, delay_until_epoch_ms
+        created_at, updated_at, completed_at, started_at_epoch_ms,
+        recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
+        forked_from, parent_workflow_id, was_forked_from
       """;
 
   private WorkflowDAO() {}
@@ -323,25 +325,34 @@ public class WorkflowDAO {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
 
+    if (status != WorkflowState.SUCCESS
+        && status != WorkflowState.ERROR
+        && status != WorkflowState.CANCELLED) {
+      throw new IllegalArgumentException(
+          "updateWorkflowOutcome called with non-terminal status: " + status);
+    }
+
     // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
     var sql =
         """
           UPDATE "%s".workflow_status
-          SET status = ?, output = ?, error = ?, updated_at = ?, deduplication_id = NULL
+          SET status = ?, output = ?, error = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
           WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
         """
             .formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
+      long now = System.currentTimeMillis();
       stmt.setString(1, status.name());
       stmt.setString(2, output);
       stmt.setString(3, error);
-      stmt.setLong(4, Instant.now().toEpochMilli());
-      stmt.setString(5, workflowId);
-      stmt.setString(6, WorkflowState.CANCELLED.name());
-      stmt.setString(7, status.name());
-      stmt.setString(8, WorkflowState.SUCCESS.name());
-      stmt.setString(9, WorkflowState.ERROR.name());
+      stmt.setLong(4, now);
+      stmt.setLong(5, now);
+      stmt.setString(6, workflowId);
+      stmt.setString(7, WorkflowState.CANCELLED.name());
+      stmt.setString(8, status.name());
+      stmt.setString(9, WorkflowState.SUCCESS.name());
+      stmt.setString(10, WorkflowState.ERROR.name());
 
       stmt.executeUpdate();
     }
@@ -491,7 +502,7 @@ public class WorkflowDAO {
         """
           UPDATE "%s".workflow_status
              SET delay_until_epoch_ms = ?,
-                 updated_at = EXTRACT(epoch FROM NOW()) * 1000
+                 updated_at = ?
            WHERE workflow_uuid = ?
              AND status = ?
         """
@@ -499,8 +510,9 @@ public class WorkflowDAO {
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setLong(1, resolved.toEpochMilli());
-      stmt.setString(2, workflowId);
-      stmt.setString(3, WorkflowState.DELAYED.name());
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, workflowId);
+      stmt.setString(4, WorkflowState.DELAYED.name());
 
       stmt.executeUpdate();
     }
@@ -709,8 +721,8 @@ public class WorkflowDAO {
       input = new GetWorkflowAggregatesInput();
     }
 
-    // Determine which columns to group by (in a stable order)
-    record GroupDim(String name, String column) {}
+    // --- GROUP BY dimensions (stable order) ---
+    record GroupDim(String name, String expr) {}
     var dims = new ArrayList<GroupDim>();
     if (input.groupByStatus()) dims.add(new GroupDim("status", "status"));
     if (input.groupByName()) dims.add(new GroupDim("name", "name"));
@@ -718,18 +730,42 @@ public class WorkflowDAO {
     if (input.groupByExecutorId()) dims.add(new GroupDim("executor_id", "executor_id"));
     if (input.groupByApplicationVersion())
       dims.add(new GroupDim("application_version", "application_version"));
+    // Time bucket: floor(created_at / bucket) * bucket
+    boolean hasBucket = input.timeBucketSize() != null;
+    if (hasBucket) {
+      long ms = input.timeBucketSize().toMillis();
+      String bucketExpr = "(floor(created_at / %d) * %d)::bigint".formatted(ms, ms);
+      dims.add(new GroupDim("time_bucket", bucketExpr));
+    }
 
     if (dims.isEmpty()) {
       throw new IllegalArgumentException(
-          "At least one groupBy flag must be set in GetWorkflowAggregatesInput");
+          "GetWorkflowAggregatesInput requires at least one groupBy* flag set to true"
+              + " (e.g. groupByStatus, groupByName, groupByQueueName)");
+    }
+
+    // --- SELECT metrics ---
+    record Metric(String alias, String expr) {}
+    var metrics = new ArrayList<Metric>();
+    if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
+    if (input.selectMinCreatedAt()) metrics.add(new Metric("min_created_at", "MIN(created_at)"));
+    if (input.selectMaxQueueWaitMs())
+      metrics.add(new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
+    if (input.selectMaxTotalLatencyMs())
+      metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
+
+    if (metrics.isEmpty()) {
+      throw new IllegalArgumentException(
+          "GetWorkflowAggregatesInput requires at least one select* flag set to true"
+              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWaitMs)");
     }
 
     List<Object> parameters = new ArrayList<>();
     StringBuilder sqlBuilder = new StringBuilder("SELECT ");
 
     StringJoiner selectCols = new StringJoiner(", ");
-    for (var dim : dims) selectCols.add(dim.column());
-    selectCols.add("COUNT(*) AS count");
+    for (var dim : dims) selectCols.add(dim.expr() + " AS " + dim.name());
+    for (var m : metrics) selectCols.add(m.expr() + " AS " + m.alias());
     sqlBuilder.append(selectCols).append(" FROM \"%s\".workflow_status".formatted(ctx.schema()));
 
     // --- WHERE ---
@@ -763,8 +799,23 @@ public class WorkflowDAO {
       whereConditions.add("created_at <= ?");
       parameters.add(input.endTime().toEpochMilli());
     }
+    if (input.completedAfter() != null) {
+      whereConditions.add("completed_at >= ?");
+      parameters.add(input.completedAfter().toEpochMilli());
+    }
+    if (input.completedBefore() != null) {
+      whereConditions.add("completed_at <= ?");
+      parameters.add(input.completedBefore().toEpochMilli());
+    }
+    if (input.dequeuedAfter() != null) {
+      whereConditions.add("started_at_epoch_ms >= ?");
+      parameters.add(input.dequeuedAfter().toEpochMilli());
+    }
+    if (input.dequeuedBefore() != null) {
+      whereConditions.add("started_at_epoch_ms <= ?");
+      parameters.add(input.dequeuedBefore().toEpochMilli());
+    }
     if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
-      // Multiple prefixes are OR'd: (uuid LIKE 'a%' OR uuid LIKE 'b%' ...)
       StringJoiner prefixOr = new StringJoiner(" OR ", "(", ")");
       for (var prefix : input.workflowIdPrefix()) {
         prefixOr.add("workflow_uuid LIKE ?");
@@ -779,9 +830,8 @@ public class WorkflowDAO {
 
     // --- GROUP BY ---
     StringJoiner groupByCols = new StringJoiner(", ");
-    for (var dim : dims) groupByCols.add(dim.column());
+    for (var dim : dims) groupByCols.add(dim.expr());
     sqlBuilder.append(" GROUP BY ").append(groupByCols);
-    sqlBuilder.append(" ORDER BY ").append(groupByCols);
 
     List<WorkflowAggregateRow> results = new ArrayList<>();
     try (Connection connection = ctx.getConnection();
@@ -790,12 +840,8 @@ public class WorkflowDAO {
       try {
         for (int i = 0; i < parameters.size(); i++) {
           Object param = parameters.get(i);
-          if (param instanceof String v) {
-            pstmt.setString(i + 1, v);
-          } else if (param instanceof Long v) {
+          if (param instanceof Long v) {
             pstmt.setLong(i + 1, v);
-          } else if (param instanceof Integer v) {
-            pstmt.setInt(i + 1, v);
           } else if (param instanceof List<?> v) {
             Array sqlArray = connection.createArrayOf("text", v.toArray());
             arrays.add(sqlArray);
@@ -805,12 +851,174 @@ public class WorkflowDAO {
           }
         }
         try (ResultSet rs = pstmt.executeQuery()) {
+          int groupCount = dims.size();
           while (rs.next()) {
             var group = new LinkedHashMap<String, String>();
-            for (var dim : dims) {
-              group.put(dim.name(), rs.getString(dim.column()));
+            for (int i = 0; i < groupCount; i++) {
+              String val = rs.getString(dims.get(i).name());
+              group.put(dims.get(i).name(), val);
             }
-            results.add(new WorkflowAggregateRow(group, rs.getLong("count")));
+            Long count = null;
+            Instant minCreatedAt = null;
+            Duration maxQueueWait = null;
+            Duration maxTotalLatency = null;
+            for (var m : metrics) {
+              Object v = rs.getObject(m.alias());
+              Long lv = v == null ? null : ((Number) v).longValue();
+              switch (m.alias()) {
+                case "count" -> count = lv;
+                case "min_created_at" ->
+                    minCreatedAt = lv != null ? Instant.ofEpochMilli(lv) : null;
+                case "max_queue_wait_ms" ->
+                    maxQueueWait = lv != null ? Duration.ofMillis(lv) : null;
+                case "max_total_latency_ms" ->
+                    maxTotalLatency = lv != null ? Duration.ofMillis(lv) : null;
+              }
+            }
+            results.add(
+                new WorkflowAggregateRow(
+                    group, count, minCreatedAt, maxQueueWait, maxTotalLatency));
+          }
+        }
+      } finally {
+        for (Array array : arrays) {
+          array.free();
+        }
+      }
+    }
+
+    return results;
+  }
+
+  public static List<StepAggregateRow> getStepAggregates(
+      DbContext ctx, GetStepAggregatesInput input) throws SQLException {
+
+    if (input == null) {
+      input = new GetStepAggregatesInput();
+    }
+
+    // Status is derived: error IS NULL → SUCCESS, otherwise ERROR
+    String statusExpr = "CASE WHEN error IS NULL THEN 'SUCCESS' ELSE 'ERROR' END";
+
+    // --- GROUP BY dimensions ---
+    record GroupDim(String name, String expr) {}
+    var dims = new ArrayList<GroupDim>();
+    if (input.groupByFunctionName()) dims.add(new GroupDim("function_name", "function_name"));
+    if (input.groupByStatus()) dims.add(new GroupDim("status", statusExpr));
+    if (input.timeBucketSize() != null) {
+      long ms = input.timeBucketSize().toMillis();
+      String bucketExpr = "(floor(completed_at_epoch_ms / %d) * %d)::bigint".formatted(ms, ms);
+      dims.add(new GroupDim("time_bucket", bucketExpr));
+    }
+
+    if (dims.isEmpty()) {
+      throw new IllegalArgumentException(
+          "GetStepAggregatesInput requires at least one groupBy* flag set to true"
+              + " (e.g. groupByFunctionName, groupByStatus)");
+    }
+
+    // --- SELECT metrics ---
+    record Metric(String alias, String expr) {}
+    var metrics = new ArrayList<Metric>();
+    if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
+    if (input.selectMaxDurationMs())
+      metrics.add(
+          new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
+
+    if (metrics.isEmpty()) {
+      throw new IllegalArgumentException(
+          "GetStepAggregatesInput requires at least one select* flag set to true"
+              + " (e.g. selectCount, selectMaxDurationMs)");
+    }
+
+    List<Object> parameters = new ArrayList<>();
+    StringBuilder sqlBuilder = new StringBuilder("SELECT ");
+
+    StringJoiner selectCols = new StringJoiner(", ");
+    for (var dim : dims) selectCols.add(dim.expr() + " AS " + dim.name());
+    for (var m : metrics) selectCols.add(m.expr() + " AS " + m.alias());
+    sqlBuilder.append(selectCols).append(" FROM \"%s\".operation_outputs".formatted(ctx.schema()));
+
+    // --- WHERE ---
+    StringJoiner whereConditions = new StringJoiner(" AND ");
+
+    if (input.status() != null && !input.status().isEmpty()) {
+      // Translate status filter to error IS NULL / IS NOT NULL conditions
+      boolean wantSuccess = input.status().contains("SUCCESS");
+      boolean wantError = input.status().contains("ERROR");
+      if (wantSuccess && !wantError) {
+        whereConditions.add("error IS NULL");
+      } else if (wantError && !wantSuccess) {
+        whereConditions.add("error IS NOT NULL");
+      }
+      // if both or neither: no filter needed
+    }
+    if (input.functionName() != null && !input.functionName().isEmpty()) {
+      whereConditions.add("function_name = ANY(?)");
+      parameters.add(input.functionName());
+    }
+    if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
+      StringJoiner prefixOr = new StringJoiner(" OR ", "(", ")");
+      for (var prefix : input.workflowIdPrefix()) {
+        prefixOr.add("workflow_uuid LIKE ?");
+        parameters.add(prefix + "%");
+      }
+      whereConditions.add(prefixOr.toString());
+    }
+    if (input.completedAfter() != null) {
+      whereConditions.add("completed_at_epoch_ms >= ?");
+      parameters.add(input.completedAfter().toEpochMilli());
+    }
+    if (input.completedBefore() != null) {
+      whereConditions.add("completed_at_epoch_ms <= ?");
+      parameters.add(input.completedBefore().toEpochMilli());
+    }
+
+    if (whereConditions.length() > 0) {
+      sqlBuilder.append(" WHERE ").append(whereConditions);
+    }
+
+    // --- GROUP BY ---
+    StringJoiner groupByCols = new StringJoiner(", ");
+    for (var dim : dims) groupByCols.add(dim.expr());
+    sqlBuilder.append(" GROUP BY ").append(groupByCols);
+
+    List<StepAggregateRow> results = new ArrayList<>();
+    try (Connection connection = ctx.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
+      List<Array> arrays = new ArrayList<>();
+      try {
+        for (int i = 0; i < parameters.size(); i++) {
+          Object param = parameters.get(i);
+          if (param instanceof Long v) {
+            pstmt.setLong(i + 1, v);
+          } else if (param instanceof List<?> v) {
+            Array sqlArray = connection.createArrayOf("text", v.toArray());
+            arrays.add(sqlArray);
+            pstmt.setArray(i + 1, sqlArray);
+          } else {
+            pstmt.setObject(i + 1, param);
+          }
+        }
+        try (ResultSet rs = pstmt.executeQuery()) {
+          int groupCount = dims.size();
+          while (rs.next()) {
+            var group = new LinkedHashMap<String, String>();
+            for (int i = 0; i < groupCount; i++) {
+              String val = rs.getString(dims.get(i).name());
+              group.put(dims.get(i).name(), val);
+            }
+            Long count = null;
+            Duration maxDuration = null;
+            for (var m : metrics) {
+              Object v = rs.getObject(m.alias());
+              Long lv = v == null ? null : ((Number) v).longValue();
+              switch (m.alias()) {
+                case "count" -> count = lv;
+                case "max_duration_ms" -> maxDuration = lv != null ? Duration.ofMillis(lv) : null;
+              }
+            }
+            results.add(new StepAggregateRow(group, count, maxDuration));
           }
         }
       } finally {
@@ -868,6 +1076,7 @@ public class WorkflowDAO {
             rs.getString("parent_workflow_id"),
             rs.getObject("was_forked_from", Boolean.class),
             SystemDatabase.toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("completed_at", Long.class)),
             serialization);
     return info;
   }
@@ -999,7 +1208,8 @@ public class WorkflowDAO {
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
-              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+              updated_at = ?,
+              completed_at = ?
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -1008,11 +1218,14 @@ public class WorkflowDAO {
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", allIds.toArray(String[]::new));
+      long now = System.currentTimeMillis();
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
-        stmt.setArray(2, array);
-        stmt.setString(3, WorkflowState.SUCCESS.name());
-        stmt.setString(4, WorkflowState.ERROR.name());
+        stmt.setLong(2, now);
+        stmt.setLong(3, now);
+        stmt.setArray(4, array);
+        stmt.setString(5, WorkflowState.SUCCESS.name());
+        stmt.setString(6, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();
@@ -1036,7 +1249,8 @@ public class WorkflowDAO {
               workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
-              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+              completed_at = NULL,
+              updated_at = ?
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -1048,9 +1262,10 @@ public class WorkflowDAO {
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
         stmt.setString(2, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setArray(3, array);
-        stmt.setString(4, WorkflowState.SUCCESS.name());
-        stmt.setString(5, WorkflowState.ERROR.name());
+        stmt.setLong(3, System.currentTimeMillis());
+        stmt.setArray(4, array);
+        stmt.setString(5, WorkflowState.SUCCESS.name());
+        stmt.setString(6, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();
@@ -1568,9 +1783,9 @@ public class WorkflowDAO {
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
           recovery_attempts, forked_from, parent_workflow_id, serialization,
-          delay_until_epoch_ms
+          delay_until_epoch_ms, completed_at
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -1680,6 +1895,7 @@ public class WorkflowDAO {
           wfStmt.setString(26, status.parentWorkflowId());
           wfStmt.setString(27, status.serialization());
           wfStmt.setObject(28, status.delayUntilEpochMs());
+          wfStmt.setObject(29, status.completedAtEpochMs());
           wfStmt.addBatch();
 
           for (var step : workflow.steps()) {
