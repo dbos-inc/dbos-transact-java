@@ -589,14 +589,16 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public void cancelWorkflows(List<String> workflowIds) {
+  public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     Objects.requireNonNull(workflowIds);
 
-    // Execute the cancel operation as a workflow step
     this.runDbosFunctionAsStep(
         () -> {
-          logger.info("Cancelling workflow(s) {}", workflowIds);
-          systemDatabase.cancelWorkflows(workflowIds);
+          logger.info(
+              "Cancelling workflow(s) {}{}",
+              workflowIds,
+              cancelChildren ? " and their children" : "");
+          systemDatabase.cancelWorkflows(workflowIds, cancelChildren);
           return null; // void
         },
         "DBOS.cancelWorkflow",
@@ -1075,7 +1077,7 @@ public class DBOSExecutor implements AutoCloseable {
             .withStatus(
                 List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
     for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
-      cancelWorkflows(List.of(status.workflowId()));
+      cancelWorkflows(List.of(status.workflowId()), false);
     }
   }
 
@@ -1717,7 +1719,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (initResult.deadlineEpochMS() != null
         && System.currentTimeMillis() > initResult.deadlineEpochMS()) {
-      systemDatabase.cancelWorkflows(List.of(workflowId));
+      systemDatabase.cancelWorkflows(List.of(workflowId), false);
       return retrieveWorkflow(workflowId);
     }
 
@@ -1726,7 +1728,7 @@ public class DBOSExecutor implements AutoCloseable {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
-              systemDatabase.cancelWorkflows(List.of(workflowId));
+              systemDatabase.cancelWorkflows(List.of(workflowId), false);
               future.cancel(true);
             }
           },

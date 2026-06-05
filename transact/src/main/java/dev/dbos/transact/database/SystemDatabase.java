@@ -529,8 +529,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> StepsDAO.sleep(ctx, workflowId, functionId, duration));
   }
 
-  public void cancelWorkflows(List<String> workflowIds) {
-    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds));
+  public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
+    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds, cancelChildren));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {

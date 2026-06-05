@@ -550,7 +550,59 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenTrue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenFalse() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", false);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -569,7 +621,9 @@ public class ConductorTest {
     String errorMessage = "canCancelThrows error";
     String workflowId = "sample-wf-id";
 
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).cancelWorkflows(anyList());
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .cancelWorkflows(anyList(), eq(false));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -581,7 +635,7 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -724,6 +778,58 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canCancelWithChildren() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelBulkWithChildren() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "bulk-cancel-children-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(workflowIds, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("bulk-cancel-children-1", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
   public void canCancelBulk() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -738,7 +844,7 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "bulk-cancel-1", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(workflowIds);
+      verify(mockExec).cancelWorkflows(workflowIds, false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

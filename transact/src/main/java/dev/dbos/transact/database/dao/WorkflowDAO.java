@@ -40,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -970,16 +971,25 @@ public class WorkflowDAO {
     }
   }
 
-  private static List<String> filterNullsAndBlanks(List<String> workflowIds) {
+  private static Collection<String> filterNullsAndBlanks(Collection<String> workflowIds) {
     if (workflowIds == null) {
       return List.of();
     }
     return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
   }
 
-  public static void cancelWorkflows(DbContext ctx, List<String> workflowIds) throws SQLException {
-    List<String> filtered = filterNullsAndBlanks(workflowIds);
-    if (filtered.isEmpty()) {
+  public static void cancelWorkflows(
+      DbContext ctx, List<String> workflowIds, boolean cancelChildren) throws SQLException {
+    Collection<String> allIds = filterNullsAndBlanks(workflowIds);
+    if (cancelChildren) {
+      var set = new HashSet<>(allIds);
+      for (var wfid : allIds) {
+        set.addAll(getWorkflowChildren(ctx, wfid));
+      }
+      allIds = filterNullsAndBlanks(set);
+    }
+
+    if (allIds.isEmpty()) {
       return;
     }
     String sql =
@@ -997,7 +1007,7 @@ public class WorkflowDAO {
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
+      Array array = conn.createArrayOf("text", allIds.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
         stmt.setArray(2, array);
@@ -1012,7 +1022,7 @@ public class WorkflowDAO {
 
   public static void resumeWorkflows(DbContext ctx, List<String> workflowIds, String queueName)
       throws SQLException {
-    List<String> filtered = filterNullsAndBlanks(workflowIds);
+    var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
@@ -1050,7 +1060,7 @@ public class WorkflowDAO {
 
   public static void deleteWorkflows(
       DbContext ctx, List<String> workflowIds, boolean deleteChildren) throws SQLException {
-    List<String> filtered = filterNullsAndBlanks(workflowIds);
+    var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }

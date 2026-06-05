@@ -188,7 +188,7 @@ public class SystemDatabaseTest {
 
     // Cancel all five IDs in one call
     sysdb.cancelWorkflows(
-        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"));
+        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"), false);
 
     // PENDING ones become CANCELLED, and updated_at is refreshed
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
@@ -289,11 +289,71 @@ public class SystemDatabaseTest {
         WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
     long beforeCancel = System.currentTimeMillis();
-    sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
+    sysdb.cancelWorkflows(Arrays.asList("wf-id", null), false);
 
     var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
     assertEquals(WorkflowState.CANCELLED.name(), row.status());
     assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
+  }
+
+  @Test
+  public void testCancelWorkflowsWithChildren() throws Exception {
+    // Build a 3-level tree: parent -> 3 children -> 2 grandchildren each
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("parent").build(), 5, false, false);
+
+    for (var i = 0; i < 3; i++) {
+      var childId = "child-%d".formatted(i);
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(childId).build(), 5, false, false);
+      sysdb.recordChildWorkflow(
+          "parent", childId, i, "child-step-%d".formatted(i), System.currentTimeMillis());
+
+      for (var j = 0; j < 2; j++) {
+        var grandchildId = "grandchild-%d-%d".formatted(i, j);
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(grandchildId).build(), 5, false, false);
+        sysdb.recordChildWorkflow(
+            childId,
+            grandchildId,
+            j,
+            "grandchild-step-%d-%d".formatted(i, j),
+            System.currentTimeMillis());
+      }
+    }
+
+    // Without cancelChildren=true, only the parent is cancelled
+    sysdb.cancelWorkflows(List.of("parent"), false);
+    assertEquals(
+        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
+    for (var i = 0; i < 3; i++) {
+      assertEquals(
+          WorkflowState.PENDING.name(),
+          DBUtils.getWorkflowRow(dataSource, "child-%d".formatted(i)).status());
+      for (var j = 0; j < 2; j++) {
+        assertEquals(
+            WorkflowState.PENDING.name(),
+            DBUtils.getWorkflowRow(dataSource, "grandchild-%d-%d".formatted(i, j)).status());
+      }
+    }
+
+    // Reset parent to PENDING
+    DBUtils.setWorkflowState(dataSource, "parent", WorkflowState.PENDING.name());
+
+    // With cancelChildren=true, parent + all descendants are cancelled
+    sysdb.cancelWorkflows(List.of("parent"), true);
+    assertEquals(
+        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
+    for (var i = 0; i < 3; i++) {
+      assertEquals(
+          WorkflowState.CANCELLED.name(),
+          DBUtils.getWorkflowRow(dataSource, "child-%d".formatted(i)).status());
+      for (var j = 0; j < 2; j++) {
+        assertEquals(
+            WorkflowState.CANCELLED.name(),
+            DBUtils.getWorkflowRow(dataSource, "grandchild-%d-%d".formatted(i, j)).status());
+      }
+    }
   }
 
   @Test

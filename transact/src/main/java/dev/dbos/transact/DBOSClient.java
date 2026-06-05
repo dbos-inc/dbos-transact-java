@@ -842,7 +842,17 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to cancel
    */
   public void cancelWorkflow(@NonNull String workflowId) {
-    systemDatabase.cancelWorkflows(List.of(workflowId));
+    cancelWorkflows(List.of(workflowId), false);
+  }
+
+  /**
+   * Cancel a workflow, optionally also cancelling all descendant workflows.
+   *
+   * @param workflowId ID of the workflow to cancel
+   * @param cancelChildren if true, recursively cancel all descendant workflows
+   */
+  public void cancelWorkflow(@NonNull String workflowId, boolean cancelChildren) {
+    cancelWorkflows(List.of(workflowId), cancelChildren);
   }
 
   /**
@@ -852,7 +862,17 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowIds a list of workflow IDs to cancel; must not be null
    */
   public void cancelWorkflows(@NonNull List<String> workflowIds) {
-    systemDatabase.cancelWorkflows(workflowIds);
+    cancelWorkflows(workflowIds, false);
+  }
+
+  /**
+   * Cancel multiple workflows, optionally also cancelling all descendant workflows.
+   *
+   * @param workflowIds a list of workflow IDs to cancel; must not be null
+   * @param cancelChildren if true, recursively cancel all descendant workflows
+   */
+  public void cancelWorkflows(@NonNull List<String> workflowIds, boolean cancelChildren) {
+    systemDatabase.cancelWorkflows(workflowIds, cancelChildren);
   }
 
   /**
