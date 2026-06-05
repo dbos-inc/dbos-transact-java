@@ -324,6 +324,13 @@ public class WorkflowDAO {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
 
+    if (status != WorkflowState.SUCCESS
+        && status != WorkflowState.ERROR
+        && status != WorkflowState.CANCELLED) {
+      throw new IllegalArgumentException(
+          "updateWorkflowOutcome called with non-terminal status: " + status);
+    }
+
     // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
     var sql =
         """
@@ -730,7 +737,9 @@ public class WorkflowDAO {
     }
 
     if (dims.isEmpty()) {
-      throw new IllegalArgumentException("At least one group_by flag must be set to True");
+      throw new IllegalArgumentException(
+          "GetWorkflowAggregatesInput requires at least one groupBy* flag set to true"
+              + " (e.g. groupByStatus, groupByName, groupByQueueName)");
     }
 
     // --- SELECT metrics ---
@@ -744,7 +753,9 @@ public class WorkflowDAO {
       metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
 
     if (metrics.isEmpty()) {
-      throw new IllegalArgumentException("At least one select_ flag must be set to True");
+      throw new IllegalArgumentException(
+          "GetWorkflowAggregatesInput requires at least one select* flag set to true"
+              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWaitMs)");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -899,7 +910,9 @@ public class WorkflowDAO {
     }
 
     if (dims.isEmpty()) {
-      throw new IllegalArgumentException("At least one group_by flag must be set to True");
+      throw new IllegalArgumentException(
+          "GetStepAggregatesInput requires at least one groupBy* flag set to true"
+              + " (e.g. groupByFunctionName, groupByStatus)");
     }
 
     // --- SELECT metrics ---
@@ -911,7 +924,9 @@ public class WorkflowDAO {
           new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
 
     if (metrics.isEmpty()) {
-      throw new IllegalArgumentException("At least one select_ flag must be set to True");
+      throw new IllegalArgumentException(
+          "GetStepAggregatesInput requires at least one select* flag set to true"
+              + " (e.g. selectCount, selectMaxDurationMs)");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -1181,8 +1196,8 @@ public class WorkflowDAO {
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
-              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint,
-              completed_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+              updated_at = ?,
+              completed_at = ?
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -1190,12 +1205,15 @@ public class WorkflowDAO {
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
+      long now = Instant.now().toEpochMilli();
       Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
-        stmt.setArray(2, array);
-        stmt.setString(3, WorkflowState.SUCCESS.name());
-        stmt.setString(4, WorkflowState.ERROR.name());
+        stmt.setLong(2, now);
+        stmt.setLong(3, now);
+        stmt.setArray(4, array);
+        stmt.setString(5, WorkflowState.SUCCESS.name());
+        stmt.setString(6, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();
