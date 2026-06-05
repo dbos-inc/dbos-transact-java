@@ -501,7 +501,7 @@ public class WorkflowDAO {
         """
           UPDATE "%s".workflow_status
              SET delay_until_epoch_ms = ?,
-                 updated_at = EXTRACT(epoch FROM NOW()) * 1000
+                 updated_at = ?
            WHERE workflow_uuid = ?
              AND status = ?
         """
@@ -509,8 +509,9 @@ public class WorkflowDAO {
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setLong(1, resolved.toEpochMilli());
-      stmt.setString(2, workflowId);
-      stmt.setString(3, WorkflowState.DELAYED.name());
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, workflowId);
+      stmt.setString(4, WorkflowState.DELAYED.name());
 
       stmt.executeUpdate();
     }
@@ -1238,7 +1239,8 @@ public class WorkflowDAO {
               workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
-              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+              completed_at = NULL,
+              updated_at = ?
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -1250,9 +1252,10 @@ public class WorkflowDAO {
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
         stmt.setString(2, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setArray(3, array);
-        stmt.setString(4, WorkflowState.SUCCESS.name());
-        stmt.setString(5, WorkflowState.ERROR.name());
+        stmt.setLong(3, System.currentTimeMillis());
+        stmt.setArray(4, array);
+        stmt.setString(5, WorkflowState.SUCCESS.name());
+        stmt.setString(6, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();

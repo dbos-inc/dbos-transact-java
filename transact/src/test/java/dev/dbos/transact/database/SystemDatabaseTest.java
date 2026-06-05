@@ -222,15 +222,18 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
-    // Set a non-null deadline on the cancellable workflows so we can assert it is cleared on resume
+    // Set non-null deadline and completed_at on the cancellable workflows so we can assert they are
+    // cleared on resume
     try (var conn = dataSource.getConnection();
         var stmt =
             conn.prepareStatement(
-                "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ANY(?)")) {
+                "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ?, completed_at = ? WHERE workflow_uuid = ANY(?)")) {
       long deadline = System.currentTimeMillis() + 60_000;
+      long completedAt = System.currentTimeMillis() - 1_000;
       stmt.setLong(1, deadline);
+      stmt.setLong(2, completedAt);
       stmt.setArray(
-          2, conn.createArrayOf("text", new String[] {"wf-cancelled-1", "wf-cancelled-2"}));
+          3, conn.createArrayOf("text", new String[] {"wf-cancelled-1", "wf-cancelled-2"}));
       stmt.executeUpdate();
     }
 
@@ -246,13 +249,14 @@ public class SystemDatabaseTest {
     // Resume all four IDs in one call
     sysdb.resumeWorkflows(workflowIds, null);
 
-    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
       assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
       assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
       assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
+      assertNull(row.completedAt(), "completed_at should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -271,13 +275,14 @@ public class SystemDatabaseTest {
     // Resume all four IDs in one call
     sysdb.resumeWorkflows(workflowIds, "customQueue");
 
-    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
       assertEquals("customQueue", row.queueName());
       assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
       assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
+      assertNull(row.completedAt(), "completed_at should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
