@@ -1460,14 +1460,18 @@ public class WorkflowDAO {
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
-      stmt.setArray(1, array);
-      if (options.fromStepName() != null) {
-        stmt.setString(2, options.fromStepName());
-      }
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          startStepByWorkflowId.put(rs.getString("workflow_uuid"), rs.getInt("start_step"));
+      try {
+        stmt.setArray(1, array);
+        if (options.fromStepName() != null) {
+          stmt.setString(2, options.fromStepName());
         }
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            startStepByWorkflowId.put(rs.getString("workflow_uuid"), rs.getInt("start_step"));
+          }
+        }
+      } finally {
+        array.free();
       }
     }
 
@@ -1500,25 +1504,29 @@ public class WorkflowDAO {
     Map<String, RawStatusData> result = new HashMap<>();
     try (var stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
-      stmt.setArray(1, array);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          long timeoutMsRaw = rs.getLong("workflow_timeout_ms");
-          Long timeoutMs = rs.wasNull() ? null : timeoutMsRaw;
-          result.put(
-              rs.getString("workflow_uuid"),
-              new RawStatusData(
-                  rs.getString("name"),
-                  rs.getString("class_name"),
-                  rs.getString("config_name"),
-                  rs.getString("application_id"),
-                  rs.getString("authenticated_user"),
-                  rs.getString("authenticated_roles"),
-                  rs.getString("assumed_role"),
-                  rs.getString("inputs"),
-                  rs.getString("serialization"),
-                  timeoutMs));
+      try {
+        stmt.setArray(1, array);
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            long timeoutMsRaw = rs.getLong("workflow_timeout_ms");
+            Long timeoutMs = rs.wasNull() ? null : timeoutMsRaw;
+            result.put(
+                rs.getString("workflow_uuid"),
+                new RawStatusData(
+                    rs.getString("name"),
+                    rs.getString("class_name"),
+                    rs.getString("config_name"),
+                    rs.getString("application_id"),
+                    rs.getString("authenticated_user"),
+                    rs.getString("authenticated_roles"),
+                    rs.getString("assumed_role"),
+                    rs.getString("inputs"),
+                    rs.getString("serialization"),
+                    timeoutMs));
+          }
         }
+      } finally {
+        array.free();
       }
     }
     return result;
@@ -1584,9 +1592,12 @@ public class WorkflowDAO {
             UPDATE "%s".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ANY(?)
           """
             .formatted(schema);
+    Array arr = conn.createArrayOf("text", origIds.toArray(String[]::new));
     try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setArray(1, conn.createArrayOf("text", origIds.toArray(String[]::new)));
+      stmt.setArray(1, arr);
       stmt.executeUpdate();
+    } finally {
+      arr.free();
     }
   }
 
@@ -1612,10 +1623,11 @@ public class WorkflowDAO {
     Array origArr = conn.createArrayOf("text", origIds.toArray(String[]::new));
     Array forkArr = conn.createArrayOf("text", forkIds.toArray(String[]::new));
     Array stepArr = conn.createArrayOf("integer", startSteps.toArray(Integer[]::new));
+    try {
 
-    String ooSql =
-        mappingCTE
-            + """
+      String ooSql =
+          mappingCTE
+              + """
                 INSERT INTO "%1$s".operation_outputs
                   (workflow_uuid, function_id, output, error, function_name,
                    child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization)
@@ -1626,11 +1638,11 @@ public class WorkflowDAO {
                 JOIN "%1$s".operation_outputs oo
                   ON oo.workflow_uuid = m.orig_id AND oo.function_id < m.start_step
               """
-                .formatted(schema);
+                  .formatted(schema);
 
-    String wehSql =
-        mappingCTE
-            + """
+      String wehSql =
+          mappingCTE
+              + """
                 INSERT INTO "%1$s".workflow_events_history
                   (workflow_uuid, function_id, key, value, serialization)
                 SELECT m.fork_id, weh.function_id, weh.key, weh.value, weh.serialization
@@ -1638,12 +1650,12 @@ public class WorkflowDAO {
                 JOIN "%1$s".workflow_events_history weh
                   ON weh.workflow_uuid = m.orig_id AND weh.function_id < m.start_step
               """
-                .formatted(schema);
+                  .formatted(schema);
 
-    // Copy latest value per event key using a window function
-    String weSql =
-        mappingCTE
-            + """
+      // Copy latest value per event key using a window function
+      String weSql =
+          mappingCTE
+              + """
                 , ranked AS (
                   SELECT m.fork_id,
                          weh.key,
@@ -1662,11 +1674,11 @@ public class WorkflowDAO {
                 FROM ranked
                 WHERE rn = 1
               """
-                .formatted(schema);
+                  .formatted(schema);
 
-    String streamSql =
-        mappingCTE
-            + """
+      String streamSql =
+          mappingCTE
+              + """
                 INSERT INTO "%1$s".streams
                   (workflow_uuid, function_id, key, value, "offset", serialization)
                 SELECT m.fork_id, s.function_id, s.key, s.value, s."offset", s.serialization
@@ -1674,15 +1686,20 @@ public class WorkflowDAO {
                 JOIN "%1$s".streams s
                   ON s.workflow_uuid = m.orig_id AND s.function_id < m.start_step
               """
-                .formatted(schema);
+                  .formatted(schema);
 
-    for (String sql : List.of(ooSql, wehSql, weSql, streamSql)) {
-      try (var stmt = conn.prepareStatement(sql)) {
-        stmt.setArray(1, origArr);
-        stmt.setArray(2, forkArr);
-        stmt.setArray(3, stepArr);
-        stmt.executeUpdate();
+      for (String sql : List.of(ooSql, wehSql, weSql, streamSql)) {
+        try (var stmt = conn.prepareStatement(sql)) {
+          stmt.setArray(1, origArr);
+          stmt.setArray(2, forkArr);
+          stmt.setArray(3, stepArr);
+          stmt.executeUpdate();
+        }
       }
+    } finally {
+      origArr.free();
+      forkArr.free();
+      stepArr.free();
     }
   }
 
