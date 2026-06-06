@@ -8,13 +8,13 @@ plugins {
 }
 
 dependencies {
-  api(libs.slf4j.api)
   api(libs.jspecify)
 
-  implementation(libs.postgresql)
-  implementation(libs.hikaricp)
-  implementation(libs.bundles.jackson)
   implementation(libs.cron.utils)
+  implementation(libs.hikaricp)
+  implementation(libs.jackson.databind)
+  implementation(libs.postgresql)
+  implementation(libs.slf4j.api)
 
   testImplementation(platform(libs.junit.bom))
   testImplementation(libs.junit.jupiter)
