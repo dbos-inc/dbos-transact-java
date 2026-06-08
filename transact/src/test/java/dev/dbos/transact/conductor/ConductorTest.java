@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +29,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
@@ -3619,6 +3621,263 @@ public class ConductorTest {
       assertEquals("req-get-queue-404", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       assertTrue(!json.has("output") || json.get("output").isNull());
+    }
+  }
+
+  // ---- forkFromFailure conductor tests ----
+
+  @SuppressWarnings("unchecked")
+  private WorkflowHandle<Object, Exception> mockForkFromFailureHandle(String forkedId) {
+    var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(handle.workflowId()).thenReturn(forkedId);
+    return handle;
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastFailure() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-a", "wf-b");
+    List<String> forkedIds = List.of("fork-a", "fork-b");
+    var handles = List.of(mockForkFromFailureHandle("fork-a"), mockForkFromFailureHandle("fork-b"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      body.put("application_version", "v2");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-1", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromLastFailure.class, options);
+      assertEquals("v2", options.applicationVersion());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-1", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+      JsonNode ids = json.get("forked_workflow_ids");
+      assertNotNull(ids);
+      assertEquals(forkedIds, mapper.convertValue(ids, List.class));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-x");
+    var handles = List.of(mockForkFromFailureHandle("fork-x"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-2", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      assertInstanceOf(ForkFromFailureOptions.FromLastStep.class, captor.getValue());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-y");
+    var handles = List.of(mockForkFromFailureHandle("fork-y"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step", 3);
+      body.put("queue_name", "my-queue");
+      body.put("queue_partition_key", "pk");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-3", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStep.class, options);
+      assertEquals(3, ((ForkFromFailureOptions.FromStep) options).step());
+      assertEquals("my-queue", options.queueName());
+      assertEquals("pk", options.queuePartitionKey());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStepName() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-z");
+    var handles = List.of(mockForkFromFailureHandle("fork-z"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step_name", "myStep");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-4", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStepName.class, options);
+      assertEquals("myStep", ((ForkFromFailureOptions.FromStepName) options).stepName());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  // multiple mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureMultipleModesReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-p"));
+      body.put("from_last_failure", true);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-multi", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  // no mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureNoModeReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-q"));
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nomode", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingBody() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // send message with no body field at all
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nobody", Map.of());
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nobody", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingWorkflowIds() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // body present but workflow_ids omitted
+      Map<String, Object> body = new HashMap<>();
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nowfids", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nowfids", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureExecutorThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-err");
+    String errorMessage = "canForkFromFailureExecutorThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).forkFromFailure(eq(origIds), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-throws", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-throws", json.get("request_id").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertNull(json.get("forked_workflow_ids"));
     }
   }
 }

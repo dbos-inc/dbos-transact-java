@@ -856,9 +856,9 @@ public class Conductor implements AutoCloseable {
         () -> {
           ForkFromFailureRequest request = (ForkFromFailureRequest) message;
           try {
+            var options = request.toOptions();
             var handles =
-                conductor.dbosExecutor.forkFromFailure(
-                    request.body.workflow_ids, request.toOptions());
+                conductor.dbosExecutor.forkFromFailure(request.body.workflow_ids, options);
             var forkedIds =
                 handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
             return new ForkFromFailureResponse(request, forkedIds);

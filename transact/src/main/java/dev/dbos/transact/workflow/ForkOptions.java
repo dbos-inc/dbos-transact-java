@@ -78,11 +78,6 @@ public record ForkOptions(
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
-  /** Returns a copy of this object with no timeout (clears any previously set timeout). */
-  public ForkOptions withNoTimeout() {
-    return withTimeout((Duration) null);
-  }
-
   /**
    * Returns a copy of this object with the given queueName.
    *

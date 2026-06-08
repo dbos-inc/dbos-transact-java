@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = ExecutorInfoRequest.class, name = "executor_info"),
   @JsonSubTypes.Type(value = ExistPendingWorkflowsRequest.class, name = "exist_pending_workflows"),
   @JsonSubTypes.Type(value = ExportWorkflowRequest.class, name = "export_workflow"),
+  @JsonSubTypes.Type(value = ForkFromFailureRequest.class, name = "fork_from_failure"),
   @JsonSubTypes.Type(value = ForkWorkflowRequest.class, name = "fork_workflow"),
   @JsonSubTypes.Type(value = GetMetricsRequest.class, name = "get_metrics"),
   @JsonSubTypes.Type(value = GetQueueRequest.class, name = "get_queue"),

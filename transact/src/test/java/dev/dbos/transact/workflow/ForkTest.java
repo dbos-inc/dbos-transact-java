@@ -277,7 +277,7 @@ public class ForkTest {
     assertEquals(Duration.ofMillis(2000), handle2.getStatus().timeout());
     assertNull(handle2.getStatus().deadline());
 
-    forkOptions = new ForkOptions().withNoTimeout();
+    forkOptions = new ForkOptions();
     var handle3 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle3.workflowId());
     assertEquals(workflowId, handle3.getStatus().forkedFrom());

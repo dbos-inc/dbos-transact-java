@@ -14,9 +14,24 @@ public class ForkFromFailureRequest extends BaseMessage {
 
   public ForkFromFailureOptions toOptions() {
     Objects.requireNonNull(body, "ForkFromFailureRequest body must not be null");
-    Objects.requireNonNull(body.workflow_ids, "ForkFromFailureBody workflow_ids must not be null");
+    Objects.requireNonNull(body.workflow_ids, "workflow_ids must not be null");
 
-    var options =
+    int modeCount =
+        (Boolean.TRUE.equals(body.from_last_failure) ? 1 : 0)
+            + (Boolean.TRUE.equals(body.from_last_step) ? 1 : 0)
+            + (body.from_step != null ? 1 : 0)
+            + (body.from_step_name != null ? 1 : 0);
+    if (modeCount == 0) {
+      throw new IllegalArgumentException(
+          "exactly one of from_last_failure, from_last_step, from_step, or from_step_name must be set");
+    }
+    if (modeCount > 1) {
+      throw new IllegalArgumentException(
+          "exactly one of from_last_failure, from_last_step, from_step, or from_step_name must be set; got "
+              + modeCount);
+    }
+
+    ForkFromFailureOptions options =
         Boolean.TRUE.equals(body.from_last_failure)
             ? new ForkFromFailureOptions.FromLastFailure()
             : Boolean.TRUE.equals(body.from_last_step)
