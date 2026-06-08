@@ -7,7 +7,7 @@ application { mainClass.set("dev.dbos.transact.cli.Main") }
 
 dependencies {
   implementation(project(":transact"))
-  implementation(libs.bundles.jackson)
+  implementation(libs.jackson.databind)
   implementation(libs.picocli)
   runtimeOnly(libs.slf4j.simple)
 
