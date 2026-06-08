@@ -1,138 +1,162 @@
 package dev.dbos.transact.workflow;
 
+import java.util.Objects;
+
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Options for forking a workflow from a failure point. Exactly one of fromLastFailure,
- * fromLastStep, fromStep, or fromStepName must be specified via the with* builder methods.
+ * Mode selection for {@link dev.dbos.transact.DBOS#forkFromFailure}. Construct one of the four
+ * permitted subtypes, then optionally chain {@code with*} calls for common options.
+ *
+ * <ul>
+ *   <li>{@link FromLastFailure} – re-execute from the last step that recorded an error (falls back
+ *       to the last step if no error exists)
+ *   <li>{@link FromLastStep} – re-execute from the last step executed
+ *   <li>{@link FromStep} – re-execute from a specific step number
+ *   <li>{@link FromStepName} – re-execute from the last occurrence of a named step
+ * </ul>
  */
-public record ForkFromFailureOptions(
-    @Nullable String applicationVersion,
-    @Nullable String queueName,
-    @Nullable String queuePartitionKey,
-    @Nullable Boolean fromLastFailure,
-    @Nullable Boolean fromLastStep,
-    @Nullable Integer fromStep,
-    @Nullable String fromStepName) {
+public sealed interface ForkFromFailureOptions
+    permits ForkFromFailureOptions.FromLastFailure,
+        ForkFromFailureOptions.FromLastStep,
+        ForkFromFailureOptions.FromStep,
+        ForkFromFailureOptions.FromStepName {
 
-  public ForkFromFailureOptions() {
-    this(null, null, null, null, null, null, null);
-  }
+  @Nullable String applicationVersion();
 
-  /**
-   * Returns a copy of this object with the given applicationVersion.
-   *
-   * @param applicationVersion Application version to use for the new fork of the workflow
-   */
-  public ForkFromFailureOptions withApplicationVersion(String applicationVersion) {
-    return new ForkFromFailureOptions(
-        applicationVersion,
-        this.queueName,
-        this.queuePartitionKey,
-        this.fromLastFailure,
-        this.fromLastStep,
-        this.fromStep,
-        this.fromStepName);
-  }
+  @Nullable String queueName();
 
-  /**
-   * Returns a copy of this object with the given queue.
-   *
-   * @param queue Queue to assign to the forked workflow
-   */
-  public ForkFromFailureOptions withQueue(Queue queue) {
+  @Nullable String queuePartitionKey();
+
+  ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion);
+
+  /** Shorthand for {@link #withQueue(String)}. */
+  default ForkFromFailureOptions withQueue(Queue queue) {
     return withQueue(queue.name());
   }
 
-  /**
-   * Returns a copy of this object with the given queueName.
-   *
-   * @param queueName Queue name to assign to the forked workflow
-   */
-  public ForkFromFailureOptions withQueue(String queueName) {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        queueName,
-        this.queuePartitionKey,
-        this.fromLastFailure,
-        this.fromLastStep,
-        this.fromStep,
-        this.fromStepName);
-  }
+  ForkFromFailureOptions withQueue(@Nullable String queueName);
+
+  ForkFromFailureOptions withQueuePartitionKey(@Nullable String queuePartitionKey);
 
   /**
-   * Returns a copy of this object with the given queuePartitionKey.
-   *
-   * @param queuePartitionKey Queue partition key to assign to the forked workflow
+   * Fork from the last step that recorded an error. Falls back to the last step executed if no step
+   * has an error.
    */
-  public ForkFromFailureOptions withQueuePartitionKey(String queuePartitionKey) {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        this.queueName,
-        queuePartitionKey,
-        this.fromLastFailure,
-        this.fromLastStep,
-        this.fromStep,
-        this.fromStepName);
-  }
+  record FromLastFailure(
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey)
+      implements ForkFromFailureOptions {
 
-  /**
-   * Fork from the last step that recorded an error. If no step has an error, falls back to the last
-   * step executed.
-   */
-  public ForkFromFailureOptions withFromLastFailure() {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        this.queueName,
-        this.queuePartitionKey,
-        true,
-        this.fromLastStep,
-        this.fromStep,
-        this.fromStepName);
+    public FromLastFailure() {
+      this(null, null, null);
+    }
+
+    @Override
+    public ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion) {
+      return new FromLastFailure(applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueue(@Nullable String queueName) {
+      return new FromLastFailure(applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueuePartitionKey(@Nullable String queuePartitionKey) {
+      return new FromLastFailure(applicationVersion, queueName, queuePartitionKey);
+    }
   }
 
   /** Fork from the last step executed, regardless of success or failure. */
-  public ForkFromFailureOptions withFromLastStep() {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        this.queueName,
-        this.queuePartitionKey,
-        this.fromLastFailure,
-        true,
-        this.fromStep,
-        this.fromStepName);
+  record FromLastStep(
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey)
+      implements ForkFromFailureOptions {
+
+    public FromLastStep() {
+      this(null, null, null);
+    }
+
+    @Override
+    public ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion) {
+      return new FromLastStep(applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueue(@Nullable String queueName) {
+      return new FromLastStep(applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueuePartitionKey(@Nullable String queuePartitionKey) {
+      return new FromLastStep(applicationVersion, queueName, queuePartitionKey);
+    }
   }
 
   /**
-   * Fork from a specific step number. Steps before this step are copied; execution starts at this
-   * step.
-   *
-   * @param step The step number (0-indexed function_id) to start execution from
+   * Fork from a specific step number (0-indexed {@code function_id}). Steps before this are copied;
+   * execution starts at this step.
    */
-  public ForkFromFailureOptions withFromStep(int step) {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        this.queueName,
-        this.queuePartitionKey,
-        this.fromLastFailure,
-        this.fromLastStep,
-        step,
-        this.fromStepName);
+  record FromStep(
+      int step,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey)
+      implements ForkFromFailureOptions {
+
+    public FromStep(int step) {
+      this(step, null, null, null);
+    }
+
+    @Override
+    public ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion) {
+      return new FromStep(step, applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueue(@Nullable String queueName) {
+      return new FromStep(step, applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueuePartitionKey(@Nullable String queuePartitionKey) {
+      return new FromStep(step, applicationVersion, queueName, queuePartitionKey);
+    }
   }
 
-  /**
-   * Fork from the last occurrence of a step with the given function name.
-   *
-   * @param stepName The function name of the step to fork from
-   */
-  public ForkFromFailureOptions withFromStepName(String stepName) {
-    return new ForkFromFailureOptions(
-        this.applicationVersion,
-        this.queueName,
-        this.queuePartitionKey,
-        this.fromLastFailure,
-        this.fromLastStep,
-        this.fromStep,
-        stepName);
+  /** Fork from the last occurrence of a step with the given function name. */
+  record FromStepName(
+      @NonNull String stepName,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey)
+      implements ForkFromFailureOptions {
+
+    public FromStepName {
+      Objects.requireNonNull(stepName, "stepName must not be null");
+    }
+
+    public FromStepName(String stepName) {
+      this(stepName, null, null, null);
+    }
+
+    @Override
+    public ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion) {
+      return new FromStepName(stepName, applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueue(@Nullable String queueName) {
+      return new FromStepName(stepName, applicationVersion, queueName, queuePartitionKey);
+    }
+
+    @Override
+    public ForkFromFailureOptions withQueuePartitionKey(@Nullable String queuePartitionKey) {
+      return new FromStepName(stepName, applicationVersion, queueName, queuePartitionKey);
+    }
   }
 }

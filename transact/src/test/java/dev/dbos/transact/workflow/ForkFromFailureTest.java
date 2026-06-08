@@ -64,8 +64,7 @@ public class ForkFromFailureTest {
     assertEquals(0, impl.step3Count);
 
     // Fork from failure: should re-execute from step2
-    var handle =
-        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastFailure());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromLastFailure());
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -91,8 +90,7 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step3Count);
 
     // No failure — should fall back to re-executing the last step (step3)
-    var handle =
-        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastFailure());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromLastFailure());
     assertEquals("hellohello", handle.getResult());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
 
@@ -113,7 +111,7 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step2Count);
     assertEquals(1, impl.step3Count);
 
-    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromLastStep());
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -136,7 +134,7 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step3Count);
 
     // Fork from function_id=1 (step2): step1 copied, step2 and step3 re-executed
-    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromStep(1));
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromStep(1));
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -159,8 +157,7 @@ public class ForkFromFailureTest {
 
     // Fork from the step named "stepThree": step1 and step2 copied, step3 re-executed
     var handle =
-        dbos.forkFromFailure(
-            workflowId, new ForkFromFailureOptions().withFromStepName("stepThree"));
+        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromStepName("stepThree"));
     assertEquals("hellohello", handle.getResult());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
 
@@ -182,8 +179,7 @@ public class ForkFromFailureTest {
     }
 
     var handles =
-        dbos.forkFromFailure(
-            List.of(wfid1, wfid2), new ForkFromFailureOptions().withFromLastStep());
+        dbos.forkFromFailure(List.of(wfid1, wfid2), new ForkFromFailureOptions.FromLastStep());
     assertEquals(2, handles.size());
     for (var h : handles) {
       assertNotNull(h.getResult());
@@ -192,30 +188,6 @@ public class ForkFromFailureTest {
     }
     assertTrue(dbos.retrieveWorkflow(wfid1).getStatus().wasForkedFrom());
     assertTrue(dbos.retrieveWorkflow(wfid2).getStatus().wasForkedFrom());
-  }
-
-  @Test
-  public void testNoModeThrows() throws Exception {
-    var workflowId = "testNoMode-%d".formatted(System.currentTimeMillis());
-    try (var o = new WorkflowOptions(workflowId).setContext()) {
-      proxy.threeStepWorkflow("hello");
-    }
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> dbos.forkFromFailure(workflowId, new ForkFromFailureOptions()));
-  }
-
-  @Test
-  public void testMultipleModesThrows() throws Exception {
-    var workflowId = "testMultiModes-%d".formatted(System.currentTimeMillis());
-    try (var o = new WorkflowOptions(workflowId).setContext()) {
-      proxy.threeStepWorkflow("hello");
-    }
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            dbos.forkFromFailure(
-                workflowId, new ForkFromFailureOptions().withFromLastFailure().withFromLastStep()));
   }
 
   @Test
@@ -228,7 +200,7 @@ public class ForkFromFailureTest {
         Exception.class,
         () ->
             dbos.forkFromFailure(
-                workflowId, new ForkFromFailureOptions().withFromStepName("nonExistentStep")));
+                workflowId, new ForkFromFailureOptions.FromStepName("nonExistentStep")));
   }
 
   @Test
@@ -244,7 +216,7 @@ public class ForkFromFailureTest {
     var handle =
         dbos.forkFromFailure(
             workflowId,
-            new ForkFromFailureOptions().withFromLastStep().withApplicationVersion(appVersion));
+            new ForkFromFailureOptions.FromLastStep().withApplicationVersion(appVersion));
     assertEquals(appVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
   }
@@ -262,7 +234,7 @@ public class ForkFromFailureTest {
     assertNotNull(originalVersion);
 
     // No applicationVersion specified: fork should inherit the original's version.
-    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions.FromLastStep());
     assertEquals(originalVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
   }
@@ -274,7 +246,7 @@ public class ForkFromFailureTest {
     // first.
     assertThrows(
         DBOSNonExistentWorkflowException.class,
-        () -> dbos.forkFromFailure(bogusId, new ForkFromFailureOptions().withFromStep(0)));
+        () -> dbos.forkFromFailure(bogusId, new ForkFromFailureOptions.FromStep(0)));
   }
 }
 

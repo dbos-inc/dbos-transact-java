@@ -876,7 +876,16 @@ public class Conductor implements AutoCloseable {
 
   private static ForkFromFailureOptions buildForkFromFailureOptions(
       ForkFromFailureRequest.ForkFromFailureBody body) {
-    ForkFromFailureOptions options = new ForkFromFailureOptions();
+    ForkFromFailureOptions options;
+    if (Boolean.TRUE.equals(body.from_last_failure)) {
+      options = new ForkFromFailureOptions.FromLastFailure();
+    } else if (Boolean.TRUE.equals(body.from_last_step)) {
+      options = new ForkFromFailureOptions.FromLastStep();
+    } else if (body.from_step != null) {
+      options = new ForkFromFailureOptions.FromStep(body.from_step);
+    } else {
+      options = new ForkFromFailureOptions.FromStepName(body.from_step_name);
+    }
     if (body.application_version != null) {
       options = options.withApplicationVersion(body.application_version);
     }
@@ -885,15 +894,6 @@ public class Conductor implements AutoCloseable {
     }
     if (body.queue_partition_key != null) {
       options = options.withQueuePartitionKey(body.queue_partition_key);
-    }
-    if (Boolean.TRUE.equals(body.from_last_failure)) {
-      options = options.withFromLastFailure();
-    } else if (Boolean.TRUE.equals(body.from_last_step)) {
-      options = options.withFromLastStep();
-    } else if (body.from_step != null) {
-      options = options.withFromStep(body.from_step);
-    } else if (body.from_step_name != null) {
-      options = options.withFromStepName(body.from_step_name);
     }
     return options;
   }

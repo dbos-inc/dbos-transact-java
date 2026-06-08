@@ -3,23 +3,23 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Options for forking a workflow. This includes: Specified ID for the new workflow Application
  * version to use for executing the new workflow Timeout to apply for the new workflow execution
  */
 public record ForkOptions(
-    String forkedWorkflowId,
-    String applicationVersion,
-    Timeout timeout,
-    String queueName,
-    String queuePartitionKey) {
+    @Nullable String forkedWorkflowId,
+    @Nullable String applicationVersion,
+    @Nullable Duration timeout,
+    @Nullable String queueName,
+    @Nullable String queuePartitionKey) {
 
   public ForkOptions {
-    if (timeout instanceof Timeout.Explicit explicit) {
-      if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException(
-            "ForkOptions explicit timeout must be a positive non-zero duration");
-      }
+    if (timeout != null && (timeout.isNegative() || timeout.isZero())) {
+      throw new IllegalArgumentException(
+          "ForkOptions timeout must be a positive non-zero duration");
     }
   }
 
@@ -37,7 +37,7 @@ public record ForkOptions(
    *
    * @param forkedWorkflowId ID to assign to the forked workflow.
    */
-  public ForkOptions withForkedWorkflowId(String forkedWorkflowId) {
+  public ForkOptions withForkedWorkflowId(@Nullable String forkedWorkflowId) {
     return new ForkOptions(
         forkedWorkflowId,
         this.applicationVersion,
@@ -51,20 +51,11 @@ public record ForkOptions(
    *
    * @param applicationVersion Application version to use for the new fork of the workflow
    */
-  public ForkOptions withApplicationVersion(String applicationVersion) {
+  public ForkOptions withApplicationVersion(@Nullable String applicationVersion) {
     return new ForkOptions(
         this.forkedWorkflowId,
         applicationVersion,
         this.timeout,
-        this.queueName,
-        this.queuePartitionKey);
-  }
-
-  public ForkOptions withTimeout(Timeout timeout) {
-    return new ForkOptions(
-        this.forkedWorkflowId,
-        this.applicationVersion,
-        timeout,
         this.queueName,
         this.queuePartitionKey);
   }
@@ -74,16 +65,22 @@ public record ForkOptions(
    *
    * @param timeout Duration to allow for the workflow to run, before canceling the workflow
    */
-  public ForkOptions withTimeout(Duration timeout) {
-    return withTimeout(Timeout.of(timeout));
+  public ForkOptions withTimeout(@Nullable Duration timeout) {
+    return new ForkOptions(
+        this.forkedWorkflowId,
+        this.applicationVersion,
+        timeout,
+        this.queueName,
+        this.queuePartitionKey);
   }
 
   public ForkOptions withTimeout(long value, TimeUnit unit) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
+  /** Returns a copy of this object with no timeout (clears any previously set timeout). */
   public ForkOptions withNoTimeout() {
-    return withTimeout(Timeout.none());
+    return withTimeout((Duration) null);
   }
 
   /**
@@ -105,7 +102,7 @@ public record ForkOptions(
    *
    * @param queueName Queue name to assign to the forked workflow
    */
-  public ForkOptions withQueue(String queueName) {
+  public ForkOptions withQueue(@Nullable String queueName) {
     return new ForkOptions(
         this.forkedWorkflowId,
         this.applicationVersion,
@@ -119,7 +116,7 @@ public record ForkOptions(
    *
    * @param queuePartitionKey Queue partition key to assign to the forked workflow
    */
-  public ForkOptions withQueuePartitionKey(String queuePartitionKey) {
+  public ForkOptions withQueuePartitionKey(@Nullable String queuePartitionKey) {
     return new ForkOptions(
         this.forkedWorkflowId,
         this.applicationVersion,
