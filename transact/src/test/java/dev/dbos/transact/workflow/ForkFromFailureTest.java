@@ -10,6 +10,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.util.List;
@@ -190,7 +191,10 @@ public class ForkFromFailureTest {
     assertEquals(2, handles.size());
     for (var h : handles) {
       assertNotNull(h.getResult());
+      assertEquals(wfid1.equals(h.getStatus().forkedFrom()) ? wfid1 : wfid2, h.getStatus().forkedFrom());
     }
+    assertTrue(dbos.retrieveWorkflow(wfid1).getStatus().wasForkedFrom());
+    assertTrue(dbos.retrieveWorkflow(wfid2).getStatus().wasForkedFrom());
   }
 
   @Test
@@ -246,6 +250,34 @@ public class ForkFromFailureTest {
             new ForkFromFailureOptions().withFromLastStep().withApplicationVersion(appVersion));
     assertEquals(appVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
+  }
+
+  @Test
+  public void testAppVersionFallsBackToOriginal() throws Exception {
+    var workflowId = "testAppVersionFallback-%d".formatted(System.currentTimeMillis());
+    try (var o = new WorkflowOptions(workflowId).setContext()) {
+      proxy.threeStepWorkflow("hello");
+    }
+
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    var originalVersion = dbos.retrieveWorkflow(workflowId).getStatus().appVersion();
+    assertNotNull(originalVersion);
+
+    // No applicationVersion specified: fork should inherit the original's version.
+    var handle =
+        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
+    assertEquals(originalVersion, handle.getStatus().appVersion());
+    assertEquals(workflowId, handle.getStatus().forkedFrom());
+  }
+
+  @Test
+  public void testNonExistentWorkflowThrows() {
+    var bogusId = UUID.randomUUID().toString();
+    // Use fromStep to bypass step resolution; the existence check inside the transaction fires first.
+    assertThrows(
+        DBOSNonExistentWorkflowException.class,
+        () -> dbos.forkFromFailure(bogusId, new ForkFromFailureOptions().withFromStep(0)));
   }
 }
 
