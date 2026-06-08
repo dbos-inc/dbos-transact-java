@@ -5,6 +5,7 @@ import java.util.List;
 public class CancelRequest extends BaseMessage {
   public String workflow_id;
   public List<String> workflow_ids;
+  public boolean cancel_children = false;
 
   public CancelRequest() {}
 

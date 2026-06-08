@@ -769,7 +769,7 @@ public class Conductor implements AutoCloseable {
                   ? request.workflow_ids
                   : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.cancelWorkflows(ids);
+            conductor.dbosExecutor.cancelWorkflows(ids, request.cancel_children);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when cancelling workflow(s) {}", ids, e);

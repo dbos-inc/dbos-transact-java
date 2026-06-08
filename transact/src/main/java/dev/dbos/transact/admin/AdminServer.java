@@ -207,7 +207,7 @@ public class AdminServer implements AutoCloseable {
 
     logger.info("cancel workflow {}", wfid);
 
-    dbosExecutor.cancelWorkflows(List.of(wfid));
+    dbosExecutor.cancelWorkflows(List.of(wfid), false);
     exchange.sendResponseHeaders(204, 0);
   }
 

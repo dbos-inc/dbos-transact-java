@@ -192,7 +192,7 @@ public class SystemDatabaseTest {
 
     // Cancel all five IDs in one call
     sysdb.cancelWorkflows(
-        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"));
+        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"), false);
 
     // PENDING ones become CANCELLED, and updated_at is refreshed
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
@@ -298,11 +298,69 @@ public class SystemDatabaseTest {
         WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
     long beforeCancel = System.currentTimeMillis();
-    sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
+    sysdb.cancelWorkflows(Arrays.asList("wf-id", null), false);
 
     var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
     assertEquals(WorkflowState.CANCELLED.name(), row.status());
     assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
+  }
+
+  @Test
+  public void testCancelWorkflowsWithChildren() throws Exception {
+    // Build a 3-level tree: parent -> 3 children -> 2 grandchildren each
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("parent").build(), 5, false, false);
+
+    for (var i = 0; i < 3; i++) {
+      var childId = "child-%d".formatted(i);
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(childId).parentWorkflowId("parent").build(),
+          5,
+          false,
+          false);
+
+      for (var j = 0; j < 2; j++) {
+        var grandchildId = "grandchild-%d-%d".formatted(i, j);
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(grandchildId).parentWorkflowId(childId).build(),
+            5,
+            false,
+            false);
+      }
+    }
+
+    // Without cancelChildren=true, only the parent is cancelled
+    sysdb.cancelWorkflows(List.of("parent"), false);
+    assertEquals(
+        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
+    for (var i = 0; i < 3; i++) {
+      assertEquals(
+          WorkflowState.PENDING.name(),
+          DBUtils.getWorkflowRow(dataSource, "child-%d".formatted(i)).status());
+      for (var j = 0; j < 2; j++) {
+        assertEquals(
+            WorkflowState.PENDING.name(),
+            DBUtils.getWorkflowRow(dataSource, "grandchild-%d-%d".formatted(i, j)).status());
+      }
+    }
+
+    // Reset parent to PENDING
+    DBUtils.setWorkflowState(dataSource, "parent", WorkflowState.PENDING.name());
+
+    // With cancelChildren=true, parent + all descendants are cancelled
+    sysdb.cancelWorkflows(List.of("parent"), true);
+    assertEquals(
+        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
+    for (var i = 0; i < 3; i++) {
+      assertEquals(
+          WorkflowState.CANCELLED.name(),
+          DBUtils.getWorkflowRow(dataSource, "child-%d".formatted(i)).status());
+      for (var j = 0; j < 2; j++) {
+        assertEquals(
+            WorkflowState.CANCELLED.name(),
+            DBUtils.getWorkflowRow(dataSource, "grandchild-%d-%d".formatted(i, j)).status());
+      }
+    }
   }
 
   @Test
@@ -339,21 +397,23 @@ public class SystemDatabaseTest {
     }
 
     for (var i = 0; i < 5; i++) {
-      var parentWfId = "wfid-2";
       var wfid = "childwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid).build();
-      sysdb.initWorkflowStatus(status, 5, false, false);
-      sysdb.recordChildWorkflow(
-          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid).parentWorkflowId("wfid-2").build(),
+          5,
+          false,
+          false);
     }
 
     for (var i = 0; i < 5; i++) {
-      var parentWfId = "childwfid-%d".formatted(i);
       var wfid = "grandchildwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid).build();
-      sysdb.initWorkflowStatus(status, 5, false, false);
-      sysdb.recordChildWorkflow(
-          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid)
+              .parentWorkflowId("childwfid-%d".formatted(i))
+              .build(),
+          5,
+          false,
+          false);
     }
 
     var children = sysdb.getWorkflowChildren("wfid-2");
