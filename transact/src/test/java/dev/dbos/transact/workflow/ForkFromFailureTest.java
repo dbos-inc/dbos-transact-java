@@ -20,12 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ForkFromFailureTest {
-
-  private static final Logger logger = LoggerFactory.getLogger(ForkFromFailureTest.class);
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -40,7 +36,7 @@ public class ForkFromFailureTest {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
 
-    impl = new ForkFromFailureServiceImpl(dbos);
+    impl = new ForkFromFailureServiceImpl();
     proxy = dbos.registerProxy(ForkFromFailureService.class, impl);
     impl.setProxy(proxy);
 
@@ -191,7 +187,8 @@ public class ForkFromFailureTest {
     assertEquals(2, handles.size());
     for (var h : handles) {
       assertNotNull(h.getResult());
-      assertEquals(wfid1.equals(h.getStatus().forkedFrom()) ? wfid1 : wfid2, h.getStatus().forkedFrom());
+      assertEquals(
+          wfid1.equals(h.getStatus().forkedFrom()) ? wfid1 : wfid2, h.getStatus().forkedFrom());
     }
     assertTrue(dbos.retrieveWorkflow(wfid1).getStatus().wasForkedFrom());
     assertTrue(dbos.retrieveWorkflow(wfid2).getStatus().wasForkedFrom());
@@ -265,8 +262,7 @@ public class ForkFromFailureTest {
     assertNotNull(originalVersion);
 
     // No applicationVersion specified: fork should inherit the original's version.
-    var handle =
-        dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
+    var handle = dbos.forkFromFailure(workflowId, new ForkFromFailureOptions().withFromLastStep());
     assertEquals(originalVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
   }
@@ -274,7 +270,8 @@ public class ForkFromFailureTest {
   @Test
   public void testNonExistentWorkflowThrows() {
     var bogusId = UUID.randomUUID().toString();
-    // Use fromStep to bypass step resolution; the existence check inside the transaction fires first.
+    // Use fromStep to bypass step resolution; the existence check inside the transaction fires
+    // first.
     assertThrows(
         DBOSNonExistentWorkflowException.class,
         () -> dbos.forkFromFailure(bogusId, new ForkFromFailureOptions().withFromStep(0)));
@@ -293,17 +290,12 @@ interface ForkFromFailureService {
 
 class ForkFromFailureServiceImpl implements ForkFromFailureService {
 
-  private final DBOS dbos;
   private ForkFromFailureService proxy;
 
   public int step1Count;
   public int step2Count;
   public int step3Count;
   public AtomicInteger step2FailCount = new AtomicInteger(0);
-
-  public ForkFromFailureServiceImpl(DBOS dbos) {
-    this.dbos = dbos;
-  }
 
   public void setProxy(ForkFromFailureService proxy) {
     this.proxy = proxy;

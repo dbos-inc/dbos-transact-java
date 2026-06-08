@@ -1394,10 +1394,18 @@ public class WorkflowDAO {
         }
 
         List<Long> timeoutMsValues =
-            workflowIds.stream().map(wid -> rawDataById.get(wid).timeoutMs()).collect(Collectors.toList());
+            workflowIds.stream()
+                .map(wid -> rawDataById.get(wid).timeoutMs())
+                .collect(Collectors.toList());
         batchInsertForkedStatuses(
-            conn, ctx.schema(), workflowIds, forkedIds, rawDataById,
-            options.applicationVersion(), options.queueName(), options.queuePartitionKey(),
+            conn,
+            ctx.schema(),
+            workflowIds,
+            forkedIds,
+            rawDataById,
+            options.applicationVersion(),
+            options.queueName(),
+            options.queuePartitionKey(),
             timeoutMsValues);
 
         markWasForkedFrom(conn, ctx.schema(), workflowIds);
@@ -1581,7 +1589,8 @@ public class WorkflowDAO {
         stmt.setString(p++, rd.configName());
         // Fall back to the original workflow's application_version when none is specified.
         // Matches TypeScript behavior; Python does not fall back (passes null).
-        stmt.setString(p++, applicationVersion != null ? applicationVersion : rd.applicationVersion());
+        stmt.setString(
+            p++, applicationVersion != null ? applicationVersion : rd.applicationVersion());
         stmt.setString(p++, rd.applicationId());
         stmt.setString(p++, rd.authenticatedUser());
         stmt.setString(p++, rd.authenticatedRoles());
@@ -1747,18 +1756,25 @@ public class WorkflowDAO {
         }
 
         batchInsertForkedStatuses(
-            conn, ctx.schema(),
-            List.of(originalWorkflowId), List.of(forkedWorkflowId),
+            conn,
+            ctx.schema(),
+            List.of(originalWorkflowId),
+            List.of(forkedWorkflowId),
             rawDataById,
-            options.applicationVersion(), options.queueName(), options.queuePartitionKey(),
+            options.applicationVersion(),
+            options.queueName(),
+            options.queuePartitionKey(),
             Collections.singletonList(timeoutMS));
 
         markWasForkedFrom(conn, ctx.schema(), List.of(originalWorkflowId));
 
         if (startStep > 0) {
           batchCopyWorkflowData(
-              conn, ctx.schema(),
-              List.of(originalWorkflowId), List.of(forkedWorkflowId), List.of(startStep));
+              conn,
+              ctx.schema(),
+              List.of(originalWorkflowId),
+              List.of(forkedWorkflowId),
+              List.of(startStep));
         }
 
         conn.commit();
