@@ -1,17 +1,19 @@
 package dev.dbos.transact.workflow;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Options for forking a workflow from a failure point. Exactly one of fromLastFailure,
  * fromLastStep, fromStep, or fromStepName must be specified via the with* builder methods.
  */
 public record ForkFromFailureOptions(
-    String applicationVersion,
-    String queueName,
-    String queuePartitionKey,
-    Boolean fromLastFailure,
-    Boolean fromLastStep,
-    Integer fromStep,
-    String fromStepName) {
+    @Nullable String applicationVersion,
+    @Nullable String queueName,
+    @Nullable String queuePartitionKey,
+    @Nullable Boolean fromLastFailure,
+    @Nullable Boolean fromLastStep,
+    @Nullable Integer fromStep,
+    @Nullable String fromStepName) {
 
   public ForkFromFailureOptions() {
     this(null, null, null, null, null, null, null);

@@ -12,6 +12,7 @@ mavenPublishing {
 
 dependencies {
   api(project(":transact"))
+  implementation(libs.slf4j.api)
   compileOnly(libs.spring.boot.autoconfigure)
   compileOnly(libs.spring.aop)
   compileOnly(libs.aspectjweaver)
