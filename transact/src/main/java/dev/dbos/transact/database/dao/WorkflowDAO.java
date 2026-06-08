@@ -43,6 +43,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1338,6 +1339,7 @@ public class WorkflowDAO {
       String name,
       String className,
       String configName,
+      String applicationVersion,
       String applicationId,
       String authenticatedUser,
       String authenticatedRoles,
@@ -1391,9 +1393,14 @@ public class WorkflowDAO {
           }
         }
 
-        batchInsertForkedStatuses(conn, ctx.schema(), workflowIds, forkedIds, rawDataById, options);
+        List<Long> timeoutMsValues =
+            workflowIds.stream().map(wid -> rawDataById.get(wid).timeoutMs()).collect(Collectors.toList());
+        batchInsertForkedStatuses(
+            conn, ctx.schema(), workflowIds, forkedIds, rawDataById,
+            options.applicationVersion(), options.queueName(), options.queuePartitionKey(),
+            timeoutMsValues);
 
-        batchMarkWasForkedFrom(conn, ctx.schema(), workflowIds);
+        markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
         // Build lists of only the workflows that need data copied (startStep > 0)
         List<String> copyOrigIds = new ArrayList<>();
@@ -1493,8 +1500,8 @@ public class WorkflowDAO {
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
     String sql =
         """
-            SELECT workflow_uuid, name, class_name, config_name, application_id,
-                   authenticated_user, authenticated_roles, assumed_role,
+            SELECT workflow_uuid, name, class_name, config_name, application_version,
+                   application_id, authenticated_user, authenticated_roles, assumed_role,
                    inputs, serialization, workflow_timeout_ms
             FROM "%s".workflow_status
             WHERE workflow_uuid = ANY(?)
@@ -1516,6 +1523,7 @@ public class WorkflowDAO {
                     rs.getString("name"),
                     rs.getString("class_name"),
                     rs.getString("config_name"),
+                    rs.getString("application_version"),
                     rs.getString("application_id"),
                     rs.getString("authenticated_user"),
                     rs.getString("authenticated_roles"),
@@ -1538,7 +1546,10 @@ public class WorkflowDAO {
       List<String> origIds,
       List<String> forkIds,
       Map<String, RawStatusData> rawDataById,
-      ForkFromFailureOptions options)
+      String applicationVersion,
+      String queueName,
+      String queuePartitionKey,
+      List<Long> timeoutMsValues)
       throws SQLException {
 
     StringBuilder sql =
@@ -1568,16 +1579,17 @@ public class WorkflowDAO {
         stmt.setString(p++, rd.name());
         stmt.setString(p++, rd.className());
         stmt.setString(p++, rd.configName());
-        stmt.setString(p++, options.applicationVersion());
+        // Fall back to the original workflow's application_version when none is specified.
+        // Matches TypeScript behavior; Python does not fall back (passes null).
+        stmt.setString(p++, applicationVersion != null ? applicationVersion : rd.applicationVersion());
         stmt.setString(p++, rd.applicationId());
         stmt.setString(p++, rd.authenticatedUser());
         stmt.setString(p++, rd.authenticatedRoles());
         stmt.setString(p++, rd.assumedRole());
-        stmt.setString(
-            p++, Objects.requireNonNullElse(options.queueName(), Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setString(p++, options.queuePartitionKey());
+        stmt.setString(p++, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
+        stmt.setString(p++, queuePartitionKey);
         stmt.setString(p++, rd.inputs());
-        stmt.setObject(p++, rd.timeoutMs());
+        stmt.setObject(p++, timeoutMsValues.get(i));
         stmt.setString(p++, origIds.get(i));
         stmt.setString(p++, rd.serialization());
       }
@@ -1585,7 +1597,7 @@ public class WorkflowDAO {
     }
   }
 
-  private static void batchMarkWasForkedFrom(Connection conn, String schema, List<String> origIds)
+  private static void markWasForkedFrom(Connection conn, String schema, List<String> origIds)
       throws SQLException {
     String sql =
         """
@@ -1709,49 +1721,45 @@ public class WorkflowDAO {
 
     options = Objects.requireNonNullElseGet(options, ForkOptions::new);
 
-    var status = getWorkflowStatus(ctx, originalWorkflowId);
-    if (status == null) {
-      throw new DBOSNonExistentWorkflowException(originalWorkflowId);
-    }
-
     String forkedWorkflowId =
         Objects.requireNonNullElseGet(
             options.forkedWorkflowId(), () -> UUID.randomUUID().toString());
 
     logger.debug("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
 
-    var timeout = Objects.requireNonNullElseGet(options.timeout(), Timeout::inherit);
-    Long timeoutMS = null;
-    if (timeout instanceof Timeout.Inherit) {
-      timeoutMS = status.timeoutMs();
-    } else if (timeout instanceof Timeout.Explicit explicit) {
-      timeoutMS = explicit.value().toMillis();
-    }
-
     try (var conn = ctx.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
-        // Create entry for forked workflow
-        insertForkedWorkflowStatus(
-            conn,
-            ctx.schema(),
-            ctx.serializer(),
-            originalWorkflowId,
-            forkedWorkflowId,
-            status,
-            options.applicationVersion(),
-            timeoutMS,
-            options.queueName(),
-            options.queuePartitionKey());
+        Map<String, RawStatusData> rawDataById =
+            fetchRawStatusData(conn, ctx.schema(), List.of(originalWorkflowId));
+        if (!rawDataById.containsKey(originalWorkflowId)) {
+          throw new DBOSNonExistentWorkflowException(originalWorkflowId);
+        }
+        RawStatusData rd = rawDataById.get(originalWorkflowId);
 
-        // Copy operation outputs if starting from step > 0
-        if (startStep > 0) {
-          copyOperationOutputs(conn, ctx.schema(), originalWorkflowId, forkedWorkflowId, startStep);
+        var timeout = Objects.requireNonNullElseGet(options.timeout(), Timeout::inherit);
+        Long timeoutMS = null;
+        if (timeout instanceof Timeout.Inherit) {
+          timeoutMS = rd.timeoutMs();
+        } else if (timeout instanceof Timeout.Explicit explicit) {
+          timeoutMS = explicit.value().toMillis();
         }
 
-        // Mark the original workflow as having been forked
-        markWasForkedFrom(conn, ctx.schema(), originalWorkflowId);
+        batchInsertForkedStatuses(
+            conn, ctx.schema(),
+            List.of(originalWorkflowId), List.of(forkedWorkflowId),
+            rawDataById,
+            options.applicationVersion(), options.queueName(), options.queuePartitionKey(),
+            Collections.singletonList(timeoutMS));
+
+        markWasForkedFrom(conn, ctx.schema(), List.of(originalWorkflowId));
+
+        if (startStep > 0) {
+          batchCopyWorkflowData(
+              conn, ctx.schema(),
+              List.of(originalWorkflowId), List.of(forkedWorkflowId), List.of(startStep));
+        }
 
         conn.commit();
         return forkedWorkflowId;
@@ -1760,165 +1768,6 @@ public class WorkflowDAO {
         conn.rollback();
         throw e;
       }
-    }
-  }
-
-  private static void insertForkedWorkflowStatus(
-      Connection conn,
-      String schema,
-      DBOSSerializer serializer,
-      String originalWorkflowId,
-      String forkedWorkflowId,
-      WorkflowStatus originalStatus,
-      String applicationVersion,
-      Long timeoutMS,
-      String queueName,
-      String queuePartitionKey)
-      throws SQLException {
-    Objects.requireNonNull(schema);
-
-    String sql =
-        """
-          INSERT INTO "%s".workflow_status (
-            workflow_uuid, status, name, class_name, config_name, application_version, application_id,
-            authenticated_user, authenticated_roles, assumed_role, queue_name, queue_partition_key, inputs,
-            workflow_timeout_ms, forked_from, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-            .formatted(schema);
-
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, forkedWorkflowId);
-      stmt.setString(2, WorkflowState.ENQUEUED.name());
-      stmt.setString(3, originalStatus.workflowName());
-      stmt.setString(4, originalStatus.className());
-      stmt.setString(5, originalStatus.instanceName());
-      stmt.setString(6, applicationVersion);
-      stmt.setString(7, originalStatus.appId());
-      stmt.setString(8, originalStatus.authenticatedUser());
-      stmt.setString(
-          9,
-          originalStatus.authenticatedRoles() == null
-              ? null
-              : JsonUtility.toJson(originalStatus.authenticatedRoles()));
-      stmt.setString(10, originalStatus.assumedRole());
-      stmt.setString(11, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-      stmt.setString(12, queuePartitionKey);
-      stmt.setString(
-          13,
-          SerializationUtil.serializeArgs(
-                  originalStatus.input(), null, originalStatus.serialization(), serializer)
-              .serializedValue());
-      stmt.setObject(14, timeoutMS);
-      stmt.setString(15, originalWorkflowId);
-      stmt.setString(16, originalStatus.serialization());
-
-      stmt.executeUpdate();
-    }
-  }
-
-  private static void markWasForkedFrom(Connection conn, String schema, String workflowId)
-      throws SQLException {
-    String sql =
-        """
-          UPDATE "%s".workflow_status
-          SET was_forked_from = TRUE
-          WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      stmt.executeUpdate();
-    }
-  }
-
-  private static void copyOperationOutputs(
-      Connection conn,
-      String schema,
-      String originalWorkflowId,
-      String forkedWorkflowId,
-      int startStep)
-      throws SQLException {
-
-    String stepOutputsSql =
-        """
-          INSERT INTO "%1$s".operation_outputs
-              (workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization)
-          SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
-              FROM "%1$s".operation_outputs
-              WHERE workflow_uuid = ? AND function_id < ?
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(stepOutputsSql)) {
-      stmt.setString(1, forkedWorkflowId);
-      stmt.setString(2, originalWorkflowId);
-      stmt.setInt(3, startStep);
-
-      int rowsCopied = stmt.executeUpdate();
-      logger.debug("Copied " + rowsCopied + " operation outputs to forked workflow");
-    }
-
-    var eventHistorySql =
-        """
-          INSERT INTO "%1$s".workflow_events_history
-            (workflow_uuid, function_id, key, value, serialization)
-          SELECT ? as workflow_uuid, function_id, key, value, serialization
-            FROM "%1$s".workflow_events_history
-            WHERE workflow_uuid = ? AND function_id < ?
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(eventHistorySql)) {
-      stmt.setString(1, forkedWorkflowId);
-      stmt.setString(2, originalWorkflowId);
-      stmt.setInt(3, startStep);
-
-      int rowsCopied = stmt.executeUpdate();
-      logger.debug("Copied " + rowsCopied + " workflow_events_history to forked workflow");
-    }
-
-    var eventSql =
-        """
-          INSERT INTO "%1$s".workflow_events
-            (workflow_uuid, key, value, serialization)
-          SELECT ?, weh1.key, weh1.value, weh1.serialization
-            FROM "%1$s".workflow_events_history weh1
-            WHERE weh1.workflow_uuid = ?
-              AND weh1.function_id = (
-                SELECT MAX(weh2.function_id)
-                  FROM "%1$s".workflow_events_history weh2
-                  WHERE weh2.workflow_uuid = ?
-                    AND weh2.key = weh1.key
-                    AND weh2.function_id < ?
-              )
-        """
-            .formatted(schema);
-
-    try (var stmt = conn.prepareStatement(eventSql)) {
-      stmt.setString(1, forkedWorkflowId);
-      stmt.setString(2, originalWorkflowId);
-      stmt.setString(3, originalWorkflowId);
-      stmt.setInt(4, startStep);
-
-      int rowsCopied = stmt.executeUpdate();
-      logger.debug("Copied " + rowsCopied + " workflow_events to forked workflow");
-    }
-
-    var streamsSql =
-        """
-          INSERT INTO "%1$s".streams
-            (workflow_uuid, function_id, key, value, "offset", serialization)
-          SELECT ? as workflow_uuid, function_id, key, value, "offset", serialization
-            FROM "%1$s".streams
-            WHERE workflow_uuid = ? AND function_id < ?
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(streamsSql)) {
-      stmt.setString(1, forkedWorkflowId);
-      stmt.setString(2, originalWorkflowId);
-      stmt.setInt(3, startStep);
-
-      int rowsCopied = stmt.executeUpdate();
-      logger.debug("Copied " + rowsCopied + " streams to forked workflow");
     }
   }
 
