@@ -170,28 +170,40 @@ public class TransactionalStepFactory {
             return prev.get().<Object, E>toResult(serializer);
           }
 
-          var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
-          TransactionStatus status = txManager.getTransaction(txDef);
-          try {
-            Object result = supplier.execute();
-            Connection conn = DataSourceUtils.getConnection(dataSource);
-            recordOutput(conn, workflowId, stepId, result);
-            txManager.commit(status);
-            return result;
-          } catch (PostgresStepFactory.StepConflictException conflict) {
-            txManager.rollback(status);
-            return checkExecution(workflowId, stepId, stepName)
-                .orElseThrow(
-                    () ->
-                        new IllegalStateException(
-                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
-                                .formatted(workflowId, stepId, stepName),
-                            conflict))
-                .<Object, E>toResult(serializer);
-          } catch (Exception e) {
-            if (!status.isCompleted()) txManager.rollback(status);
-            recordError(workflowId, stepId, e);
-            throw (E) e;
+          long retryWaitMs = 1L;
+          while (true) {
+            var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
+            TransactionStatus status = txManager.getTransaction(txDef);
+            try {
+              Object result = supplier.execute();
+              Connection conn = DataSourceUtils.getConnection(dataSource);
+              recordOutput(conn, workflowId, stepId, result);
+              txManager.commit(status);
+              return result;
+            } catch (PostgresStepFactory.StepConflictException conflict) {
+              if (!status.isCompleted()) txManager.rollback(status);
+              return checkExecution(workflowId, stepId, stepName)
+                  .orElseThrow(
+                      () ->
+                          new IllegalStateException(
+                              "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                  .formatted(workflowId, stepId, stepName),
+                              conflict))
+                  .<Object, E>toResult(serializer);
+            } catch (Exception e) {
+              if (!status.isCompleted()) txManager.rollback(status);
+              if (PostgresStepFactory.isSerializationFailure(e)) {
+                try {
+                  Thread.sleep(retryWaitMs);
+                } catch (InterruptedException ie) {
+                  Thread.currentThread().interrupt();
+                }
+                retryWaitMs = Math.min((long) (retryWaitMs * 1.5), 2000L);
+                continue;
+              }
+              recordError(workflowId, stepId, e);
+              throw (E) e;
+            }
           }
         },
         stepName);

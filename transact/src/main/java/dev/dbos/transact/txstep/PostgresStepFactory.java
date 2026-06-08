@@ -70,6 +70,20 @@ public abstract class PostgresStepFactory {
     return false;
   }
 
+  public static boolean isSerializationFailure(Exception e) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof SQLException sq) {
+        var state = sq.getSQLState();
+        if ("40001".equals(state) || "40P01".equals(state)) return true;
+      }
+    }
+    return false;
+  }
+
+  private static final long RETRY_WAIT_INITIAL_MS = 1L;
+  private static final double RETRY_BACKOFF_FACTOR = 1.5;
+  private static final long RETRY_WAIT_MAX_MS = 2000L;
+
   @SuppressWarnings("unchecked")
   protected <R, X extends Exception> R runTxStep(TxStepFunction<R, X> execute, String stepName)
       throws X {
@@ -83,11 +97,24 @@ public abstract class PostgresStepFactory {
             return prev.get().<R, X>toResult(serializer);
           }
 
-          try {
-            return execute.execute(workflowId, stepId);
-          } catch (Exception e) {
-            recordError(workflowId, stepId, e);
-            throw (X) e;
+          long retryWaitMs = RETRY_WAIT_INITIAL_MS;
+          while (true) {
+            try {
+              return execute.execute(workflowId, stepId);
+            } catch (Exception e) {
+              if (isSerializationFailure(e)) {
+                try {
+                  Thread.sleep(retryWaitMs);
+                } catch (InterruptedException ie) {
+                  Thread.currentThread().interrupt();
+                }
+                retryWaitMs =
+                    Math.min((long) (retryWaitMs * RETRY_BACKOFF_FACTOR), RETRY_WAIT_MAX_MS);
+                continue;
+              }
+              recordError(workflowId, stepId, e);
+              throw (X) e;
+            }
           }
         },
         stepName);

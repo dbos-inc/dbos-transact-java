@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -38,12 +39,16 @@ interface FactoryTestService {
   TestResult insertThenReadWorkflow(String user) throws SQLException;
 
   TestResult conflictWorkflow(String user) throws SQLException;
+
+  TestResult serializationRetryWorkflow(String user) throws SQLException;
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
 
   private final JdbcStepFactory stepFactory;
   private final DataSource dataSource;
+
+  final AtomicInteger retryAttempts = new AtomicInteger();
 
   public FactoryTestServiceImpl(JdbcStepFactory stepFactory, DataSource dataSource) {
     this.stepFactory = stepFactory;
@@ -113,6 +118,19 @@ class FactoryTestServiceImpl implements FactoryTestService {
   public TestResult insertThenReadWorkflow(String user) throws SQLException {
     stepFactory.txStep((Connection c) -> insertGreeting(c, user), "insertGreeting");
     return stepFactory.txStep((Connection c) -> readGreeting(c, user), "readGreeting");
+  }
+
+  @Override
+  @Workflow
+  public TestResult serializationRetryWorkflow(String user) throws SQLException {
+    return stepFactory.txStep(
+        (Connection c) -> {
+          if (retryAttempts.incrementAndGet() <= 2) {
+            throw new SQLException("simulated serialization failure", "40001");
+          }
+          return insertGreeting(c, user);
+        },
+        "serializationRetry");
   }
 
   // Simulates a concurrent winner committing a result while this executor's transaction is still
@@ -443,6 +461,25 @@ public class JdbcStepFactoryTest {
     assertNull(row.error());
     var output = SerializationUtil.deserializeValue(row.output(), row.serialization(), null);
     assertEquals(new FactoryTestService.TestResult(user, 99), output);
+  }
+
+  @Test
+  public void testSerializationRetry() throws Exception {
+    var wfid = "wf-ser-retry";
+    var user = "retryUser";
+
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      var result = proxy.serializationRetryWorkflow(user);
+      assertEquals(1, result.greetCount());
+      assertEquals(user, result.user());
+    }
+
+    assertEquals(3, impl.retryAttempts.get()); // 2 failures + 1 success
+    assertEquals(1, getGreetCount(user));
+    var rows = DBUtils.getTxStepRows(dataSource, wfid);
+    assertEquals(1, rows.size());
+    assertNotNull(rows.get(0).output());
+    assertNull(rows.get(0).error());
   }
 
   @Test
