@@ -4,7 +4,6 @@ import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -856,13 +855,10 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           ForkFromFailureRequest request = (ForkFromFailureRequest) message;
-          if (request.body == null || request.body.workflow_ids == null) {
-            return new ForkFromFailureResponse(request, null, "Invalid Fork From Failure Request");
-          }
           try {
-            ForkFromFailureOptions options = buildForkFromFailureOptions(request.body);
             var handles =
-                conductor.dbosExecutor.forkFromFailure(request.body.workflow_ids, options);
+                conductor.dbosExecutor.forkFromFailure(
+                    request.body.workflow_ids, request.toOptions());
             var forkedIds =
                 handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
             return new ForkFromFailureResponse(request, forkedIds);
@@ -872,30 +868,6 @@ public class Conductor implements AutoCloseable {
             return new ForkFromFailureResponse(request, e);
           }
         });
-  }
-
-  private static ForkFromFailureOptions buildForkFromFailureOptions(
-      ForkFromFailureRequest.ForkFromFailureBody body) {
-    ForkFromFailureOptions options;
-    if (Boolean.TRUE.equals(body.from_last_failure)) {
-      options = new ForkFromFailureOptions.FromLastFailure();
-    } else if (Boolean.TRUE.equals(body.from_last_step)) {
-      options = new ForkFromFailureOptions.FromLastStep();
-    } else if (body.from_step != null) {
-      options = new ForkFromFailureOptions.FromStep(body.from_step);
-    } else {
-      options = new ForkFromFailureOptions.FromStepName(body.from_step_name);
-    }
-    if (body.application_version != null) {
-      options = options.withApplicationVersion(body.application_version);
-    }
-    if (body.queue_name != null) {
-      options = options.withQueue(body.queue_name);
-    }
-    if (body.queue_partition_key != null) {
-      options = options.withQueuePartitionKey(body.queue_partition_key);
-    }
-    return options;
   }
 
   static CompletableFuture<BaseResponse> handleListWorkflows(
