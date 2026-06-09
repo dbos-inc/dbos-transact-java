@@ -13,7 +13,6 @@ import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.Debouncer;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -940,35 +939,6 @@ public class DBOS implements AutoCloseable {
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep) {
     return forkWorkflow(workflowId, startStep, new ForkOptions());
-  }
-
-  /**
-   * Fork a single workflow from the point determined by the given options. The mode
-   * (fromLastFailure, fromLastStep, fromStep, or fromStepName) controls which step the fork
-   * re-executes from.
-   *
-   * @param workflowId ID of the workflow to fork
-   * @param options Fork-from-failure options; exactly one mode must be set
-   * @return handle to the newly forked workflow
-   */
-  public @NonNull WorkflowHandle<Object, Exception> forkFromFailure(
-      @NonNull String workflowId, @NonNull ForkFromFailureOptions options) {
-    var handles = forkFromFailure(List.of(workflowId), options);
-    return handles.get(0);
-  }
-
-  /**
-   * Fork multiple workflows from the point determined by the given options. The mode
-   * (fromLastFailure, fromLastStep, fromStep, or fromStepName) controls which step each fork
-   * re-executes from.
-   *
-   * @param workflowIds IDs of the workflows to fork
-   * @param options Fork-from-failure options; exactly one mode must be set
-   * @return handles to the newly forked workflows, in the same order as workflowIds
-   */
-  public @NonNull List<WorkflowHandle<Object, Exception>> forkFromFailure(
-      @NonNull List<String> workflowIds, @NonNull ForkFromFailureOptions options) {
-    return ensureLaunched("forkFromFailure").forkFromFailure(workflowIds, options);
   }
 
   /**
