@@ -27,6 +27,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -652,6 +653,25 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS.forkWorkflow",
             null);
     return retrieveWorkflow(forkedId);
+  }
+
+  public List<WorkflowHandle<Object, Exception>> forkFromFailure(
+      List<String> workflowIds, ForkFromFailureOptions options) {
+
+    List<String> forkedIds =
+        this.runDbosFunctionAsStep(
+            () -> {
+              logger.info("Forking {} workflow(s) from failure", workflowIds.size());
+
+              validateQueue(options.queueName(), options.queuePartitionKey());
+
+              return systemDatabase.forkFromFailure(workflowIds, options);
+            },
+            "DBOS.forkFromFailure",
+            null);
+    return forkedIds.stream()
+        .map(id -> (WorkflowHandle<Object, Exception>) retrieveWorkflow(id))
+        .collect(Collectors.toList());
   }
 
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {

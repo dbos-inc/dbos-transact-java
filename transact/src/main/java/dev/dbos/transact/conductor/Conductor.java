@@ -700,6 +700,7 @@ public class Conductor implements AutoCloseable {
       case EXECUTOR_INFO -> handleExecutorInfo(this, message);
       case EXIST_PENDING_WORKFLOWS -> handleExistPendingWorkflows(this, message);
       case EXPORT_WORKFLOW -> handleExportWorkflow(this, message, ws);
+      case FORK_FROM_FAILURE -> handleForkFromFailure(this, message);
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_QUEUE -> handleGetQueue(this, message);
@@ -845,6 +846,26 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when forking workflow {}", request, e);
             return new ForkWorkflowResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleForkFromFailure(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ForkFromFailureRequest request = (ForkFromFailureRequest) message;
+          try {
+            var options = request.toOptions();
+            var handles =
+                conductor.dbosExecutor.forkFromFailure(request.body.workflow_ids, options);
+            var forkedIds =
+                handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
+            return new ForkFromFailureResponse(request, forkedIds);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when forking workflows from failure {}", request, e);
+            return new ForkFromFailureResponse(request, e);
           }
         });
   }
