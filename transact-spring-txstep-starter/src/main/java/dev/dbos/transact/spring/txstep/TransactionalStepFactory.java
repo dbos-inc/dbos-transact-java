@@ -22,6 +22,7 @@ import javax.sql.DataSource;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 /**
@@ -137,9 +138,14 @@ public class TransactionalStepFactory {
    * @param supplier the step body; typically {@code () -> pjp.proceed()} from the aspect
    * @param stepName stable name for the step within the workflow
    */
-  @SuppressWarnings("unchecked")
   public <E extends Exception> Object runTransactionalStep(
       ThrowingSupplier<Object, E> supplier, String stepName) throws E {
+    return runTransactionalStep(supplier, stepName, Isolation.DEFAULT);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <E extends Exception> Object runTransactionalStep(
+      ThrowingSupplier<Object, E> supplier, String stepName, Isolation isolation) throws E {
     // If a @TransactionalStep method is called outside a workflow or inside a step, execute the
     // supplier as a standard @Transactional method without any of the durable execution bookkeeping
     if (!DBOS.inWorkflow() || DBOS.inStep()) {
@@ -170,28 +176,42 @@ public class TransactionalStepFactory {
             return prev.get().<Object, E>toResult(serializer);
           }
 
-          var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
-          TransactionStatus status = txManager.getTransaction(txDef);
-          try {
-            Object result = supplier.execute();
-            Connection conn = DataSourceUtils.getConnection(dataSource);
-            recordOutput(conn, workflowId, stepId, result);
-            txManager.commit(status);
-            return result;
-          } catch (PostgresStepFactory.StepConflictException conflict) {
-            txManager.rollback(status);
-            return checkExecution(workflowId, stepId, stepName)
-                .orElseThrow(
-                    () ->
-                        new IllegalStateException(
-                            "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
-                                .formatted(workflowId, stepId, stepName),
-                            conflict))
-                .<Object, E>toResult(serializer);
-          } catch (Exception e) {
-            if (!status.isCompleted()) txManager.rollback(status);
-            recordError(workflowId, stepId, e);
-            throw (E) e;
+          long retryWaitMs = 1L;
+          while (true) {
+            var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
+            txDef.setIsolationLevel(isolation.value());
+            TransactionStatus status = txManager.getTransaction(txDef);
+            try {
+              Object result = supplier.execute();
+              Connection conn = DataSourceUtils.getConnection(dataSource);
+              recordOutput(conn, workflowId, stepId, result);
+              txManager.commit(status);
+              return result;
+            } catch (PostgresStepFactory.StepConflictException conflict) {
+              if (!status.isCompleted()) txManager.rollback(status);
+              return checkExecution(workflowId, stepId, stepName)
+                  .orElseThrow(
+                      () ->
+                          new IllegalStateException(
+                              "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
+                                  .formatted(workflowId, stepId, stepName),
+                              conflict))
+                  .<Object, E>toResult(serializer);
+            } catch (Exception e) {
+              if (!status.isCompleted()) txManager.rollback(status);
+              if (PostgresStepFactory.isSerializationFailure(e)) {
+                try {
+                  Thread.sleep(retryWaitMs);
+                } catch (InterruptedException ie) {
+                  Thread.currentThread().interrupt();
+                  throw new RuntimeException("Interrupted during serialization retry backoff", ie);
+                }
+                retryWaitMs = Math.min((long) (retryWaitMs * 1.5), 2000L);
+                continue;
+              }
+              recordError(workflowId, stepId, e);
+              throw (E) e;
+            }
           }
         },
         stepName);

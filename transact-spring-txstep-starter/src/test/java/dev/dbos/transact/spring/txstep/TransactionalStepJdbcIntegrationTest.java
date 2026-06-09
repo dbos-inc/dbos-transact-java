@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Isolation;
 
 public class TransactionalStepJdbcIntegrationTest {
 
@@ -43,6 +44,11 @@ public class TransactionalStepJdbcIntegrationTest {
     public Order doError(String orderId, String item, int qty) {
       jdbc.update("INSERT INTO orders(id, item, qty) VALUES (?, ?, ?)", orderId, item, qty);
       throw new RuntimeException("intentional failure");
+    }
+
+    @TransactionalStep(isolationLevel = Isolation.SERIALIZABLE)
+    public String checkIsolationLevel() {
+      return jdbc.queryForObject("SELECT current_setting('transaction_isolation')", String.class);
     }
   }
 
@@ -94,6 +100,11 @@ public class TransactionalStepJdbcIntegrationTest {
     @Workflow
     public Order processOrderViaDbosStep(String orderId, String item, int qty) {
       return dbos.runStep(() -> steps.placeOrder(orderId, item, qty), "processOrderViaDbosStep");
+    }
+
+    @Workflow
+    public String checkIsolationLevel() {
+      return steps.checkIsolationLevel();
     }
   }
 
@@ -180,6 +191,21 @@ public class TransactionalStepJdbcIntegrationTest {
                 assertThat(rows).hasSize(1);
                 assertThat(rows.get(0).output()).isNotNull();
                 assertThat(rows.get(0).error()).isNull();
+              });
+    }
+  }
+
+  @Test
+  void isolationLevel() {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                try (var _o = new WorkflowOptions("wf-jdbc-int-iso").setContext()) {
+                  assertThat(workflow.checkIsolationLevel()).isEqualTo("serializable");
+                }
               });
     }
   }

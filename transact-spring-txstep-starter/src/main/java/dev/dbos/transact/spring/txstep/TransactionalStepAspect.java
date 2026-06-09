@@ -29,7 +29,6 @@ public class TransactionalStepAspect {
     if (stepName.isEmpty()) {
       stepName = ((MethodSignature) pjp.getSignature()).getName();
     }
-    String resolvedName = stepName;
     try {
       return factory.runTransactionalStep(
           () -> {
@@ -41,7 +40,8 @@ public class TransactionalStepAspect {
               throw new WrappedThrowableException(t);
             }
           },
-          resolvedName);
+          stepName,
+          transactionalStep.isolationLevel());
     } catch (WrappedThrowableException e) {
       throw e.getWrappedThrowable();
     }

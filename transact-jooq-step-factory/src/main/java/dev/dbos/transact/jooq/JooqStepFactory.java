@@ -3,7 +3,9 @@ package dev.dbos.transact.jooq;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.txstep.IsolationLevel;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.StepFactoryOptions;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -87,27 +89,44 @@ public class JooqStepFactory extends PostgresStepFactory {
    * @return the value returned by {@code callback}
    */
   public <T> T txStepResult(TransactionalCallable<T> callback, String stepName) {
+    return txStepResult(callback, new StepFactoryOptions(stepName));
+  }
+
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a jOOQ transaction.
+   *
+   * <p>Behaves identically to {@link #txStepResult(TransactionalCallable, String)} but accepts a
+   * {@link StepFactoryOptions} to control the step name and transaction isolation level.
+   *
+   * @param <T> the return type of the callback
+   * @param callback the database work to perform; receives a jOOQ {@link Configuration} with an
+   *     open transaction and must not commit or close the underlying connection
+   * @param options step name and optional isolation level override
+   * @return the value returned by {@code callback}
+   */
+  public <T> T txStepResult(TransactionalCallable<T> callback, StepFactoryOptions options) {
     return runTxStep(
         (wfId, stepId) -> {
           try {
             return dsl.transactionResult(
                 trx -> {
+                  applyIsolationLevel(trx, options.isolationLevel());
                   var result = callback.run(trx);
                   recordOutput(trx, wfId, stepId, result);
                   return result;
                 });
           } catch (StepConflictException e) {
-            return checkExecution(wfId, stepId, stepName)
+            return checkExecution(wfId, stepId, options.name())
                 .orElseThrow(
                     () ->
                         new IllegalStateException(
                             "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
-                                .formatted(wfId, stepId, stepName),
+                                .formatted(wfId, stepId, options.name()),
                             e))
                 .<T, RuntimeException>toResult(serializer);
           }
         },
-        stepName);
+        options.name());
   }
 
   /**
@@ -123,12 +142,32 @@ public class JooqStepFactory extends PostgresStepFactory {
    * @param stepName a stable name that identifies this step within the workflow
    */
   public void txStep(TransactionalRunnable transactional, String stepName) {
+    txStep(transactional, new StepFactoryOptions(stepName));
+  }
+
+  /**
+   * Executes {@code transactional} as an idempotent DBOS step inside a jOOQ transaction, with no
+   * return value.
+   *
+   * <p>Behaves identically to {@link #txStepResult(TransactionalCallable, StepFactoryOptions)} but
+   * accepts a {@link TransactionalRunnable} for callers that do not need to return a result.
+   *
+   * @param transactional the database work to perform; receives a jOOQ {@link Configuration} with
+   *     an open transaction and must not commit or close the underlying connection
+   * @param options step name and optional isolation level override
+   */
+  public void txStep(TransactionalRunnable transactional, StepFactoryOptions options) {
     txStepResult(
         c -> {
           transactional.run(c);
           return null;
         },
-        stepName);
+        options);
+  }
+
+  private static void applyIsolationLevel(Configuration trx, IsolationLevel level) {
+    if (level == null || level == IsolationLevel.DEFAULT) return;
+    trx.dsl().execute("SET TRANSACTION ISOLATION LEVEL " + level.sqlName());
   }
 
   @Override
