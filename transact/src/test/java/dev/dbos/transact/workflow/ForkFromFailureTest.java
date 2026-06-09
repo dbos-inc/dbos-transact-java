@@ -64,7 +64,10 @@ public class ForkFromFailureTest {
     assertEquals(0, impl.step3Count);
 
     // Fork from failure: should re-execute from step2
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastFailure()).get(0);
+    var handle =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastFailure())
+            .get(0);
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -90,7 +93,10 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step3Count);
 
     // No failure — should fall back to re-executing the last step (step3)
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastFailure()).get(0);
+    var handle =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastFailure())
+            .get(0);
     assertEquals("hellohello", handle.getResult());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
 
@@ -111,7 +117,10 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step2Count);
     assertEquals(1, impl.step3Count);
 
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastStep()).get(0);
+    var handle =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastStep())
+            .get(0);
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -134,7 +143,10 @@ public class ForkFromFailureTest {
     assertEquals(1, impl.step3Count);
 
     // Fork from function_id=1 (step2): step1 copied, step2 and step3 re-executed
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromStep(1)).get(0);
+    var handle =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromStep(1))
+            .get(0);
     assertEquals("hellohello", handle.getResult());
     assertNotEquals(workflowId, handle.workflowId());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
@@ -157,7 +169,10 @@ public class ForkFromFailureTest {
 
     // Fork from the step named "stepThree": step1 and step2 copied, step3 re-executed
     var handle =
-        DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromStepName("stepThree")).get(0);
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(
+                List.of(workflowId), new ForkFromFailureOptions.FromStepName("stepThree"))
+            .get(0);
     assertEquals("hellohello", handle.getResult());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
 
@@ -179,7 +194,8 @@ public class ForkFromFailureTest {
     }
 
     var handles =
-        DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(wfid1, wfid2), new ForkFromFailureOptions.FromLastStep());
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(wfid1, wfid2), new ForkFromFailureOptions.FromLastStep());
     assertEquals(2, handles.size());
     for (var h : handles) {
       assertNotNull(h.getResult());
@@ -199,8 +215,10 @@ public class ForkFromFailureTest {
     assertThrows(
         Exception.class,
         () ->
-            DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(
-                List.of(workflowId), new ForkFromFailureOptions.FromStepName("nonExistentStep")));
+            DBOSTestAccess.getDbosExecutor(dbos)
+                .forkFromFailure(
+                    List.of(workflowId),
+                    new ForkFromFailureOptions.FromStepName("nonExistentStep")));
   }
 
   @Test
@@ -214,9 +232,11 @@ public class ForkFromFailureTest {
 
     var appVersion = UUID.randomUUID().toString();
     var handle =
-        DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(
-            List.of(workflowId),
-            new ForkFromFailureOptions.FromLastStep().withApplicationVersion(appVersion)).get(0);
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(
+                List.of(workflowId),
+                new ForkFromFailureOptions.FromLastStep().withApplicationVersion(appVersion))
+            .get(0);
     assertEquals(appVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
   }
@@ -234,7 +254,10 @@ public class ForkFromFailureTest {
     assertNotNull(originalVersion);
 
     // No applicationVersion specified: fork should inherit the original's version.
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastStep()).get(0);
+    var handle =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .forkFromFailure(List.of(workflowId), new ForkFromFailureOptions.FromLastStep())
+            .get(0);
     assertEquals(originalVersion, handle.getStatus().appVersion());
     assertEquals(workflowId, handle.getStatus().forkedFrom());
   }
@@ -246,7 +269,9 @@ public class ForkFromFailureTest {
     // first.
     assertThrows(
         DBOSNonExistentWorkflowException.class,
-        () -> DBOSTestAccess.getDbosExecutor(dbos).forkFromFailure(List.of(bogusId), new ForkFromFailureOptions.FromStep(0)));
+        () ->
+            DBOSTestAccess.getDbosExecutor(dbos)
+                .forkFromFailure(List.of(bogusId), new ForkFromFailureOptions.FromStep(0)));
   }
 }
 
