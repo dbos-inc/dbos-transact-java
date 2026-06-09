@@ -29,6 +29,10 @@ public record StepOptions(
     }
   }
 
+  public StepOptions(String name, int maxAttempts, Duration retryInterval, double backOffRate) {
+    this(name, maxAttempts, retryInterval, backOffRate, null);
+  }
+
   public StepOptions(String name) {
     this(
         name,
@@ -45,7 +49,7 @@ public record StepOptions(
 
     var shouldRetryClass = stepTag.shouldRetry();
     if (shouldRetryClass.equals(StepShouldRetry.None.class)) {
-      return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate(), null);
+      return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate());
     }
 
     try {
