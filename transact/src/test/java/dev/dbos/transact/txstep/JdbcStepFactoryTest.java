@@ -508,7 +508,9 @@ public class JdbcStepFactoryTest {
       assertEquals("read committed", proxy.isolationLevelWorkflow(IsolationLevel.READ_COMMITTED));
     }
     try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
-      assertEquals("repeatable read", proxy.isolationLevelWorkflow(IsolationLevel.REPEATABLE_READ));
+      // CRDB upgrades REPEATABLE READ to SERIALIZABLE
+      var expected = PgContainer.USE_COCKROACH_DB ? "serializable" : "repeatable read";
+      assertEquals(expected, proxy.isolationLevelWorkflow(IsolationLevel.REPEATABLE_READ));
     }
   }
 
