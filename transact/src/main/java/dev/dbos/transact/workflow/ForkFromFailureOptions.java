@@ -6,8 +6,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Mode selection for {@link dev.dbos.transact.DBOS#forkFromFailure}. Construct one of the four
- * permitted subtypes, then optionally chain {@code with*} calls for common options.
+ * Mode selection for fork-from-failure operations. Construct one of the four permitted subtypes,
+ * then optionally chain {@code with*} calls for common options.
  *
  * <ul>
  *   <li>{@link FromLastFailure} – re-execute from the last step that recorded an error (falls back
