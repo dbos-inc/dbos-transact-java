@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -37,6 +38,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.transaction.annotation.Isolation;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class TransactionalStepTest {
@@ -206,6 +208,10 @@ public class TransactionalStepTest {
     String insertViaDbosStepWithRuntimeError(String name);
 
     String insertViaDbosStepWithCheckedException(String name) throws Exception;
+
+    String serializationRetry(String name);
+
+    String isolationLevel(Isolation isolation);
   }
 
   static class GreetingServiceImpl implements GreetingService {
@@ -213,6 +219,7 @@ public class TransactionalStepTest {
     private final TransactionalStepFactory factory;
     private final JdbcTemplate jdbc;
     private final String schema;
+    final AtomicInteger retryAttempts = new AtomicInteger();
 
     GreetingServiceImpl(
         DBOS dbos, TransactionalStepFactory factory, JdbcTemplate jdbc, String schema) {
@@ -387,6 +394,36 @@ public class TransactionalStepTest {
           "dbosStep");
     }
 
+    @Override
+    @Workflow
+    public String isolationLevel(Isolation isolation) {
+      return (String)
+          factory.runTransactionalStep(
+              () ->
+                  jdbc.queryForObject(
+                      "SELECT current_setting('transaction_isolation')", String.class),
+              "checkIsolation",
+              isolation);
+    }
+
+    @Workflow
+    public String serializationRetry(String name) {
+      return (String)
+          factory.runTransactionalStep(
+              () -> {
+                if (retryAttempts.incrementAndGet() <= 2) {
+                  throw new RuntimeException(
+                      new SQLException("simulated serialization failure", "40001"));
+                }
+                jdbc.update(
+                    "INSERT INTO greetings(name, count) VALUES (?, 1)"
+                        + " ON CONFLICT(name) DO UPDATE SET count = greetings.count + 1",
+                    name);
+                return name;
+              },
+              "serializationRetry");
+    }
+
     // Simulates a concurrent winner committing a result while this executor's transaction is still
     // open. The separate autocommit connection represents the other executor — its INSERT persists
     // even when the Spring transaction manager rolls back the main transaction. When recordOutput
@@ -432,6 +469,7 @@ public class TransactionalStepTest {
     JdbcTemplate jdbc;
     TransactionalStepFactory factory;
     GreetingService proxy;
+    GreetingServiceImpl impl;
 
     @BeforeEach
     void setup() throws SQLException {
@@ -449,7 +487,7 @@ public class TransactionalStepTest {
       factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
       factory.initialize();
 
-      var impl = new GreetingServiceImpl(dbos, factory, jdbc, SystemDatabase.sanitizeSchema(null));
+      impl = new GreetingServiceImpl(dbos, factory, jdbc, SystemDatabase.sanitizeSchema(null));
       proxy = dbos.registerProxy(GreetingService.class, impl);
       dbos.launch();
     }
@@ -663,6 +701,35 @@ public class TransactionalStepTest {
 
       assertThat(greetCount(db.dataSource, "dbos-step-checked")).isEqualTo(1);
       assertThat(totalTxRows(db.dataSource)).isEqualTo(0);
+    }
+
+    @Test
+    void isolationLevel() throws Exception {
+      try (var _o = new WorkflowOptions("wf-iso-ser").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.SERIALIZABLE)).isEqualTo("serializable");
+      }
+      try (var _o = new WorkflowOptions("wf-iso-rc").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.READ_COMMITTED)).isEqualTo("read committed");
+      }
+      try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.REPEATABLE_READ)).isEqualTo("repeatable read");
+      }
+    }
+
+    @Test
+    void serializationRetry() throws SQLException {
+      var wfid = "wf-ser-retry";
+
+      try (var _o = new WorkflowOptions(wfid).setContext()) {
+        assertThat(proxy.serializationRetry("alice")).isEqualTo("alice");
+      }
+
+      assertThat(impl.retryAttempts.get()).isEqualTo(3); // 2 failures + 1 success
+      assertThat(greetCount(db.dataSource, "alice")).isEqualTo(1);
+      var rows = getTxRows(db.dataSource, wfid);
+      assertThat(rows).hasSize(1);
+      assertThat(rows.get(0).output()).isNotNull();
+      assertThat(rows.get(0).error()).isNull();
     }
 
     // Two executors race to write the result for the same step. The loser detects the 23505

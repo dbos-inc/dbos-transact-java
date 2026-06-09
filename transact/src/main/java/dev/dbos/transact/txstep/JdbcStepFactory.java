@@ -109,28 +109,48 @@ public class JdbcStepFactory extends PostgresStepFactory {
    */
   public <R, X extends Exception> R txStep(
       final TransactionalFunction<R, X> callback, String stepName) throws X {
+    return txStep(callback, new StepFactoryOptions(stepName));
+  }
+
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a JDBC transaction.
+   *
+   * <p>Behaves identically to {@link #txStep(TransactionalFunction, String)} but accepts a {@link
+   * StepFactoryOptions} to control the step name and transaction isolation level.
+   *
+   * @param <R> the return type of the callback
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Connection} and must not
+   *     commit or close it
+   * @param options step name and optional isolation level override
+   * @return the value returned by {@code callback}
+   * @throws X if the callback throws
+   */
+  public <R, X extends Exception> R txStep(
+      final TransactionalFunction<R, X> callback, StepFactoryOptions options) throws X {
     return runTxStep(
         (wfId, stepId) -> {
           try {
             return executeTransaction(
                 dataSource,
+                options.isolationLevel(),
                 c -> {
                   var result = callback.execute(c);
                   recordOutput(c, wfId, stepId, result);
                   return result;
                 });
           } catch (StepConflictException e) {
-            return checkExecution(wfId, stepId, stepName)
+            return checkExecution(wfId, stepId, options.name())
                 .orElseThrow(
                     () ->
                         new IllegalStateException(
                             "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
-                                .formatted(wfId, stepId, stepName),
+                                .formatted(wfId, stepId, options.name()),
                             e))
                 .<R, X>toResult(serializer);
           }
         },
-        stepName);
+        options.name());
   }
 
   /** Database work that runs inside a JDBC transaction without returning a result. */
@@ -154,21 +174,48 @@ public class JdbcStepFactory extends PostgresStepFactory {
    */
   public <X extends Exception> void txStep(final TransactionalRunnable<X> callback, String stepName)
       throws X {
+    txStep(callback, new StepFactoryOptions(stepName));
+  }
+
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a JDBC transaction, with no return
+   * value.
+   *
+   * <p>Behaves identically to {@link #txStep(TransactionalFunction, StepFactoryOptions)} but
+   * accepts a {@link TransactionalRunnable} for callers that do not need to return a result.
+   *
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Connection} and must not
+   *     commit or close it
+   * @param options step name and optional isolation level override
+   * @throws X if the callback throws
+   */
+  public <X extends Exception> void txStep(
+      final TransactionalRunnable<X> callback, StepFactoryOptions options) throws X {
     txStep(
         c -> {
           callback.execute(c);
           return null;
         },
-        stepName);
+        options);
   }
 
   private static <R, X extends Exception> R executeTransaction(
       final DataSource ds, TransactionalFunction<R, X> func) throws X {
+    return executeTransaction(ds, IsolationLevel.DEFAULT, func);
+  }
+
+  private static <R, X extends Exception> R executeTransaction(
+      final DataSource ds, IsolationLevel isolationLevel, TransactionalFunction<R, X> func)
+      throws X {
     var conn =
         safeGet(
             () -> {
               var c = ds.getConnection();
               c.setAutoCommit(false);
+              if (isolationLevel != null && isolationLevel != IsolationLevel.DEFAULT) {
+                c.setTransactionIsolation(isolationLevel.jdbcValue());
+              }
               return c;
             });
     try {
