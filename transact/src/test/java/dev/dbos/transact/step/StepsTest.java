@@ -118,13 +118,6 @@ class FatalStepException extends RuntimeException {
   }
 }
 
-class RejectFatalExceptions implements StepShouldRetry {
-  @Override
-  public boolean shouldRetry(Throwable e) {
-    return !(e instanceof FatalStepException);
-  }
-}
-
 interface ServiceWFAndStep {
   String aWorkflow(String input);
 

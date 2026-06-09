@@ -53,11 +53,14 @@ public record StepOptions(
     }
 
     try {
-      var constructor = shouldRetryClass.getDeclaredConstructor();
-      constructor.setAccessible(true);
-      var instance = constructor.newInstance();
+      var instance = shouldRetryClass.getConstructor().newInstance();
       return new StepOptions(
           name, maxAttempts, interval, stepTag.backOffRate(), instance::shouldRetry);
+    } catch (NoSuchMethodException ex) {
+      throw new RuntimeException(
+          "%s must be a public class with a public no-arg constructor"
+              .formatted(shouldRetryClass.getName()),
+          ex);
     } catch (Exception ex) {
       throw new RuntimeException(
           "Failed to instantiate shouldRetry class: " + shouldRetryClass.getName(), ex);
