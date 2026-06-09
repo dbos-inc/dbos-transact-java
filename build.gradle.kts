@@ -98,7 +98,7 @@ val pmdVersion = libs.versions.pmd.get()
 extensions.configure<org.gradle.api.plugins.quality.PmdExtension> { toolVersion = pmdVersion }
 
 subprojects {
-  apply(plugin = "java")
+  if (name != "transact-bom") apply(plugin = "java")
   apply(plugin = "pmd")
   apply(plugin = "com.diffplug.spotless")
   apply(plugin = "com.github.ben-manes.versions")
@@ -113,15 +113,16 @@ subprojects {
 
   // Spotless configuration
   extensions.configure<com.diffplug.gradle.spotless.SpotlessExtension> {
-    java {
-      googleJavaFormat()
-      cleanthat()
-      formatAnnotations()
-      removeUnusedImports()
-      importOrder("dev.dbos", "java", "javax", "")
-      trimTrailingWhitespace()
-      endWithNewline()
-    }
+    if (name != "transact-bom")
+      java {
+        googleJavaFormat()
+        cleanthat()
+        formatAnnotations()
+        removeUnusedImports()
+        importOrder("dev.dbos", "java", "javax", "")
+        trimTrailingWhitespace()
+        endWithNewline()
+      }
     kotlin {
       target("**/*.kt")
       targetExclude("build/**/*.kt")
@@ -228,7 +229,7 @@ subprojects {
       }
     }
 
-    tasks.named("build") { dependsOn("javadoc") }
+    if (name != "transact-bom") tasks.named("build") { dependsOn("javadoc") }
 
     extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
       publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)

@@ -2,6 +2,7 @@ rootProject.name = "dbos-transact-java"
 
 include(
   "transact",
+  "transact-bom",
   "transact-cli",
   "transact-spring-boot-starter",
   "transact-spring-txstep-starter",
