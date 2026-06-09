@@ -11,6 +11,8 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.txstep.IsolationLevel;
+import dev.dbos.transact.txstep.StepFactoryOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
@@ -44,6 +46,8 @@ interface FactoryTestService {
   TestResult conflictWorkflow(String user) throws SQLException;
 
   TestResult serializationRetryWorkflow(String user);
+
+  String isolationLevelWorkflow(IsolationLevel level);
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
@@ -123,6 +127,17 @@ class FactoryTestServiceImpl implements FactoryTestService {
           return insertGreeting(ctx.dsl(), user);
         },
         "serializationRetry");
+  }
+
+  @Override
+  @Workflow
+  public String isolationLevelWorkflow(IsolationLevel level) {
+    return stepFactory.<String>txStepResult(
+        trx -> {
+          Object val = trx.dsl().fetchValue("SELECT current_setting('transaction_isolation')");
+          return (String) val;
+        },
+        new StepFactoryOptions("checkIsolation", level));
   }
 
   // Simulates a concurrent winner committing a result while this executor's transaction is still
@@ -472,6 +487,19 @@ public class JooqStepFactoryTest {
     assertEquals(1, rows.size());
     assertNotNull(rows.get(0).output());
     assertNull(rows.get(0).error());
+  }
+
+  @Test
+  public void testIsolationLevel() throws Exception {
+    try (var _o = new WorkflowOptions("wf-iso-ser").setContext()) {
+      assertEquals("serializable", proxy.isolationLevelWorkflow(IsolationLevel.SERIALIZABLE));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rc").setContext()) {
+      assertEquals("read committed", proxy.isolationLevelWorkflow(IsolationLevel.READ_COMMITTED));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
+      assertEquals("repeatable read", proxy.isolationLevelWorkflow(IsolationLevel.REPEATABLE_READ));
+    }
   }
 
   @Test

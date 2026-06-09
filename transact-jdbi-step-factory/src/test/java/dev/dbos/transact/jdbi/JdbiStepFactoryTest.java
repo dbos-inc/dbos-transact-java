@@ -25,6 +25,7 @@ import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,8 @@ interface FactoryTestService {
   TestResult conflictWorkflow(String user) throws SQLException;
 
   TestResult serializationRetryWorkflow(String user);
+
+  String isolationLevelWorkflow(TransactionIsolationLevel level);
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
@@ -133,6 +136,18 @@ class FactoryTestServiceImpl implements FactoryTestService {
           return insertGreeting(h, user);
         },
         "serializationRetry");
+  }
+
+  @Override
+  @Workflow
+  public String isolationLevelWorkflow(TransactionIsolationLevel level) {
+    return stepFactory.inStep(
+        h ->
+            h.createQuery("SELECT current_setting('transaction_isolation')")
+                .mapTo(String.class)
+                .findFirst()
+                .orElseThrow(),
+        new JdbiStepOptions("checkIsolation", level));
   }
 
   // Simulates a concurrent winner committing a result while this executor's transaction is still
@@ -482,6 +497,23 @@ public class JdbiStepFactoryTest {
     assertEquals(1, rows.size());
     assertNotNull(rows.get(0).output());
     assertNull(rows.get(0).error());
+  }
+
+  @Test
+  public void testIsolationLevel() throws Exception {
+    try (var _o = new WorkflowOptions("wf-iso-ser").setContext()) {
+      assertEquals(
+          "serializable", proxy.isolationLevelWorkflow(TransactionIsolationLevel.SERIALIZABLE));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rc").setContext()) {
+      assertEquals(
+          "read committed", proxy.isolationLevelWorkflow(TransactionIsolationLevel.READ_COMMITTED));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
+      assertEquals(
+          "repeatable read",
+          proxy.isolationLevelWorkflow(TransactionIsolationLevel.REPEATABLE_READ));
+    }
   }
 
   @Test

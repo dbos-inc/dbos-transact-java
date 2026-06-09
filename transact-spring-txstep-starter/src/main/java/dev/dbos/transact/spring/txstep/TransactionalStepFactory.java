@@ -22,6 +22,7 @@ import javax.sql.DataSource;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 /**
@@ -137,9 +138,14 @@ public class TransactionalStepFactory {
    * @param supplier the step body; typically {@code () -> pjp.proceed()} from the aspect
    * @param stepName stable name for the step within the workflow
    */
-  @SuppressWarnings("unchecked")
   public <E extends Exception> Object runTransactionalStep(
       ThrowingSupplier<Object, E> supplier, String stepName) throws E {
+    return runTransactionalStep(supplier, stepName, Isolation.DEFAULT);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <E extends Exception> Object runTransactionalStep(
+      ThrowingSupplier<Object, E> supplier, String stepName, Isolation isolation) throws E {
     // If a @TransactionalStep method is called outside a workflow or inside a step, execute the
     // supplier as a standard @Transactional method without any of the durable execution bookkeeping
     if (!DBOS.inWorkflow() || DBOS.inStep()) {
@@ -173,6 +179,7 @@ public class TransactionalStepFactory {
           long retryWaitMs = 1L;
           while (true) {
             var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
+            txDef.setIsolationLevel(isolation.value());
             TransactionStatus status = txManager.getTransaction(txDef);
             try {
               Object result = supplier.execute();

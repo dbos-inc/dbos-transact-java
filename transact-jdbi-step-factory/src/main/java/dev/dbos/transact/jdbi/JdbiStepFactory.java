@@ -108,27 +108,50 @@ public class JdbiStepFactory extends PostgresStepFactory {
    */
   public <R, X extends Exception> R inStep(final HandleCallback<R, X> callback, String stepName)
       throws X {
+    return inStep(callback, new JdbiStepOptions(stepName));
+  }
+
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a Jdbi transaction.
+   *
+   * <p>Behaves identically to {@link #inStep(HandleCallback, String)} but accepts a {@link
+   * JdbiStepOptions} to control the step name and transaction isolation level.
+   *
+   * @param <R> the return type of the callback
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Handle} and must not
+   *     commit or close it
+   * @param options step name and optional isolation level override
+   * @return the value returned by {@code callback}
+   * @throws X if the callback throws
+   */
+  public <R, X extends Exception> R inStep(
+      final HandleCallback<R, X> callback, JdbiStepOptions options) throws X {
+    var jdbiLevel = options.isolationLevel();
     return runTxStep(
         (wfId, stepId) -> {
+          HandleCallback<R, X> wrapped =
+              h -> {
+                var result = callback.withHandle(h);
+                recordOutput(h, wfId, stepId, result);
+                return result;
+              };
           try {
-            return jdbi.inTransaction(
-                h -> {
-                  var result = callback.withHandle(h);
-                  recordOutput(h, wfId, stepId, result);
-                  return result;
-                });
+            return jdbiLevel != null
+                ? jdbi.inTransaction(jdbiLevel, wrapped)
+                : jdbi.inTransaction(wrapped);
           } catch (StepConflictException e) {
-            return checkExecution(wfId, stepId, stepName)
+            return checkExecution(wfId, stepId, options.name())
                 .orElseThrow(
                     () ->
                         new IllegalStateException(
                             "Conflict on tx_step_outputs but winner row not found: workflowId=%s stepId=%d stepName=%s"
-                                .formatted(wfId, stepId, stepName),
+                                .formatted(wfId, stepId, options.name()),
                             e))
                 .<R, X>toResult(serializer);
           }
         },
-        stepName);
+        options.name());
   }
 
   /**
@@ -146,12 +169,30 @@ public class JdbiStepFactory extends PostgresStepFactory {
    */
   public <X extends Exception> void useStep(final HandleConsumer<X> callback, String stepName)
       throws X {
+    useStep(callback, new JdbiStepOptions(stepName));
+  }
+
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a Jdbi transaction, with no return
+   * value.
+   *
+   * <p>Behaves identically to {@link #inStep(HandleCallback, JdbiStepOptions)} but accepts a {@link
+   * HandleConsumer} for callers that do not need to return a result.
+   *
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Handle} and must not
+   *     commit or close it
+   * @param options step name and optional isolation level override
+   * @throws X if the callback throws
+   */
+  public <X extends Exception> void useStep(
+      final HandleConsumer<X> callback, JdbiStepOptions options) throws X {
     inStep(
         handle -> {
           callback.useHandle(handle);
           return null;
         },
-        stepName);
+        options);
   }
 
   @Override

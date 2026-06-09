@@ -38,6 +38,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.transaction.annotation.Isolation;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class TransactionalStepTest {
@@ -209,6 +210,8 @@ public class TransactionalStepTest {
     String insertViaDbosStepWithCheckedException(String name) throws Exception;
 
     String serializationRetry(String name);
+
+    String isolationLevel(Isolation isolation);
   }
 
   static class GreetingServiceImpl implements GreetingService {
@@ -392,6 +395,17 @@ public class TransactionalStepTest {
     }
 
     @Override
+    @Workflow
+    public String isolationLevel(Isolation isolation) {
+      return (String)
+          factory.runTransactionalStep(
+              () ->
+                  jdbc.queryForObject(
+                      "SELECT current_setting('transaction_isolation')", String.class),
+              "checkIsolation",
+              isolation);
+    }
+
     @Workflow
     public String serializationRetry(String name) {
       return (String)
@@ -687,6 +701,19 @@ public class TransactionalStepTest {
 
       assertThat(greetCount(db.dataSource, "dbos-step-checked")).isEqualTo(1);
       assertThat(totalTxRows(db.dataSource)).isEqualTo(0);
+    }
+
+    @Test
+    void isolationLevel() throws Exception {
+      try (var _o = new WorkflowOptions("wf-iso-ser").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.SERIALIZABLE)).isEqualTo("serializable");
+      }
+      try (var _o = new WorkflowOptions("wf-iso-rc").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.READ_COMMITTED)).isEqualTo("read committed");
+      }
+      try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
+        assertThat(proxy.isolationLevel(Isolation.REPEATABLE_READ)).isEqualTo("repeatable read");
+      }
     }
 
     @Test

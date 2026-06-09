@@ -41,6 +41,8 @@ interface FactoryTestService {
   TestResult conflictWorkflow(String user) throws SQLException;
 
   TestResult serializationRetryWorkflow(String user) throws SQLException;
+
+  String isolationLevelWorkflow(IsolationLevel level) throws SQLException;
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
@@ -155,6 +157,21 @@ class FactoryTestServiceImpl implements FactoryTestService {
       stmt.executeUpdate();
     }
     return insertGreeting(conn, user);
+  }
+
+  @Override
+  @Workflow
+  public String isolationLevelWorkflow(IsolationLevel level) throws SQLException {
+    return stepFactory.txStep(
+        c -> {
+          try (var stmt = c.prepareStatement("SELECT current_setting('transaction_isolation')")) {
+            try (var rs = stmt.executeQuery()) {
+              rs.next();
+              return rs.getString(1);
+            }
+          }
+        },
+        new StepFactoryOptions("checkIsolation", level));
   }
 
   @Override
@@ -480,6 +497,19 @@ public class JdbcStepFactoryTest {
     assertEquals(1, rows.size());
     assertNotNull(rows.get(0).output());
     assertNull(rows.get(0).error());
+  }
+
+  @Test
+  public void testIsolationLevel() throws Exception {
+    try (var _o = new WorkflowOptions("wf-iso-ser").setContext()) {
+      assertEquals("serializable", proxy.isolationLevelWorkflow(IsolationLevel.SERIALIZABLE));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rc").setContext()) {
+      assertEquals("read committed", proxy.isolationLevelWorkflow(IsolationLevel.READ_COMMITTED));
+    }
+    try (var _o = new WorkflowOptions("wf-iso-rr").setContext()) {
+      assertEquals("repeatable read", proxy.isolationLevelWorkflow(IsolationLevel.REPEATABLE_READ));
+    }
   }
 
   @Test
