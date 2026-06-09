@@ -1209,6 +1209,11 @@ public class DBOSExecutor implements AutoCloseable {
         break;
       }
 
+      var shouldRetry = options.shouldRetry();
+      if (exception != null && shouldRetry != null && !shouldRetry.test(exception)) {
+        break;
+      }
+
       try {
         Thread.sleep(retryInterval.toMillis());
       } catch (InterruptedException e) {

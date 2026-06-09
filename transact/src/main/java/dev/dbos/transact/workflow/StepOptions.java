@@ -3,11 +3,16 @@ package dev.dbos.transact.workflow;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 import org.jspecify.annotations.NonNull;
 
 public record StepOptions(
-    String name, int maxAttempts, Duration retryInterval, double backOffRate) {
+    String name,
+    int maxAttempts,
+    Duration retryInterval,
+    double backOffRate,
+    Predicate<Throwable> shouldRetry) {
 
   public static final double DEFAULT_INTERVAL_SECONDS = 1.0;
   public static final double DEFAULT_BACKOFF = 2.0;
@@ -29,26 +34,50 @@ public record StepOptions(
         name,
         1,
         Duration.ofSeconds((long) StepOptions.DEFAULT_INTERVAL_SECONDS),
-        StepOptions.DEFAULT_BACKOFF);
+        StepOptions.DEFAULT_BACKOFF,
+        null);
   }
 
   public static StepOptions create(Step stepTag, Method method) {
     var name = stepTag.name().isEmpty() ? method.getName() : stepTag.name();
     var maxAttempts = stepTag.maxAttempts() < 1 ? 1 : stepTag.maxAttempts();
     var interval = Duration.ofMillis((long) (stepTag.intervalSeconds() * 1000));
-    return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate());
+
+    var shouldRetryClass = stepTag.shouldRetry();
+    if (shouldRetryClass.equals(StepShouldRetry.None.class)) {
+      return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate(), null);
+    }
+
+    try {
+      var constructor = shouldRetryClass.getDeclaredConstructor();
+      constructor.setAccessible(true);
+      var instance = constructor.newInstance();
+      return new StepOptions(
+          name, maxAttempts, interval, stepTag.backOffRate(), instance::shouldRetry);
+    } catch (Exception ex) {
+      throw new RuntimeException(
+          "Failed to instantiate shouldRetry class: " + shouldRetryClass.getName(), ex);
+    }
   }
 
   public StepOptions withMaxAttempts(int maxAttempts) {
-    return new StepOptions(this.name, maxAttempts, this.retryInterval, this.backOffRate);
+    return new StepOptions(
+        this.name, maxAttempts, this.retryInterval, this.backOffRate, this.shouldRetry);
   }
 
   public StepOptions withRetryInterval(Duration interval) {
-    return new StepOptions(this.name, this.maxAttempts, interval, this.backOffRate);
+    return new StepOptions(
+        this.name, this.maxAttempts, interval, this.backOffRate, this.shouldRetry);
   }
 
   public StepOptions withBackoffRate(double backOffRate) {
-    return new StepOptions(this.name, this.maxAttempts, this.retryInterval, backOffRate);
+    return new StepOptions(
+        this.name, this.maxAttempts, this.retryInterval, backOffRate, this.shouldRetry);
+  }
+
+  public StepOptions withShouldRetry(Predicate<Throwable> shouldRetry) {
+    return new StepOptions(
+        this.name, this.maxAttempts, this.retryInterval, this.backOffRate, shouldRetry);
   }
 
   @Override
