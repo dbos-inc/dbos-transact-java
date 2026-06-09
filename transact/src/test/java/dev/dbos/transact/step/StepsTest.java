@@ -148,6 +148,8 @@ interface ServiceWFAndStep {
   String shouldRetryRetryableWorkflow(String input);
 
   String inlineShouldRetryRetryableWorkflow(String input);
+
+  String throwingPredicateWorkflow(String input);
 }
 
 class ServiceWFAndStepImpl implements ServiceWFAndStep {
@@ -411,6 +413,31 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
       caught = true;
     }
     return caught ? "runs:" + inlineShouldRetryRetryableStepRuns : "should have thrown";
+  }
+
+  int throwingPredicateStepRuns = 0;
+
+  @Override
+  @Workflow(name = "throwingPredicateWorkflow")
+  public String throwingPredicateWorkflow(String input) {
+    boolean caught = false;
+    try {
+      dbos.runStep(
+          () -> {
+            ++throwingPredicateStepRuns;
+            throw new RuntimeException("step error");
+          },
+          new StepOptions("throwingPredicateStep")
+              .withMaxAttempts(3)
+              .withRetryInterval(Duration.ofMillis(10))
+              .withShouldRetry(
+                  e -> {
+                    throw new RuntimeException("predicate error");
+                  }));
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + throwingPredicateStepRuns : "should have thrown";
   }
 }
 
@@ -729,5 +756,21 @@ public class StepsTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     // shouldRetry lambda returns true for RuntimeException, so all maxAttempts=4 are consumed
     assertEquals("runs:4", (String) handle.getResult());
+  }
+
+  @Test
+  public void throwingPredicateTreatedAsRetry() throws Exception {
+    ServiceWFAndStep service =
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
+
+    String workflowId = "wf-throwing-predicate-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.throwingPredicateWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // predicate always throws, so it is treated as "retry" and all maxAttempts=3 are consumed
+    assertEquals("runs:3", (String) handle.getResult());
   }
 }
