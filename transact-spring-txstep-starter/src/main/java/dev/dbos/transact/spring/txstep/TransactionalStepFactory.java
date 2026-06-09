@@ -204,6 +204,7 @@ public class TransactionalStepFactory {
                   Thread.sleep(retryWaitMs);
                 } catch (InterruptedException ie) {
                   Thread.currentThread().interrupt();
+                  throw new RuntimeException("Interrupted during serialization retry backoff", ie);
                 }
                 retryWaitMs = Math.min((long) (retryWaitMs * 1.5), 2000L);
                 continue;

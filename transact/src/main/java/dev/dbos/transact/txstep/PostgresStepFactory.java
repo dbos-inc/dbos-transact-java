@@ -107,6 +107,7 @@ public abstract class PostgresStepFactory {
                   Thread.sleep(retryWaitMs);
                 } catch (InterruptedException ie) {
                   Thread.currentThread().interrupt();
+                  throw new RuntimeException("Interrupted during serialization retry backoff", ie);
                 }
                 retryWaitMs =
                     Math.min((long) (retryWaitMs * RETRY_BACKOFF_FACTOR), RETRY_WAIT_MAX_MS);

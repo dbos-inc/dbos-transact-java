@@ -9,7 +9,6 @@ import dev.dbos.transact.txstep.StepFactoryOptions;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
-import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -166,10 +165,9 @@ public class JooqStepFactory extends PostgresStepFactory {
         options);
   }
 
-  private static void applyIsolationLevel(Configuration trx, IsolationLevel level)
-      throws SQLException {
+  private static void applyIsolationLevel(Configuration trx, IsolationLevel level) {
     if (level == null || level == IsolationLevel.DEFAULT) return;
-    trx.connectionProvider().acquire().setTransactionIsolation(level.jdbcValue());
+    trx.dsl().execute("SET TRANSACTION ISOLATION LEVEL " + level.sqlName());
   }
 
   @Override
