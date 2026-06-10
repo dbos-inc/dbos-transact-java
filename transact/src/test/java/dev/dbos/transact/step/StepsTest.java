@@ -112,6 +112,12 @@ class ServiceBImpl implements ServiceB {
   }
 }
 
+class FatalStepException extends RuntimeException {
+  FatalStepException(String msg) {
+    super(msg);
+  }
+}
+
 interface ServiceWFAndStep {
   String aWorkflow(String input);
 
@@ -130,6 +136,20 @@ interface ServiceWFAndStep {
   String stepRetryWorkflow(String input);
 
   String inlineStepRetryWorkflow(String input);
+
+  String stepWithShouldRetry(String input) throws Exception;
+
+  String shouldRetryWorkflow(String input);
+
+  String inlineShouldRetryWorkflow(String input);
+
+  String stepWithRetryableError(String input) throws Exception;
+
+  String shouldRetryRetryableWorkflow(String input);
+
+  String inlineShouldRetryRetryableWorkflow(String input);
+
+  String throwingPredicateWorkflow(String input);
 }
 
 class ServiceWFAndStepImpl implements ServiceWFAndStep {
@@ -297,6 +317,127 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
     result += ".";
 
     return result;
+  }
+
+  int stepWithShouldRetryRuns = 0;
+
+  @Override
+  @Step(
+      name = "stepWithShouldRetry",
+      maxAttempts = 4,
+      intervalSeconds = .01,
+      backOffRate = 1,
+      shouldRetry = RejectFatalExceptions.class)
+  public String stepWithShouldRetry(String input) throws Exception {
+    ++stepWithShouldRetryRuns;
+    throw new FatalStepException("fatal error");
+  }
+
+  @Override
+  @Workflow(name = "shouldRetryWorkflow")
+  public String shouldRetryWorkflow(String input) {
+    boolean caught = false;
+    try {
+      self.stepWithShouldRetry(input);
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + stepWithShouldRetryRuns : "should have thrown";
+  }
+
+  int inlineShouldRetryStepRuns = 0;
+
+  @Override
+  @Workflow(name = "inlineShouldRetryWorkflow")
+  public String inlineShouldRetryWorkflow(String input) {
+    boolean caught = false;
+    try {
+      dbos.runStep(
+          () -> {
+            ++inlineShouldRetryStepRuns;
+            throw new FatalStepException("fatal");
+          },
+          new StepOptions("inlineShouldRetryStep")
+              .withMaxAttempts(4)
+              .withRetryInterval(Duration.ofMillis(10))
+              .withShouldRetry(e -> !(e instanceof FatalStepException)));
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + inlineShouldRetryStepRuns : "should have thrown";
+  }
+
+  int stepWithRetryableErrorRuns = 0;
+
+  @Override
+  @Step(
+      name = "stepWithRetryableError",
+      maxAttempts = 4,
+      intervalSeconds = .01,
+      backOffRate = 1,
+      shouldRetry = RejectFatalExceptions.class)
+  public String stepWithRetryableError(String input) throws Exception {
+    ++stepWithRetryableErrorRuns;
+    throw new RuntimeException("retryable error");
+  }
+
+  @Override
+  @Workflow(name = "shouldRetryRetryableWorkflow")
+  public String shouldRetryRetryableWorkflow(String input) {
+    boolean caught = false;
+    try {
+      self.stepWithRetryableError(input);
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + stepWithRetryableErrorRuns : "should have thrown";
+  }
+
+  int inlineShouldRetryRetryableStepRuns = 0;
+
+  @Override
+  @Workflow(name = "inlineShouldRetryRetryableWorkflow")
+  public String inlineShouldRetryRetryableWorkflow(String input) {
+    boolean caught = false;
+    try {
+      dbos.runStep(
+          () -> {
+            ++inlineShouldRetryRetryableStepRuns;
+            throw new RuntimeException("retryable");
+          },
+          new StepOptions("inlineShouldRetryRetryableStep")
+              .withMaxAttempts(4)
+              .withRetryInterval(Duration.ofMillis(10))
+              .withShouldRetry(e -> !(e instanceof FatalStepException)));
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + inlineShouldRetryRetryableStepRuns : "should have thrown";
+  }
+
+  int throwingPredicateStepRuns = 0;
+
+  @Override
+  @Workflow(name = "throwingPredicateWorkflow")
+  public String throwingPredicateWorkflow(String input) {
+    boolean caught = false;
+    try {
+      dbos.runStep(
+          () -> {
+            ++throwingPredicateStepRuns;
+            throw new RuntimeException("step error");
+          },
+          new StepOptions("throwingPredicateStep")
+              .withMaxAttempts(3)
+              .withRetryInterval(Duration.ofMillis(10))
+              .withShouldRetry(
+                  e -> {
+                    throw new RuntimeException("predicate error");
+                  }));
+    } catch (Exception e) {
+      caught = true;
+    }
+    return caught ? "runs:" + throwingPredicateStepRuns : "should have thrown";
   }
 }
 
@@ -547,5 +688,89 @@ public class StepsTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.";
     assertEquals(expectedRes, (String) handle.getResult());
+  }
+
+  @Test
+  public void shouldRetryAnnotationAbortsOnFatalException() throws Exception {
+    ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
+    ServiceWFAndStep service = dbos.registerProxy(ServiceWFAndStep.class, impl);
+    dbos.launch();
+    impl.setSelf(service);
+
+    String workflowId = "wf-shouldretry-annotation-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.shouldRetryWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // shouldRetry returns false for FatalStepException, so step runs exactly once despite
+    // maxAttempts=4
+    assertEquals("runs:1", (String) handle.getResult());
+  }
+
+  @Test
+  public void shouldRetryInlineAbortsOnFatalException() throws Exception {
+    ServiceWFAndStep service =
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
+
+    String workflowId = "wf-shouldretry-inline-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.inlineShouldRetryWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // shouldRetry lambda returns false for FatalStepException, so step runs exactly once despite
+    // maxAttempts=4
+    assertEquals("runs:1", (String) handle.getResult());
+  }
+
+  @Test
+  public void shouldRetryRetryableExhaustsAllAttempts() throws Exception {
+    ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
+    ServiceWFAndStep service = dbos.registerProxy(ServiceWFAndStep.class, impl);
+    dbos.launch();
+    impl.setSelf(service);
+
+    String workflowId = "wf-shouldretry-retryable-annotation-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.shouldRetryRetryableWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // shouldRetry returns true for RuntimeException, so all maxAttempts=4 are consumed
+    assertEquals("runs:4", (String) handle.getResult());
+  }
+
+  @Test
+  public void shouldRetryInlineRetryableExhaustsAllAttempts() throws Exception {
+    ServiceWFAndStep service =
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
+
+    String workflowId = "wf-shouldretry-retryable-inline-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.inlineShouldRetryRetryableWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // shouldRetry lambda returns true for RuntimeException, so all maxAttempts=4 are consumed
+    assertEquals("runs:4", (String) handle.getResult());
+  }
+
+  @Test
+  public void throwingPredicateTreatedAsRetry() throws Exception {
+    ServiceWFAndStep service =
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
+
+    String workflowId = "wf-throwing-predicate-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.throwingPredicateWorkflow("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    // predicate always throws, so it is treated as "retry" and all maxAttempts=3 are consumed
+    assertEquals("runs:3", (String) handle.getResult());
   }
 }

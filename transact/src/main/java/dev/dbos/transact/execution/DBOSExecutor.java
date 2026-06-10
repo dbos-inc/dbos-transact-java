@@ -1209,6 +1209,21 @@ public class DBOSExecutor implements AutoCloseable {
         break;
       }
 
+      var shouldRetry = options.shouldRetry();
+      if (exception != null && shouldRetry != null) {
+        try {
+          if (!shouldRetry.test(exception)) {
+            break;
+          }
+        } catch (Exception predicateEx) {
+          logger.warn(
+              "shouldRetry predicate threw for step {} in workflow {}; treating as retry",
+              options.name(),
+              workflowId,
+              predicateEx);
+        }
+      }
+
       try {
         Thread.sleep(retryInterval.toMillis());
       } catch (InterruptedException e) {
