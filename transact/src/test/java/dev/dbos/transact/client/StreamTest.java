@@ -6,18 +6,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assumptions;
 
 public class StreamTest {
 
@@ -205,5 +208,52 @@ public class StreamTest {
       Iterator<Object> iter = client.readStream("nonexistent", "mykey");
       assertFalse(iter.hasNext());
     }
+  }
+
+  @Test
+  public void streamTerminationWhileReaderBlockedTest() throws Exception {
+    var wfid = UUID.randomUUID().toString();
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.writeOneAndSleep("term_key"), new StartWorkflowOptions(wfid));
+
+    long start = System.currentTimeMillis();
+    var values = new ArrayList<>();
+    Iterator<Object> iter = dbos.readStream(wfid, "term_key");
+    while (iter.hasNext()) {
+      values.add(iter.next());
+    }
+    long elapsed = System.currentTimeMillis() - start;
+
+    handle.getResult();
+    assertEquals(List.of("only_value"), values);
+    assertTrue(elapsed < 10_000, "reader took " + elapsed + "ms to notice workflow termination");
+  }
+
+  @Test
+  public void streamLowLatencyDeliveryTest() throws Exception {
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: LISTEN/NOTIFY not supported on CRDB");
+    var wfid = UUID.randomUUID().toString();
+    int count = 3;
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.writeTimestampsAndClose("latency_key", count),
+            new StartWorkflowOptions(wfid));
+
+    long maxLatencyMs = 0;
+    int received = 0;
+    Iterator<Object> iter = dbos.readStream(wfid, "latency_key");
+    while (iter.hasNext()) {
+      long writtenAt = ((Number) iter.next()).longValue();
+      maxLatencyMs = Math.max(maxLatencyMs, System.currentTimeMillis() - writtenAt);
+      received++;
+    }
+
+    handle.getResult();
+    assertEquals(count, received);
+    assertTrue(
+        maxLatencyMs < 500,
+        "max delivery latency " + maxLatencyMs + "ms exceeds 500ms — LISTEN/NOTIFY not working");
   }
 }

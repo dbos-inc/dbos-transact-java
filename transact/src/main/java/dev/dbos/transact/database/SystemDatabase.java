@@ -53,10 +53,14 @@ import org.slf4j.LoggerFactory;
 
 public class SystemDatabase implements AutoCloseable {
 
+  public static final Object END_OF_STREAM = new Object();
+
   public interface NotificationRegistry {
     Subscription subscribe(SignalKey.Message key);
 
     Subscription subscribe(SignalKey.Event key);
+
+    Subscription subscribe(SignalKey.Stream key);
   }
 
   public interface NotificationSource extends NotificationRegistry {
@@ -74,6 +78,11 @@ public class SystemDatabase implements AutoCloseable {
 
     @Override
     public Subscription subscribe(Event key) {
+      return new Subscription(() -> {});
+    }
+
+    @Override
+    public Subscription subscribe(SignalKey.Stream key) {
       return new Subscription(() -> {});
     }
 
@@ -684,7 +693,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Object readStream(String workflowId, String key, int offset) {
-    return dbRetry(() -> StreamsDAO.readStream(ctx, workflowId, key, offset));
+    return dbRetry(
+        () ->
+            StreamsDAO.readStream(
+                ctx, workflowId, key, offset, dbPollingInterval, notificationSource));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
