@@ -20,12 +20,16 @@ public class StreamIterator implements Iterator<Object> {
   @Override
   public boolean hasNext() {
     if (!finished && nextValue == null) {
-      Object value = systemDatabase.readStream(workflowId, key, offset);
-      if (value == SystemDatabase.END_OF_STREAM) {
+      try {
+        Object value = systemDatabase.readStream(workflowId, key, offset);
+        if (value == SystemDatabase.END_OF_STREAM) {
+          finished = true;
+        } else {
+          nextValue = value;
+          offset++;
+        }
+      } catch (IllegalStateException e) {
         finished = true;
-      } else {
-        nextValue = value;
-        offset++;
       }
     }
     return !finished;
