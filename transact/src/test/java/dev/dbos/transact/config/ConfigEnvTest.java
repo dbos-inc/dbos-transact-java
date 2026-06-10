@@ -3,6 +3,7 @@ package dev.dbos.transact.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -264,6 +265,31 @@ public class ConfigEnvTest {
             dbos.shutdown();
           }
         });
+  }
+
+  @Test
+  public void cloudEnvRequiresAppName() throws Exception {
+    new EnvironmentVariables("DBOS__CLOUD", "true")
+        .execute(
+            () -> {
+              var config = pgContainer.dbosConfig("local-app-name");
+              try (var dbos = new DBOS(config)) {
+                assertThrows(IllegalArgumentException.class, dbos::launch);
+              }
+            });
+  }
+
+  @Test
+  public void cloudEnvEmptyAppNameThrows() throws Exception {
+    new EnvironmentVariables("DBOS__CLOUD", "true")
+        .and("DBOS_APP_NAME", "")
+        .execute(
+            () -> {
+              var config = pgContainer.dbosConfig("local-app-name");
+              try (var dbos = new DBOS(config)) {
+                assertThrows(IllegalArgumentException.class, dbos::launch);
+              }
+            });
   }
 
   @Test

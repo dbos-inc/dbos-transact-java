@@ -153,6 +153,11 @@ public class DBOSExecutor implements AutoCloseable {
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
     executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
 
+    if (dbosCloud && appName.isEmpty()) {
+      throw new IllegalArgumentException(
+          "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true");
+    }
+
     if (!dbosCloud) {
       appName = config.appName();
       if (config.enablePatching()) {
