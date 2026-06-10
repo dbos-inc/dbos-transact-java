@@ -42,6 +42,12 @@ class NotificationListenerSource implements NotificationSource {
   }
 
   @Override
+  public Subscription subscribe(SignalKey.Stream key) {
+    var strKey = "s::%s::%s".formatted(key.workflowId(), key.key());
+    return signalMap.subscribe(strKey, key.wakeReason());
+  }
+
+  @Override
   public void start() {
     Thread t = new Thread(this::notificationListener, "NotificationListener");
     t.setDaemon(true);
@@ -81,6 +87,7 @@ class NotificationListenerSource implements NotificationSource {
         try (Statement stmt = notificationConnection.createStatement()) {
           stmt.execute("LISTEN dbos_notifications_channel");
           stmt.execute("LISTEN dbos_workflow_events_channel");
+          stmt.execute("LISTEN dbos_streams_channel");
         }
 
         logger.debug("Listening for PostgreSQL notifications");
@@ -102,6 +109,7 @@ class NotificationListenerSource implements NotificationSource {
                 switch (channel) {
                   case "dbos_notifications_channel" -> signalMap.signal("m::" + payload);
                   case "dbos_workflow_events_channel" -> signalMap.signal("e::" + payload);
+                  case "dbos_streams_channel" -> signalMap.signal("s::" + payload);
                   default -> logger.error("Unknown NOTIFY channel: {}", channel);
                 }
             }
