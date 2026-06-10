@@ -156,49 +156,29 @@ public class StreamsDAO {
 
     while (true) {
       ctx.checkClosed();
-      try (var sub = notificationRegistry.subscribe(new SignalKey.Stream(workflowId, key));
-          var conn = ctx.getConnection();
-          var stmt = conn.prepareStatement(sql)) {
-        stmt.setString(1, workflowId);
-        stmt.setString(2, key);
-        stmt.setInt(3, offset);
-        try (var rs = stmt.executeQuery()) {
-          if (rs.next()) {
-            String value = rs.getString("value");
-            String serialization = rs.getString("serialization");
-            Object deserialized = SerializationUtil.deserializeValue(value, serialization, null);
-            if (STREAM_CLOSED_SENTINEL.equals(deserialized)) {
-              throw new IllegalStateException("Stream is closed: " + key);
+      try (var sub = notificationRegistry.subscribe(new SignalKey.Stream(workflowId, key))) {
+        try (var conn = ctx.getConnection();
+            var stmt = conn.prepareStatement(sql)) {
+          stmt.setString(1, workflowId);
+          stmt.setString(2, key);
+          stmt.setInt(3, offset);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              String value = rs.getString("value");
+              String serialization = rs.getString("serialization");
+              Object deserialized = SerializationUtil.deserializeValue(value, serialization, null);
+              if (STREAM_CLOSED_SENTINEL.equals(deserialized)) {
+                return SystemDatabase.END_OF_STREAM;
+              }
+              return deserialized;
             }
-            return deserialized;
+          }
+          WorkflowStatus status = WorkflowDAO.getWorkflowStatus(ctx, workflowId);
+          if (status == null || !status.status().isActive()) {
+            return SystemDatabase.END_OF_STREAM;
           }
         }
-        if (!streamKeyExists(conn, ctx.schema(), workflowId, key)) {
-          throw new IllegalArgumentException("Stream key not found: " + key);
-        }
-        WorkflowStatus status = WorkflowDAO.getWorkflowStatus(ctx, workflowId);
-        if (status == null || !status.status().isActive()) {
-          return SystemDatabase.END_OF_STREAM;
-        }
         SignalMap.awaitAny(dbPollingInterval, sub);
-      }
-    }
-  }
-
-  private static boolean streamKeyExists(
-      Connection conn, String schema, String workflowId, String key) throws SQLException {
-    String sql =
-        """
-        SELECT 1 FROM "%s".streams
-        WHERE workflow_uuid = ? AND key = ?
-        LIMIT 1
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      stmt.setString(2, key);
-      try (var rs = stmt.executeQuery()) {
-        return rs.next();
       }
     }
   }
