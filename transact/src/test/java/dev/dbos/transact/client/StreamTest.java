@@ -13,8 +13,6 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 
-import org.junit.jupiter.api.Assumptions;
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -22,6 +20,7 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assumptions;
 
 public class StreamTest {
 
@@ -233,7 +232,8 @@ public class StreamTest {
 
   @Test
   public void streamLowLatencyDeliveryTest() throws Exception {
-    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "PG-only: LISTEN/NOTIFY not supported on CRDB");
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: LISTEN/NOTIFY not supported on CRDB");
     var wfid = UUID.randomUUID().toString();
     int count = 3;
     var handle =
