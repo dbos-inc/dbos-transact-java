@@ -147,7 +147,7 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOSConfig.executorId cannot be specified when using Conductor");
     }
 
-    dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+    dbosCloud = Boolean.parseBoolean(System.getenv("DBOS__CLOUD"));
     appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
     appName = Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "");
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
