@@ -1030,7 +1030,7 @@ public class SystemDatabaseTest {
     sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
     sysdb.closeStream(workflowId, 2, "key1");
 
-    assertThrows(IllegalStateException.class, () -> sysdb.readStream(workflowId, "key1", 1));
+    assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key1", 1));
   }
 
   @Test
@@ -1058,7 +1058,8 @@ public class SystemDatabaseTest {
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
 
-    assertThrows(IllegalArgumentException.class, () -> sysdb.readStream(workflowId, "key", 0));
+    DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.SUCCESS.name());
+    assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key", 0));
   }
 
   public void testInsertWorkflowStatusValidation() throws Exception {
