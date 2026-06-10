@@ -66,6 +66,8 @@ public record WorkflowStatus(
     Boolean wasForkedFrom,
     /** Time until which the workflow is delayed. */
     Instant delayUntil,
+    /** When the workflow completed (terminal states only). */
+    Instant completedAt,
     /** Serialized representation of the workflow. */
     String serialization) {
 
@@ -97,6 +99,11 @@ public record WorkflowStatus(
   @JsonIgnore
   public Long delayUntilEpochMs() {
     return delayUntil == null ? null : delayUntil.toEpochMilli();
+  }
+
+  @JsonIgnore
+  public Long completedAtEpochMs() {
+    return completedAt == null ? null : completedAt.toEpochMilli();
   }
 
   /**

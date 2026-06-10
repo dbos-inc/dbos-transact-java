@@ -18,12 +18,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.type.TypeReference;
 
 public class AdminServer implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(AdminServer.class);
@@ -207,7 +207,7 @@ public class AdminServer implements AutoCloseable {
 
     logger.info("cancel workflow {}", wfid);
 
-    dbosExecutor.cancelWorkflows(List.of(wfid));
+    dbosExecutor.cancelWorkflows(List.of(wfid), false);
     exchange.sendResponseHeaders(204, 0);
   }
 

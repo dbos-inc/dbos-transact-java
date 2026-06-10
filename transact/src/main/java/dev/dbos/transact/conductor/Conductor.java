@@ -49,16 +49,15 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.core.StreamReadConstraints;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.core.StreamReadConstraints;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 public class Conductor implements AutoCloseable {
 
@@ -70,7 +69,7 @@ public class Conductor implements AutoCloseable {
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
   private final HttpClient httpClient;
-  private final ObjectMapper mapper;
+  private final JsonMapper mapper;
   private final int pingPeriodMs;
   private final int pingTimeoutMs;
   private final int reconnectDelayMs;
@@ -116,14 +115,14 @@ public class Conductor implements AutoCloseable {
     this.mapper = buildObjectMapper();
   }
 
-  static ObjectMapper buildObjectMapper() {
-    return new ObjectMapper(
+  static JsonMapper buildObjectMapper() {
+    return JsonMapper.builder(
             JsonFactory.builder()
                 .streamReadConstraints(
                     StreamReadConstraints.builder().maxStringLength(1_000_000_000).build())
                 .build())
-        .registerModule(new JavaTimeModule())
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .build();
   }
 
   // TODO: do we need the insecure connection?
@@ -386,7 +385,7 @@ public class Conductor implements AutoCloseable {
   }
 
   private static void writeFragmentedResponse(
-      WebSocket ws, BaseResponse response, ObjectMapper mapper) throws Exception {
+      WebSocket ws, BaseResponse response, JsonMapper mapper) throws Exception {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
         "Starting to write fragmented response: type={}, id={}",
@@ -701,10 +700,12 @@ public class Conductor implements AutoCloseable {
       case EXECUTOR_INFO -> handleExecutorInfo(this, message);
       case EXIST_PENDING_WORKFLOWS -> handleExistPendingWorkflows(this, message);
       case EXPORT_WORKFLOW -> handleExportWorkflow(this, message, ws);
+      case FORK_FROM_FAILURE -> handleForkFromFailure(this, message);
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_QUEUE -> handleGetQueue(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
+      case GET_STEP_AGGREGATES -> handleGetStepAggregates(this, message);
       case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
       case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, message);
       case GET_WORKFLOW_NOTIFICATIONS -> handleGetWorkflowNotifications(this, message);
@@ -769,7 +770,7 @@ public class Conductor implements AutoCloseable {
                   ? request.workflow_ids
                   : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.cancelWorkflows(ids);
+            conductor.dbosExecutor.cancelWorkflows(ids, request.cancel_children);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when cancelling workflow(s) {}", ids, e);
@@ -845,6 +846,26 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when forking workflow {}", request, e);
             return new ForkWorkflowResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleForkFromFailure(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ForkFromFailureRequest request = (ForkFromFailureRequest) message;
+          try {
+            var options = request.toOptions();
+            var handles =
+                conductor.dbosExecutor.forkFromFailure(request.body.workflow_ids, options);
+            var forkedIds =
+                handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
+            return new ForkFromFailureResponse(request, forkedIds);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when forking workflows from failure {}", request, e);
+            return new ForkFromFailureResponse(request, e);
           }
         });
   }
@@ -1039,6 +1060,21 @@ public class Conductor implements AutoCloseable {
         });
   }
 
+  static CompletableFuture<BaseResponse> handleGetStepAggregates(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetStepAggregatesRequest request = (GetStepAggregatesRequest) message;
+          try {
+            var rows = conductor.systemDatabase.getStepAggregates(request.toInput());
+            return new GetStepAggregatesResponse(request, rows);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting step aggregates", e);
+            return new GetStepAggregatesResponse(request, e);
+          }
+        });
+  }
+
   static CompletableFuture<BaseResponse> handleGetWorkflowEvents(
       Conductor conductor, BaseMessage message) {
     return CompletableFuture.supplyAsync(
@@ -1112,7 +1148,7 @@ public class Conductor implements AutoCloseable {
             TypeReference<List<ExportedWorkflow>> typeRef = new TypeReference<>() {};
             JsonToken token;
             while ((token = parser.nextToken()) != null && token != JsonToken.END_OBJECT) {
-              if (token != JsonToken.FIELD_NAME) {
+              if (token != JsonToken.PROPERTY_NAME) {
                 continue;
               }
               String fieldName = parser.currentName();
@@ -1243,7 +1279,7 @@ public class Conductor implements AutoCloseable {
    * through GZIPOutputStream and Base64 encoding into 128 KB WebSocket frames.
    */
   private static void streamExportResponse(
-      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows, ObjectMapper mapper)
+      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows, JsonMapper mapper)
       throws IOException {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
@@ -1301,7 +1337,7 @@ public class Conductor implements AutoCloseable {
   }
 
   static List<ExportedWorkflow> deserializeExportedWorkflows(
-      String serializedWorkflow, ObjectMapper mapper) throws IOException {
+      String serializedWorkflow, JsonMapper mapper) throws IOException {
     var compressed = Base64.getDecoder().decode(serializedWorkflow);
     try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
       var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
@@ -1310,7 +1346,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // Used by tests to create import payloads and verify export output
-  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows, ObjectMapper mapper)
+  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows, JsonMapper mapper)
       throws IOException {
     var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {

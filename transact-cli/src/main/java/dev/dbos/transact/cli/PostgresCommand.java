@@ -8,12 +8,12 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
+import tools.jackson.databind.json.JsonMapper;
 
 @Command(
     name = "postgres",
@@ -37,9 +37,9 @@ public class PostgresCommand implements Runnable {
   public static String inspectContainerStatus(String containerName) throws Exception {
     var result = CommandResult.execute("docker", "inspect", containerName);
     if (result.exitCode() == 0) {
-      var mapper = new ObjectMapper();
+      var mapper = new JsonMapper();
       var root = mapper.readTree(result.stdout());
-      return root.get(0).get("State").get("Status").asText();
+      return root.get(0).get("State").get("Status").stringValue();
     } else {
       return null;
     }

@@ -1,57 +1,38 @@
 package dev.dbos.transact.json;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JavaType;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 public final class JsonUtility {
 
-  public static final ObjectMapper MAPPER =
-      new ObjectMapper()
-          .registerModule(new JavaTimeModule())
-          .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+  public static final JsonMapper MAPPER =
+      JsonMapper.builder()
+          .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+          .enable(DateTimeFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+          .build();
 
   private JsonUtility() {}
 
   public static String toJson(Object obj) {
-    try {
-      return MAPPER.writeValueAsString(obj);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return MAPPER.writeValueAsString(obj);
   }
 
   public static <T> T fromJson(String content, Class<T> valueType) {
-    try {
-      return MAPPER.readValue(content, valueType);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return MAPPER.readValue(content, valueType);
   }
 
   public static <T> T fromJson(InputStream in, Class<T> valueType) {
-    try {
-      return MAPPER.readValue(in, valueType);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
+    return MAPPER.readValue(in, valueType);
   }
 
   public static <T> T fromJson(InputStream in, TypeReference<T> valueType) {
-    try {
-      return MAPPER.readValue(in, valueType);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
+    return MAPPER.readValue(in, valueType);
   }
 
   public static Object[] coerceArguments(Object[] args, Method method) {
@@ -80,7 +61,7 @@ public final class JsonUtility {
           continue;
         }
         coerced[i] = MAPPER.convertValue(args[i], targetType);
-      } catch (IllegalArgumentException e) {
+      } catch (RuntimeException e) {
         throw new IllegalArgumentException(
             "Cannot convert argument "
                 + i

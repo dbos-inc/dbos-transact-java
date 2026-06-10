@@ -17,7 +17,9 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
@@ -25,6 +27,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -390,6 +393,10 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }
 
+  public List<StepAggregateRow> getStepAggregates(GetStepAggregatesInput input) {
+    return dbRetry(() -> WorkflowDAO.getStepAggregates(ctx, input));
+  }
+
   public boolean clearQueueAssignment(String workflowId) {
     return dbRetry(() -> QueuesDAO.clearQueueAssignment(ctx, workflowId));
   }
@@ -447,11 +454,16 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
   }
 
-  public List<String> getAndStartQueuedWorkflows(
-      Queue queue, String executorId, String appVersion, String partitionKey) {
+  public List<String> startQueuedWorkflows(
+      Queue queue,
+      String executorId,
+      String appVersion,
+      String partitionKey,
+      long localRunningCount) {
     return dbRetry(
         () ->
-            QueuesDAO.getAndStartQueuedWorkflows(ctx, queue, executorId, appVersion, partitionKey));
+            QueuesDAO.startQueuedWorkflows(
+                ctx, queue, executorId, appVersion, partitionKey, localRunningCount));
   }
 
   public void recordChildWorkflow(
@@ -524,8 +536,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> StepsDAO.sleep(ctx, workflowId, functionId, duration));
   }
 
-  public void cancelWorkflows(List<String> workflowIds) {
-    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds));
+  public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
+    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds, cancelChildren));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {
@@ -538,6 +550,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
     return dbRetry(() -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+  }
+
+  public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
+    return dbRetry(() -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
   }
 
   public void createApplicationVersion(String versionName) {

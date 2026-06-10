@@ -27,11 +27,11 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Tests for portable serialization format. These tests verify that workflows can be triggered via
@@ -731,7 +731,7 @@ public class PortableSerializationTest {
 
   /** A test custom serializer that base64-encodes JSON. */
   static class TestBase64Serializer implements DBOSSerializer {
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final JsonMapper mapper = new JsonMapper();
 
     @Override
     public String name() {

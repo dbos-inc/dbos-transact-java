@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
@@ -463,14 +464,13 @@ public class StaticQueuesTest {
     assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
 
     assertEquals(2, idsToRun.size());
 
-    // run the same above 2 are in Pending.
+    // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -478,15 +478,14 @@ public class StaticQueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null);
+        systemDatabase.startQueuedWorkflows(
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
     assertEquals(0, idsToRun.size());
   }
 
@@ -546,19 +545,20 @@ public class StaticQueuesTest {
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(
+        systemDatabase.startQueuedWorkflows(
             qwithWCLimit,
             // executorId,
             executor2,
             appVersion,
-            null);
+            null,
+            0);
     assertEquals(2, idsToRun.size());
   }
 
@@ -654,6 +654,184 @@ public class StaticQueuesTest {
     assertEquals(2, handle3.getResult());
     assertEquals("local", handle3.getStatus().executorId());
 
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testCancellingQueuedWorkflows() throws Exception {
+    // Cancelling a PENDING workflow should free the concurrency slot so the queued workflow runs.
+    Queue queue = new Queue("test_queue").withConcurrency(1);
+    dbos.registerQueue(queue);
+
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var blockedHandle =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0), new StartWorkflowOptions("blocked").withQueue(queue));
+    var regularHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(42), new StartWorkflowOptions().withQueue(queue));
+
+    impl.wfSemaphore.acquire(1);
+    assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
+
+    dbos.cancelWorkflow("blocked");
+    assertEquals(WorkflowState.CANCELLED, blockedHandle.getStatus().status());
+    assertEquals(42, (int) regularHandle.getResult());
+
+    impl.latch.countDown(); // let the blocked thread exit cleanly
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testResumingQueuedWorkflows() throws Exception {
+    // Resuming an ENQUEUED workflow bypasses the queue concurrency limit and runs it immediately.
+    Queue queue = new Queue("test_queue").withConcurrency(1);
+    dbos.registerQueue(queue);
+
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var blockedHandle =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue(queue));
+    var regularHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(99), new StartWorkflowOptions("resumable").withQueue(queue));
+
+    impl.wfSemaphore.acquire(1);
+    assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
+
+    var resumedHandle = dbos.<Integer, Exception>resumeWorkflow("resumable");
+    assertEquals(99, (int) resumedHandle.getResult());
+
+    impl.latch.countDown();
+    blockedHandle.getResult();
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testOneAtATimeWithWorkerConcurrency() throws Exception {
+    // workerConcurrency=1: second workflow must stay ENQUEUED until first completes.
+    Queue queue = new Queue("test_queue").withWorkerConcurrency(1);
+    dbos.registerQueue(queue);
+
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue(queue));
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(1), new StartWorkflowOptions().withQueue(queue));
+
+    impl.wfSemaphore.acquire(1);
+    Thread.sleep(2000); // let several poll cycles run
+    assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
+    assertEquals(1, impl.counter.get());
+
+    impl.latch.countDown();
+    assertEquals(0, h1.getResult());
+    assertEquals(1, h2.getResult());
+    assertEquals(1, impl.counter.get());
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testTimeoutQueue() throws Exception {
+    // Workflows with short timeouts should be cancelled; a normal workflow should succeed.
+    Queue queue = new Queue("test_queue").withConcurrency(1);
+    dbos.registerQueue(queue);
+
+    ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
+    dbos.launch();
+
+    var h1 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(0),
+            new StartWorkflowOptions().withQueue(queue).withTimeout(500, TimeUnit.MILLISECONDS));
+    var h2 =
+        dbos.startWorkflow(
+            () -> service.blockedWorkflow(1),
+            new StartWorkflowOptions().withQueue(queue).withTimeout(500, TimeUnit.MILLISECONDS));
+    var normalHandle =
+        dbos.startWorkflow(
+            () -> service.noopWorkflow(42),
+            new StartWorkflowOptions().withQueue(queue).withTimeout(10, TimeUnit.SECONDS));
+
+    assertThrows(Exception.class, h1::getResult);
+    assertThrows(Exception.class, h2::getResult);
+    assertEquals(42, (int) normalHandle.getResult());
+    assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testMultipleExecutorWorkerConcurrency() throws Exception {
+    // Two DBOS instances share a queue. Each respects workerConcurrency independently;
+    // together they respect the global concurrency cap.
+    int workerConcurrency = 2;
+    int globalConcurrency = workerConcurrency * 2;
+
+    Queue queue =
+        new Queue("multi_exec_queue")
+            .withWorkerConcurrency(workerConcurrency)
+            .withConcurrency(globalConcurrency);
+    dbos.registerQueue(queue);
+
+    ConcurrencyTestServiceImpl impl1 = new ConcurrencyTestServiceImpl();
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl1);
+    dbos.launch();
+
+    // Fill exec1 to its local workerConcurrency limit.
+    for (int i = 0; i < workerConcurrency; i++) {
+      final int fi = i;
+      dbos.startWorkflow(
+          () -> service.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue));
+    }
+    impl1.wfSemaphore.acquire(workerConcurrency);
+
+    // Start exec2 against the same database; exec1 is full so exec2 picks up new work.
+    ConcurrencyTestServiceImpl impl2 = new ConcurrencyTestServiceImpl();
+    try (var dbos2 = new DBOS(dbosConfig.withExecutorId("executor2"))) {
+      ConcurrencyTestService service2 = dbos2.registerProxy(ConcurrencyTestService.class, impl2);
+      dbos2.registerQueue(queue);
+      dbos2.launch();
+
+      List<WorkflowHandle<Integer, ?>> handles2 = new ArrayList<>();
+      for (int i = 0; i < workerConcurrency; i++) {
+        final int fi = i;
+        handles2.add(
+            dbos2.startWorkflow(
+                () -> service2.blockedWorkflow(fi), new StartWorkflowOptions().withQueue(queue)));
+      }
+      impl2.wfSemaphore.acquire(workerConcurrency);
+      for (var h : handles2) {
+        assertEquals("executor2", h.getStatus().executorId());
+      }
+
+      // Global limit reached: one more workflow must stay ENQUEUED.
+      var extra =
+          dbos2.startWorkflow(
+              () -> service2.noopWorkflow(99), new StartWorkflowOptions().withQueue(queue));
+      Thread.sleep(2000);
+      assertEquals(WorkflowState.ENQUEUED, extra.getStatus().status());
+
+      // Releasing exec2 frees global slots; the extra workflow should now run.
+      impl2.latch.countDown();
+      for (var h : handles2) {
+        h.getResult();
+      }
+      assertEquals(99, (int) extra.getResult());
+    }
+
+    impl1.latch.countDown();
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }
 

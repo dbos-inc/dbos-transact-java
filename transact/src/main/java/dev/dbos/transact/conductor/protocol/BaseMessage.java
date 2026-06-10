@@ -17,10 +17,12 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = ExecutorInfoRequest.class, name = "executor_info"),
   @JsonSubTypes.Type(value = ExistPendingWorkflowsRequest.class, name = "exist_pending_workflows"),
   @JsonSubTypes.Type(value = ExportWorkflowRequest.class, name = "export_workflow"),
+  @JsonSubTypes.Type(value = ForkFromFailureRequest.class, name = "fork_from_failure"),
   @JsonSubTypes.Type(value = ForkWorkflowRequest.class, name = "fork_workflow"),
   @JsonSubTypes.Type(value = GetMetricsRequest.class, name = "get_metrics"),
   @JsonSubTypes.Type(value = GetQueueRequest.class, name = "get_queue"),
   @JsonSubTypes.Type(value = GetScheduleRequest.class, name = "get_schedule"),
+  @JsonSubTypes.Type(value = GetStepAggregatesRequest.class, name = "get_step_aggregates"),
   @JsonSubTypes.Type(value = GetWorkflowAggregatesRequest.class, name = "get_workflow_aggregates"),
   @JsonSubTypes.Type(value = GetWorkflowEventsRequest.class, name = "get_workflow_events"),
   @JsonSubTypes.Type(

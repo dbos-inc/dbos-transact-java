@@ -12,6 +12,7 @@ mavenPublishing {
 
 dependencies {
   api(project(":transact"))
+  implementation(libs.slf4j.api)
   compileOnly(project(":transact-spring-boot-starter"))
   compileOnly(libs.spring.boot.autoconfigure)
   compileOnly(libs.spring.aop)

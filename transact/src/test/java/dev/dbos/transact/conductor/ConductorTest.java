@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,10 +29,13 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -62,8 +66,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.WebSocket;
 import org.java_websocket.enums.Opcode;
 import org.java_websocket.framing.Framedata;
@@ -76,6 +78,8 @@ import org.mockito.Captor;
 import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 public class ConductorTest {
 
@@ -86,8 +90,11 @@ public class ConductorTest {
   Conductor.Builder builder;
   TestWebSocketServer testServer;
 
-  static final ObjectMapper mapper =
-      new ObjectMapper().setDefaultPropertyInclusion(JsonInclude.Include.NON_EMPTY);
+  static final JsonMapper mapper =
+      JsonMapper.builder()
+          .changeDefaultPropertyInclusion(
+              incl -> incl.withValueInclusion(JsonInclude.Include.NON_EMPTY))
+          .build();
 
   @BeforeEach
   void beforeEach() throws Exception {
@@ -333,13 +340,13 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("executor_info", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(hostname, jsonNode.get("hostname").asText());
-      assertEquals("test-app-version", jsonNode.get("application_version").asText());
-      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
-      assertEquals("java", jsonNode.get("language").asText());
-      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertEquals("executor_info", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(hostname, jsonNode.get("hostname").stringValue());
+      assertEquals("test-app-version", jsonNode.get("application_version").stringValue());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").stringValue());
+      assertEquals("java", jsonNode.get("language").stringValue());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertEquals("{}", jsonNode.get("executor_metadata").toString());
     }
@@ -393,7 +400,7 @@ public class ConductorTest {
           "Should have received more than one frame, but got " + listener.frameCount);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
-      assertEquals("list_steps", jsonNode.get("type").asText());
+      assertEquals("list_steps", jsonNode.get("type").stringValue());
       assertEquals(200, jsonNode.get("output").size());
     }
   }
@@ -419,8 +426,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("recovery", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("recovery", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -451,9 +458,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("recovery", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("recovery", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -479,13 +486,13 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("executor_info", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(hostname, jsonNode.get("hostname").asText());
-      assertEquals("test-app-version", jsonNode.get("application_version").asText());
-      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
-      assertEquals("java", jsonNode.get("language").asText());
-      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertEquals("executor_info", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(hostname, jsonNode.get("hostname").stringValue());
+      assertEquals("test-app-version", jsonNode.get("application_version").stringValue());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").stringValue());
+      assertEquals("java", jsonNode.get("language").stringValue());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertEquals("{}", jsonNode.get("executor_metadata").toString());
     }
@@ -514,17 +521,17 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("executor_info", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(hostname, jsonNode.get("hostname").asText());
-      assertEquals("test-app-version", jsonNode.get("application_version").asText());
-      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
-      assertEquals("java", jsonNode.get("language").asText());
-      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertEquals("executor_info", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(hostname, jsonNode.get("hostname").stringValue());
+      assertEquals("test-app-version", jsonNode.get("application_version").stringValue());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").stringValue());
+      assertEquals("java", jsonNode.get("language").stringValue());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").stringValue());
       assertNull(jsonNode.get("error_message"));
       JsonNode metadataNode = jsonNode.get("executor_metadata");
       assertNotNull(metadataNode);
-      assertEquals("value1", metadataNode.get("key1").asText());
+      assertEquals("value1", metadataNode.get("key1").stringValue());
       assertEquals(42, metadataNode.get("key2").asInt());
     }
   }
@@ -547,12 +554,64 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("cancel", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenTrue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenFalse() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", false);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -566,7 +625,9 @@ public class ConductorTest {
     String errorMessage = "canCancelThrows error";
     String workflowId = "sample-wf-id";
 
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).cancelWorkflows(anyList());
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .cancelWorkflows(anyList(), eq(false));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -578,13 +639,13 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("cancel", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -617,8 +678,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("delete", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("delete", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -656,9 +717,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("delete", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("delete", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -683,8 +744,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("resume", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("resume", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -721,6 +782,32 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canCancelBulkWithChildren() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "bulk-cancel-children-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(workflowIds, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("bulk-cancel-children-1", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
   public void canCancelBulk() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -735,12 +822,12 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "bulk-cancel-1", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(workflowIds);
+      verify(mockExec).cancelWorkflows(workflowIds, false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("cancel", jsonNode.get("type").asText());
-      assertEquals("bulk-cancel-1", jsonNode.get("request_id").asText());
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("bulk-cancel-1", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -765,8 +852,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("delete", jsonNode.get("type").asText());
-      assertEquals("bulk-delete-1", jsonNode.get("request_id").asText());
+      assertEquals("delete", jsonNode.get("type").stringValue());
+      assertEquals("bulk-delete-1", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -791,8 +878,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("resume", jsonNode.get("type").asText());
-      assertEquals("bulk-resume-1", jsonNode.get("request_id").asText());
+      assertEquals("resume", jsonNode.get("type").stringValue());
+      assertEquals("bulk-resume-1", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -819,8 +906,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("resume", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("resume", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -877,9 +964,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("restart", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("restart", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -927,9 +1014,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("fork_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").asText());
+      assertEquals("fork_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").stringValue());
       assertNull(jsonNode.get("error_message"));
     }
   }
@@ -976,9 +1063,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("fork_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").asText());
+      assertEquals("fork_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").stringValue());
       assertNull(jsonNode.get("error_message"));
     }
   }
@@ -1025,10 +1112,10 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("fork_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("fork_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("new_workflow_id"));
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
     }
   }
 
@@ -1054,16 +1141,16 @@ public class ConductorTest {
       verify(mockDB).listApplicationVersions();
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_application_versions", json.get("type").asText());
-      assertEquals("req-avl", json.get("request_id").asText());
+      assertEquals("list_application_versions", json.get("type").stringValue());
+      assertEquals("req-avl", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode av = json.get("output");
       assertNotNull(av);
       assertTrue(av.isArray());
       assertEquals(2, av.size());
-      assertEquals("v2.0.0", av.get(0).get("version_name").asText());
-      assertEquals("v1.0.0", av.get(1).get("version_name").asText());
+      assertEquals("v2.0.0", av.get(0).get("version_name").stringValue());
+      assertEquals("v1.0.0", av.get(1).get("version_name").stringValue());
     }
   }
 
@@ -1083,8 +1170,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_application_versions", json.get("type").asText());
-      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals("list_application_versions", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
       assertEquals(0, json.get("output").size());
     }
   }
@@ -1105,8 +1192,8 @@ public class ConductorTest {
       verify(mockExec).setLatestApplicationVersion("v3.0.0");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("set_latest_application_version", json.get("type").asText());
-      assertEquals("req-slav", json.get("request_id").asText());
+      assertEquals("set_latest_application_version", json.get("type").stringValue());
+      assertEquals("req-slav", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       assertTrue(json.get("success").asBoolean());
     }
@@ -1131,8 +1218,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("set_latest_application_version", json.get("type").asText());
-      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals("set_latest_application_version", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
       assertFalse(json.get("success").asBoolean());
     }
   }
@@ -1201,17 +1288,17 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("list_workflows", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("list_workflows", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
 
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isArray());
       assertTrue(outputNode.size() == 3);
 
-      assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").stringValue());
       assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
-      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").stringValue());
       assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
       assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
@@ -1281,17 +1368,17 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("list_queued_workflows", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("list_queued_workflows", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
 
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isArray());
       assertTrue(outputNode.size() == 3);
 
-      assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").stringValue());
       assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
-      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").stringValue());
       assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
       assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
@@ -1482,14 +1569,14 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("get_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("get_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isObject());
-      assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
+      assertEquals("wf-1", outputNode.get("WorkflowUUID").stringValue());
       assertTrue(outputNode.get("WasForkedFrom").asBoolean());
-      assertEquals("1754999999999", outputNode.get("DelayUntilEpochMS").asText());
+      assertEquals("1754999999999", outputNode.get("DelayUntilEpochMS").stringValue());
     }
   }
 
@@ -1559,8 +1646,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("exist_pending_workflows", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("exist_pending_workflows", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertTrue(jsonNode.get("exist").asBoolean());
     }
   }
@@ -1594,8 +1681,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("exist_pending_workflows", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("exist_pending_workflows", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertFalse(jsonNode.get("exist").asBoolean());
     }
   }
@@ -1654,8 +1741,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("list_steps", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("list_steps", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isArray());
@@ -1692,8 +1779,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("retention", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("retention", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -1725,8 +1812,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("retention", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("retention", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -1764,9 +1851,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("retention", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("retention", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -1803,9 +1890,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("retention", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("retention", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -1845,19 +1932,19 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("get_metrics", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("get_metrics", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
 
       JsonNode metricsNode = jsonNode.get("metrics");
       assertTrue(metricsNode.isArray());
       assertEquals(6, metricsNode.size());
       var n1 = metricsNode.get(0);
-      assertEquals("workflow_count", n1.get("metric_type").asText());
-      assertEquals("wf-one", n1.get("metric_name").asText());
+      assertEquals("workflow_count", n1.get("metric_type").stringValue());
+      assertEquals("wf-one", n1.get("metric_name").stringValue());
       assertEquals(10, n1.get("value").asInt());
       var n5 = metricsNode.get(5);
-      assertEquals("step_count", n5.get("metric_type").asText());
-      assertEquals("step-three", n5.get("metric_name").asText());
+      assertEquals("step_count", n5.get("metric_type").stringValue());
+      assertEquals("step-three", n5.get("metric_name").stringValue());
       assertEquals(10, n5.get("value").asInt());
     }
   }
@@ -1891,9 +1978,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("get_metrics", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("get_metrics", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
     }
   }
 
@@ -1924,9 +2011,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("get_metrics", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("get_metrics", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
     }
   }
 
@@ -1957,8 +2044,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("import_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("import_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -1990,9 +2077,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("import_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("import_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -2026,9 +2113,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("export_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("export_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertNull(jsonNode.get("serialized_workflow"));
     }
   }
@@ -2064,10 +2151,10 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("export_workflow", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("export_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
-      assertEquals(serialized, jsonNode.get("serialized_workflow").asText());
+      assertEquals(serialized, jsonNode.get("serialized_workflow").stringValue());
     }
   }
 
@@ -2098,8 +2185,8 @@ public class ConductorTest {
       assertEquals(workflows.size(), workflowListCaptor.getValue().size());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
-      assertEquals("import_workflow", jsonNode.get("type").asText());
-      assertEquals("large-import-1", jsonNode.get("request_id").asText());
+      assertEquals("import_workflow", jsonNode.get("type").stringValue());
+      assertEquals("large-import-1", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -2173,8 +2260,8 @@ public class ConductorTest {
       assertFalse(listener.connectionReset, "connection was reset after import");
 
       JsonNode jsonNode = mapper.readTree(listener.message);
-      assertEquals("import_workflow", jsonNode.get("type").asText());
-      assertEquals("ping-during-import", jsonNode.get("request_id").asText());
+      assertEquals("import_workflow", jsonNode.get("type").stringValue());
+      assertEquals("ping-during-import", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -2210,10 +2297,10 @@ public class ConductorTest {
       verify(mockDB).exportWorkflow("large-wf-1", true);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
-      assertEquals("export_workflow", jsonNode.get("type").asText());
-      assertEquals("large-export-1", jsonNode.get("request_id").asText());
+      assertEquals("export_workflow", jsonNode.get("type").stringValue());
+      assertEquals("large-export-1", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
-      assertEquals(serialized, jsonNode.get("serialized_workflow").asText());
+      assertEquals(serialized, jsonNode.get("serialized_workflow").stringValue());
     }
   }
 
@@ -2361,8 +2448,8 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("alert", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals("alert", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -2413,7 +2500,7 @@ public class ConductorTest {
       assertEquals(requestCount, listener.responses.size());
       for (String msg : listener.responses) {
         JsonNode json = mapper.readTree(msg);
-        assertEquals("executor_info", json.get("type").asText());
+        assertEquals("executor_info", json.get("type").stringValue());
         assertNull(json.get("error_message"));
       }
     }
@@ -2464,9 +2551,9 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
-      assertEquals("alert", jsonNode.get("type").asText());
-      assertEquals("12345", jsonNode.get("request_id").asText());
-      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertEquals("alert", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
@@ -2519,19 +2606,19 @@ public class ConductorTest {
       verify(mockDB).listSchedules(null, null, null);
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_schedules", json.get("type").asText());
-      assertEquals("req-list-sched", json.get("request_id").asText());
+      assertEquals("list_schedules", json.get("type").stringValue());
+      assertEquals("req-list-sched", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode output = json.get("output");
       assertNotNull(output);
       assertTrue(output.isArray());
       assertEquals(2, output.size());
-      assertEquals("sched-1", output.get(0).get("schedule_id").asText());
-      assertEquals("schedule-1", output.get(0).get("schedule_name").asText());
-      assertEquals("ACTIVE", output.get(0).get("status").asText());
-      assertEquals("sched-2", output.get(1).get("schedule_id").asText());
-      assertEquals("PAUSED", output.get(1).get("status").asText());
+      assertEquals("sched-1", output.get(0).get("schedule_id").stringValue());
+      assertEquals("schedule-1", output.get(0).get("schedule_name").stringValue());
+      assertEquals("ACTIVE", output.get(0).get("status").stringValue());
+      assertEquals("sched-2", output.get(1).get("schedule_id").stringValue());
+      assertEquals("PAUSED", output.get(1).get("status").stringValue());
     }
   }
 
@@ -2578,7 +2665,7 @@ public class ConductorTest {
               eq(List.of("schedule")));
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_schedules", json.get("type").asText());
+      assertEquals("list_schedules", json.get("type").stringValue());
       assertNull(json.get("error_message"));
       assertEquals(1, json.get("output").size());
     }
@@ -2611,7 +2698,7 @@ public class ConductorTest {
               eq(null));
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_schedules", json.get("type").asText());
+      assertEquals("list_schedules", json.get("type").stringValue());
       assertNull(json.get("error_message"));
     }
   }
@@ -2641,7 +2728,7 @@ public class ConductorTest {
               eq(null), eq(List.of("WorkflowA", "WorkflowB")), eq(List.of("prefix1-", "prefix2-")));
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_schedules", json.get("type").asText());
+      assertEquals("list_schedules", json.get("type").stringValue());
       assertNull(json.get("error_message"));
     }
   }
@@ -2678,14 +2765,14 @@ public class ConductorTest {
       verify(mockDB).getSchedule("schedule-1");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_schedule", json.get("type").asText());
-      assertEquals("req-get-sched", json.get("request_id").asText());
+      assertEquals("get_schedule", json.get("type").stringValue());
+      assertEquals("req-get-sched", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode output = json.get("output");
       assertNotNull(output);
-      assertEquals("sched-1", output.get("schedule_id").asText());
-      assertEquals("schedule-1", output.get("schedule_name").asText());
+      assertEquals("sched-1", output.get("schedule_id").stringValue());
+      assertEquals("schedule-1", output.get("schedule_name").stringValue());
     }
   }
 
@@ -2706,8 +2793,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_schedule", json.get("type").asText());
-      assertEquals("req-get-sched-404", json.get("request_id").asText());
+      assertEquals("get_schedule", json.get("type").stringValue());
+      assertEquals("req-get-sched-404", json.get("request_id").stringValue());
       assertTrue(!json.has("output") || json.get("output").isNull());
     }
   }
@@ -2846,13 +2933,13 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("backfill_schedule", json.get("type").asText());
-      assertEquals("req-backfill-sched", json.get("request_id").asText());
+      assertEquals("backfill_schedule", json.get("type").stringValue());
+      assertEquals("req-backfill-sched", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       // The cron "0 0 0 * * *" fires daily at midnight. The window
       // (2024-01-01T00:00Z, 2024-01-02T00:00Z] has exactly one firing: 2024-01-02T00:00Z.
       assertEquals(1, json.get("workflow_ids").size());
-      String wfId = json.get("workflow_ids").get(0).asText();
+      String wfId = json.get("workflow_ids").get(0).stringValue();
       assertTrue(
           wfId.startsWith("sched-schedule-to-backfill-"), "Unexpected workflow ID prefix: " + wfId);
       assertTrue(
@@ -2898,8 +2985,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("backfill_schedule", json.get("type").asText());
-      assertEquals("req-backfill-hourly", json.get("request_id").asText());
+      assertEquals("backfill_schedule", json.get("type").stringValue());
+      assertEquals("req-backfill-hourly", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       // Verify count: 5 executions in a 5-hour window for an hourly cron
@@ -2907,7 +2994,7 @@ public class ConductorTest {
 
       // Verify each ID encodes the correct scheduled hour
       var ids = new java.util.ArrayList<String>();
-      json.get("workflow_ids").forEach(n -> ids.add(n.asText()));
+      json.get("workflow_ids").forEach(n -> ids.add(n.stringValue()));
       assertTrue(ids.stream().anyMatch(id -> id.contains("T10:00")), "Missing 10:00 execution");
       assertTrue(ids.stream().anyMatch(id -> id.contains("T11:00")), "Missing 11:00 execution");
       assertTrue(ids.stream().anyMatch(id -> id.contains("T12:00")), "Missing 12:00 execution");
@@ -2937,8 +3024,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("backfill_schedule", json.get("type").asText());
-      assertEquals("req-backfill-sched-err", json.get("request_id").asText());
+      assertEquals("backfill_schedule", json.get("type").stringValue());
+      assertEquals("req-backfill-sched-err", json.get("request_id").stringValue());
       assertNotNull(json.get("error_message"));
     }
   }
@@ -2975,10 +3062,10 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("trigger_schedule", json.get("type").asText());
-      assertEquals("req-trigger-sched", json.get("request_id").asText());
+      assertEquals("trigger_schedule", json.get("type").stringValue());
+      assertEquals("req-trigger-sched", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
-      assertNotNull(json.get("workflow_id").asText());
+      assertNotNull(json.get("workflow_id").stringValue());
     }
   }
 
@@ -2999,8 +3086,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("trigger_schedule", json.get("type").asText());
-      assertEquals("req-trigger-sched-err", json.get("request_id").asText());
+      assertEquals("trigger_schedule", json.get("type").stringValue());
+      assertEquals("req-trigger-sched-err", json.get("request_id").stringValue());
       assertNotNull(json.get("error_message"));
     }
   }
@@ -3012,8 +3099,10 @@ public class ConductorTest {
 
     List<WorkflowAggregateRow> rows =
         List.of(
-            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10),
-            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3));
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
+            new WorkflowAggregateRow(
+                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3043,18 +3132,18 @@ public class ConductorTest {
       assertEquals(List.of("SUCCESS", "FAILURE"), captured.status());
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_aggregates", json.get("type").asText());
-      assertEquals("req-agg", json.get("request_id").asText());
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertEquals("req-agg", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode output = json.get("output");
       assertNotNull(output);
       assertTrue(output.isArray());
       assertEquals(2, output.size());
-      assertEquals("SUCCESS", output.get(0).get("group").get("status").asText());
-      assertEquals("myWorkflow", output.get(0).get("group").get("name").asText());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
+      assertEquals("myWorkflow", output.get(0).get("group").get("name").stringValue());
       assertEquals(10, output.get(0).get("count").asLong());
-      assertEquals("FAILURE", output.get(1).get("group").get("status").asText());
+      assertEquals("FAILURE", output.get(1).get("group").get("status").stringValue());
       assertEquals(3, output.get(1).get("count").asLong());
     }
   }
@@ -3080,8 +3169,145 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_aggregates", json.get("type").asText());
-      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesWithSelectFields() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS"),
+                null,
+                Instant.ofEpochMilli(1_700_000_000_000L),
+                Duration.ofMillis(50),
+                Duration.ofMillis(200)));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-sel",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_status", true,
+                  "select_count", false,
+                  "select_min_created_at", true,
+                  "select_max_queue_wait_ms", true,
+                  "select_max_total_latency_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertFalse(captured.selectCount());
+      assertTrue(captured.selectMinCreatedAt());
+      assertTrue(captured.selectMaxQueueWaitMs());
+      assertTrue(captured.selectMaxTotalLatencyMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode out = json.get("output");
+      assertEquals(1, out.size());
+      assertTrue(out.get(0).get("count").isNull());
+      assertEquals(1_700_000_000_000L, out.get(0).get("min_created_at").asLong());
+      assertEquals(50L, out.get(0).get("max_queue_wait_ms").asLong());
+      assertEquals(200L, out.get(0).get("max_total_latency_ms").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregates() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<StepAggregateRow> rows =
+        List.of(
+            new StepAggregateRow(
+                Map.of("function_name", "stepA", "status", "SUCCESS"), 5L, Duration.ofMillis(120)),
+            new StepAggregateRow(Map.of("function_name", "stepB", "status", "ERROR"), 2L, null));
+    when(mockDB.getStepAggregates(any(GetStepAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_function_name", true,
+                  "group_by_status", true,
+                  "select_count", true,
+                  "select_max_duration_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetStepAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetStepAggregatesInput.class);
+      verify(mockDB).getStepAggregates(inputCaptor.capture());
+      GetStepAggregatesInput captured = inputCaptor.getValue();
+      assertTrue(captured.groupByFunctionName());
+      assertTrue(captured.groupByStatus());
+      assertTrue(captured.selectCount());
+      assertTrue(captured.selectMaxDurationMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
+      assertEquals("req-step-agg", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("stepA", output.get(0).get("group").get("function_name").stringValue());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
+      assertEquals(5L, output.get(0).get("count").asLong());
+      assertEquals(120L, output.get(0).get("max_duration_ms").asLong());
+      assertEquals("stepB", output.get(1).get("group").get("function_name").stringValue());
+      assertEquals(2L, output.get(1).get("count").asLong());
+      assertTrue(output.get(1).get("max_duration_ms").isNull());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregatesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canGetStepAggregatesThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .getStepAggregates(any(GetStepAggregatesInput.class));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg-err",
+          Map.of("body", Map.of("group_by_function_name", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
       assertEquals(0, json.get("output").size());
     }
   }
@@ -3104,8 +3330,8 @@ public class ConductorTest {
       verify(mockDB).getAllEvents("wf-events-1");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_events", json.get("type").asText());
-      assertEquals("req-events", json.get("request_id").asText());
+      assertEquals("get_workflow_events", json.get("type").stringValue());
+      assertEquals("req-events", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       JsonNode events = json.get("events");
       assertNotNull(events);
@@ -3132,8 +3358,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_events", json.get("type").asText());
-      assertEquals("events error", json.get("error_message").asText());
+      assertEquals("get_workflow_events", json.get("type").stringValue());
+      assertEquals("events error", json.get("error_message").stringValue());
       assertEquals(0, json.get("events").size());
     }
   }
@@ -3162,19 +3388,19 @@ public class ConductorTest {
       verify(mockDB).getAllNotifications("wf-notifs-1");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_notifications", json.get("type").asText());
-      assertEquals("req-notifs", json.get("request_id").asText());
+      assertEquals("get_workflow_notifications", json.get("type").stringValue());
+      assertEquals("req-notifs", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       JsonNode notifs = json.get("notifications");
       assertNotNull(notifs);
       assertTrue(notifs.isArray());
       assertEquals(2, notifs.size());
-      assertEquals("topic1", notifs.get(0).get("topic").asText());
-      assertEquals("\"msg1\"", notifs.get(0).get("message").asText());
+      assertEquals("topic1", notifs.get(0).get("topic").stringValue());
+      assertEquals("\"msg1\"", notifs.get(0).get("message").stringValue());
       assertEquals(1000L, notifs.get(0).get("created_at_epoch_ms").asLong());
       assertFalse(notifs.get(0).get("consumed").asBoolean());
       assertTrue(notifs.get(1).get("topic").isNull());
-      assertEquals("99", notifs.get(1).get("message").asText());
+      assertEquals("99", notifs.get(1).get("message").stringValue());
       assertTrue(notifs.get(1).get("consumed").asBoolean());
     }
   }
@@ -3197,8 +3423,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_notifications", json.get("type").asText());
-      assertEquals("notifs error", json.get("error_message").asText());
+      assertEquals("get_workflow_notifications", json.get("type").stringValue());
+      assertEquals("notifs error", json.get("error_message").stringValue());
       assertEquals(0, json.get("notifications").size());
     }
   }
@@ -3224,19 +3450,19 @@ public class ConductorTest {
       verify(mockDB).getAllStreamEntries("wf-streams-1");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_streams", json.get("type").asText());
-      assertEquals("req-streams", json.get("request_id").asText());
+      assertEquals("get_workflow_streams", json.get("type").stringValue());
+      assertEquals("req-streams", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       JsonNode streams = json.get("streams");
       assertNotNull(streams);
       assertTrue(streams.isArray());
       assertEquals(2, streams.size());
-      assertEquals("stream1", streams.get(0).get("key").asText());
+      assertEquals("stream1", streams.get(0).get("key").stringValue());
       assertEquals(3, streams.get(0).get("values").size());
-      assertEquals("\"a\"", streams.get(0).get("values").get(0).asText());
-      assertEquals("stream2", streams.get(1).get("key").asText());
+      assertEquals("\"a\"", streams.get(0).get("values").get(0).stringValue());
+      assertEquals("stream2", streams.get(1).get("key").stringValue());
       assertEquals(2, streams.get(1).get("values").size());
-      assertEquals("1", streams.get(1).get("values").get(0).asText());
+      assertEquals("1", streams.get(1).get("values").get(0).stringValue());
     }
   }
 
@@ -3260,8 +3486,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_workflow_streams", json.get("type").asText());
-      assertEquals("streams error", json.get("error_message").asText());
+      assertEquals("get_workflow_streams", json.get("type").stringValue());
+      assertEquals("streams error", json.get("error_message").stringValue());
       assertEquals(0, json.get("streams").size());
     }
   }
@@ -3292,8 +3518,8 @@ public class ConductorTest {
       verify(mockDB).listQueues();
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_queues", json.get("type").asText());
-      assertEquals("req-list-queues", json.get("request_id").asText());
+      assertEquals("list_queues", json.get("type").stringValue());
+      assertEquals("req-list-queues", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode output = json.get("output");
@@ -3302,7 +3528,7 @@ public class ConductorTest {
       assertEquals(2, output.size());
 
       JsonNode first = output.get(0);
-      assertEquals("queue-1", first.get("name").asText());
+      assertEquals("queue-1", first.get("name").stringValue());
       assertEquals(5, first.get("concurrency").asInt());
       assertEquals(2, first.get("worker_concurrency").asInt());
       assertEquals(10, first.get("rate_limit_max").asInt());
@@ -3312,7 +3538,7 @@ public class ConductorTest {
       assertEquals(0.5, first.get("polling_interval_sec").asDouble(), 0.001);
 
       JsonNode second = output.get(1);
-      assertEquals("queue-2", second.get("name").asText());
+      assertEquals("queue-2", second.get("name").stringValue());
       assertTrue(second.get("concurrency").isNull());
       assertTrue(second.get("worker_concurrency").isNull());
       assertTrue(second.get("rate_limit_max").isNull());
@@ -3339,8 +3565,8 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("list_queues", json.get("type").asText());
-      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals("list_queues", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
       assertEquals(0, json.get("output").size());
     }
   }
@@ -3364,13 +3590,13 @@ public class ConductorTest {
       verify(mockDB).findQueue("my-queue");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_queue", json.get("type").asText());
-      assertEquals("req-get-queue", json.get("request_id").asText());
+      assertEquals("get_queue", json.get("type").stringValue());
+      assertEquals("req-get-queue", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
 
       JsonNode output = json.get("output");
       assertNotNull(output);
-      assertEquals("my-queue", output.get("name").asText());
+      assertEquals("my-queue", output.get("name").stringValue());
       assertEquals(3, output.get("concurrency").asInt());
       assertTrue(output.get("worker_concurrency").isNull());
     }
@@ -3391,10 +3617,267 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
-      assertEquals("get_queue", json.get("type").asText());
-      assertEquals("req-get-queue-404", json.get("request_id").asText());
+      assertEquals("get_queue", json.get("type").stringValue());
+      assertEquals("req-get-queue-404", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       assertTrue(!json.has("output") || json.get("output").isNull());
+    }
+  }
+
+  // ---- forkFromFailure conductor tests ----
+
+  @SuppressWarnings("unchecked")
+  private WorkflowHandle<Object, Exception> mockForkFromFailureHandle(String forkedId) {
+    var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(handle.workflowId()).thenReturn(forkedId);
+    return handle;
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastFailure() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-a", "wf-b");
+    List<String> forkedIds = List.of("fork-a", "fork-b");
+    var handles = List.of(mockForkFromFailureHandle("fork-a"), mockForkFromFailureHandle("fork-b"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      body.put("application_version", "v2");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-1", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromLastFailure.class, options);
+      assertEquals("v2", options.applicationVersion());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-1", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+      JsonNode ids = json.get("forked_workflow_ids");
+      assertNotNull(ids);
+      assertEquals(forkedIds, mapper.convertValue(ids, List.class));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-x");
+    var handles = List.of(mockForkFromFailureHandle("fork-x"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-2", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      assertInstanceOf(ForkFromFailureOptions.FromLastStep.class, captor.getValue());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-y");
+    var handles = List.of(mockForkFromFailureHandle("fork-y"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step", 3);
+      body.put("queue_name", "my-queue");
+      body.put("queue_partition_key", "pk");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-3", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStep.class, options);
+      assertEquals(3, ((ForkFromFailureOptions.FromStep) options).step());
+      assertEquals("my-queue", options.queueName());
+      assertEquals("pk", options.queuePartitionKey());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStepName() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-z");
+    var handles = List.of(mockForkFromFailureHandle("fork-z"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step_name", "myStep");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-4", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStepName.class, options);
+      assertEquals("myStep", ((ForkFromFailureOptions.FromStepName) options).stepName());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  // multiple mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureMultipleModesReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-p"));
+      body.put("from_last_failure", true);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-multi", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  // no mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureNoModeReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-q"));
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nomode", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingBody() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // send message with no body field at all
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nobody", Map.of());
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nobody", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingWorkflowIds() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // body present but workflow_ids omitted
+      Map<String, Object> body = new HashMap<>();
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nowfids", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nowfids", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureExecutorThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-err");
+    String errorMessage = "canForkFromFailureExecutorThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).forkFromFailure(eq(origIds), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-throws", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-throws", json.get("request_id").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertNull(json.get("forked_workflow_ids"));
     }
   }
 }

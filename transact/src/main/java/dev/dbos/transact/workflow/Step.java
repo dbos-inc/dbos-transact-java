@@ -15,4 +15,6 @@ public @interface Step {
   double intervalSeconds() default StepOptions.DEFAULT_INTERVAL_SECONDS;
 
   double backOffRate() default StepOptions.DEFAULT_BACKOFF;
+
+  Class<? extends StepShouldRetry> shouldRetry() default StepShouldRetry.None.class;
 }
