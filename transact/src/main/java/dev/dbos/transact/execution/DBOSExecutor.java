@@ -117,10 +117,11 @@ public class DBOSExecutor implements AutoCloseable {
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, QueueBucket> activeWorkflows = new ConcurrentHashMap<>();
 
-  private boolean dbosCloud;
+  private final boolean dbosCloud;
+  private final String appId;
+  private final String appName;
   private String appVersion;
   private String executorId;
-  private String appId;
 
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
@@ -146,10 +147,22 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOSConfig.executorId cannot be specified when using Conductor");
     }
 
-    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    dbosCloud = Boolean.parseBoolean(System.getenv("DBOS__CLOUD"));
     appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
+    appName =
+        dbosCloud
+            ? Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "")
+            : config.appName();
+    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
     executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
-    dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+
+    if (appName.isEmpty()) {
+      var msg =
+          dbosCloud
+              ? "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true"
+              : "DBOSConfig.appName field must not be empty";
+      throw new IllegalArgumentException(msg);
+    }
 
     if (!dbosCloud) {
       if (config.enablePatching()) {
@@ -374,20 +387,20 @@ public class DBOSExecutor implements AutoCloseable {
 
   // executor metadata
 
-  public String executorId() {
-    return this.executorId;
+  public String appId() {
+    return this.appId;
+  }
+
+  public String appName() {
+    return appName;
   }
 
   public String appVersion() {
     return this.appVersion;
   }
 
-  public String appId() {
-    return this.appId;
-  }
-
-  public String appName() {
-    return config.appName();
+  public String executorId() {
+    return this.executorId;
   }
 
   public Map<String, Object> executorMetadata() {
