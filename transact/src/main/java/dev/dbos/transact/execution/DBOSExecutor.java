@@ -117,9 +117,9 @@ public class DBOSExecutor implements AutoCloseable {
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, QueueBucket> activeWorkflows = new ConcurrentHashMap<>();
 
-  private boolean dbosCloud;
-  private String appId;
-  private String appName;
+  private final boolean dbosCloud;
+  private final String appId;
+  private final String appName;
   private String appVersion;
   private String executorId;
 
@@ -149,17 +149,22 @@ public class DBOSExecutor implements AutoCloseable {
 
     dbosCloud = Boolean.parseBoolean(System.getenv("DBOS__CLOUD"));
     appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
-    appName = Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "");
+    appName =
+        dbosCloud
+            ? Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "")
+            : config.appName();
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
     executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
 
-    if (dbosCloud && appName.isEmpty()) {
-      throw new IllegalArgumentException(
-          "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true");
+    if (appName.isEmpty()) {
+      var msg =
+          dbosCloud
+              ? "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true"
+              : "DBOSConfig.appName field must not be empty";
+      throw new IllegalArgumentException(msg);
     }
 
     if (!dbosCloud) {
-      appName = config.appName();
       if (config.enablePatching()) {
         appVersion = "PATCHING_ENABLED";
       }

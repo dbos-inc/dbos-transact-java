@@ -92,13 +92,14 @@ public class ConfigEnvTest {
         new EnvironmentVariables("DBOS__CLOUD", "true")
             .and("DBOS__VMID", "test-env-executor-id")
             .and("DBOS__APPVERSION", "test-env-app-version")
-            .and("DBOS__APPID", "test-env-app-id");
+            .and("DBOS__APPID", "test-env-app-id")
+            .and("DBOS_APP_NAME", "test-env-app-name");
 
     envVars.execute(
         () -> {
           var config =
               pgContainer
-                  .dbosConfig()
+                  .dbosConfig("test-app-name")
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
           var dbos = new DBOS(config);
@@ -109,6 +110,7 @@ public class ConfigEnvTest {
             assertEquals("test-env-app-version", dbosExecutor.appVersion());
             assertEquals("test-env-executor-id", dbosExecutor.executorId());
             assertEquals("test-env-app-id", dbosExecutor.appId());
+            assertEquals("test-env-app-name", dbosExecutor.appName());
           } finally {
             dbos.shutdown();
           }
