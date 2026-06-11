@@ -826,7 +826,18 @@ public class DBOS implements AutoCloseable {
    * @throws IllegalStateException if called before DBOS is launched
    */
   public void cancelWorkflow(@NonNull String workflowId) {
-    cancelWorkflows(List.of(workflowId));
+    cancelWorkflows(List.of(workflowId), false);
+  }
+
+  /**
+   * Cancel a workflow, optionally also cancelling all descendant workflows.
+   *
+   * @param workflowId ID of the workflow to cancel
+   * @param cancelChildren if true, recursively cancel all descendant workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void cancelWorkflow(@NonNull String workflowId, boolean cancelChildren) {
+    cancelWorkflows(List.of(workflowId), cancelChildren);
   }
 
   /**
@@ -837,7 +848,18 @@ public class DBOS implements AutoCloseable {
    * @throws IllegalStateException if called before DBOS is launched
    */
   public void cancelWorkflows(@NonNull List<String> workflowIds) {
-    ensureLaunched("cancelWorkflow").cancelWorkflows(workflowIds);
+    cancelWorkflows(workflowIds, false);
+  }
+
+  /**
+   * Cancels multiple workflows, optionally also cancelling all descendant workflows.
+   *
+   * @param workflowIds a list of workflow IDs to cancel; must not be null
+   * @param cancelChildren if true, recursively cancel all descendant workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void cancelWorkflows(@NonNull List<String> workflowIds, boolean cancelChildren) {
+    ensureLaunched("cancelWorkflows").cancelWorkflows(workflowIds, cancelChildren);
   }
 
   /**

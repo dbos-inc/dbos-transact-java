@@ -1,11 +1,17 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.SystemDatabase.NotificationRegistry;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,7 +138,13 @@ public class StreamsDAO {
         ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
   }
 
-  public static Object readStream(DbContext ctx, String workflowId, String key, int offset)
+  public static Object readStream(
+      DbContext ctx,
+      String workflowId,
+      String key,
+      int offset,
+      Duration dbPollingInterval,
+      NotificationRegistry notificationRegistry)
       throws SQLException {
     String sql =
         """
@@ -142,23 +154,31 @@ public class StreamsDAO {
         """
             .formatted(ctx.schema());
 
-    try (Connection conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      stmt.setString(2, key);
-      stmt.setInt(3, offset);
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          String value = rs.getString("value");
-          String serialization = rs.getString("serialization");
-          Object deserialized = SerializationUtil.deserializeValue(value, serialization, null);
-          if (STREAM_CLOSED_SENTINEL.equals(deserialized)) {
-            throw new IllegalStateException("Stream closed for key: " + key);
+    while (true) {
+      ctx.checkClosed();
+      try (var sub = notificationRegistry.subscribe(new SignalKey.Stream(workflowId, key))) {
+        try (var conn = ctx.getConnection();
+            var stmt = conn.prepareStatement(sql)) {
+          stmt.setString(1, workflowId);
+          stmt.setString(2, key);
+          stmt.setInt(3, offset);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              String value = rs.getString("value");
+              String serialization = rs.getString("serialization");
+              Object deserialized = SerializationUtil.deserializeValue(value, serialization, null);
+              if (STREAM_CLOSED_SENTINEL.equals(deserialized)) {
+                return SystemDatabase.END_OF_STREAM;
+              }
+              return deserialized;
+            }
           }
-          return deserialized;
+          WorkflowStatus status = WorkflowDAO.getWorkflowStatus(ctx, workflowId);
+          if (status == null || !status.status().isActive()) {
+            return SystemDatabase.END_OF_STREAM;
+          }
         }
-        throw new IllegalArgumentException(
-            "No value found for workflow=" + workflowId + ", key=" + key + ", offset=" + offset);
+        SignalMap.awaitAny(dbPollingInterval, sub);
       }
     }
   }

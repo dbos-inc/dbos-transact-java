@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,10 +29,13 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
@@ -550,7 +554,59 @@ public class ConductorTest {
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenTrue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canCancelWithCancelChildrenFalse() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", workflowId, "cancel_children", false);
+      listener.send(MessageType.CANCEL, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -569,7 +625,9 @@ public class ConductorTest {
     String errorMessage = "canCancelThrows error";
     String workflowId = "sample-wf-id";
 
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).cancelWorkflows(anyList());
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .cancelWorkflows(anyList(), eq(false));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -581,7 +639,7 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(List.of(workflowId));
+      verify(mockExec).cancelWorkflows(List.of(workflowId), false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -724,6 +782,32 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canCancelBulkWithChildren() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds, "cancel_children", true);
+      listener.send(MessageType.CANCEL, "bulk-cancel-children-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(workflowIds, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").stringValue());
+      assertEquals("bulk-cancel-children-1", jsonNode.get("request_id").stringValue());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
   public void canCancelBulk() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -738,7 +822,7 @@ public class ConductorTest {
       listener.send(MessageType.CANCEL, "bulk-cancel-1", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).cancelWorkflows(workflowIds);
+      verify(mockExec).cancelWorkflows(workflowIds, false);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -3015,8 +3099,10 @@ public class ConductorTest {
 
     List<WorkflowAggregateRow> rows =
         List.of(
-            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10),
-            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3));
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
+            new WorkflowAggregateRow(
+                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3084,6 +3170,143 @@ public class ConductorTest {
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesWithSelectFields() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(
+            new WorkflowAggregateRow(
+                Map.of("status", "SUCCESS"),
+                null,
+                Instant.ofEpochMilli(1_700_000_000_000L),
+                Duration.ofMillis(50),
+                Duration.ofMillis(200)));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-sel",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_status", true,
+                  "select_count", false,
+                  "select_min_created_at", true,
+                  "select_max_queue_wait_ms", true,
+                  "select_max_total_latency_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertFalse(captured.selectCount());
+      assertTrue(captured.selectMinCreatedAt());
+      assertTrue(captured.selectMaxQueueWaitMs());
+      assertTrue(captured.selectMaxTotalLatencyMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode out = json.get("output");
+      assertEquals(1, out.size());
+      assertTrue(out.get(0).get("count").isNull());
+      assertEquals(1_700_000_000_000L, out.get(0).get("min_created_at").asLong());
+      assertEquals(50L, out.get(0).get("max_queue_wait_ms").asLong());
+      assertEquals(200L, out.get(0).get("max_total_latency_ms").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregates() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<StepAggregateRow> rows =
+        List.of(
+            new StepAggregateRow(
+                Map.of("function_name", "stepA", "status", "SUCCESS"), 5L, Duration.ofMillis(120)),
+            new StepAggregateRow(Map.of("function_name", "stepB", "status", "ERROR"), 2L, null));
+    when(mockDB.getStepAggregates(any(GetStepAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_function_name", true,
+                  "group_by_status", true,
+                  "select_count", true,
+                  "select_max_duration_ms", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetStepAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetStepAggregatesInput.class);
+      verify(mockDB).getStepAggregates(inputCaptor.capture());
+      GetStepAggregatesInput captured = inputCaptor.getValue();
+      assertTrue(captured.groupByFunctionName());
+      assertTrue(captured.groupByStatus());
+      assertTrue(captured.selectCount());
+      assertTrue(captured.selectMaxDurationMs());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
+      assertEquals("req-step-agg", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("stepA", output.get(0).get("group").get("function_name").stringValue());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
+      assertEquals(5L, output.get(0).get("count").asLong());
+      assertEquals(120L, output.get(0).get("max_duration_ms").asLong());
+      assertEquals("stepB", output.get(1).get("group").get("function_name").stringValue());
+      assertEquals(2L, output.get(1).get("count").asLong());
+      assertTrue(output.get(1).get("max_duration_ms").isNull());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetStepAggregatesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canGetStepAggregatesThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .getStepAggregates(any(GetStepAggregatesInput.class));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_STEP_AGGREGATES,
+          "req-step-agg-err",
+          Map.of("body", Map.of("group_by_function_name", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_step_aggregates", json.get("type").stringValue());
       assertEquals(errorMessage, json.get("error_message").stringValue());
       assertEquals(0, json.get("output").size());
     }
@@ -3398,6 +3621,263 @@ public class ConductorTest {
       assertEquals("req-get-queue-404", json.get("request_id").stringValue());
       assertNull(json.get("error_message"));
       assertTrue(!json.has("output") || json.get("output").isNull());
+    }
+  }
+
+  // ---- forkFromFailure conductor tests ----
+
+  @SuppressWarnings("unchecked")
+  private WorkflowHandle<Object, Exception> mockForkFromFailureHandle(String forkedId) {
+    var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(handle.workflowId()).thenReturn(forkedId);
+    return handle;
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastFailure() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-a", "wf-b");
+    List<String> forkedIds = List.of("fork-a", "fork-b");
+    var handles = List.of(mockForkFromFailureHandle("fork-a"), mockForkFromFailureHandle("fork-b"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      body.put("application_version", "v2");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-1", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromLastFailure.class, options);
+      assertEquals("v2", options.applicationVersion());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-1", json.get("request_id").stringValue());
+      assertNull(json.get("error_message"));
+      JsonNode ids = json.get("forked_workflow_ids");
+      assertNotNull(ids);
+      assertEquals(forkedIds, mapper.convertValue(ids, List.class));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureLastStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-x");
+    var handles = List.of(mockForkFromFailureHandle("fork-x"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-2", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      assertInstanceOf(ForkFromFailureOptions.FromLastStep.class, captor.getValue());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-y");
+    var handles = List.of(mockForkFromFailureHandle("fork-y"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step", 3);
+      body.put("queue_name", "my-queue");
+      body.put("queue_partition_key", "pk");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-3", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStep.class, options);
+      assertEquals(3, ((ForkFromFailureOptions.FromStep) options).step());
+      assertEquals("my-queue", options.queueName());
+      assertEquals("pk", options.queuePartitionKey());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureFromStepName() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-z");
+    var handles = List.of(mockForkFromFailureHandle("fork-z"));
+    ArgumentCaptor<ForkFromFailureOptions> captor =
+        ArgumentCaptor.forClass(ForkFromFailureOptions.class);
+    when(mockExec.forkFromFailure(eq(origIds), captor.capture())).thenReturn(handles);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_step_name", "myStep");
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-4", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ForkFromFailureOptions options = captor.getValue();
+      assertInstanceOf(ForkFromFailureOptions.FromStepName.class, options);
+      assertEquals("myStep", ((ForkFromFailureOptions.FromStepName) options).stepName());
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  // multiple mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureMultipleModesReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-p"));
+      body.put("from_last_failure", true);
+      body.put("from_last_step", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-multi", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  // no mode flags → validation error
+  @RetryingTest(3)
+  public void canForkFromFailureNoModeReturnsError() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", List.of("wf-q"));
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nomode", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertNotNull(json.get("error_message"));
+      verify(mockExec, never()).forkFromFailure(any(), any());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingBody() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // send message with no body field at all
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nobody", Map.of());
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nobody", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureMissingWorkflowIds() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // body present but workflow_ids omitted
+      Map<String, Object> body = new HashMap<>();
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-nowfids", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-nowfids", json.get("request_id").stringValue());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canForkFromFailureExecutorThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> origIds = List.of("wf-err");
+    String errorMessage = "canForkFromFailureExecutorThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).forkFromFailure(eq(origIds), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = new HashMap<>();
+      body.put("workflow_ids", origIds);
+      body.put("from_last_failure", true);
+      listener.send(MessageType.FORK_FROM_FAILURE, "req-fff-throws", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("fork_from_failure", json.get("type").stringValue());
+      assertEquals("req-fff-throws", json.get("request_id").stringValue());
+      assertEquals(errorMessage, json.get("error_message").stringValue());
+      assertNull(json.get("forked_workflow_ids"));
     }
   }
 }

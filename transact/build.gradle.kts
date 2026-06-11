@@ -10,10 +10,9 @@ plugins {
 dependencies {
   api(libs.jspecify)
 
-  implementation(libs.asm)
-  implementation(libs.bundles.jackson)
   implementation(libs.cron.utils)
   implementation(libs.hikaricp)
+  implementation(libs.jackson.databind)
   implementation(libs.postgresql)
   implementation(libs.slf4j.api)
 

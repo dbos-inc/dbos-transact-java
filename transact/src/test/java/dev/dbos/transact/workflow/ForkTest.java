@@ -200,7 +200,8 @@ public class ForkTest {
     var handle1 = dbos.forkWorkflow(workflowId, 0);
     assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertNull(handle1.getStatus().appVersion());
+    // No applicationVersion specified: falls back to the original workflow's version (matches TS).
+    assertEquals(handle.getStatus().appVersion(), handle1.getStatus().appVersion());
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
 
     var appVersion = UUID.randomUUID().toString();
@@ -265,7 +266,8 @@ public class ForkTest {
     var handle1 = dbos.forkWorkflow(workflowId, 0);
     assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertEquals(Duration.ofMillis(1000), handle1.getStatus().timeout());
+    assertNull(
+        handle1.getStatus().timeout()); // no explicit timeout: fork does not inherit original's
     assertNull(handle1.getStatus().deadline());
 
     var forkOptions = new ForkOptions().withTimeout(Duration.ofSeconds(2));
@@ -275,7 +277,7 @@ public class ForkTest {
     assertEquals(Duration.ofMillis(2000), handle2.getStatus().timeout());
     assertNull(handle2.getStatus().deadline());
 
-    forkOptions = new ForkOptions().withNoTimeout();
+    forkOptions = new ForkOptions();
     var handle3 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle3.workflowId());
     assertEquals(workflowId, handle3.getStatus().forkedFrom());

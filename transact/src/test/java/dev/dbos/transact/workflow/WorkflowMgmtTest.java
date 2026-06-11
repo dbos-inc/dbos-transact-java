@@ -13,6 +13,9 @@ import dev.dbos.transact.utils.PgContainer;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,6 +49,7 @@ public class WorkflowMgmtTest {
 
     impl = new MgmtServiceImpl(dbos);
     proxy = dbos.registerProxy(MgmtService.class, impl);
+    impl.proxy = proxy;
 
     myqueue = new Queue("myqueue");
     dbos.registerQueue(myqueue);
@@ -177,6 +181,44 @@ public class WorkflowMgmtTest {
     assertEquals(3, impl.stepsExecuted());
 
     assertEquals(WorkflowState.SUCCESS, origHandle.getStatus().status());
+  }
+
+  @Test
+  public void cancelAfterFinalStepTest() throws Exception {
+    // A workflow cancelled after its final step completes (but before it returns)
+    // must not complete as SUCCESS. CANCELLED is terminal.
+    String workflowId = "cancelAfterFinalStepTest:%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(workflowId);
+    WorkflowHandle<Integer, ?> h =
+        dbos.startWorkflow(() -> proxy.cancelAfterFinalStepWorkflow(42), options);
+
+    impl.mainLatch.await();
+    dbos.cancelWorkflow(workflowId);
+    impl.workLatch.countDown();
+
+    // getResult() blocks until done; CANCELLED status throws DBOSAwaitedWorkflowCancelledException
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, h::getResult);
+    assertEquals(1, impl.stepsExecuted());
+    assertEquals(WorkflowState.CANCELLED, h.getStatus().status());
+
+    // Resume: completes successfully without re-running the already-recorded step
+    WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
+    assertEquals(42, handle.getResult());
+    assertEquals(1, impl.stepsExecuted()); // step not re-run
+    assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
+  }
+
+  @Test
+  public void cancelAfterCompletionTest() throws Exception {
+    // Cancelling a workflow that has already completed successfully is a no-op.
+    // SUCCESS is a terminal state; cancel must not change it.
+    WorkflowHandle<String, ?> h = dbos.startWorkflow(() -> proxy.helloWorkflow("world"));
+    assertEquals("Hello, world!", h.getResult());
+    assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
+
+    dbos.cancelWorkflow(h.workflowId());
+
+    assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
   }
 
   @Test
@@ -334,6 +376,86 @@ public class WorkflowMgmtTest {
     dbos.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
     qs.unpause();
     assertEquals("Hello, world!", handle.getResult());
+  }
+
+  @Test
+  public void bulkCancelTest() throws Exception {
+    // Start 3 concurrent blocking workflows, cancel them all at once, verify none complete.
+    var wfIds = new ArrayList<String>();
+    var handles = new ArrayList<WorkflowHandle<String, ?>>();
+
+    for (int i = 0; i < 3; i++) {
+      var wfId = "bulkCancelTest-%d:%d".formatted(i, System.currentTimeMillis());
+      wfIds.add(wfId);
+      impl.testMainLatches.put(wfId, new CountDownLatch(1));
+      impl.testWorkLatches.put(wfId, new CountDownLatch(1));
+      handles.add(
+          dbos.startWorkflow(() -> proxy.blockingWorkflow(), new StartWorkflowOptions(wfId)));
+    }
+
+    for (var wfId : wfIds) {
+      impl.testMainLatches.get(wfId).await();
+    }
+    assertEquals(3, impl.stepsExecuted()); // only step one ran for each
+
+    dbos.cancelWorkflows(wfIds);
+
+    // Release workflows so they proceed to step two and detect cancellation there
+    for (var wfId : wfIds) {
+      impl.testWorkLatches.get(wfId).countDown();
+    }
+
+    for (var handle : handles) {
+      assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
+    }
+    assertEquals(3, impl.stepsExecuted()); // step two did not run for any
+  }
+
+  @Test
+  public void cancelChildrenEndToEndTest() throws Exception {
+    // Build a running parent→child→grandchild tree and verify cancel_children propagation.
+    var parentId = "cancelChildren-parent:%d".formatted(System.currentTimeMillis());
+    var childId = "cancelChildren-child:%d".formatted(System.currentTimeMillis());
+    var grandchildId = "cancelChildren-grandchild:%d".formatted(System.currentTimeMillis());
+    var ids = List.of(parentId, childId, grandchildId);
+
+    for (var id : ids) {
+      impl.testMainLatches.put(id, new CountDownLatch(1));
+      impl.testWorkLatches.put(id, new CountDownLatch(1));
+    }
+
+    var parentHandle =
+        dbos.startWorkflow(
+            () -> proxy.treeParentWorkflow(childId, grandchildId),
+            new StartWorkflowOptions(parentId));
+
+    // Wait until the whole tree is running and blocked
+    for (var id : ids) {
+      impl.testMainLatches.get(id).await();
+    }
+
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    assertEquals(Set.of(childId, grandchildId), sysdb.getWorkflowChildren(parentId));
+
+    // Cancelling without cancel_children only affects the parent
+    dbos.cancelWorkflow(parentId, false);
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(parentId).getStatus().status());
+    assertNotEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(childId).getStatus().status());
+    assertNotEquals(
+        WorkflowState.CANCELLED, dbos.retrieveWorkflow(grandchildId).getStatus().status());
+
+    // Cancelling with cancel_children cancels the full subtree
+    dbos.cancelWorkflow(parentId, true);
+    for (var id : ids) {
+      assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(id).getStatus().status());
+    }
+
+    // Release all so each workflow thread can proceed to its step and observe cancellation
+    for (var id : ids) {
+      impl.testWorkLatches.get(id).countDown();
+    }
+
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, parentHandle::getResult);
   }
 
   @Test

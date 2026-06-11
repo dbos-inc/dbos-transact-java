@@ -23,12 +23,13 @@ public record ExecutionOptions(
     String queuePartitionKey,
     Duration delay,
     String appVersion,
-    boolean isRecoveryRequest,
-    boolean isDequeuedRequest,
     String serialization,
     String authenticatedUser,
     String assumedRole,
-    String[] authenticatedRoles) {
+    String[] authenticatedRoles,
+    // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
+    boolean isRecoveryRequest,
+    boolean isDequeuedRequest) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -63,6 +64,35 @@ public record ExecutionOptions(
     }
   }
 
+  public ExecutionOptions(
+      String workflowId,
+      Timeout timeout,
+      Instant deadline,
+      String queueName,
+      String deduplicationId,
+      Integer priority,
+      String queuePartitionKey,
+      Duration delay,
+      String appVersion,
+      String serialization) {
+    this(
+        workflowId,
+        timeout,
+        deadline,
+        queueName,
+        deduplicationId,
+        priority,
+        queuePartitionKey,
+        delay,
+        appVersion,
+        serialization,
+        null,
+        null,
+        null,
+        false,
+        false);
+  }
+
   public ExecutionOptions(String workflowId) {
     this(
         workflowId,
@@ -74,12 +104,12 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
+        null,
+        null,
+        null,
         false,
-        false,
-        null,
-        null,
-        null,
-        null);
+        false);
   }
 
   public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
@@ -93,12 +123,12 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
+        null,
+        null,
+        null,
         false,
-        false,
-        null,
-        null,
-        null,
-        null);
+        false);
   }
 
   public ExecutionOptions asRecoveryRequest() {
@@ -112,31 +142,31 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        true,
-        false,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        true,
+        false);
   }
 
-  public ExecutionOptions asDequeuedRequest() {
+  public ExecutionOptions asDequeuedRequest(String queueName, String partitionKey) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
         this.deadline,
-        this.queueName,
+        queueName,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey,
+        partitionKey,
         this.delay,
         this.appVersion,
-        false,
-        true,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        false,
+        true);
   }
 
   public ExecutionOptions withOptions(DBOSClient.EnqueueOptions options) {
@@ -150,12 +180,12 @@ public record ExecutionOptions(
         options.queuePartitionKey(),
         options.delay(),
         options.appVersion(),
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         options.authenticatedUser(),
         options.assumedRole(),
-        options.authenticatedRoles());
+        options.authenticatedRoles(),
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withOptions(StartWorkflowOptions options) {
@@ -172,12 +202,12 @@ public record ExecutionOptions(
         options.queuePartitionKey(),
         options.delay(),
         options.appVersion(),
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         options.authenticatedUser(),
         options.assumedRole(),
-        options.authenticatedRoles());
+        options.authenticatedRoles(),
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -191,12 +221,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withPriority(Integer priority) {
@@ -210,12 +240,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -229,12 +259,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
@@ -248,12 +278,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withAssumedRole(String assumedRole) {
@@ -267,12 +297,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withAuthenticatedRoles(String[] authenticatedRoles) {
@@ -286,12 +316,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        authenticatedRoles);
+        authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withQueueName(String queueName) {
@@ -305,12 +335,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withTimeout(Duration timeout) {
@@ -324,12 +354,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withTimeout(Timeout timeout) {
@@ -343,12 +373,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public ExecutionOptions withDeadline(Instant deadline) {
@@ -362,12 +392,12 @@ public record ExecutionOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
         this.serialization,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
   }
 
   public Duration timeoutDuration() {

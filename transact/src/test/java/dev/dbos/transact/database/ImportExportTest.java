@@ -85,10 +85,22 @@ public class ImportExportTest {
         false,
         false);
     sysdb.recordWorkflowOutput(wfId, null);
+  }
 
-    long now = System.currentTimeMillis();
-    sysdb.recordChildWorkflow(wfId, child1Id, 0, "step0", now - 2000);
-    sysdb.recordChildWorkflow(wfId, child2Id, 1, "step1", now - 1000);
+  /** Creates a child workflow with parentWorkflowId set so getWorkflowChildren can find it. */
+  private void createChildWorkflow(String wfId, String parentId) throws SQLException {
+    sysdb.initWorkflowStatus(
+        new WorkflowStatusInternalBuilder()
+            .workflowId(wfId)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .priority(0)
+            .parentWorkflowId(parentId)
+            .build(),
+        null,
+        false,
+        false);
+    sysdb.recordWorkflowOutput(wfId, null);
   }
 
   // ── Import tests (importWorkflow is the subject; setup via buildExportedWorkflow) ──────────
@@ -242,8 +254,8 @@ public class ImportExportTest {
     var child2Id = "export-no-children-child-2";
 
     createWorkflowWithChildren(parentId, child1Id, child2Id);
-    createWorkflow(child1Id);
-    createWorkflow(child2Id);
+    createChildWorkflow(child1Id, parentId);
+    createChildWorkflow(child2Id, parentId);
 
     var result = sysdb.exportWorkflow(parentId, false);
     assertEquals(1, result.size());
@@ -257,8 +269,8 @@ public class ImportExportTest {
     var child2Id = "export-children-child-2";
 
     createWorkflowWithChildren(parentId, child1Id, child2Id);
-    createWorkflow(child1Id);
-    createWorkflow(child2Id);
+    createChildWorkflow(child1Id, parentId);
+    createChildWorkflow(child2Id, parentId);
 
     var result = sysdb.exportWorkflow(parentId, true);
     assertEquals(3, result.size());

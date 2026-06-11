@@ -3,6 +3,7 @@ package dev.dbos.transact.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -36,13 +37,14 @@ public class ConfigEnvTest {
     var envVars =
         new EnvironmentVariables("DBOS__VMID", "test-env-executor-id")
             .and("DBOS__APPVERSION", "test-env-app-version")
-            .and("DBOS__APPID", "test-env-app-id");
+            .and("DBOS__APPID", "test-env-app-id")
+            .and("DBOS_APP_NAME", "test-env-app-name");
 
     envVars.execute(
         () -> {
           var config =
               pgContainer
-                  .dbosConfig()
+                  .dbosConfig("test-app-name")
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
           var dbos = new DBOS(config);
@@ -50,6 +52,7 @@ public class ConfigEnvTest {
           try {
             dbos.launch();
             var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertEquals("test-app-name", dbosExecutor.appName());
             assertEquals("test-app-version", dbosExecutor.appVersion());
             assertEquals("test-executor-id", dbosExecutor.executorId());
             assertEquals("test-env-app-id", dbosExecutor.appId());
@@ -89,13 +92,14 @@ public class ConfigEnvTest {
         new EnvironmentVariables("DBOS__CLOUD", "true")
             .and("DBOS__VMID", "test-env-executor-id")
             .and("DBOS__APPVERSION", "test-env-app-version")
-            .and("DBOS__APPID", "test-env-app-id");
+            .and("DBOS__APPID", "test-env-app-id")
+            .and("DBOS_APP_NAME", "test-env-app-name");
 
     envVars.execute(
         () -> {
           var config =
               pgContainer
-                  .dbosConfig()
+                  .dbosConfig("test-app-name")
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
           var dbos = new DBOS(config);
@@ -106,6 +110,7 @@ public class ConfigEnvTest {
             assertEquals("test-env-app-version", dbosExecutor.appVersion());
             assertEquals("test-env-executor-id", dbosExecutor.executorId());
             assertEquals("test-env-app-id", dbosExecutor.appId());
+            assertEquals("test-env-app-name", dbosExecutor.appName());
           } finally {
             dbos.shutdown();
           }
@@ -241,6 +246,52 @@ public class ConfigEnvTest {
     } finally {
       d.shutdown();
     }
+  }
+
+  @Test
+  public void cloudEnvOverridesAppName() throws Exception {
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true").and("DBOS_APP_NAME", "env-app-name");
+
+    envVars.execute(
+        () -> {
+          var config = pgContainer.dbosConfig("local-app-name");
+          assertEquals("local-app-name", config.appName());
+          var dbos = new DBOS(config);
+
+          try {
+            dbos.launch();
+            var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertEquals("env-app-name", dbosExecutor.appName());
+          } finally {
+            dbos.shutdown();
+          }
+        });
+  }
+
+  @Test
+  public void cloudEnvRequiresAppName() throws Exception {
+    new EnvironmentVariables("DBOS__CLOUD", "true")
+        .execute(
+            () -> {
+              var config = pgContainer.dbosConfig("local-app-name");
+              try (var dbos = new DBOS(config)) {
+                assertThrows(IllegalArgumentException.class, dbos::launch);
+              }
+            });
+  }
+
+  @Test
+  public void cloudEnvEmptyAppNameThrows() throws Exception {
+    new EnvironmentVariables("DBOS__CLOUD", "true")
+        .and("DBOS_APP_NAME", "")
+        .execute(
+            () -> {
+              var config = pgContainer.dbosConfig("local-app-name");
+              try (var dbos = new DBOS(config)) {
+                assertThrows(IllegalArgumentException.class, dbos::launch);
+              }
+            });
   }
 
   @Test

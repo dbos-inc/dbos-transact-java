@@ -27,6 +27,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -106,23 +107,27 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  private static final ThreadLocal<Consumer<Invocation>> hookHolder = new ThreadLocal<>();
+  private record QueueBucket(String queueName, String partitionKey) {}
+
+  private static final ThreadLocal<Consumer<Invocation>> HOOK_HOLDER = new ThreadLocal<>();
+  private static final QueueBucket NO_QUEUE = new QueueBucket(null, null);
 
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
+  private final ConcurrentHashMap<String, QueueBucket> activeWorkflows = new ConcurrentHashMap<>();
 
-  private boolean dbosCloud;
+  private final boolean dbosCloud;
+  private final String appId;
+  private final String appName;
   private String appVersion;
   private String executorId;
-  private String appId;
 
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
   private Map<String, RegisteredWorkflow> internalWorkflowMap;
   private Map<String, Queue> queueMap;
-  private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
   private SystemDatabase systemDatabase;
   private QueueService queueService;
@@ -142,10 +147,22 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOSConfig.executorId cannot be specified when using Conductor");
     }
 
-    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    dbosCloud = Boolean.parseBoolean(System.getenv("DBOS__CLOUD"));
     appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
+    appName =
+        dbosCloud
+            ? Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "")
+            : config.appName();
+    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
     executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
-    dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+
+    if (appName.isEmpty()) {
+      var msg =
+          dbosCloud
+              ? "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true"
+              : "DBOSConfig.appName field must not be empty";
+      throw new IllegalArgumentException(msg);
+    }
 
     if (!dbosCloud) {
       if (config.enablePatching()) {
@@ -370,20 +387,20 @@ public class DBOSExecutor implements AutoCloseable {
 
   // executor metadata
 
-  public String executorId() {
-    return this.executorId;
+  public String appId() {
+    return this.appId;
+  }
+
+  public String appName() {
+    return appName;
   }
 
   public String appVersion() {
     return this.appVersion;
   }
 
-  public String appId() {
-    return this.appId;
-  }
-
-  public String appName() {
-    return config.appName();
+  public String executorId() {
+    return this.executorId;
   }
 
   public Map<String, Object> executorMetadata() {
@@ -460,6 +477,11 @@ public class DBOSExecutor implements AutoCloseable {
           message,
           metadata);
     }
+  }
+
+  public long queueActiveCount(String queueName, String partitionKey) {
+    var target = new QueueBucket(queueName, partitionKey);
+    return activeWorkflows.values().stream().filter(target::equals).count();
   }
 
   // DBOS / DBOSClient API methods
@@ -581,14 +603,16 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public void cancelWorkflows(List<String> workflowIds) {
+  public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     Objects.requireNonNull(workflowIds);
 
-    // Execute the cancel operation as a workflow step
     this.runDbosFunctionAsStep(
         () -> {
-          logger.info("Cancelling workflow(s) {}", workflowIds);
-          systemDatabase.cancelWorkflows(workflowIds);
+          logger.info(
+              "Cancelling workflow(s) {}{}",
+              workflowIds,
+              cancelChildren ? " and their children" : "");
+          systemDatabase.cancelWorkflows(workflowIds, cancelChildren);
           return null; // void
         },
         "DBOS.cancelWorkflow",
@@ -642,6 +666,25 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS.forkWorkflow",
             null);
     return retrieveWorkflow(forkedId);
+  }
+
+  public List<WorkflowHandle<Object, Exception>> forkFromFailure(
+      List<String> workflowIds, ForkFromFailureOptions options) {
+
+    List<String> forkedIds =
+        this.runDbosFunctionAsStep(
+            () -> {
+              logger.info("Forking {} workflow(s) from failure", workflowIds.size());
+
+              validateQueue(options.queueName(), options.queuePartitionKey());
+
+              return systemDatabase.forkFromFailure(workflowIds, options);
+            },
+            "DBOS.forkFromFailure",
+            null);
+    return forkedIds.stream()
+        .map(id -> (WorkflowHandle<Object, Exception>) retrieveWorkflow(id))
+        .collect(Collectors.toList());
   }
 
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
@@ -1065,7 +1108,7 @@ public class DBOSExecutor implements AutoCloseable {
             .withStatus(
                 List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
     for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
-      cancelWorkflows(List.of(status.workflowId()));
+      cancelWorkflows(List.of(status.workflowId()), false);
     }
   }
 
@@ -1112,7 +1155,7 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(step, "step must not be null");
     Objects.requireNonNull(options, "options must not be null");
 
-    var hook = hookHolder.get();
+    var hook = HOOK_HOLDER.get();
     if (hook != null) {
       throw new RuntimeException("@Step functions cannot be called from the startWorkflow lambda");
     }
@@ -1177,6 +1220,21 @@ public class DBOSExecutor implements AutoCloseable {
         break;
       }
 
+      var shouldRetry = options.shouldRetry();
+      if (exception != null && shouldRetry != null) {
+        try {
+          if (!shouldRetry.test(exception)) {
+            break;
+          }
+        } catch (Exception predicateEx) {
+          logger.warn(
+              "shouldRetry predicate threw for step {} in workflow {}; treating as retry",
+              options.name(),
+              workflowId,
+              predicateEx);
+        }
+      }
+
       try {
         Thread.sleep(retryInterval.toMillis());
       } catch (InterruptedException e) {
@@ -1223,7 +1281,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   // helper method to validate that @Workflow methods are not invoked from the startWorkflow lambda
   public void validateNonWorkflowInvocation() {
-    var hook = hookHolder.get();
+    var hook = HOOK_HOLDER.get();
     if (hook != null) {
       throw new RuntimeException("Only @Workflow functions may run in this context");
     }
@@ -1238,7 +1296,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     // If the hook holder is set, we're invoking the workflow from startWorkflow. In this case,
     // provide the workflow invocation info and return a default value without execution
-    var hook = hookHolder.get();
+    var hook = HOOK_HOLDER.get();
     if (hook != null) {
       hook.accept(new Invocation(this, workflowName, className, instanceName, args));
       var type = method.getReturnType();
@@ -1302,7 +1360,7 @@ public class DBOSExecutor implements AutoCloseable {
    */
   public <T, E extends Exception> Invocation captureInvocation(ThrowingSupplier<T, E> wfLambda) {
     AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
-    DBOSExecutor.hookHolder.set(
+    DBOSExecutor.HOOK_HOLDER.set(
         (invocation) -> {
           if (!capturedInvocation.compareAndSet(null, invocation)) {
             throw new RuntimeException("Only one @Workflow can be called in the captured lambda");
@@ -1313,7 +1371,7 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally {
-      DBOSExecutor.hookHolder.remove();
+      DBOSExecutor.HOOK_HOLDER.remove();
     }
     var invocation =
         Objects.requireNonNull(
@@ -1449,8 +1507,12 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(status.authenticatedUser())
             .withAssumedRole(status.assumedRole())
             .withAuthenticatedRoles(status.authenticatedRoles());
-    if (isRecoveryRequest) options = options.asRecoveryRequest();
-    if (isDequeuedRequest) options = options.asDequeuedRequest();
+    if (isRecoveryRequest) {
+      options = options.asRecoveryRequest();
+    }
+    if (isDequeuedRequest) {
+      options = options.asDequeuedRequest(status.queueName(), status.queuePartitionKey());
+    }
     return executeWorkflow(workflow, inputs, options, null);
   }
 
@@ -1617,8 +1679,13 @@ public class DBOSExecutor implements AutoCloseable {
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
-          var res = workflowsInProgress.putIfAbsent(workflowId, true);
-          if (res != null) throw new DBOSWorkflowExecutionConflictException(workflowId);
+          var bucket =
+              finalOptions.isDequeuedRequest()
+                  ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
+                  : NO_QUEUE;
+          if (activeWorkflows.putIfAbsent(workflowId, bucket) != null) {
+            throw new DBOSWorkflowExecutionConflictException(workflowId);
+          }
           try {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
@@ -1681,13 +1748,13 @@ public class DBOSExecutor implements AutoCloseable {
             throw e;
           } finally {
             DBOSContextHolder.clear();
-            workflowsInProgress.remove(workflowId);
+            activeWorkflows.remove(workflowId);
           }
         };
 
     if (initResult.deadlineEpochMS() != null
         && System.currentTimeMillis() > initResult.deadlineEpochMS()) {
-      systemDatabase.cancelWorkflows(List.of(workflowId));
+      systemDatabase.cancelWorkflows(List.of(workflowId), false);
       return retrieveWorkflow(workflowId);
     }
 
@@ -1696,7 +1763,7 @@ public class DBOSExecutor implements AutoCloseable {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
-              systemDatabase.cancelWorkflows(List.of(workflowId));
+              systemDatabase.cancelWorkflows(List.of(workflowId), false);
               future.cancel(true);
             }
           },
