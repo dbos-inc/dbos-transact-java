@@ -1601,7 +1601,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    if (options.queueName() != null) {
+    if (options.queueName() != null && !options.isDequeuedRequest()) {
       // enqueue with the current app version if it's not explicitly set
       if (options.appVersion() == null) {
         options = options.withAppVersion(appVersion());
@@ -1628,24 +1628,26 @@ public class DBOSExecutor implements AutoCloseable {
     // executing workflows always use the current app version.
     options = options.withAppVersion(appVersion());
 
-    var badOptionList = new ArrayList<String>();
-    if (options.deduplicationId() != null) {
-      badOptionList.add("deduplicationId");
-    }
-    if (options.priority() != null) {
-      badOptionList.add("priority");
-    }
-    if (options.queuePartitionKey() != null) {
-      badOptionList.add("queuePartitionKey");
-    }
-    if (options.delay() != null) {
-      badOptionList.add("delay");
-    }
+    if (!options.isDequeuedRequest()) {
+      var badOptionList = new ArrayList<String>();
+      if (options.deduplicationId() != null) {
+        badOptionList.add("deduplicationId");
+      }
+      if (options.priority() != null) {
+        badOptionList.add("priority");
+      }
+      if (options.queuePartitionKey() != null) {
+        badOptionList.add("queuePartitionKey");
+      }
+      if (options.delay() != null) {
+        badOptionList.add("delay");
+      }
 
-    if (!badOptionList.isEmpty()) {
-      throw new IllegalArgumentException(
-          "%s invalid options without a queue name: %s"
-              .formatted(workflow.fullyQualifiedName(), String.join(", ", badOptionList)));
+      if (!badOptionList.isEmpty()) {
+        throw new IllegalArgumentException(
+            "%s invalid options without a queue name: %s"
+                .formatted(workflow.fullyQualifiedName(), String.join(", ", badOptionList)));
+      }
     }
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
