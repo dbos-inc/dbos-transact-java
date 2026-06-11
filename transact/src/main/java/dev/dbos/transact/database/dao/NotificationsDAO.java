@@ -502,18 +502,26 @@ public class NotificationsDAO {
       var prevResult =
           StepsDAO.checkStepResult(ctx, caller.workflowId(), caller.stepId(), stepName);
       if (prevResult != null) {
-        logger.debug("Replaying getEvent, id: {}, key: {}", caller.stepId(), key);
+        logger.debug(
+            "Replaying getEvent, workflowId: {}, stepId: {}, key: {}",
+            caller.workflowId(),
+            caller.stepId(),
+            key);
         return prevResult.toResult(ctx.serializer());
       }
+      logger.debug(
+          "Running getEvent, workflowId: {}, stepId: {}, key: {}",
+          caller.workflowId(),
+          caller.stepId(),
+          key);
     }
-
-    logger.debug("Running getEvent, id: {}, key: {}", caller.stepId(), key);
 
     var startTime = System.currentTimeMillis();
     var eventKey = new SignalKey.Event(workflowId, key);
     var timeoutAt =
         caller != null
-            ? StepsDAO.durableSleepEndTime(ctx, workflowId, caller.timeoutStepId(), timeout)
+            ? StepsDAO.durableSleepEndTime(
+                ctx, caller.workflowId(), caller.timeoutStepId(), timeout)
             : Instant.now().plusMillis(timeout.toMillis());
     GetEventResult result = null;
 
@@ -528,7 +536,16 @@ public class NotificationsDAO {
             break;
           }
 
-          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId);
+          if (caller != null) {
+            WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId());
+          }
+
+          var targetState = WorkflowDAO.getWorkflowState(conn, ctx.schema(), workflowId);
+          if (targetState != null && !targetState.isActive()) {
+            var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
+            result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
+            break;
+          }
         }
 
         var duration = Duration.between(Instant.now(), timeoutAt);
@@ -547,7 +564,14 @@ public class NotificationsDAO {
 
     Objects.requireNonNull(result);
     ctx.checkClosed();
-    WorkflowDAO.checkWorkflow(ctx, workflowId);
+
+    if (result.value() == null) {
+      var targetState = WorkflowDAO.getWorkflowState(ctx, workflowId);
+      if (targetState != null && !targetState.isActive()) {
+        var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
+        result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
+      }
+    }
 
     if (caller != null) {
       var stepResult =

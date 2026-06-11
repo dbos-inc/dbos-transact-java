@@ -469,6 +469,46 @@ public class EventsTest {
   }
 
   @Test
+  public void getEventReturnsNullWhenTargetCompletes() throws Exception {
+    var targetWfId = UUID.randomUUID().toString();
+    try (var ctx = new WorkflowOptions(targetWfId).setContext()) {
+      proxy.setMultipleEvents(); // sets key1, key2, key3 — not "missing-key"
+    }
+    assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(targetWfId).getStatus().status());
+
+    // With a 30s timeout, should return null quickly because target is already done
+    long start = System.currentTimeMillis();
+    var result = dbos.getEvent(targetWfId, "missing-key", Duration.ofSeconds(30)).orElse(null);
+    long elapsed = System.currentTimeMillis() - start;
+    assertNull(result);
+    assertTrue(
+        elapsed < 3000,
+        "Expected fast return when target workflow is complete, took " + elapsed + "ms");
+  }
+
+  @Test
+  public void getEventCancelsCaller() throws Exception {
+    var targetWfId = UUID.randomUUID().toString();
+    var callerWfId = UUID.randomUUID().toString();
+
+    dbos.startWorkflow(
+        () -> proxy.getEventWorkflow(targetWfId, "key", Duration.ofSeconds(30)),
+        new StartWorkflowOptions(callerWfId));
+
+    Thread.sleep(200);
+    dbos.cancelWorkflow(callerWfId);
+
+    WorkflowState finalState = null;
+    long deadline = System.currentTimeMillis() + 10_000;
+    while (System.currentTimeMillis() < deadline) {
+      finalState = dbos.retrieveWorkflow(callerWfId).getStatus().status();
+      if (finalState == WorkflowState.CANCELLED) break;
+      Thread.sleep(100);
+    }
+    assertEquals(WorkflowState.CANCELLED, finalState);
+  }
+
+  @Test
   public void concurrency() throws Exception {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {

@@ -532,6 +532,30 @@ class NotificationServiceTest {
   }
 
   @Test
+  public void recvCancelsCaller() throws Exception {
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
+    dbos.launch();
+
+    var handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic", Duration.ofSeconds(30)));
+
+    // Wait for recv to signal it's ready, then give it a moment to enter the polling loop
+    impl.recvReadyLatch.await();
+    Thread.sleep(200);
+
+    dbos.cancelWorkflow(handle.workflowId());
+
+    WorkflowState finalState = null;
+    long deadline = System.currentTimeMillis() + 10_000;
+    while (System.currentTimeMillis() < deadline) {
+      finalState = dbos.retrieveWorkflow(handle.workflowId()).getStatus().status();
+      if (finalState == WorkflowState.CANCELLED) break;
+      Thread.sleep(100);
+    }
+    assertEquals(WorkflowState.CANCELLED, finalState);
+  }
+
+  @Test
   public void sendFromStepWithIdempotencyKey() throws Exception {
     // Send from a step with same idempotency key twice delivers only one message.
 
