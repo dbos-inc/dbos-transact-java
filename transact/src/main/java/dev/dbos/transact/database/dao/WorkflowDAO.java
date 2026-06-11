@@ -488,8 +488,7 @@ public class WorkflowDAO {
     }
 
     if (workflowState == WorkflowState.CANCELLED) {
-      throw new DBOSWorkflowCancelledException(
-          String.format("Workflow %s is cancelled. Aborting function.", workflowId));
+      throw new DBOSWorkflowCancelledException(workflowId);
     }
   }
 
