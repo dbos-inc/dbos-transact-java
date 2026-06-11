@@ -87,16 +87,20 @@ class NotificationListenerSource implements NotificationSource {
               if (null == channel) {
                 logger.error("Received notification with null channel. Payload: {}", payload);
               } else
-                switch (channel) {
-                  case "dbos_notifications_channel" -> raiseSignal.accept("m::" + payload);
-                  case "dbos_workflow_events_channel" -> raiseSignal.accept("e::" + payload);
-                  case "dbos_streams_channel" -> raiseSignal.accept("s::" + payload);
-                  default -> logger.error("Unknown NOTIFY channel: {}", channel);
+                try {
+                  switch (channel) {
+                    case "dbos_notifications_channel" -> raiseSignal.accept("m::" + payload);
+                    case "dbos_workflow_events_channel" -> raiseSignal.accept("e::" + payload);
+                    case "dbos_streams_channel" -> raiseSignal.accept("s::" + payload);
+                    default -> logger.error("Unknown NOTIFY channel: {}", channel);
+                  }
+                } catch (Exception e) {
+                  logger.error(
+                      "Error raising signal for channel: {}, payload: {}", channel, payload, e);
                 }
             }
           }
         }
-
       } catch (Exception e) {
         if (notificationListenerThread.get() == Thread.currentThread()) {
           logger.warn("Notification listener error: {}", e.getMessage());

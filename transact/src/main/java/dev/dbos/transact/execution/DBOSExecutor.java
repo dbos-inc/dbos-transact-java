@@ -1013,9 +1013,11 @@ public class DBOSExecutor implements AutoCloseable {
             throw new DBOSAwaitedWorkflowCancelledException(workflowId);
           } catch (ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
-              if (cause instanceof DBOSWorkflowExecutionConflictException
-                  || cause instanceof DBOSWorkflowCancelledException) {
+              if (cause instanceof DBOSWorkflowExecutionConflictException) {
                 return awaitWorkflowResult(workflowId);
+              }
+              if (cause instanceof DBOSWorkflowCancelledException cancelled) {
+                throw new DBOSAwaitedWorkflowCancelledException(cancelled.workflowId());
               }
               throw (E) cause;
             }
