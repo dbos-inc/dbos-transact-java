@@ -84,7 +84,7 @@ public class SystemDatabase implements AutoCloseable {
   private final Function<SignalKey, Subscription> createSubscription =
       key -> signalMap.subscribe(key.toString());
   private final NotificationSource notificationSource;
-  private Duration dbPollingInterval;
+  private final Duration dbPollingInterval = Duration.ofSeconds(1);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -120,7 +120,6 @@ public class SystemDatabase implements AutoCloseable {
       useListenNotify = false;
     }
 
-    dbPollingInterval = Duration.ofSeconds(useListenNotify ? 5 : 1);
     notificationSource =
         useListenNotify
             ? new NotificationListenerSource(dataSource, signalMap::raiseSignal)
@@ -439,9 +438,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    // don't use dbPollingInterval since it is longer for listen/notify events
-    return dbRetry(
-        () -> WorkflowDAO.<T>awaitWorkflowResult(ctx, Duration.ofSeconds(1), workflowId));
+    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
   }
 
   public List<String> startQueuedWorkflows(
