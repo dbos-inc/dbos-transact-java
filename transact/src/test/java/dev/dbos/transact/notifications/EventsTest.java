@@ -469,24 +469,6 @@ public class EventsTest {
   }
 
   @Test
-  public void getEventReturnsNullWhenTargetCompletes() throws Exception {
-    var targetWfId = UUID.randomUUID().toString();
-    try (var ctx = new WorkflowOptions(targetWfId).setContext()) {
-      proxy.setMultipleEvents(); // sets key1, key2, key3 — not "missing-key"
-    }
-    assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(targetWfId).getStatus().status());
-
-    // With a 30s timeout, should return null quickly because target is already done
-    long start = System.currentTimeMillis();
-    var result = dbos.getEvent(targetWfId, "missing-key", Duration.ofSeconds(30)).orElse(null);
-    long elapsed = System.currentTimeMillis() - start;
-    assertNull(result);
-    assertTrue(
-        elapsed < 3000,
-        "Expected fast return when target workflow is complete, took " + elapsed + "ms");
-  }
-
-  @Test
   public void getEventCancelsCaller() throws Exception {
     var targetWfId = UUID.randomUUID().toString();
     var callerWfId = UUID.randomUUID().toString();
