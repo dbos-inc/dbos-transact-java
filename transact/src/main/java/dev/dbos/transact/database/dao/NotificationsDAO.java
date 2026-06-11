@@ -522,7 +522,7 @@ public class NotificationsDAO {
         caller != null
             ? StepsDAO.durableSleepEndTime(
                 ctx, caller.workflowId(), caller.timeoutStepId(), timeout)
-            : Instant.now().plusMillis(timeout.toMillis());
+            : Instant.now().plus(timeout);
     GetEventResult result = null;
 
     while (true) {
@@ -538,13 +538,6 @@ public class NotificationsDAO {
 
           if (caller != null) {
             WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId());
-          }
-
-          var targetState = WorkflowDAO.getWorkflowState(conn, ctx.schema(), workflowId);
-          if (targetState != null && !targetState.isActive()) {
-            var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
-            result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
-            break;
           }
         }
 
@@ -564,14 +557,6 @@ public class NotificationsDAO {
 
     Objects.requireNonNull(result);
     ctx.checkClosed();
-
-    if (result.value() == null) {
-      var targetState = WorkflowDAO.getWorkflowState(ctx, workflowId);
-      if (targetState != null && !targetState.isActive()) {
-        var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
-        result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
-      }
-    }
 
     if (caller != null) {
       var stepResult =
