@@ -104,7 +104,7 @@ public class SystemDatabase implements AutoCloseable {
 
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final NotificationSource notificationSource;
-  private Duration dbPollingInterval = Duration.ofSeconds(1);
+  private Duration dbPollingInterval;
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -140,6 +140,7 @@ public class SystemDatabase implements AutoCloseable {
       useListenNotify = false;
     }
 
+    dbPollingInterval = Duration.ofSeconds(useListenNotify ? 5 : 1);
     notificationSource =
         useListenNotify ? new NotificationListenerSource(dataSource) : new NullNotificationSource();
   }
@@ -240,10 +241,6 @@ public class SystemDatabase implements AutoCloseable {
 
   public void start() {
     notificationSource.start();
-  }
-
-  void speedUpPollingForTest() {
-    dbPollingInterval = Duration.ofMillis(100);
   }
 
   private static boolean isConnectionFailure(SQLException e) {
@@ -460,7 +457,9 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
+    // don't use dbPollingInterval since it is longer for listen/notify events
+    return dbRetry(
+        () -> WorkflowDAO.<T>awaitWorkflowResult(ctx, Duration.ofSeconds(1), workflowId));
   }
 
   public List<String> startQueuedWorkflows(
@@ -526,7 +525,6 @@ public class SystemDatabase implements AutoCloseable {
       Object message,
       boolean asStep,
       String serialization) {
-
     dbRetry(
         () ->
             NotificationsDAO.setEvent(
@@ -534,7 +532,6 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Object getEvent(String targetId, String key, Duration timeout, GetEventCaller caller) {
-
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(

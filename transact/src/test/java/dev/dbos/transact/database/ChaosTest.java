@@ -3,7 +3,6 @@ package dev.dbos.transact.database;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
@@ -121,7 +120,6 @@ public class ChaosTest {
       impl.setSelf(proxy);
 
       dbos.launch();
-      DBOSTestAccess.getSystemDatabase(dbos).speedUpPollingForTest();
 
       assertEquals("Hehehe", proxy.dbLossBetweenSteps());
 

@@ -227,12 +227,13 @@ public class NotificationsDAO {
       int timeoutStepId,
       String topic,
       Duration dbPollingInterval,
-      NotificationRegistry notifcationRegistry)
+      NotificationRegistry notificationRegistry)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
+    Objects.requireNonNull(dbPollingInterval);
 
     var stepName = "DBOS.recv";
     topic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
@@ -250,19 +251,18 @@ public class NotificationsDAO {
 
     var startTime = System.currentTimeMillis();
     var messageKey = new SignalKey.Message(workflowId, topic);
-    dbPollingInterval = Objects.requireNonNullElse(dbPollingInterval, Duration.ofSeconds(1));
+    var checkSql =
+        """
+          SELECT topic FROM "%s".notifications
+          WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
+        """
+            .formatted(ctx.schema());
 
-    try (var messageSignal = notifcationRegistry.subscribe(messageKey)) {
-      while (true) {
-        ctx.checkClosed();
-        var sql =
-            """
-              SELECT topic FROM "%s".notifications
-              WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
-            """
-                .formatted(ctx.schema());
+    while (true) {
+      ctx.checkClosed();
+      try (var messageSignal = notificationRegistry.subscribe(messageKey)) {
         try (var conn = ctx.getConnection();
-            var stmt = conn.prepareStatement(sql)) {
+            var stmt = conn.prepareStatement(checkSql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, topic);
           try (var rs = stmt.executeQuery()) {
@@ -291,7 +291,7 @@ public class NotificationsDAO {
     }
 
     ctx.checkClosed();
-    var sql =
+    var updateSql =
         """
           UPDATE "%1$s".notifications
           SET consumed = TRUE
@@ -315,7 +315,7 @@ public class NotificationsDAO {
       try {
         String serializedMessage = null;
         String serialization = null;
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, topic);
           stmt.setString(3, workflowId);
@@ -485,12 +485,13 @@ public class NotificationsDAO {
       Duration timeout,
       @Nullable GetEventCaller caller,
       Duration dbPollingInterval,
-      NotificationRegistry notifcationRegistry)
+      NotificationRegistry notificationRegistry)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
+    Objects.requireNonNull(dbPollingInterval);
 
     var stepName = "DBOS.getEvent";
 
@@ -506,11 +507,11 @@ public class NotificationsDAO {
 
     var startTime = Instant.now();
     var eventKey = new SignalKey.Event(workflowId, key);
-    dbPollingInterval = Objects.requireNonNullElse(dbPollingInterval, Duration.ofSeconds(1));
 
     GetEventResult result = null;
-    try (var eventSignal = notifcationRegistry.subscribe(eventKey)) {
-      while (true) {
+    while (true) {
+      ctx.checkClosed();
+      try (var eventSignal = notificationRegistry.subscribe(eventKey)) {
         var optResult = getEvent(ctx, workflowId, key);
         if (optResult.isPresent()) {
           result = optResult.get();
