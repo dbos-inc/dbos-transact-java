@@ -472,6 +472,49 @@ public class WorkflowDAO {
     return null;
   }
 
+  public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      checkWorkflow(conn, ctx.schema(), workflowId);
+    }
+  }
+
+  public static void checkWorkflow(Connection conn, String schema, String workflowId)
+      throws SQLException {
+    var workflowState =
+        WorkflowDAO.getWorkflowState(
+            conn, Objects.requireNonNull(schema), Objects.requireNonNull(workflowId));
+    if (workflowState == null) {
+      throw new DBOSNonExistentWorkflowException(workflowId);
+    }
+
+    if (workflowState == WorkflowState.CANCELLED) {
+      throw new DBOSWorkflowCancelledException(
+          String.format("Workflow %s is cancelled. Aborting function.", workflowId));
+    }
+  }
+
+  public static @Nullable WorkflowState getWorkflowState(DbContext ctx, String workflowId)
+      throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return getWorkflowState(conn, ctx.schema(), workflowId);
+    }
+  }
+
+  public static @Nullable WorkflowState getWorkflowState(
+      Connection conn, String schema, String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(Objects.requireNonNull(schema));
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? WorkflowState.valueOf(rs.getString("status")) : null;
+      }
+    }
+  }
+
   /**
    * Look up the workflow_uuid of the currently-enqueued or running workflow with a given
    * (queue_name, deduplication_id) pair. Uses the UNIQUE index on that pair for O(1) lookup.

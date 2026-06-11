@@ -7,7 +7,6 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
-import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.*;
@@ -116,36 +115,12 @@ public class StepsDAO {
   }
 
   public static StepResult checkStepResult(
-      Connection conn, String schema, String workflowId, int functionId, String functionName)
+      Connection conn, String schema, String workflowId, int stepId, String stepName)
       throws SQLException {
 
-    Objects.requireNonNull(schema);
-    final String sql =
-        """
-          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
+    WorkflowDAO.checkWorkflow(conn, schema, workflowId);
 
-    String workflowStatus = null;
-    try (var pstmt = conn.prepareStatement(sql)) {
-      pstmt.setString(1, workflowId);
-      try (ResultSet rs = pstmt.executeQuery()) {
-        if (rs.next()) {
-          workflowStatus = rs.getString("status");
-        }
-      }
-    }
-
-    if (workflowStatus == null) {
-      throw new DBOSNonExistentWorkflowException(workflowId);
-    }
-
-    if (Objects.equals(workflowStatus, WorkflowState.CANCELLED.name())) {
-      throw new DBOSWorkflowCancelledException(
-          String.format("Workflow %s is cancelled. Aborting function.", workflowId));
-    }
-
-    String operationOutputSql =
+    String sql =
         """
           SELECT output, error, function_name, serialization
           FROM "%s".operation_outputs
@@ -153,35 +128,31 @@ public class StepsDAO {
         """
             .formatted(schema);
 
-    StepResult recordedResult = null;
-    String recordedFunctionName = null;
-
-    try (var pstmt = conn.prepareStatement(operationOutputSql)) {
+    StepResult result = null;
+    try (var pstmt = conn.prepareStatement(sql)) {
       pstmt.setString(1, workflowId);
-      pstmt.setInt(2, functionId);
+      pstmt.setInt(2, stepId);
       try (ResultSet rs = pstmt.executeQuery()) {
         if (rs.next()) { // Check if any operation output row exists
           String output = rs.getString("output");
           String error = rs.getString("error");
-          recordedFunctionName = rs.getString("function_name");
+          String _stepName = rs.getString("function_name");
           String serialization = rs.getString("serialization");
-          recordedResult =
-              new StepResult(
-                  workflowId, functionId, recordedFunctionName, output, error, null, serialization);
+          result =
+              new StepResult(workflowId, stepId, _stepName, output, error, null, serialization);
         }
       }
     }
 
-    if (recordedResult == null) {
+    if (result == null) {
       return null;
     }
 
-    if (!Objects.equals(functionName, recordedFunctionName)) {
-      throw new DBOSUnexpectedStepException(
-          workflowId, functionId, functionName, recordedFunctionName);
+    if (!Objects.equals(stepName, result.stepName())) {
+      throw new DBOSUnexpectedStepException(workflowId, stepId, stepName, result.stepName());
     }
 
-    return recordedResult;
+    return result;
   }
 
   public static List<StepInfo> listWorkflowSteps(
@@ -282,8 +253,12 @@ public class StepsDAO {
 
   public static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
       throws SQLException {
-    var sleepDuration = durableSleepDuration(ctx, workflowUuid, functionId, duration);
-    logger.debug("Sleeping for duration {}", sleepDuration);
+    var endTime = durableSleepEndTime(ctx, workflowUuid, functionId, duration);
+    var sleepDuration = Duration.between(Instant.now(), endTime);
+    logger.debug("Sleeping until {} (duration {})", endTime, sleepDuration);
+    if (sleepDuration.isNegative() || sleepDuration.isZero()) {
+      return;
+    }
     try {
       Thread.sleep(sleepDuration.toMillis());
     } catch (InterruptedException e) {
@@ -339,7 +314,7 @@ public class StepsDAO {
     }
   }
 
-  static Duration durableSleepDuration(
+  static Instant durableSleepEndTime(
       DbContext ctx, String workflowUuid, int functionId, Duration duration) throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
@@ -353,7 +328,6 @@ public class StepsDAO {
       recordedOutput = checkStepResult(conn, ctx.schema(), workflowUuid, functionId, functionName);
     }
 
-    long endTime;
     if (recordedOutput != null) {
       logger.debug(
           "Replaying sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
@@ -364,15 +338,15 @@ public class StepsDAO {
           SerializationUtil.deserializeValue(
               recordedOutput.output(), recordedOutput.serialization(), serializer);
       if (deserialized instanceof Long durationLong) {
-        endTime = durationLong;
+        return Instant.ofEpochMilli(durationLong);
       } else {
         throw new IllegalStateException("Recorded sleep timeout is not a number: " + deserialized);
       }
     } else {
       logger.debug(
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
-      endTime = System.currentTimeMillis() + duration.toMillis();
 
+      var endTime = System.currentTimeMillis() + duration.toMillis();
       try {
         var serializedValue =
             SerializationUtil.serializeValue(
@@ -390,9 +364,7 @@ public class StepsDAO {
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }
+      return Instant.ofEpochMilli(endTime);
     }
-
-    var durationms = Math.max(0, endTime - System.currentTimeMillis());
-    return Duration.ofMillis(durationms);
   }
 }

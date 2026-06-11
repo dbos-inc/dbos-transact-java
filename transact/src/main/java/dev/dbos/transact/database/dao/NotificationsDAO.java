@@ -5,9 +5,9 @@ import static java.util.stream.Collectors.joining;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
-import dev.dbos.transact.database.SystemDatabase.NotificationRegistry;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
+import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -33,6 +33,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -227,7 +228,7 @@ public class NotificationsDAO {
       int timeoutStepId,
       String topic,
       Duration dbPollingInterval,
-      NotificationRegistry notificationRegistry)
+      Function<SignalKey, Subscription> createSubscription)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
@@ -238,31 +239,32 @@ public class NotificationsDAO {
     var stepName = "DBOS.recv";
     topic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
-    var recordedResult = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
-    if (recordedResult != null) {
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
+    if (result != null) {
       logger.debug(
           "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
-      if (recordedResult.output() != null) {
-        return recordedResult.toResult(ctx.serializer());
+      if (result.output() != null) {
+        return result.toResult(ctx.serializer());
       }
-      logger.debug(
-          "Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
     }
+
+    logger.debug("Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
 
     var startTime = System.currentTimeMillis();
     var messageKey = new SignalKey.Message(workflowId, topic);
-    var checkSql =
+    var selectSql =
         """
           SELECT topic FROM "%s".notifications
           WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
         """
             .formatted(ctx.schema());
 
+    var timeoutAt = StepsDAO.durableSleepEndTime(ctx, workflowId, timeoutStepId, timeout);
     while (true) {
       ctx.checkClosed();
-      try (var messageSignal = notificationRegistry.subscribe(messageKey)) {
+      try (var messageSignal = createSubscription.apply(messageKey)) {
         try (var conn = ctx.getConnection();
-            var stmt = conn.prepareStatement(checkSql)) {
+            var stmt = conn.prepareStatement(selectSql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, topic);
           try (var rs = stmt.executeQuery()) {
@@ -271,12 +273,11 @@ public class NotificationsDAO {
               break;
             }
           }
+          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId);
         }
 
-        // check cancelled
-
-        var sleepDuration = StepsDAO.durableSleepDuration(ctx, workflowId, timeoutStepId, timeout);
-        if (sleepDuration.isNegative() || sleepDuration.isZero()) {
+        var duration = Duration.between(Instant.now(), timeoutAt);
+        if (duration.isNegative() || duration.isZero()) {
           var output = SerializationUtil.serializeValue(null, null, ctx.serializer());
           var stepResult = StepResult.ofOutput(workflowId, stepId, stepName, output);
           StepsDAO.recordStepResult(ctx, stepResult, startTime);
@@ -284,13 +285,15 @@ public class NotificationsDAO {
         }
 
         var loopDuration =
-            dbPollingInterval.compareTo(sleepDuration) <= 0 ? dbPollingInterval : sleepDuration;
+            dbPollingInterval.compareTo(duration) <= 0 ? dbPollingInterval : duration;
 
         SignalMap.awaitAny(loopDuration, messageSignal);
       }
     }
 
     ctx.checkClosed();
+    WorkflowDAO.checkWorkflow(ctx, workflowId);
+
     var updateSql =
         """
           UPDATE "%1$s".notifications
@@ -456,14 +459,14 @@ public class NotificationsDAO {
   private record GetEventResult(String value, String serialization) {}
 
   private static Optional<GetEventResult> getEvent(
-      DbContext ctx, @NonNull String workflowId, @NonNull String key) throws SQLException {
+      Connection conn, String schema, @NonNull String workflowId, @NonNull String key)
+      throws SQLException {
     var sql =
         """
         SELECT value, serialization FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
         """
-            .formatted(ctx.schema());
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       stmt.setString(2, key);
       try (var rs = stmt.executeQuery()) {
@@ -485,7 +488,7 @@ public class NotificationsDAO {
       Duration timeout,
       @Nullable GetEventCaller caller,
       Duration dbPollingInterval,
-      NotificationRegistry notificationRegistry)
+      Function<SignalKey, Subscription> notificationRegistry)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
@@ -502,38 +505,41 @@ public class NotificationsDAO {
         logger.debug("Replaying getEvent, id: {}, key: {}", caller.stepId(), key);
         return prevResult.toResult(ctx.serializer());
       }
-      logger.debug("Running getEvent, id: {}, key: {}", caller.stepId(), key);
     }
 
-    var startTime = Instant.now();
-    var eventKey = new SignalKey.Event(workflowId, key);
+    logger.debug("Running getEvent, id: {}, key: {}", caller.stepId(), key);
 
+    var startTime = System.currentTimeMillis();
+    var eventKey = new SignalKey.Event(workflowId, key);
+    var timeoutAt =
+        caller != null
+            ? StepsDAO.durableSleepEndTime(ctx, workflowId, caller.timeoutStepId(), timeout)
+            : Instant.now().plusMillis(timeout.toMillis());
     GetEventResult result = null;
+
     while (true) {
       ctx.checkClosed();
-      try (var eventSignal = notificationRegistry.subscribe(eventKey)) {
-        var optResult = getEvent(ctx, workflowId, key);
-        if (optResult.isPresent()) {
-          result = optResult.get();
-          break;
+      try (var eventSignal = notificationRegistry.apply(eventKey)) {
+        try (var conn = ctx.getConnection()) {
+
+          var optResult = getEvent(conn, ctx.schema(), workflowId, key);
+          if (optResult.isPresent()) {
+            result = optResult.get();
+            break;
+          }
+
+          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId);
         }
 
-        // check cancelled (both workflowId and caller.workflowId)
-
-        var sleepDuration =
-            caller != null
-                ? StepsDAO.durableSleepDuration(
-                    ctx, caller.workflowId(), caller.timeoutStepId(), timeout)
-                : timeout.minus(Duration.between(startTime, Instant.now()));
-
-        if (sleepDuration.isNegative() || sleepDuration.isZero()) {
+        var duration = Duration.between(Instant.now(), timeoutAt);
+        if (duration.isNegative() || duration.isZero()) {
           var serialized = SerializationUtil.serializeValue(null, null, ctx.serializer());
           result = new GetEventResult(serialized.serializedValue(), serialized.serialization());
           break;
         }
 
         var loopDuration =
-            dbPollingInterval.compareTo(sleepDuration) <= 0 ? dbPollingInterval : sleepDuration;
+            dbPollingInterval.compareTo(duration) <= 0 ? dbPollingInterval : duration;
 
         SignalMap.awaitAny(loopDuration, eventSignal);
       }
@@ -541,6 +547,7 @@ public class NotificationsDAO {
 
     Objects.requireNonNull(result);
     ctx.checkClosed();
+    WorkflowDAO.checkWorkflow(ctx, workflowId);
 
     if (caller != null) {
       var stepResult =
@@ -552,7 +559,7 @@ public class NotificationsDAO {
               null,
               null,
               result.serialization());
-      StepsDAO.recordStepResult(ctx, stepResult, startTime.toEpochMilli());
+      StepsDAO.recordStepResult(ctx, stepResult, startTime);
     }
 
     return SerializationUtil.deserializeValue(
