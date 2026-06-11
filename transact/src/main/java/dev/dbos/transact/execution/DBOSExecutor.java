@@ -1013,7 +1013,8 @@ public class DBOSExecutor implements AutoCloseable {
             throw new DBOSAwaitedWorkflowCancelledException(workflowId);
           } catch (ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
-              if (cause instanceof DBOSWorkflowExecutionConflictException) {
+              if (cause instanceof DBOSWorkflowExecutionConflictException
+                  || cause instanceof DBOSWorkflowCancelledException) {
                 return awaitWorkflowResult(workflowId);
               }
               throw (E) cause;
@@ -1752,8 +1753,13 @@ public class DBOSExecutor implements AutoCloseable {
 
             logger.error("executeWorkflow {}", workflowId, actual);
 
-            if (actual instanceof InterruptedException
-                || actual instanceof DBOSWorkflowCancelledException) {
+            if (actual instanceof DBOSWorkflowCancelledException cancelled) {
+              if (cancelled.workflowId().equals(workflowId)) {
+                throw cancelled;
+              } else {
+                throw new DBOSAwaitedWorkflowCancelledException(cancelled.workflowId());
+              }
+            } else if (actual instanceof InterruptedException) {
               throw new DBOSAwaitedWorkflowCancelledException(workflowId);
             }
 
