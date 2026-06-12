@@ -31,6 +31,10 @@ public final class JsonUtility {
     return MAPPER.readValue(in, valueType);
   }
 
+  public static <T> T fromJson(String content, TypeReference<T> valueType) {
+    return MAPPER.readValue(content, valueType);
+  }
+
   public static <T> T fromJson(InputStream in, TypeReference<T> valueType) {
     return MAPPER.readValue(in, valueType);
   }

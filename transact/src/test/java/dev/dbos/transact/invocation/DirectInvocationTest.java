@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
@@ -18,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -317,7 +320,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent2() throws Exception {
+  void workflowOptionsTimeoutAppliedToParentAndChild() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -338,7 +341,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent3() throws Exception {
+  void workflowOptionsTimeoutNotInheritedByChild() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -415,5 +418,195 @@ public class DirectInvocationTest {
     assertNotNull(row0.deadlineEpochMs());
     assertNotNull(row1.deadlineEpochMs());
     assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
+  }
+
+  @Test
+  void authFlowsFromParentToChildViaDirectInvoke() throws Exception {
+    String parentId = "authParentDirect";
+    String[] roles = {"admin"};
+
+    try (var _i = new WorkflowOptions(parentId).withAuthentication("alice", roles).setContext()) {
+      proxy.parentWorkflow();
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("alice", parentStatus.authenticatedUser());
+    assertEquals(List.of(roles), parentStatus.authenticatedRoles());
+    assertNull(parentStatus.assumedRole());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("alice", childStatus.authenticatedUser());
+    assertEquals(List.of(roles), childStatus.authenticatedRoles());
+    assertNull(childStatus.assumedRole());
+  }
+
+  @Test
+  void authFlowsFromParentToChildViaStartWorkflow() throws Exception {
+    String parentId = "authParentStart";
+    String[] roles = {"editor"};
+
+    try (var _i = new WorkflowOptions(parentId).withAuthentication("bob", roles).setContext()) {
+      proxy.parentStartWorkflow();
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("bob", parentStatus.authenticatedUser());
+    assertEquals(List.of(roles), parentStatus.authenticatedRoles());
+    assertNull(parentStatus.assumedRole());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("bob", childStatus.authenticatedUser());
+    assertEquals(List.of(roles), childStatus.authenticatedRoles());
+    assertNull(childStatus.assumedRole());
+  }
+
+  @Test
+  void workflowOptionsAuthFlowsToStatus() throws Exception {
+    String workflowId = "authViaWorkflowOptions";
+    String[] roles = {"viewer"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("bob", roles).setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("bob", status.authenticatedUser());
+    assertEquals(List.of(roles), status.authenticatedRoles());
+    assertNull(status.assumedRole());
+  }
+
+  @Test
+  void authSurvivesRecovery() throws Exception {
+    String workflowId = "authRecovery";
+    String[] roles = {"admin"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("alice", roles).setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.PENDING.name());
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    executor.executeWorkflowById(workflowId, true, false).getResult();
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("alice", status.authenticatedUser());
+    assertEquals(List.of(roles), status.authenticatedRoles());
+    assertNull(status.assumedRole());
+  }
+
+  @Test
+  void workflowOptionsTimeoutAndDeadlineBothSetThrows() {
+    var options =
+        new WorkflowOptions()
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now().plus(Duration.ofDays(1)));
+    assertThrows(IllegalArgumentException.class, options::setContext);
+  }
+
+  @Test
+  void authContextMethodsReturnValuesInsideWorkflow() throws Exception {
+    String workflowId = "authContextMethods";
+    String[] roles = {"admin", "editor"};
+
+    try (var _i = new WorkflowOptions(workflowId).withAuthentication("carol", roles).setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("carol|null|admin,editor", result);
+    }
+  }
+
+  @Test
+  void authContextMethodsReturnNullWhenNotSet() throws Exception {
+    String workflowId = "authContextMethodsNull";
+
+    try (var _i = new WorkflowOptions(workflowId).setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("null|null|null", result);
+    }
+  }
+
+  @Test
+  void workflowOptionsAssumedRoleFlowsToStatus() throws Exception {
+    String workflowId = "authAssumedRole";
+    String[] roles = {"admin"};
+
+    try (var _i =
+        new WorkflowOptions(workflowId)
+            .withAuthentication("dave", roles)
+            .withAssumedRole("admin")
+            .setContext()) {
+      proxy.simpleWorkflow();
+    }
+
+    var status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("dave", status.authenticatedUser());
+    assertEquals(List.of(roles), status.authenticatedRoles());
+    assertEquals("admin", status.assumedRole());
+  }
+
+  @Test
+  void assumedRoleVisibleInsideWorkflowContext() throws Exception {
+    String workflowId = "authAssumedRoleContext";
+
+    try (var _i =
+        new WorkflowOptions(workflowId)
+            .withAuthentication("eve", new String[] {"mod"})
+            .withAssumedRole("mod")
+            .setContext()) {
+      String result = proxy.authContextWorkflow();
+      assertEquals("eve|mod|mod", result);
+    }
+  }
+
+  @Test
+  void parentAuthNotVisibleInsideWorkflowBlock() throws Exception {
+    String workflowId = "authParentNotVisible";
+
+    try (var _i =
+        new WorkflowOptions(workflowId).withAuthentication("alice", "admin").setContext()) {
+      // authenticatedUser() reflects the current workflow's identity, not the staged next value
+      assertNull(DBOSContext.authenticatedUser());
+    }
+  }
+
+  @Test
+  void childWorkflowAuthCanBeOverridden() throws Exception {
+    String parentId = "authChildOverride";
+
+    try (var _i =
+        new WorkflowOptions(parentId)
+            .withAuthentication("parent-user", "parent-role")
+            .setContext()) {
+      String result = proxy.parentWorkflowWithAuthOverride();
+      // child sees override-user, not parent-user
+      assertEquals("override-user|null|override-role", result);
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("parent-user", parentStatus.authenticatedUser());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("override-user", childStatus.authenticatedUser());
+    assertEquals(List.of("override-role"), childStatus.authenticatedRoles());
+  }
+
+  @Test
+  void childWorkflowAuthCanBeCleared() throws Exception {
+    String parentId = "authChildCleared";
+
+    try (var _i =
+        new WorkflowOptions(parentId)
+            .withAuthentication("parent-user", "parent-role")
+            .setContext()) {
+      String result = proxy.parentWorkflowWithAuthCleared();
+      // child sees no auth identity
+      assertEquals("null|null|null", result);
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("parent-user", parentStatus.authenticatedUser());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertNull(childStatus.authenticatedUser());
+    assertNull(childStatus.authenticatedRoles());
   }
 }

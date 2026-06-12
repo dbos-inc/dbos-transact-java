@@ -12,20 +12,32 @@ interface ClientService {
   String sendTest(int i);
 
   void sleep(int ms);
+
+  String parentWorkflow();
 }
 
 @WorkflowClassName("ClientServiceImpl")
 class ClientServiceImpl implements ClientService {
 
   private final DBOS dbos;
+  private ClientService proxy;
 
   public ClientServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
+  public void setProxy(ClientService proxy) {
+    this.proxy = proxy;
+  }
+
   @Workflow
   public String enqueueTest(int i, String s) {
     return String.format("%d-%s", i, s);
+  }
+
+  @Workflow
+  public String parentWorkflow() {
+    return proxy.enqueueTest(1, "child");
   }
 
   @Workflow

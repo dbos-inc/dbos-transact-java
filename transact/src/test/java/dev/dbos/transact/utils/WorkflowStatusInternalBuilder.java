@@ -4,6 +4,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 public class WorkflowStatusInternalBuilder {
   private String workflowId;
@@ -17,7 +18,7 @@ public class WorkflowStatusInternalBuilder {
   private Duration delay;
   private String authenticatedUser;
   private String assumedRole;
-  private String[] authenticatedRoles;
+  private List<String> authenticatedRoles;
   private String inputs;
   private String executorId;
   private String appVersion;
@@ -86,8 +87,8 @@ public class WorkflowStatusInternalBuilder {
     return this;
   }
 
-  public WorkflowStatusInternalBuilder authenticatedRoles(String[] authenticatedRoles) {
-    this.authenticatedRoles = authenticatedRoles;
+  public WorkflowStatusInternalBuilder authenticatedRoles(String... authenticatedRoles) {
+    this.authenticatedRoles = authenticatedRoles != null ? List.of(authenticatedRoles) : null;
     return this;
   }
 
