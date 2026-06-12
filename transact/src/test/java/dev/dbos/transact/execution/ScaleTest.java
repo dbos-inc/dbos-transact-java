@@ -14,8 +14,9 @@ import java.util.ArrayList;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +38,8 @@ class ScaleServiceImpl implements ScaleService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 5, unit = java.util.concurrent.TimeUnit.MINUTES)
+@Tag("ci-only")
+@Timeout(value = 5, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ScaleTest {
   private static final Logger logger = LoggerFactory.getLogger(ScaleTest.class);
 
@@ -51,7 +53,6 @@ public class ScaleTest {
   }
 
   @Test
-  @EnabledIfEnvironmentVariable(named = "SCALE_TEST", matches = "^true$")
   public void scaleTest() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
       var service = dbos.registerProxy(ScaleService.class, new ScaleServiceImpl());
