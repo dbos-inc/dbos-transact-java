@@ -30,7 +30,6 @@ dependencies {
   testImplementation(libs.mockito.core)
   testImplementation(libs.rest.assured)
   testImplementation(libs.sqlite.jdbc)
-  testImplementation(libs.system.stubs.jupiter)
   testImplementation(libs.testcontainers.cockroachdb)
   testImplementation(libs.testcontainers.postgresql)
 }
