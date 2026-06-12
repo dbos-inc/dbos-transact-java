@@ -1,14 +1,12 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.database.SystemDatabase.NotificationSource;
-import dev.dbos.transact.database.signal.SignalKey;
-import dev.dbos.transact.database.signal.SignalMap;
-import dev.dbos.transact.database.signal.Subscription;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
@@ -22,29 +20,12 @@ class NotificationListenerSource implements NotificationSource {
   private static final Logger logger = LoggerFactory.getLogger(NotificationListenerSource.class);
 
   private final DataSource dataSource;
+  private final Consumer<String> raiseSignal;
   private final AtomicReference<Thread> notificationListenerThread = new AtomicReference<>(null);
-  private final SignalMap<String> signalMap = new SignalMap<>();
 
-  public NotificationListenerSource(DataSource dataSource) {
+  public NotificationListenerSource(DataSource dataSource, Consumer<String> raiseSignal) {
     this.dataSource = dataSource;
-  }
-
-  @Override
-  public Subscription subscribe(SignalKey.Message key) {
-    var strKey = "m::%s::%s".formatted(key.workflowId(), key.topic());
-    return signalMap.subscribe(strKey, key.wakeReason());
-  }
-
-  @Override
-  public Subscription subscribe(SignalKey.Event key) {
-    var strKey = "e::%s::%s".formatted(key.workflowId(), key.key());
-    return signalMap.subscribe(strKey, key.wakeReason());
-  }
-
-  @Override
-  public Subscription subscribe(SignalKey.Stream key) {
-    var strKey = "s::%s::%s".formatted(key.workflowId(), key.key());
-    return signalMap.subscribe(strKey, key.wakeReason());
+    this.raiseSignal = raiseSignal;
   }
 
   @Override
@@ -106,16 +87,20 @@ class NotificationListenerSource implements NotificationSource {
               if (null == channel) {
                 logger.error("Received notification with null channel. Payload: {}", payload);
               } else
-                switch (channel) {
-                  case "dbos_notifications_channel" -> signalMap.signal("m::" + payload);
-                  case "dbos_workflow_events_channel" -> signalMap.signal("e::" + payload);
-                  case "dbos_streams_channel" -> signalMap.signal("s::" + payload);
-                  default -> logger.error("Unknown NOTIFY channel: {}", channel);
+                try {
+                  switch (channel) {
+                    case "dbos_notifications_channel" -> raiseSignal.accept("m::" + payload);
+                    case "dbos_workflow_events_channel" -> raiseSignal.accept("e::" + payload);
+                    case "dbos_streams_channel" -> raiseSignal.accept("s::" + payload);
+                    default -> logger.error("Unknown NOTIFY channel: {}", channel);
+                  }
+                } catch (Exception e) {
+                  logger.error(
+                      "Error raising signal for channel: {}, payload: {}", channel, payload, e);
                 }
             }
           }
         }
-
       } catch (Exception e) {
         if (notificationListenerThread.get() == Thread.currentThread()) {
           logger.warn("Notification listener error: {}", e.getMessage());
