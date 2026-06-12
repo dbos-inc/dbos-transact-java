@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
@@ -554,5 +555,58 @@ public class DirectInvocationTest {
       String result = proxy.authContextWorkflow();
       assertEquals("eve|mod|mod", result);
     }
+  }
+
+  @Test
+  void parentAuthNotVisibleInsideWorkflowBlock() throws Exception {
+    String workflowId = "authParentNotVisible";
+
+    try (var _i =
+        new WorkflowOptions(workflowId).withAuthentication("alice", "admin").setContext()) {
+      // authenticatedUser() reflects the current workflow's identity, not the staged next value
+      assertNull(DBOSContext.authenticatedUser());
+    }
+  }
+
+  @Test
+  void childWorkflowAuthCanBeOverridden() throws Exception {
+    String parentId = "authChildOverride";
+
+    try (var _i =
+        new WorkflowOptions(parentId)
+            .withAuthentication("parent-user", "parent-role")
+            .setContext()) {
+      String result = proxy.parentWorkflowWithAuthOverride();
+      // child sees override-user, not parent-user
+      assertEquals("override-user|null|override-role", result);
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("parent-user", parentStatus.authenticatedUser());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertEquals("override-user", childStatus.authenticatedUser());
+    assertEquals(List.of("override-role"), childStatus.authenticatedRoles());
+  }
+
+  @Test
+  void childWorkflowAuthCanBeCleared() throws Exception {
+    String parentId = "authChildCleared";
+
+    try (var _i =
+        new WorkflowOptions(parentId)
+            .withAuthentication("parent-user", "parent-role")
+            .setContext()) {
+      String result = proxy.parentWorkflowWithAuthCleared();
+      // child sees no auth identity
+      assertEquals("null|null|null", result);
+    }
+
+    var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
+    assertEquals("parent-user", parentStatus.authenticatedUser());
+
+    var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
+    assertNull(childStatus.authenticatedUser());
+    assertNull(childStatus.authenticatedRoles());
   }
 }

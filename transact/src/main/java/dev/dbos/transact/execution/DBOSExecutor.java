@@ -1336,9 +1336,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     var options =
         new ExecutionOptions(workflowId, td.timeout(), td.deadline())
-            .withAuthenticatedUser(ctx.getAuthenticatedUser())
-            .withAssumedRole(ctx.getAssumedRole())
-            .withAuthenticatedRoles(ctx.getAuthenticatedRoles());
+            .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
+            .withAssumedRole(ctx.resolveNextAssumedRole())
+            .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles());
     if (workflow.serializationStrategy() != null) {
       options = options.withSerialization(workflow.serializationStrategy().formatName());
     }
@@ -1435,15 +1435,15 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(
                 options != null && options.authenticatedUser() != null
                     ? options.authenticatedUser()
-                    : ctx.getAuthenticatedUser())
+                    : ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(
                 options != null && options.assumedRole() != null
                     ? options.assumedRole()
-                    : ctx.getAssumedRole())
+                    : ctx.resolveNextAssumedRole())
             .withAuthenticatedRoles(
                 options != null && options.authenticatedRoles() != null
                     ? options.authenticatedRoles()
-                    : ctx.getAuthenticatedRoles());
+                    : ctx.resolveNextAuthenticatedRoles());
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 

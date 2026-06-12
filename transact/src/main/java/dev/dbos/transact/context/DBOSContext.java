@@ -1,6 +1,7 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 
@@ -15,9 +16,9 @@ public class DBOSContext {
   String nextWorkflowId;
   Timeout nextTimeout;
   Instant nextDeadline;
-  String nextAuthenticatedUser;
-  String nextAssumedRole;
-  List<String> nextAuthenticatedRoles;
+  Field<String> nextAuthenticatedUser = Field.absent();
+  Field<String> nextAssumedRole = Field.absent();
+  Field<List<String>> nextAuthenticatedRoles = Field.absent();
 
   // current workflow fields
   private final String workflowId;
@@ -214,14 +215,28 @@ public class DBOSContext {
   }
 
   public String getAuthenticatedUser() {
-    return nextAuthenticatedUser != null ? nextAuthenticatedUser : authenticatedUser;
+    return authenticatedUser;
   }
 
   public String getAssumedRole() {
-    return nextAssumedRole != null ? nextAssumedRole : assumedRole;
+    return assumedRole;
   }
 
   public List<String> getAuthenticatedRoles() {
-    return nextAuthenticatedRoles != null ? nextAuthenticatedRoles : authenticatedRoles;
+    return authenticatedRoles;
+  }
+
+  public String resolveNextAuthenticatedUser() {
+    return nextAuthenticatedUser instanceof Field.Present<String> p ? p.value() : authenticatedUser;
+  }
+
+  public String resolveNextAssumedRole() {
+    return nextAssumedRole instanceof Field.Present<String> p ? p.value() : assumedRole;
+  }
+
+  public List<String> resolveNextAuthenticatedRoles() {
+    return nextAuthenticatedRoles instanceof Field.Present<List<String>> p
+        ? p.value()
+        : authenticatedRoles;
   }
 }

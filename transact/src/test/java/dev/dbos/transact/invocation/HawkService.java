@@ -24,4 +24,8 @@ public interface HawkService {
 
   // returns "user|assumedRole|role0,role1,..." (or "null" for absent fields) for auth context tests
   String authContextWorkflow();
+
+  String parentWorkflowWithAuthOverride();
+
+  String parentWorkflowWithAuthCleared();
 }
