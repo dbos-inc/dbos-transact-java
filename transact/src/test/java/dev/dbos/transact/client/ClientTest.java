@@ -1,6 +1,5 @@
 package dev.dbos.transact.client;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -485,7 +484,7 @@ public class ClientTest {
 
       var status = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
       assertEquals("alice", status.authenticatedUser());
-      assertArrayEquals(new String[] {"admin", "editor"}, status.authenticatedRoles());
+      assertEquals(List.of("admin", "editor"), status.authenticatedRoles());
       assertNull(status.assumedRole());
     }
   }
@@ -501,11 +500,11 @@ public class ClientTest {
 
       var parentStatus = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
       assertEquals("bob", parentStatus.authenticatedUser());
-      assertArrayEquals(new String[] {"viewer"}, parentStatus.authenticatedRoles());
+      assertEquals(List.of("viewer"), parentStatus.authenticatedRoles());
 
       var childStatus = client.getWorkflowStatus(handle.workflowId() + "-0").orElseThrow();
       assertEquals("bob", childStatus.authenticatedUser());
-      assertArrayEquals(new String[] {"viewer"}, childStatus.authenticatedRoles());
+      assertEquals(List.of("viewer"), childStatus.authenticatedRoles());
     }
   }
 

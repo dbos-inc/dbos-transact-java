@@ -1,6 +1,5 @@
 package dev.dbos.transact.invocation;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -18,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -278,7 +278,7 @@ public class StartWorkflowTest {
 
     var status = handle.getStatus();
     assertEquals("alice", status.authenticatedUser());
-    assertArrayEquals(roles, status.authenticatedRoles());
+    assertEquals(List.of(roles), status.authenticatedRoles());
     assertNull(status.assumedRole());
   }
 

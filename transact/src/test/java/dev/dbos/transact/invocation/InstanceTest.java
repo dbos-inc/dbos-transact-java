@@ -113,7 +113,7 @@ class HawkServiceInstanceImpl implements HawkService {
   public String authContextWorkflow() {
     String user = DBOS.authenticatedUser();
     String role = DBOS.assumedRole();
-    String[] roles = DBOS.authenticatedRoles();
+    var roles = DBOS.authenticatedRoles();
     String rolesStr = roles == null ? "null" : String.join(",", roles);
     return user + "|" + role + "|" + rolesStr;
   }

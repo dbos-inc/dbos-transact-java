@@ -231,7 +231,7 @@ public class DBOSClient implements AutoCloseable {
       @Nullable SerializationStrategy serialization,
       @Nullable String authenticatedUser,
       @Nullable String assumedRole,
-      @Nullable String[] authenticatedRoles) {
+      @Nullable List<String> authenticatedRoles) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -273,6 +273,8 @@ public class DBOSClient implements AutoCloseable {
       if (nullableIsNotPositive(delay)) {
         throw new IllegalArgumentException("delay must be positive, non-zero duration");
       }
+
+      authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
@@ -622,7 +624,23 @@ public class DBOSClient implements AutoCloseable {
      * @return New `EnqueueOptions` with the authenticated user set
      */
     public @NonNull EnqueueOptions withAuthenticatedUser(@Nullable String authenticatedUser) {
-      return withAuthentication(authenticatedUser, this.authenticatedRoles);
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles);
     }
 
     /**
@@ -658,7 +676,23 @@ public class DBOSClient implements AutoCloseable {
      * @return New `EnqueueOptions` with the authenticated roles set
      */
     public @NonNull EnqueueOptions withAuthenticatedRoles(@Nullable String... authenticatedRoles) {
-      return withAuthentication(this.authenticatedUser, authenticatedRoles);
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          authenticatedRoles != null ? List.of(authenticatedRoles) : null);
     }
 
     /**
@@ -686,7 +720,7 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           authenticatedUser,
           this.assumedRole,
-          authenticatedRoles);
+          authenticatedRoles != null ? List.of(authenticatedRoles) : null);
     }
   }
 

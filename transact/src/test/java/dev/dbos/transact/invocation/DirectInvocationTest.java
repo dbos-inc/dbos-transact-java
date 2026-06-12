@@ -1,6 +1,5 @@
 package dev.dbos.transact.invocation;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -20,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -430,12 +430,12 @@ public class DirectInvocationTest {
 
     var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
     assertEquals("alice", parentStatus.authenticatedUser());
-    assertArrayEquals(roles, parentStatus.authenticatedRoles());
+    assertEquals(List.of(roles), parentStatus.authenticatedRoles());
     assertNull(parentStatus.assumedRole());
 
     var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
     assertEquals("alice", childStatus.authenticatedUser());
-    assertArrayEquals(roles, childStatus.authenticatedRoles());
+    assertEquals(List.of(roles), childStatus.authenticatedRoles());
     assertNull(childStatus.assumedRole());
   }
 
@@ -450,12 +450,12 @@ public class DirectInvocationTest {
 
     var parentStatus = dbos.retrieveWorkflow(parentId).getStatus();
     assertEquals("bob", parentStatus.authenticatedUser());
-    assertArrayEquals(roles, parentStatus.authenticatedRoles());
+    assertEquals(List.of(roles), parentStatus.authenticatedRoles());
     assertNull(parentStatus.assumedRole());
 
     var childStatus = dbos.retrieveWorkflow(parentId + "-0").getStatus();
     assertEquals("bob", childStatus.authenticatedUser());
-    assertArrayEquals(roles, childStatus.authenticatedRoles());
+    assertEquals(List.of(roles), childStatus.authenticatedRoles());
     assertNull(childStatus.assumedRole());
   }
 
@@ -470,7 +470,7 @@ public class DirectInvocationTest {
 
     var status = dbos.retrieveWorkflow(workflowId).getStatus();
     assertEquals("bob", status.authenticatedUser());
-    assertArrayEquals(roles, status.authenticatedRoles());
+    assertEquals(List.of(roles), status.authenticatedRoles());
     assertNull(status.assumedRole());
   }
 
@@ -489,7 +489,7 @@ public class DirectInvocationTest {
 
     var status = dbos.retrieveWorkflow(workflowId).getStatus();
     assertEquals("alice", status.authenticatedUser());
-    assertArrayEquals(roles, status.authenticatedRoles());
+    assertEquals(List.of(roles), status.authenticatedRoles());
     assertNull(status.assumedRole());
   }
 
@@ -538,7 +538,7 @@ public class DirectInvocationTest {
 
     var status = dbos.retrieveWorkflow(workflowId).getStatus();
     assertEquals("dave", status.authenticatedUser());
-    assertArrayEquals(roles, status.authenticatedRoles());
+    assertEquals(List.of(roles), status.authenticatedRoles());
     assertEquals("admin", status.assumedRole());
   }
 

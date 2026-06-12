@@ -39,7 +39,7 @@ public class WorkflowsOutput {
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
     Object output = status.output();
-    String[] authenticatedRoles = status.authenticatedRoles();
+    var authenticatedRoles = status.authenticatedRoles();
 
     this.WorkflowUUID = status.workflowId();
     this.Status = status.status().name();
@@ -49,7 +49,7 @@ public class WorkflowsOutput {
     this.AuthenticatedUser = status.authenticatedUser();
     this.AssumedRole = status.assumedRole();
     this.AuthenticatedRoles =
-        authenticatedRoles != null && authenticatedRoles.length > 0
+        authenticatedRoles != null && !authenticatedRoles.isEmpty()
             ? JsonUtility.toJson(authenticatedRoles)
             : null;
     this.Input = input != null ? JsonUtility.toJson(input) : null;

@@ -1,6 +1,5 @@
 package dev.dbos.transact.queue;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -444,7 +443,7 @@ public class StaticQueuesTest {
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")
             .assumedRole("admin")
-            .authenticatedRoles(new String[] {"admin", "operator"})
+            .authenticatedRoles("admin", "operator")
             .queueName("QwithWCLimit")
             .executorId(executorId)
             .appVersion(appVersion)
@@ -461,7 +460,7 @@ public class StaticQueuesTest {
     }
 
     var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
-    assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
+    assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
         systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
@@ -516,7 +515,7 @@ public class StaticQueuesTest {
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")
             .assumedRole("admin")
-            .authenticatedRoles(new String[] {"admin", "operator"})
+            .authenticatedRoles("admin", "operator")
             .queueName("QwithWCLimit")
             .executorId(executorId)
             .appVersion(appVersion)

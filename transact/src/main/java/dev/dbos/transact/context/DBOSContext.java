@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class DBOSContext {
@@ -16,7 +17,7 @@ public class DBOSContext {
   Instant nextDeadline;
   String nextAuthenticatedUser;
   String nextAssumedRole;
-  String[] nextAuthenticatedRoles;
+  List<String> nextAuthenticatedRoles;
 
   // current workflow fields
   private final String workflowId;
@@ -27,7 +28,7 @@ public class DBOSContext {
   private final Instant deadline;
   private final String authenticatedUser;
   private final String assumedRole;
-  private final String[] authenticatedRoles;
+  private final List<String> authenticatedRoles;
   private SerializationStrategy serialization;
 
   // private StepStatus stepStatus;
@@ -51,7 +52,7 @@ public class DBOSContext {
       Instant deadline,
       String authenticatedUser,
       String assumedRole,
-      String[] authenticatedRoles,
+      List<String> authenticatedRoles,
       SerializationStrategy serialization) {
     this.workflowId = workflowId;
     this.functionId = 0;
@@ -185,7 +186,7 @@ public class DBOSContext {
     return DBOSContextHolder.get().getAssumedRole();
   }
 
-  public static String[] authenticatedRoles() {
+  public static List<String> authenticatedRoles() {
     return DBOSContextHolder.get().getAuthenticatedRoles();
   }
 
@@ -220,7 +221,7 @@ public class DBOSContext {
     return nextAssumedRole != null ? nextAssumedRole : assumedRole;
   }
 
-  public String[] getAuthenticatedRoles() {
+  public List<String> getAuthenticatedRoles() {
     return nextAuthenticatedRoles != null ? nextAuthenticatedRoles : authenticatedRoles;
   }
 }

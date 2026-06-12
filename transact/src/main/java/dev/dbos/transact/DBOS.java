@@ -1270,7 +1270,7 @@ public class DBOS implements AutoCloseable {
    *
    * @return the authenticated roles array, or {@code null} if not set or not in a workflow context
    */
-  public static @Nullable String[] authenticatedRoles() {
+  public static @Nullable List<String> authenticatedRoles() {
     return DBOSContext.authenticatedRoles();
   }
 

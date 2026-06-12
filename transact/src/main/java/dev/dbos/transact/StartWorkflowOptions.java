@@ -8,6 +8,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
@@ -60,7 +61,7 @@ public record StartWorkflowOptions(
     @Nullable String appVersion,
     @Nullable String authenticatedUser,
     @Nullable String assumedRole,
-    @Nullable String[] authenticatedRoles) {
+    @Nullable List<String> authenticatedRoles) {
 
   public StartWorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -90,6 +91,8 @@ public record StartWorkflowOptions(
     if (nullableIsEmpty(appVersion)) {
       throw new IllegalArgumentException("appVersion must not be empty");
     }
+
+    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
   /** Construct with default options (all fields null). */
@@ -362,7 +365,19 @@ public record StartWorkflowOptions(
    * @return a new StartWorkflowOptions with the updated authenticated user
    */
   public @NonNull StartWorkflowOptions withAuthenticatedUser(@Nullable String authenticatedUser) {
-    return withAuthentication(authenticatedUser, this.authenticatedRoles);
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -395,7 +410,19 @@ public record StartWorkflowOptions(
    */
   public @NonNull StartWorkflowOptions withAuthenticatedRoles(
       @Nullable String... authenticatedRoles) {
-    return withAuthentication(this.authenticatedUser, authenticatedRoles);
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
   }
 
   /**
@@ -419,7 +446,7 @@ public record StartWorkflowOptions(
         this.appVersion,
         authenticatedUser,
         this.assumedRole,
-        authenticatedRoles);
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
   }
 
   /**

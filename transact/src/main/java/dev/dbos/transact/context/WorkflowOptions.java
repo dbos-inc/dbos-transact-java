@@ -7,6 +7,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
@@ -28,7 +29,7 @@ public record WorkflowOptions(
     @Nullable Instant deadline,
     @Nullable String authenticatedUser,
     @Nullable String assumedRole,
-    @Nullable String[] authenticatedRoles) {
+    @Nullable List<String> authenticatedRoles) {
 
   public WorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -38,6 +39,8 @@ public record WorkflowOptions(
     if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
+
+    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
   /** Create a WorkflowOptions with no ID and no timout */
@@ -123,7 +126,13 @@ public record WorkflowOptions(
 
   /** Create a WorkflowOptions like this one, but with the authenticated user set */
   public @NonNull WorkflowOptions withAuthenticatedUser(@Nullable String authenticatedUser) {
-    return withAuthentication(authenticatedUser, this.authenticatedRoles);
+    return new WorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /** Create a WorkflowOptions like this one, but with the assumed role set */
@@ -139,7 +148,13 @@ public record WorkflowOptions(
 
   /** Create a WorkflowOptions like this one, but with the authenticated roles set */
   public @NonNull WorkflowOptions withAuthenticatedRoles(@Nullable String... authenticatedRoles) {
-    return withAuthentication(this.authenticatedUser, authenticatedRoles);
+    return new WorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.authenticatedUser,
+        this.assumedRole,
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user and roles set */
@@ -151,7 +166,7 @@ public record WorkflowOptions(
         this.deadline,
         authenticatedUser,
         this.assumedRole,
-        authenticatedRoles);
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
   }
 
   /**
@@ -198,7 +213,7 @@ public record WorkflowOptions(
     private final Instant deadline;
     private final String authenticatedUser;
     private final String assumedRole;
-    private final String[] authenticatedRoles;
+    private final List<String> authenticatedRoles;
 
     private Guard(@NonNull DBOSContext ctx) {
       this.ctx = ctx;

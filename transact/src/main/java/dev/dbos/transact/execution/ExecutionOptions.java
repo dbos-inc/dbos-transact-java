@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 // Internal execution options record. External API specific records such as StartWorkflowOptions,
 // WorkflowOptions and DBOSClient.EnqueueOptions are converted to ExecutionOptions before execution.
@@ -26,7 +27,7 @@ public record ExecutionOptions(
     String serialization,
     String authenticatedUser,
     String assumedRole,
-    String[] authenticatedRoles,
+    List<String> authenticatedRoles,
     // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
     boolean isRecoveryRequest,
     boolean isDequeuedRequest) {
@@ -62,6 +63,8 @@ public record ExecutionOptions(
     if (nullableIsEmpty(serialization)) {
       throw new IllegalArgumentException("serialization must not be empty");
     }
+
+    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
   public ExecutionOptions(
@@ -305,7 +308,7 @@ public record ExecutionOptions(
         this.isDequeuedRequest);
   }
 
-  public ExecutionOptions withAuthenticatedRoles(String[] authenticatedRoles) {
+  public ExecutionOptions withAuthenticatedRoles(List<String> authenticatedRoles) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
