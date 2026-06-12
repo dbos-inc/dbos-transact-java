@@ -459,6 +459,32 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  public void interruptedWorkflowPersistsStatusTest() throws Exception {
+    // When a workflow throws InterruptedException, executeWorkflow skips persistWorkflowError,
+    // leaving the workflow PENDING in the DB. A DB-polling getResult() then hangs forever.
+    var workflowId = "interruptedWorkflow:%d".formatted(System.currentTimeMillis());
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.selfInterruptingWorkflow(), new StartWorkflowOptions(workflowId));
+
+    // The future-backed handle should surface the InterruptedException.
+    assertThrows(InterruptedException.class, handle::getResult);
+
+    // Workflow status must be ERROR in the DB recording the InterruptedException.
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+    assertTrue(row.error().contains("InterruptedException"));
+
+    // A DB-polling handle must surface the same InterruptedException, not hang.
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(5),
+        () ->
+            assertThrows(
+                InterruptedException.class, () -> dbos.retrieveWorkflow(workflowId).getResult()));
+  }
+
+  @Test
   public void testListWorkflowsLoadInputOutput() throws Exception {
     var handle = dbos.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
     assertEquals("Hello, Chuck!", handle.getResult());

@@ -6,6 +6,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
@@ -545,14 +546,9 @@ class NotificationServiceTest {
 
     dbos.cancelWorkflow(handle.workflowId());
 
-    WorkflowState finalState = null;
-    long deadline = System.currentTimeMillis() + 10_000;
-    while (System.currentTimeMillis() < deadline) {
-      finalState = dbos.retrieveWorkflow(handle.workflowId()).getStatus().status();
-      if (finalState == WorkflowState.CANCELLED) break;
-      Thread.sleep(100);
-    }
-    assertEquals(WorkflowState.CANCELLED, finalState);
+    // Blocks until the workflow task actually exits, proving the recv loop detected the
+    // cancellation and the workflow thread terminated — not just that the DB was updated.
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
   }
 
   @Test
