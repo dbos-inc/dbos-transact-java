@@ -212,7 +212,7 @@ public record WorkflowOptions(
         this.timeout,
         this.deadline,
         Field.of(null),
-        this.assumedRole,
+        Field.of(null),
         Field.of(null));
   }
 
