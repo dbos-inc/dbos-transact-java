@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -25,7 +26,7 @@ public record WorkflowStatus(
     /** Assumed role for the workflow execution. */
     String assumedRole,
     /** Roles authenticated for the workflow. */
-    String[] authenticatedRoles,
+    List<String> authenticatedRoles,
     /** Input arguments to the workflow. */
     Object[] input,
     /** Output/result of the workflow execution. */
@@ -107,10 +108,9 @@ public record WorkflowStatus(
   }
 
   /**
-   * Custom equals required because this record contains array fields ({@code authenticatedRoles},
-   * {@code input}). The default record equals uses {@code Objects.equals()} on each component,
-   * which for arrays falls back to reference equality. Here we use {@code Arrays.equals} and {@code
-   * Arrays.deepEquals} to get value equality instead.
+   * Custom equals required because {@code input} is an {@code Object[]} whose default {@code
+   * Objects.equals} falls back to reference equality. {@code authenticatedRoles} is now a {@code
+   * List<String>} and uses value-based equality naturally.
    *
    * @param obj the object to compare
    * @return true if all fields are equal, false otherwise
@@ -129,7 +129,7 @@ public record WorkflowStatus(
         && java.util.Objects.equals(instanceName, that.instanceName)
         && java.util.Objects.equals(authenticatedUser, that.authenticatedUser)
         && java.util.Objects.equals(assumedRole, that.assumedRole)
-        && java.util.Arrays.equals(authenticatedRoles, that.authenticatedRoles)
+        && java.util.Objects.equals(authenticatedRoles, that.authenticatedRoles)
         && java.util.Arrays.deepEquals(input, that.input)
         && java.util.Objects.equals(output, that.output)
         && java.util.Objects.equals(error, that.error)
@@ -153,8 +153,8 @@ public record WorkflowStatus(
   }
 
   /**
-   * Custom hashCode required for the same reason as {@link #equals}: array fields need {@code
-   * Arrays.hashCode}/{@code Arrays.deepHashCode} for value-based hashing.
+   * Custom hashCode required because {@code input} is an {@code Object[]} that needs {@code
+   * Arrays.deepHashCode} for value-based hashing.
    *
    * @return the hash code
    */
@@ -168,7 +168,7 @@ public record WorkflowStatus(
         instanceName,
         authenticatedUser,
         assumedRole,
-        java.util.Arrays.hashCode(authenticatedRoles),
+        authenticatedRoles,
         java.util.Arrays.deepHashCode(input),
         output,
         error,

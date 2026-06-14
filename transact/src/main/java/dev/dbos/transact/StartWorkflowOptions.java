@@ -8,6 +8,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
@@ -23,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  *   <li>Timeout and deadline management
  *   <li>Queue assignment, deduplication, priority, and partitioning
  *   <li>Optional execution delay and application version targeting
+ *   <li>Authentication context (user, assumed role, roles)
  * </ul>
  *
  * @param workflowId The unique identifier for the workflow instance. Used for idempotency and
@@ -42,6 +44,10 @@ import org.jspecify.annotations.Nullable;
  *     be null.
  * @param delay Optional delay before the workflow starts executing. May be null.
  * @param appVersion Optional application version to target for workflow execution. May be null.
+ * @param authenticatedUser Optional authenticated user to associate with the workflow. May be null.
+ * @param assumedRole Optional assumed role to associate with the workflow. May be null.
+ * @param authenticatedRoles Optional authenticated roles to associate with the workflow. May be
+ *     null.
  */
 public record StartWorkflowOptions(
     @Nullable String workflowId,
@@ -52,7 +58,10 @@ public record StartWorkflowOptions(
     @Nullable Integer priority,
     @Nullable String queuePartitionKey,
     @Nullable Duration delay,
-    @Nullable String appVersion) {
+    @Nullable String appVersion,
+    @Nullable String authenticatedUser,
+    @Nullable String assumedRole,
+    @Nullable List<String> authenticatedRoles) {
 
   public StartWorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -82,11 +91,13 @@ public record StartWorkflowOptions(
     if (nullableIsEmpty(appVersion)) {
       throw new IllegalArgumentException("appVersion must not be empty");
     }
+
+    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
   /** Construct with default options (all fields null). */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -95,7 +106,7 @@ public record StartWorkflowOptions(
    * @param workflowId the workflow ID to assign
    */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -104,7 +115,7 @@ public record StartWorkflowOptions(
    * @param queue the queue to assign the workflow to
    */
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null, null, null);
+    this(null, null, null, queue.name(), null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -123,7 +134,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -142,7 +156,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -191,7 +208,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -210,7 +230,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -240,7 +263,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -260,7 +286,10 @@ public record StartWorkflowOptions(
         priority,
         this.queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -279,7 +308,10 @@ public record StartWorkflowOptions(
         this.priority,
         queuePartitionKey,
         this.delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -298,7 +330,10 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         delay,
-        this.appVersion);
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
   }
 
   /**
@@ -317,7 +352,101 @@ public record StartWorkflowOptions(
         this.priority,
         this.queuePartitionKey,
         this.delay,
-        appVersion);
+        appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified authenticated user.
+   *
+   * @param authenticatedUser the authenticated user to assign
+   * @return a new StartWorkflowOptions with the updated authenticated user
+   */
+  public @NonNull StartWorkflowOptions withAuthenticatedUser(@Nullable String authenticatedUser) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified assumed role.
+   *
+   * @param assumedRole the assumed role to assign
+   * @return a new StartWorkflowOptions with the updated assumed role
+   */
+  public @NonNull StartWorkflowOptions withAssumedRole(@Nullable String assumedRole) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        assumedRole,
+        this.authenticatedRoles);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified authenticated roles.
+   *
+   * @param authenticatedRoles the authenticated roles to assign
+   * @return a new StartWorkflowOptions with the updated authenticated roles
+   */
+  public @NonNull StartWorkflowOptions withAuthenticatedRoles(
+      @Nullable String... authenticatedRoles) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified authenticated user and roles.
+   *
+   * @param authenticatedUser the authenticated user to assign
+   * @param authenticatedRoles the authenticated roles to assign
+   * @return a new StartWorkflowOptions with the updated authenticated user and roles
+   */
+  public @NonNull StartWorkflowOptions withAuthentication(
+      @Nullable String authenticatedUser, @Nullable String... authenticatedRoles) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        authenticatedUser,
+        this.assumedRole,
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
   }
 
   /**

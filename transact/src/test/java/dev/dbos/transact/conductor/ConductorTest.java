@@ -2328,7 +2328,7 @@ public class ConductorTest {
             .instanceName("test-instance" + (index > 0 ? "-" + (index + 1) : ""))
             .authenticatedUser("test-user" + (index > 0 ? "-" + (index + 1) : ""))
             .assumedRole("test-role" + (index > 0 ? "-" + (index + 1) : ""))
-            .authenticatedRoles(new String[] {"role1", "role2"})
+            .authenticatedRoles("role1", "role2")
             .input(new Object[] {"input1", "input2"})
             .output("test-output" + (index > 0 ? "-" + (index + 1) : ""))
             .error(null)
