@@ -1943,8 +1943,8 @@ public class SystemDatabaseTest {
             new GetWorkflowAggregatesInput()
                 .withGroupByName(true)
                 .withSelectCount(false)
-                .withSelectMaxQueueWaitMs(true)
-                .withSelectMaxTotalLatencyMs(true)
+                .withselectMaxQueueWait(true)
+                .withselectMaxTotalLatency(true)
                 .withWorkflowIdPrefix(List.of("agg-md-"))
                 .withStatus(List.of("SUCCESS")));
     assertEquals(2, results.size());
@@ -2143,7 +2143,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withSelectCount(false)
-                .withSelectMaxDurationMs(true));
+                .withselectMaxDuration(true));
     assertEquals(1, rows.size());
     assertNull(rows.get(0).count());
     assertNotNull(rows.get(0).maxDuration());
@@ -2254,7 +2254,7 @@ public class SystemDatabaseTest {
                 .withCompletedAfter(beforeAll)
                 .withCompletedBefore(afterAll)
                 .withSelectCount(true)
-                .withSelectMaxDurationMs(true));
+                .withselectMaxDuration(true));
     var byFn = rows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
 
     // Real steps have count=1 and max_duration populated
@@ -2277,7 +2277,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withSelectCount(true)
-                .withSelectMaxDurationMs(true));
+                .withselectMaxDuration(true));
     var allByFn =
         allRows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
     var childRow = allByFn.get("childWorkflow");
@@ -2300,7 +2300,7 @@ public class SystemDatabaseTest {
                 .withGroupByFunctionName(true)
                 .withFunctionName(List.of("quickStep", "slowStep"))
                 .withSelectCount(false)
-                .withSelectMaxDurationMs(true));
+                .withselectMaxDuration(true));
     for (var r : maxOnly) {
       assertNull(r.count());
       assertNotNull(r.maxDuration());

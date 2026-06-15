@@ -3213,8 +3213,8 @@ public class ConductorTest {
       GetWorkflowAggregatesInput captured = inputCaptor.getValue();
       assertFalse(captured.selectCount());
       assertTrue(captured.selectMinCreatedAt());
-      assertTrue(captured.selectMaxQueueWaitMs());
-      assertTrue(captured.selectMaxTotalLatencyMs());
+      assertTrue(captured.selectMaxQueueWait());
+      assertTrue(captured.selectMaxTotalLatency());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
@@ -3264,7 +3264,7 @@ public class ConductorTest {
       assertTrue(captured.groupByFunctionName());
       assertTrue(captured.groupByStatus());
       assertTrue(captured.selectCount());
-      assertTrue(captured.selectMaxDurationMs());
+      assertTrue(captured.selectMaxDuration());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_step_aggregates", json.get("type").stringValue());

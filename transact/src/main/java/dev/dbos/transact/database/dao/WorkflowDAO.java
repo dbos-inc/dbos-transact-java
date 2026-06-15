@@ -808,15 +808,15 @@ public class WorkflowDAO {
     var metrics = new ArrayList<Metric>();
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
     if (input.selectMinCreatedAt()) metrics.add(new Metric("min_created_at", "MIN(created_at)"));
-    if (input.selectMaxQueueWaitMs())
+    if (input.selectMaxQueueWait())
       metrics.add(new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
-    if (input.selectMaxTotalLatencyMs())
+    if (input.selectMaxTotalLatency())
       metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
 
     if (metrics.isEmpty()) {
       throw new IllegalArgumentException(
           "GetWorkflowAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWaitMs)");
+              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWait)");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -980,14 +980,14 @@ public class WorkflowDAO {
     record Metric(String alias, String expr) {}
     var metrics = new ArrayList<Metric>();
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
-    if (input.selectMaxDurationMs())
+    if (input.selectMaxDuration())
       metrics.add(
           new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
 
     if (metrics.isEmpty()) {
       throw new IllegalArgumentException(
           "GetStepAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMaxDurationMs)");
+              + " (e.g. selectCount, selectMaxDuration)");
     }
 
     List<Object> parameters = new ArrayList<>();
