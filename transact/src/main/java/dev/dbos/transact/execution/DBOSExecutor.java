@@ -1776,7 +1776,7 @@ public class DBOSExecutor implements AutoCloseable {
               future.cancel(true);
             }
           },
-          Duration.between(Instant.now(), initResult.deadline()).toMillis(),
+          Math.max(0, Duration.between(Instant.now(), initResult.deadline()).toMillis()),
           TimeUnit.MILLISECONDS);
     }
 
