@@ -134,9 +134,7 @@ public class WorkflowDAO {
           if (resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
-          Long deadlineEpochMs = resRow.deadlineEpochMs();
-          Instant deadline = deadlineEpochMs != null ? Instant.ofEpochMilli(deadlineEpochMs) : null;
-          return new WorkflowInitResult(state, deadline, false, resRow.serialization());
+          return new WorkflowInitResult(state, resRow.deadline(), false, resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -164,9 +162,7 @@ public class WorkflowDAO {
           throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
         }
 
-        Long deadlineEpochMs = resRow.deadlineEpochMs();
-        Instant deadline = deadlineEpochMs != null ? Instant.ofEpochMilli(deadlineEpochMs) : null;
-        return new WorkflowInitResult(state, deadline, true, resRow.serialization());
+        return new WorkflowInitResult(state, resRow.deadline(), true, resRow.serialization());
 
       } finally {
         if (shouldCommit) {
@@ -186,7 +182,7 @@ public class WorkflowDAO {
       String className,
       String instanceName,
       String queueName,
-      Long deadlineEpochMs,
+      Instant deadline,
       String serialization,
       String ownerXid) {}
 
@@ -296,7 +292,7 @@ public class WorkflowDAO {
                   rs.getString("class_name"),
                   rs.getString("config_name"),
                   rs.getString("queue_name"),
-                  rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
                   rs.getString("serialization"),
                   rs.getString("owner_xid"));
 
