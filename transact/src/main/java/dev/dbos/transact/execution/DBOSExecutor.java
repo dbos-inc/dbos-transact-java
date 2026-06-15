@@ -1762,8 +1762,7 @@ public class DBOSExecutor implements AutoCloseable {
           }
         };
 
-    if (initResult.deadline() != null
-        && Instant.now().isAfter(initResult.deadline())) {
+    if (initResult.deadline() != null && Instant.now().isAfter(initResult.deadline())) {
       systemDatabase.cancelWorkflows(List.of(workflowId), false);
       return retrieveWorkflow(workflowId);
     }

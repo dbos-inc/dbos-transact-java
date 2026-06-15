@@ -42,7 +42,9 @@ public class GetStepAggregatesRequest extends BaseMessage {
         Boolean.TRUE.equals(body.select_max_duration_ms),
         body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.status != null
-            ? body.status.stream().map(GetStepAggregatesInput.Status::valueOf).collect(Collectors.toList())
+            ? body.status.stream()
+                .map(GetStepAggregatesInput.Status::valueOf)
+                .collect(Collectors.toList())
             : null,
         body.function_name,
         body.workflow_id_prefix,

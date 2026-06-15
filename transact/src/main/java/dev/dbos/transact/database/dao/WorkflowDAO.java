@@ -136,8 +136,7 @@ public class WorkflowDAO {
           }
           Long deadlineEpochMs = resRow.deadlineEpochMs();
           Instant deadline = deadlineEpochMs != null ? Instant.ofEpochMilli(deadlineEpochMs) : null;
-          return new WorkflowInitResult(
-              state, deadline, false, resRow.serialization());
+          return new WorkflowInitResult(state, deadline, false, resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -167,8 +166,7 @@ public class WorkflowDAO {
 
         Long deadlineEpochMs = resRow.deadlineEpochMs();
         Instant deadline = deadlineEpochMs != null ? Instant.ofEpochMilli(deadlineEpochMs) : null;
-        return new WorkflowInitResult(
-            state, deadline, true, resRow.serialization());
+        return new WorkflowInitResult(state, deadline, true, resRow.serialization());
 
       } finally {
         if (shouldCommit) {
