@@ -41,6 +41,7 @@ import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.sql.DataSource;
@@ -253,14 +254,14 @@ public class SystemDatabase implements AutoCloseable {
 
   private static boolean isTransientState(SQLException e) {
     String state = e.getSQLState();
-    return state != null && (state.startsWith("40") || state.equals("53300"));
+    return state != null && (state.startsWith("40") || state.startsWith("53"));
   }
 
-  private static void waitForRecovery(int attempt, long baseDelay) {
+  private static void sleepWithJitter(double baseMs) {
+    double jitter = 0.5 + ThreadLocalRandom.current().nextDouble(); // [0.5, 1.5)
+    long sleepMs = (long) (baseMs * jitter);
     try {
-      // Exponential backoff: 1x, 2x, 4x the base delay
-      long sleepTime = (long) (baseDelay * Math.pow(2, attempt - 1));
-      Thread.sleep(sleepTime);
+      Thread.sleep(sleepMs);
     } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
     }
@@ -285,7 +286,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   private <T> T dbRetry(SqlSupplier<T> supplier) {
-    final int MAX_RETRIES = 20;
+    double backoffMs = 1000.0;
+    final double maxBackoffMs = 60_000.0;
     int attempt = 0;
     while (true) {
       if (closed.get()) {
@@ -294,22 +296,20 @@ public class SystemDatabase implements AutoCloseable {
       try {
         return supplier.get();
       } catch (SQLException e) {
-        if (++attempt > MAX_RETRIES) {
-          String msg = "Database operation failed after %d attempts".formatted(attempt);
-          throw new RuntimeException(msg, e);
-        }
+        attempt++;
         if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
-          logger.warn("Recoverable connection error. Resetting client pool.", e);
+          logger.warn(
+              "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
           if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
             hikariDataSource.getHikariPoolMXBean().softEvictConnections();
           }
-          waitForRecovery(attempt, 2000);
         } else if (e instanceof SQLTransientException || isTransientState(e)) {
-          logger.warn("Transient DB error. Retrying command.", e);
-          waitForRecovery(attempt, 500);
+          logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
         } else {
           throw new RuntimeException(e);
         }
+        sleepWithJitter(backoffMs);
+        backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
     }
   }
