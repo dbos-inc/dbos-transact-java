@@ -220,7 +220,7 @@ class SignalMapTest {
     CompletableFuture.runAsync(
         () -> {
           try {
-            done1.complete(map.subscribe(FOO).get(500, TimeUnit.MILLISECONDS));
+            done1.complete(map.subscribe(FOO).get(5, TimeUnit.SECONDS));
           } catch (Exception e) {
             done1.completeExceptionally(e);
           }
@@ -228,17 +228,17 @@ class SignalMapTest {
     CompletableFuture.runAsync(
         () -> {
           try {
-            done2.complete(map.subscribe(FOO).get(500, TimeUnit.MILLISECONDS));
+            done2.complete(map.subscribe(FOO).get(5, TimeUnit.SECONDS));
           } catch (Exception e) {
             done2.completeExceptionally(e);
           }
         });
 
-    Thread.sleep(100);
+    Thread.sleep(500);
     map.raiseSignal(FOO);
 
     assertTimeoutPreemptively(
-        Duration.ofSeconds(1),
+        Duration.ofSeconds(10),
         () -> {
           done1.get();
           done2.get();

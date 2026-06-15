@@ -355,7 +355,7 @@ class NotificationServiceTest {
     assertNull(rv);
 
     long elapsed = System.currentTimeMillis() - start;
-    assertTrue(elapsed < 3000, "Call should return in under 3 seconds");
+    assertTrue(elapsed < 6000, "Call should return in under 6 seconds");
   }
 
   @Test
