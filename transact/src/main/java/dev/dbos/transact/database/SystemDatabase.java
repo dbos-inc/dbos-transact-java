@@ -227,7 +227,25 @@ public class SystemDatabase implements AutoCloseable {
 
   private static boolean isConnectionFailure(SQLException e) {
     String state = e.getSQLState();
-    return state != null && (state.startsWith("08") || state.startsWith("57"));
+    if (state != null && (state.startsWith("08") || state.startsWith("57"))) {
+      return true;
+    }
+    // HikariCP and JDBC throw connection errors without a SQLSTATE (e.g. "Connection is closed").
+    // Walk the cause chain so wrapped exceptions are also caught.
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      String msg = t.getMessage();
+      if (msg != null) {
+        String lower = msg.toLowerCase();
+        if (lower.contains("connection is closed")
+            || lower.contains("connection is not available")
+            || lower.contains("connection reset")
+            || lower.contains("broken pipe")
+            || lower.contains("socket closed")) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private static boolean isTransientState(SQLException e) {

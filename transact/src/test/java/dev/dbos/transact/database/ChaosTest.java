@@ -1,6 +1,7 @@
 package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
@@ -118,6 +119,8 @@ public class ChaosTest {
 
   @RepeatedTest(REPETITIONS)
   public void chaosTest() throws Exception {
+    assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "pg_terminate_backend() not supported on CockroachDB");
     try (var pgContainer = new PgContainer()) {
       var dbosConfig = pgContainer.dbosConfig();
       try (var dataSource = pgContainer.dataSource();

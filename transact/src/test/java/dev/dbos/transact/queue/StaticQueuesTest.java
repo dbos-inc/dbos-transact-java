@@ -377,7 +377,8 @@ public class StaticQueuesTest {
       times.add(result);
     }
 
-    double waveTolerance = 1.0;
+    // CockroachDB's slower transaction throughput can spread tasks across a wider window
+    double waveTolerance = PgContainer.USE_COCKROACH_DB ? 3.0 : 1.0;
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);
