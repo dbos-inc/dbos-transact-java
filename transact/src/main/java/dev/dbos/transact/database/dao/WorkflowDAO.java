@@ -836,7 +836,7 @@ public class WorkflowDAO {
     }
     if (input.status() != null && !input.status().isEmpty()) {
       whereConditions.add("status = ANY(?)");
-      parameters.add(input.status());
+      parameters.add(input.status().stream().map(WorkflowState::name).toList());
     }
     if (input.queueName() != null && !input.queueName().isEmpty()) {
       whereConditions.add("queue_name = ANY(?)");
@@ -1003,8 +1003,8 @@ public class WorkflowDAO {
 
     if (input.status() != null && !input.status().isEmpty()) {
       // Translate status filter to error IS NULL / IS NOT NULL conditions
-      boolean wantSuccess = input.status().contains("SUCCESS");
-      boolean wantError = input.status().contains("ERROR");
+      boolean wantSuccess = input.status().contains(GetStepAggregatesInput.Status.SUCCESS);
+      boolean wantError = input.status().contains(GetStepAggregatesInput.Status.ERROR);
       if (wantSuccess && !wantError) {
         whereConditions.add("error IS NULL");
       } else if (wantError && !wantSuccess) {

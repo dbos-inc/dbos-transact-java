@@ -3120,7 +3120,7 @@ public class ConductorTest {
                   "group_by_name",
                   true,
                   "status",
-                  List.of("SUCCESS", "FAILURE"))));
+                  List.of("SUCCESS", "ERROR"))));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
@@ -3129,7 +3129,7 @@ public class ConductorTest {
       GetWorkflowAggregatesInput captured = inputCaptor.getValue();
       assertTrue(captured.groupByStatus());
       assertTrue(captured.groupByName());
-      assertEquals(List.of("SUCCESS", "FAILURE"), captured.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.ERROR), captured.status());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());

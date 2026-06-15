@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -23,11 +24,16 @@ public record GetStepAggregatesInput(
     boolean selectCount,
     boolean selectMaxDuration,
     Duration timeBucketSize,
-    List<String> status,
+    List<Status> status,
     List<String> functionName,
     List<String> workflowIdPrefix,
     Instant completedAfter,
     Instant completedBefore) {
+
+  public enum Status {
+    SUCCESS,
+    ERROR
+  }
 
   public GetStepAggregatesInput {
     if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
@@ -109,7 +115,7 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withStatus(List<String> status) {
+  public GetStepAggregatesInput withStatus(List<Status> status) {
     return new GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
@@ -121,6 +127,10 @@ public record GetStepAggregatesInput(
         workflowIdPrefix,
         completedAfter,
         completedBefore);
+  }
+
+  public GetStepAggregatesInput withStatus(Status... status) {
+    return withStatus(Arrays.asList(status));
   }
 
   public GetStepAggregatesInput withFunctionName(List<String> functionName) {

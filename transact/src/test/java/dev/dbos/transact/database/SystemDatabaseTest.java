@@ -1724,7 +1724,7 @@ public class SystemDatabaseTest {
         sysdb.getWorkflowAggregates(
             new GetWorkflowAggregatesInput()
                 .withTimeBucketSize(Duration.ofMillis(bucketMs))
-                .withStatus(List.of("ERROR"))
+                .withStatus(WorkflowState.ERROR)
                 .withSelectCount(true)
                 .withWorkflowIdPrefix(List.of("agg-tbf-")));
     assertEquals(1, errRows.size());
@@ -1946,7 +1946,7 @@ public class SystemDatabaseTest {
                 .withselectMaxQueueWait(true)
                 .withselectMaxTotalLatency(true)
                 .withWorkflowIdPrefix(List.of("agg-md-"))
-                .withStatus(List.of("SUCCESS")));
+                .withStatus(WorkflowState.SUCCESS));
     assertEquals(2, results.size());
     WorkflowAggregateRow syncRow = null;
     WorkflowAggregateRow queuedRow = null;
@@ -2094,7 +2094,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withWorkflowIdPrefix(List.of("step-filter-wf-"))
-                .withStatus(List.of("ERROR"))
+                .withStatus(GetStepAggregatesInput.Status.ERROR)
                 .withSelectCount(true));
     assertEquals(1, errRows.size());
     assertEquals("stepY", errRows.get(0).group().get("function_name"));
