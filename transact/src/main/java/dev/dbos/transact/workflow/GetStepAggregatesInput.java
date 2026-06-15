@@ -87,7 +87,7 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withselectMaxDuration(boolean selectMaxDuration) {
+  public GetStepAggregatesInput withSelectMaxDuration(boolean selectMaxDuration) {
     return new GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,

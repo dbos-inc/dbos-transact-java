@@ -243,7 +243,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withselectMaxQueueWait(boolean selectMaxQueueWait) {
+  public GetWorkflowAggregatesInput withSelectMaxQueueWait(boolean selectMaxQueueWait) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
@@ -269,7 +269,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withselectMaxTotalLatency(boolean selectMaxTotalLatency) {
+  public GetWorkflowAggregatesInput withSelectMaxTotalLatency(boolean selectMaxTotalLatency) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
