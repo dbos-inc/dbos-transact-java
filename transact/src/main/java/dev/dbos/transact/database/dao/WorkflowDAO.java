@@ -126,12 +126,12 @@ public class WorkflowDAO {
           throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         }
 
-        var state = WorkflowState.valueOf(resRow.status);
+        var state = resRow.status;
 
         // If there is an existing DB record and we aren't here to recover it,
         //  leave it be.  Roll back the change to max recovery attempts.
         if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
-          if (resRow.status.equals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name())) {
+          if (resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
           Long deadlineEpochMs = resRow.deadlineEpochMs();
@@ -183,7 +183,7 @@ public class WorkflowDAO {
 
   record InsertWorkflowResult(
       int recoveryAttempts,
-      String status,
+      WorkflowState status,
       String workflowName,
       String className,
       String instanceName,
@@ -293,7 +293,7 @@ public class WorkflowDAO {
           InsertWorkflowResult result =
               new InsertWorkflowResult(
                   rs.getInt("recovery_attempts"),
-                  rs.getString("status"),
+                  WorkflowState.valueOf(rs.getString("status")),
                   rs.getString("name"),
                   rs.getString("class_name"),
                   rs.getString("config_name"),
