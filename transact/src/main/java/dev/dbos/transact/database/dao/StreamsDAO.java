@@ -2,11 +2,10 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.database.SystemDatabase.NotificationRegistry;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
+import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -16,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public class StreamsDAO {
 
@@ -144,7 +144,7 @@ public class StreamsDAO {
       String key,
       int offset,
       Duration dbPollingInterval,
-      NotificationRegistry notificationRegistry)
+      Function<SignalKey, Subscription> createSubscription)
       throws SQLException {
     String sql =
         """
@@ -156,7 +156,7 @@ public class StreamsDAO {
 
     while (true) {
       ctx.checkClosed();
-      try (var sub = notificationRegistry.subscribe(new SignalKey.Stream(workflowId, key))) {
+      try (var sub = createSubscription.apply(new SignalKey.Stream(workflowId, key))) {
         try (var conn = ctx.getConnection();
             var stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowId);
@@ -173,8 +173,8 @@ public class StreamsDAO {
               return deserialized;
             }
           }
-          WorkflowStatus status = WorkflowDAO.getWorkflowStatus(ctx, workflowId);
-          if (status == null || !status.status().isActive()) {
+          var state = WorkflowDAO.getWorkflowState(ctx, workflowId);
+          if (state == null || !state.isActive()) {
             return SystemDatabase.END_OF_STREAM;
           }
         }

@@ -1,9 +1,6 @@
 package dev.dbos.transact.database.signal;
 
-import dev.dbos.transact.database.signal.SignalKey.WakeReason;
-
 import java.time.Duration;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -11,20 +8,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class SignalMap<K> {
+public class SignalMap {
   private static class Entry {
-    final CompletableFuture<WakeReason> future = new CompletableFuture<>();
+    final CompletableFuture<Void> future = new CompletableFuture<>();
     final AtomicInteger refs = new AtomicInteger(1);
-    final WakeReason reason;
-
-    public Entry(WakeReason reason) {
-      this.reason = Objects.requireNonNull(reason);
-    }
   }
 
-  private final ConcurrentHashMap<K, Entry> map = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Entry> map = new ConcurrentHashMap<>();
 
-  public Subscription subscribe(K key, WakeReason reason) {
+  public Subscription subscribe(String key) {
     var entry =
         map.compute(
             key,
@@ -33,7 +25,7 @@ public class SignalMap<K> {
                 e.refs.incrementAndGet();
                 return e;
               }
-              return new Entry(reason);
+              return new Entry();
             });
 
     var sub =
@@ -42,27 +34,25 @@ public class SignalMap<K> {
                 map.compute(key, (k, e) -> e != null && e.refs.decrementAndGet() == 0 ? null : e));
 
     entry.future.thenAccept(
-        r -> {
+        ignored -> {
           if (!sub.closed) {
-            sub.complete(r);
+            sub.complete(null);
           }
         });
     return sub;
   }
 
-  public void signal(K key) {
+  public void raiseSignal(String key) {
     var e = map.remove(key);
     if (e != null) {
-      e.future.complete(e.reason);
+      e.future.complete(null);
     }
   }
 
-  public static WakeReason awaitAny(Duration timeout, Subscription... subscriptions) {
+  public static void awaitAny(Duration timeout, Subscription... subscriptions) {
     try {
-      return (WakeReason)
-          CompletableFuture.anyOf(subscriptions).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      CompletableFuture.anyOf(subscriptions).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
     } catch (TimeoutException ignored) {
-      return WakeReason.TIMEOUT;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(e);

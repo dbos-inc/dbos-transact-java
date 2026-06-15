@@ -1014,6 +1014,9 @@ public class DBOSExecutor implements AutoCloseable {
               if (cause instanceof DBOSWorkflowExecutionConflictException) {
                 return awaitWorkflowResult(workflowId);
               }
+              if (cause instanceof DBOSWorkflowCancelledException cancelled) {
+                throw new DBOSAwaitedWorkflowCancelledException(cancelled.workflowId());
+              }
               throw (E) cause;
             }
             throw new RuntimeException("Future threw non-exception", e.getCause());
@@ -1741,9 +1744,14 @@ public class DBOSExecutor implements AutoCloseable {
 
             logger.error("executeWorkflow {}", workflowId, actual);
 
-            if (actual instanceof InterruptedException
-                || actual instanceof DBOSWorkflowCancelledException) {
-              throw new DBOSAwaitedWorkflowCancelledException(workflowId);
+            // Skip persistWorkflowError for cancelled workflows: the DB already holds CANCELLED
+            // (the terminal state), and calling persistWorkflowError would cause
+            // updateWorkflowOutcome to throw DBOSWorkflowCancelledException from inside the
+            // catch block, bypassing the getResult() conversion to
+            // DBOSAwaitedWorkflowCancelledException.
+            if (actual instanceof DBOSWorkflowCancelledException cancelled
+                && cancelled.workflowId().equals(workflowId)) {
+              throw cancelled;
             }
 
             persistWorkflowError(workflowId, actual, initResult.serialization());
