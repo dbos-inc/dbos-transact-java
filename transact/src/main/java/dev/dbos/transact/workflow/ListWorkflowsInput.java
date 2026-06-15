@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -646,8 +647,8 @@ public record ListWorkflowsInput(
     return withWorkflowIds(List.of(workflowId));
   }
 
-  public ListWorkflowsInput withStatus(WorkflowState status) {
-    return withStatus(List.of(status));
+  public ListWorkflowsInput withStatus(WorkflowState... status) {
+    return withStatus(Arrays.asList(status));
   }
 
   public ListWorkflowsInput withWorkflowName(String workflowName) {

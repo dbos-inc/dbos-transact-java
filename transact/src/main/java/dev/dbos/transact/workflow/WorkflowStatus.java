@@ -149,7 +149,9 @@ public record WorkflowStatus(
         && java.util.Objects.equals(forkedFrom, that.forkedFrom)
         && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId)
         && java.util.Objects.equals(wasForkedFrom, that.wasForkedFrom)
-        && java.util.Objects.equals(delayUntil, that.delayUntil);
+        && java.util.Objects.equals(delayUntil, that.delayUntil)
+        && java.util.Objects.equals(completedAt, that.completedAt)
+        && java.util.Objects.equals(serialization, that.serialization);
   }
 
   /**
@@ -188,6 +190,8 @@ public record WorkflowStatus(
         forkedFrom,
         parentWorkflowId,
         wasForkedFrom,
-        delayUntil);
+        delayUntil,
+        completedAt,
+        serialization);
   }
 }

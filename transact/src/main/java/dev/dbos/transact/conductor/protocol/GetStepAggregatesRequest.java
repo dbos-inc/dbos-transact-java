@@ -5,6 +5,7 @@ import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -40,7 +41,19 @@ public class GetStepAggregatesRequest extends BaseMessage {
         selectCount,
         Boolean.TRUE.equals(body.select_max_duration_ms),
         body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
-        body.status,
+        body.status != null
+            ? body.status.stream()
+                .map(
+                    s -> {
+                      try {
+                        return GetStepAggregatesInput.Status.valueOf(s);
+                      } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException(
+                            "Invalid step status '" + s + "'. Valid values: SUCCESS, ERROR");
+                      }
+                    })
+                .collect(Collectors.toList())
+            : null,
         body.function_name,
         body.workflow_id_prefix,
         body.completed_after != null ? Instant.parse(body.completed_after) : null,

@@ -438,7 +438,7 @@ public class SystemDatabaseTest {
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
       assertEquals(WorkflowState.PENDING, result1.status());
-      assertNull(result1.deadlineEpochMS());
+      assertNull(result1.deadline());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
@@ -467,7 +467,7 @@ public class SystemDatabaseTest {
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
     assertEquals(WorkflowState.ENQUEUED, result1.status());
-    assertNull(result1.deadlineEpochMS());
+    assertNull(result1.deadline());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(
@@ -1724,7 +1724,7 @@ public class SystemDatabaseTest {
         sysdb.getWorkflowAggregates(
             new GetWorkflowAggregatesInput()
                 .withTimeBucketSize(Duration.ofMillis(bucketMs))
-                .withStatus(List.of("ERROR"))
+                .withStatus(WorkflowState.ERROR)
                 .withSelectCount(true)
                 .withWorkflowIdPrefix(List.of("agg-tbf-")));
     assertEquals(1, errRows.size());
@@ -1943,10 +1943,10 @@ public class SystemDatabaseTest {
             new GetWorkflowAggregatesInput()
                 .withGroupByName(true)
                 .withSelectCount(false)
-                .withSelectMaxQueueWaitMs(true)
-                .withSelectMaxTotalLatencyMs(true)
+                .withSelectMaxQueueWait(true)
+                .withSelectMaxTotalLatency(true)
                 .withWorkflowIdPrefix(List.of("agg-md-"))
-                .withStatus(List.of("SUCCESS")));
+                .withStatus(WorkflowState.SUCCESS));
     assertEquals(2, results.size());
     WorkflowAggregateRow syncRow = null;
     WorkflowAggregateRow queuedRow = null;
@@ -2094,7 +2094,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withWorkflowIdPrefix(List.of("step-filter-wf-"))
-                .withStatus(List.of("ERROR"))
+                .withStatus(GetStepAggregatesInput.Status.ERROR)
                 .withSelectCount(true));
     assertEquals(1, errRows.size());
     assertEquals("stepY", errRows.get(0).group().get("function_name"));
@@ -2143,7 +2143,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withSelectCount(false)
-                .withSelectMaxDurationMs(true));
+                .withSelectMaxDuration(true));
     assertEquals(1, rows.size());
     assertNull(rows.get(0).count());
     assertNotNull(rows.get(0).maxDuration());
@@ -2254,7 +2254,7 @@ public class SystemDatabaseTest {
                 .withCompletedAfter(beforeAll)
                 .withCompletedBefore(afterAll)
                 .withSelectCount(true)
-                .withSelectMaxDurationMs(true));
+                .withSelectMaxDuration(true));
     var byFn = rows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
 
     // Real steps have count=1 and max_duration populated
@@ -2277,7 +2277,7 @@ public class SystemDatabaseTest {
             new GetStepAggregatesInput()
                 .withGroupByFunctionName(true)
                 .withSelectCount(true)
-                .withSelectMaxDurationMs(true));
+                .withSelectMaxDuration(true));
     var allByFn =
         allRows.stream().collect(Collectors.toMap(r -> r.group().get("function_name"), r -> r));
     var childRow = allByFn.get("childWorkflow");
@@ -2300,7 +2300,7 @@ public class SystemDatabaseTest {
                 .withGroupByFunctionName(true)
                 .withFunctionName(List.of("quickStep", "slowStep"))
                 .withSelectCount(false)
-                .withSelectMaxDurationMs(true));
+                .withSelectMaxDuration(true));
     for (var r : maxOnly) {
       assertNull(r.count());
       assertNotNull(r.maxDuration());
