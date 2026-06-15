@@ -17,6 +17,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AutoClose;
@@ -239,5 +241,58 @@ public class StartWorkflowTest {
     assertTrue(
         elapsed >= delay.toMillis(),
         "Expected at least 5s delay but elapsed was " + elapsed + "ms");
+  }
+
+  @Test
+  void startWorkflowWithAppVersion() throws Exception {
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    var version = UUID.randomUUID().toString();
+    var options = new StartWorkflowOptions().withQueue("queue").withAppVersion(version);
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+
+    var status = handle.getStatus();
+    assertEquals(version, status.appVersion());
+  }
+
+  @Test
+  void startWorkflowWithNoAppVersion() throws Exception {
+    DBOSTestAccess.getQueueService(dbos).pause();
+    var exec = DBOSTestAccess.getDbosExecutor(dbos);
+
+    var options = new StartWorkflowOptions().withQueue("queue");
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+
+    var status = handle.getStatus();
+    assertEquals(exec.appVersion(), status.appVersion());
+  }
+
+  @Test
+  void startWorkflowOptionsAuthFlowsToStatus() throws Exception {
+    String workflowId = "authViaStartOptions";
+    String[] roles = {"admin", "editor"};
+    var options = new StartWorkflowOptions(workflowId).withAuthentication("alice", roles);
+
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    handle.getResult();
+
+    var status = handle.getStatus();
+    assertEquals("alice", status.authenticatedUser());
+    assertEquals(List.of(roles), status.authenticatedRoles());
+    assertNull(status.assumedRole());
+  }
+
+  @Test
+  void nullAuthFlowsToStatus() throws Exception {
+    String workflowId = "authNull";
+    var options = new StartWorkflowOptions(workflowId);
+
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    handle.getResult();
+
+    var status = handle.getStatus();
+    assertNull(status.authenticatedUser());
+    assertNull(status.assumedRole());
+    assertNull(status.authenticatedRoles());
   }
 }

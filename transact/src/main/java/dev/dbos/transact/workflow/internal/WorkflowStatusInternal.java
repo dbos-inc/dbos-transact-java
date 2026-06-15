@@ -5,6 +5,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -20,7 +21,7 @@ public record WorkflowStatusInternal(
     Duration delay,
     String authenticatedUser,
     String assumedRole,
-    String[] authenticatedRoles,
+    List<String> authenticatedRoles,
     String inputs,
     String executorId,
     String appVersion,
@@ -61,6 +62,8 @@ public record WorkflowStatusInternal(
     if (nullableIsEmpty(assumedRole)) {
       throw new IllegalArgumentException("assumedRole must not be empty");
     }
+
+    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
     if (nullableIsEmpty(inputs)) {
       throw new IllegalArgumentException("inputs must not be empty");
     }

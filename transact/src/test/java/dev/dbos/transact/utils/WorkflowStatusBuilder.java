@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 public class WorkflowStatusBuilder {
@@ -31,7 +32,7 @@ public class WorkflowStatusBuilder {
 
   private String authenticatedUser;
   private String assumedRole;
-  private String[] authenticatedRoles;
+  private List<String> authenticatedRoles;
 
   private Instant createdAt;
   private Instant updatedAt;
@@ -170,8 +171,8 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder authenticatedRoles(String[] authenticatedRoles) {
-    this.authenticatedRoles = authenticatedRoles;
+  public WorkflowStatusBuilder authenticatedRoles(String... authenticatedRoles) {
+    this.authenticatedRoles = authenticatedRoles != null ? List.of(authenticatedRoles) : null;
     return this;
   }
 

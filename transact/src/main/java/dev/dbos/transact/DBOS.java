@@ -1248,6 +1248,33 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * Get the authenticated user of the current workflow context.
+   *
+   * @return the authenticated user name, or {@code null} if not set or not in a workflow context
+   */
+  public static @Nullable String authenticatedUser() {
+    return DBOSContext.authenticatedUser();
+  }
+
+  /**
+   * Get the assumed role of the current workflow context.
+   *
+   * @return the assumed role name, or {@code null} if not set or not in a workflow context
+   */
+  public static @Nullable String assumedRole() {
+    return DBOSContext.assumedRole();
+  }
+
+  /**
+   * Get the authenticated roles of the current workflow context.
+   *
+   * @return the authenticated roles array, or {@code null} if not set or not in a workflow context
+   */
+  public static @Nullable List<String> authenticatedRoles() {
+    return DBOSContext.authenticatedRoles();
+  }
+
+  /**
    * Write a value to a stream. Must be called from within a workflow or step.
    *
    * @param key The stream key / name within the workflow

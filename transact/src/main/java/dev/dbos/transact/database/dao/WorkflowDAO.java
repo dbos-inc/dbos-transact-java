@@ -59,6 +59,7 @@ import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.type.TypeReference;
 
 public class WorkflowDAO {
 
@@ -1107,7 +1108,7 @@ public class WorkflowDAO {
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)
-                ? JsonUtility.fromJson(authenticatedRolesJson, String[].class)
+                ? JsonUtility.fromJson(authenticatedRolesJson, new TypeReference<List<String>>() {})
                 : null,
             loadInput
                 ? SerializationUtil.deserializePositionalArgs(

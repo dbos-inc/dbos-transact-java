@@ -1,6 +1,5 @@
 package dev.dbos.transact.database;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -730,7 +729,7 @@ public class SystemDatabaseTest {
     assertNotNull(retrievedStatus);
     assertEquals(authenticatedUser, retrievedStatus.authenticatedUser());
     assertEquals(assumedRole, retrievedStatus.assumedRole());
-    assertArrayEquals(authenticatedRoles, retrievedStatus.authenticatedRoles());
+    assertEquals(List.of(authenticatedRoles), retrievedStatus.authenticatedRoles());
 
     // Validate raw database values using DBUtils
     var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -759,7 +758,7 @@ public class SystemDatabaseTest {
             .className("com.example.TestNullAuthWorkflow")
             .authenticatedUser(null)
             .assumedRole(null)
-            .authenticatedRoles(null)
+            .authenticatedRoles((String[]) null)
             .build();
 
     // Insert into database
@@ -805,7 +804,7 @@ public class SystemDatabaseTest {
     assertNotNull(retrievedStatus);
     assertEquals(authenticatedUser, retrievedStatus.authenticatedUser());
     assertEquals(assumedRole, retrievedStatus.assumedRole());
-    assertEquals(0, retrievedStatus.authenticatedRoles().length);
+    assertEquals(0, retrievedStatus.authenticatedRoles().size());
 
     // Validate raw database values
     var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -840,7 +839,7 @@ public class SystemDatabaseTest {
     assertNotNull(originalRetrieved);
     assertEquals(authenticatedUser, originalRetrieved.authenticatedUser());
     assertEquals(assumedRole, originalRetrieved.assumedRole());
-    assertArrayEquals(authenticatedRoles, originalRetrieved.authenticatedRoles());
+    assertEquals(List.of(authenticatedRoles), originalRetrieved.authenticatedRoles());
 
     // Fork the workflow
     var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
@@ -853,7 +852,7 @@ public class SystemDatabaseTest {
     assertNotNull(forkedStatus);
     assertEquals(authenticatedUser, forkedStatus.authenticatedUser());
     assertEquals(assumedRole, forkedStatus.assumedRole());
-    assertArrayEquals(authenticatedRoles, forkedStatus.authenticatedRoles());
+    assertEquals(List.of(authenticatedRoles), forkedStatus.authenticatedRoles());
 
     // Verify other forked workflow properties
     assertEquals("OriginalTestWorkflow", forkedStatus.workflowName());
@@ -891,7 +890,7 @@ public class SystemDatabaseTest {
             .className("com.example.NullAuthTestWorkflow")
             .authenticatedUser(null)
             .assumedRole(null)
-            .authenticatedRoles(null)
+            .authenticatedRoles((String[]) null)
             .build();
 
     // Insert original workflow into database
@@ -950,7 +949,7 @@ public class SystemDatabaseTest {
     assertNotNull(originalRetrieved);
     assertEquals(authenticatedUser, originalRetrieved.authenticatedUser());
     assertEquals(assumedRole, originalRetrieved.assumedRole());
-    assertEquals(0, originalRetrieved.authenticatedRoles().length);
+    assertEquals(0, originalRetrieved.authenticatedRoles().size());
 
     // Fork the workflow
     var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
@@ -963,7 +962,7 @@ public class SystemDatabaseTest {
     assertNotNull(forkedStatus);
     assertEquals(authenticatedUser, forkedStatus.authenticatedUser());
     assertEquals(assumedRole, forkedStatus.assumedRole());
-    assertEquals(0, forkedStatus.authenticatedRoles().length);
+    assertEquals(0, forkedStatus.authenticatedRoles().size());
 
     // Verify other forked workflow properties
     assertEquals("EmptyAuthRolesTestWorkflow", forkedStatus.workflowName());

@@ -44,7 +44,9 @@ public class ClientTest {
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));
-    service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
+    var impl = new ClientServiceImpl(dbos);
+    service = dbos.registerProxy(ClientService.class, impl);
+    impl.setProxy(service);
 
     dbos.launch();
   }
@@ -434,5 +436,90 @@ public class ClientTest {
 
     assertEquals("1-hello", handle1.getResult());
     assertEquals("2-world", handle2.getResult());
+  }
+
+  @Test
+  public void enqueueOptionsTimeoutWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var timeout = Duration.ofSeconds(30);
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withTimeout(timeout);
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertEquals(timeout.toMillis(), row.timeoutMs());
+      assertNull(row.deadlineEpochMs()); // deadline set at dequeue time, not enqueue
+    }
+  }
+
+  @Test
+  public void enqueueOptionsDeadlineWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var deadline = Instant.now().plus(Duration.ofMinutes(5));
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withDeadline(deadline);
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertNull(row.timeoutMs());
+      assertEquals(deadline.toEpochMilli(), row.deadlineEpochMs());
+    }
+  }
+
+  @Test
+  public void enqueueOptionsAuthWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withAuthentication("alice", "admin", "editor");
+      var handle = client.enqueueWorkflow(options, new Object[] {1, "test"});
+
+      var status = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
+      assertEquals("alice", status.authenticatedUser());
+      assertEquals(List.of("admin", "editor"), status.authenticatedRoles());
+      assertNull(status.assumedRole());
+    }
+  }
+
+  @Test
+  public void authFlowsFromEnqueuedParentToChild() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("parentWorkflow", "ClientServiceImpl", "testQueue")
+              .withAuthentication("bob", "viewer");
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+      handle.getResult();
+
+      var parentStatus = client.getWorkflowStatus(handle.workflowId()).orElseThrow();
+      assertEquals("bob", parentStatus.authenticatedUser());
+      assertEquals(List.of("viewer"), parentStatus.authenticatedRoles());
+
+      var childStatus = client.getWorkflowStatus(handle.workflowId() + "-0").orElseThrow();
+      assertEquals("bob", childStatus.authenticatedUser());
+      assertEquals(List.of("viewer"), childStatus.authenticatedRoles());
+    }
+  }
+
+  @Test
+  public void enqueueOptionsNoTimeoutOrDeadlineWrittenToDb() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var handle = client.enqueueWorkflow(options, new Object[0]);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertNull(row.timeoutMs());
+      assertNull(row.deadlineEpochMs());
+    }
   }
 }
