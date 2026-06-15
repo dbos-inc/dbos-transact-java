@@ -68,7 +68,21 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.name,
         body.status != null
-            ? body.status.stream().map(WorkflowState::valueOf).collect(Collectors.toList())
+            ? body.status.stream()
+                .map(
+                    s -> {
+                      try {
+                        return WorkflowState.valueOf(s);
+                      } catch (IllegalArgumentException e) {
+                        var valid =
+                            java.util.Arrays.stream(WorkflowState.values())
+                                .map(Enum::name)
+                                .collect(Collectors.joining(", "));
+                        throw new IllegalArgumentException(
+                            "Invalid workflow status '" + s + "'. Valid values: " + valid);
+                      }
+                    })
+                .collect(Collectors.toList())
             : null,
         body.queue_name,
         body.executor_id,

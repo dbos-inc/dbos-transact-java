@@ -3102,7 +3102,7 @@ public class ConductorTest {
             new WorkflowAggregateRow(
                 Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
             new WorkflowAggregateRow(
-                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
+                Map.of("status", "ERROR", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3143,7 +3143,7 @@ public class ConductorTest {
       assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
       assertEquals("myWorkflow", output.get(0).get("group").get("name").stringValue());
       assertEquals(10, output.get(0).get("count").asLong());
-      assertEquals("FAILURE", output.get(1).get("group").get("status").stringValue());
+      assertEquals("ERROR", output.get(1).get("group").get("status").stringValue());
       assertEquals(3, output.get(1).get("count").asLong());
     }
   }

@@ -43,7 +43,15 @@ public class GetStepAggregatesRequest extends BaseMessage {
         body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.status != null
             ? body.status.stream()
-                .map(GetStepAggregatesInput.Status::valueOf)
+                .map(
+                    s -> {
+                      try {
+                        return GetStepAggregatesInput.Status.valueOf(s);
+                      } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException(
+                            "Invalid step status '" + s + "'. Valid values: SUCCESS, ERROR");
+                      }
+                    })
                 .collect(Collectors.toList())
             : null,
         body.function_name,
