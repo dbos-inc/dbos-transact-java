@@ -58,7 +58,8 @@ public record WorkflowStatusInternal(
     }
     // Normalize empty strings to null for auth fields — other SDKs (TypeScript, Go) send ""
     // rather than null when auth context is absent, so we treat them equivalently.
-    authenticatedUser = (authenticatedUser != null && authenticatedUser.isEmpty()) ? null : authenticatedUser;
+    authenticatedUser =
+        (authenticatedUser != null && authenticatedUser.isEmpty()) ? null : authenticatedUser;
     assumedRole = (assumedRole != null && assumedRole.isEmpty()) ? null : assumedRole;
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
 
