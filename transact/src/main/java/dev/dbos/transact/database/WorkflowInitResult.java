@@ -2,8 +2,10 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.time.Instant;
+
 public record WorkflowInitResult(
     WorkflowState status,
-    Long deadlineEpochMS,
+    Instant deadline,
     boolean shouldExecuteOnThisExecutor,
     String serialization) {}

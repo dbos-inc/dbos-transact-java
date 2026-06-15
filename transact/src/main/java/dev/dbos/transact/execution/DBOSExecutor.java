@@ -1762,14 +1762,14 @@ public class DBOSExecutor implements AutoCloseable {
           }
         };
 
-    if (initResult.deadlineEpochMS() != null
-        && System.currentTimeMillis() > initResult.deadlineEpochMS()) {
+    if (initResult.deadline() != null
+        && Instant.now().isAfter(initResult.deadline())) {
       systemDatabase.cancelWorkflows(List.of(workflowId), false);
       return retrieveWorkflow(workflowId);
     }
 
     var future = CompletableFuture.supplyAsync(task, executorService);
-    if (initResult.deadlineEpochMS() != null) {
+    if (initResult.deadline() != null) {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
@@ -1777,7 +1777,7 @@ public class DBOSExecutor implements AutoCloseable {
               future.cancel(true);
             }
           },
-          initResult.deadlineEpochMS() - System.currentTimeMillis(),
+          Duration.between(Instant.now(), initResult.deadline()).toMillis(),
           TimeUnit.MILLISECONDS);
     }
 

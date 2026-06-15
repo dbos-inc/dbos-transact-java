@@ -438,7 +438,7 @@ public class SystemDatabaseTest {
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
       assertEquals(WorkflowState.PENDING, result1.status());
-      assertNull(result1.deadlineEpochMS());
+      assertNull(result1.deadline());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
@@ -467,7 +467,7 @@ public class SystemDatabaseTest {
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
     assertEquals(WorkflowState.ENQUEUED, result1.status());
-    assertNull(result1.deadlineEpochMS());
+    assertNull(result1.deadline());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(
