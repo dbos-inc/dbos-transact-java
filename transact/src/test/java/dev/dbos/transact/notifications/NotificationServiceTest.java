@@ -6,6 +6,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
@@ -529,6 +530,25 @@ class NotificationServiceTest {
     notService.sendFromStep(handle.workflowId(), "hello", null);
 
     assertEquals("hello", handle.getResult());
+  }
+
+  @Test
+  public void recvCancelsCaller() throws Exception {
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
+    dbos.launch();
+
+    var handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic", Duration.ofSeconds(30)));
+
+    // Wait for recv to signal it's ready, then give it a moment to enter the polling loop
+    impl.recvReadyLatch.await();
+    Thread.sleep(200);
+
+    dbos.cancelWorkflow(handle.workflowId());
+
+    // Blocks until the workflow task actually exits, proving the recv loop detected the
+    // cancellation and the workflow thread terminated — not just that the DB was updated.
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
   }
 
   @Test

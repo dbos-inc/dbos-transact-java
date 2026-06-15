@@ -24,6 +24,8 @@ interface MgmtService {
   String treeChildWorkflow(String grandchildId) throws InterruptedException;
 
   String treeLeafWorkflow() throws InterruptedException;
+
+  void selfInterruptingWorkflow() throws InterruptedException;
 }
 
 class MgmtServiceImpl implements MgmtService {
@@ -131,5 +133,11 @@ class MgmtServiceImpl implements MgmtService {
     testWorkLatches.get(wfId).await();
     dbos.runStep(() -> null, "leafStep");
     return wfId;
+  }
+
+  @Override
+  @Workflow
+  public void selfInterruptingWorkflow() throws InterruptedException {
+    throw new InterruptedException("simulated interruption");
   }
 }

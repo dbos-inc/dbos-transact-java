@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -21,13 +22,18 @@ public record GetStepAggregatesInput(
     boolean groupByFunctionName,
     boolean groupByStatus,
     boolean selectCount,
-    boolean selectMaxDurationMs,
+    boolean selectMaxDuration,
     Duration timeBucketSize,
-    List<String> status,
+    List<Status> status,
     List<String> functionName,
     List<String> workflowIdPrefix,
     Instant completedAfter,
     Instant completedBefore) {
+
+  public enum Status {
+    SUCCESS,
+    ERROR
+  }
 
   public GetStepAggregatesInput {
     if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
@@ -44,7 +50,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -58,7 +64,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -72,7 +78,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -81,12 +87,12 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withSelectMaxDurationMs(boolean selectMaxDurationMs) {
+  public GetStepAggregatesInput withSelectMaxDuration(boolean selectMaxDuration) {
     return new GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -100,7 +106,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -109,18 +115,22 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withStatus(List<String> status) {
+  public GetStepAggregatesInput withStatus(List<Status> status) {
     return new GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
         workflowIdPrefix,
         completedAfter,
         completedBefore);
+  }
+
+  public GetStepAggregatesInput withStatus(Status... status) {
+    return withStatus(Arrays.asList(status));
   }
 
   public GetStepAggregatesInput withFunctionName(List<String> functionName) {
@@ -128,7 +138,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -142,7 +152,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -156,7 +166,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,
@@ -170,7 +180,7 @@ public record GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
         selectCount,
-        selectMaxDurationMs,
+        selectMaxDuration,
         timeBucketSize,
         status,
         functionName,

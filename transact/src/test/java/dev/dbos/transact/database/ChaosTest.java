@@ -3,7 +3,6 @@ package dev.dbos.transact.database;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
@@ -129,7 +128,6 @@ public class ChaosTest {
         impl.setSelf(proxy);
 
         dbos.launch();
-        DBOSTestAccess.getSystemDatabase(dbos).speedUpPollingForTest();
 
         assertEquals("Hehehe", proxy.dbLossBetweenSteps());
 
@@ -186,7 +184,6 @@ public class ChaosTest {
           var svc = dbos.registerProxy(ChaosService.class, impl);
           impl.setSelf(svc);
           dbos.launch();
-          DBOSTestAccess.getSystemDatabase(dbos).speedUpPollingForTest();
 
           // Scenario 1: proxy disabled — simulates a sustained network partition
           proxy.disable();

@@ -11,8 +11,7 @@ import dev.dbos.transact.database.dao.StepsDAO;
 import dev.dbos.transact.database.dao.StreamsDAO;
 import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.database.signal.SignalKey;
-import dev.dbos.transact.database.signal.SignalKey.Event;
-import dev.dbos.transact.database.signal.SignalKey.Message;
+import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -43,6 +42,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import javax.sql.DataSource;
 
@@ -56,36 +56,13 @@ public class SystemDatabase implements AutoCloseable {
 
   public static final Object END_OF_STREAM = new Object();
 
-  public interface NotificationRegistry {
-    Subscription subscribe(SignalKey.Message key);
-
-    Subscription subscribe(SignalKey.Event key);
-
-    Subscription subscribe(SignalKey.Stream key);
-  }
-
-  public interface NotificationSource extends NotificationRegistry {
+  public interface NotificationSource {
     void start();
 
     void close();
   }
 
   class NullNotificationSource implements NotificationSource {
-
-    @Override
-    public Subscription subscribe(Message key) {
-      return new Subscription(() -> {});
-    }
-
-    @Override
-    public Subscription subscribe(Event key) {
-      return new Subscription(() -> {});
-    }
-
-    @Override
-    public Subscription subscribe(SignalKey.Stream key) {
-      return new Subscription(() -> {});
-    }
 
     @Override
     public void start() {}
@@ -104,8 +81,11 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
 
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  private final SignalMap signalMap = new SignalMap();
+  private final Function<SignalKey, Subscription> createSubscription =
+      key -> signalMap.subscribe(key.toString());
   private final NotificationSource notificationSource;
-  private Duration dbPollingInterval = Duration.ofSeconds(1);
+  private final Duration dbPollingInterval = Duration.ofSeconds(1);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -142,7 +122,9 @@ public class SystemDatabase implements AutoCloseable {
     }
 
     notificationSource =
-        useListenNotify ? new NotificationListenerSource(dataSource) : new NullNotificationSource();
+        useListenNotify
+            ? new NotificationListenerSource(dataSource, signalMap::raiseSignal)
+            : new NullNotificationSource();
   }
 
   public SystemDatabase(
@@ -241,10 +223,6 @@ public class SystemDatabase implements AutoCloseable {
 
   public void start() {
     notificationSource.start();
-  }
-
-  void speedUpPollingForTest() {
-    dbPollingInterval = Duration.ofMillis(100);
   }
 
   private static boolean isConnectionFailure(SQLException e) {
@@ -516,7 +494,7 @@ public class SystemDatabase implements AutoCloseable {
                 timeoutStepId,
                 topic,
                 dbPollingInterval,
-                notificationSource));
+                createSubscription));
   }
 
   public void setEvent(
@@ -526,7 +504,6 @@ public class SystemDatabase implements AutoCloseable {
       Object message,
       boolean asStep,
       String serialization) {
-
     dbRetry(
         () ->
             NotificationsDAO.setEvent(
@@ -534,11 +511,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Object getEvent(String targetId, String key, Duration timeout, GetEventCaller caller) {
-
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                ctx, targetId, key, timeout, caller, dbPollingInterval, notificationSource));
+                ctx, targetId, key, timeout, caller, dbPollingInterval, createSubscription));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
@@ -696,7 +672,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             StreamsDAO.readStream(
-                ctx, workflowId, key, offset, dbPollingInterval, notificationSource));
+                ctx, workflowId, key, offset, dbPollingInterval, createSubscription));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {

@@ -1,10 +1,12 @@
 package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -65,7 +67,23 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         Boolean.TRUE.equals(body.select_max_total_latency_ms),
         body.time_bucket_size_ms != null ? Duration.ofMillis(body.time_bucket_size_ms) : null,
         body.name,
-        body.status,
+        body.status != null
+            ? body.status.stream()
+                .map(
+                    s -> {
+                      try {
+                        return WorkflowState.valueOf(s);
+                      } catch (IllegalArgumentException e) {
+                        var valid =
+                            java.util.Arrays.stream(WorkflowState.values())
+                                .map(Enum::name)
+                                .collect(Collectors.joining(", "));
+                        throw new IllegalArgumentException(
+                            "Invalid workflow status '" + s + "'. Valid values: " + valid);
+                      }
+                    })
+                .collect(Collectors.toList())
+            : null,
         body.queue_name,
         body.executor_id,
         body.app_version,

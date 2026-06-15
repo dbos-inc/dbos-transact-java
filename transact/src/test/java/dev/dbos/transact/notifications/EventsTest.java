@@ -469,6 +469,28 @@ public class EventsTest {
   }
 
   @Test
+  public void getEventCancelsCaller() throws Exception {
+    var targetWfId = UUID.randomUUID().toString();
+    var callerWfId = UUID.randomUUID().toString();
+
+    dbos.startWorkflow(
+        () -> proxy.getEventWorkflow(targetWfId, "key", Duration.ofSeconds(30)),
+        new StartWorkflowOptions(callerWfId));
+
+    Thread.sleep(200);
+    dbos.cancelWorkflow(callerWfId);
+
+    WorkflowState finalState = null;
+    long deadline = System.currentTimeMillis() + 10_000;
+    while (System.currentTimeMillis() < deadline) {
+      finalState = dbos.retrieveWorkflow(callerWfId).getStatus().status();
+      if (finalState == WorkflowState.CANCELLED) break;
+      Thread.sleep(100);
+    }
+    assertEquals(WorkflowState.CANCELLED, finalState);
+  }
+
+  @Test
   public void concurrency() throws Exception {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {

@@ -59,6 +59,7 @@ import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.type.TypeReference;
 
 public class WorkflowDAO {
 
@@ -125,16 +126,15 @@ public class WorkflowDAO {
           throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         }
 
-        var state = WorkflowState.valueOf(resRow.status);
+        var state = resRow.status;
 
         // If there is an existing DB record and we aren't here to recover it,
         //  leave it be.  Roll back the change to max recovery attempts.
         if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
-          if (resRow.status.equals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name())) {
+          if (resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
-          return new WorkflowInitResult(
-              state, resRow.deadlineEpochMs(), false, resRow.serialization());
+          return new WorkflowInitResult(state, resRow.deadline(), false, resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -162,8 +162,7 @@ public class WorkflowDAO {
           throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
         }
 
-        return new WorkflowInitResult(
-            state, resRow.deadlineEpochMs(), true, resRow.serialization());
+        return new WorkflowInitResult(state, resRow.deadline(), true, resRow.serialization());
 
       } finally {
         if (shouldCommit) {
@@ -178,12 +177,12 @@ public class WorkflowDAO {
 
   record InsertWorkflowResult(
       int recoveryAttempts,
-      String status,
+      WorkflowState status,
       String workflowName,
       String className,
       String instanceName,
       String queueName,
-      Long deadlineEpochMs,
+      Instant deadline,
       String serialization,
       String ownerXid) {}
 
@@ -288,12 +287,12 @@ public class WorkflowDAO {
           InsertWorkflowResult result =
               new InsertWorkflowResult(
                   rs.getInt("recovery_attempts"),
-                  rs.getString("status"),
+                  WorkflowState.valueOf(rs.getString("status")),
                   rs.getString("name"),
                   rs.getString("class_name"),
                   rs.getString("config_name"),
                   rs.getString("queue_name"),
-                  rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
                   rs.getString("serialization"),
                   rs.getString("owner_xid"));
 
@@ -470,6 +469,48 @@ public class WorkflowDAO {
     }
 
     return null;
+  }
+
+  public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      checkWorkflow(conn, ctx.schema(), workflowId);
+    }
+  }
+
+  public static void checkWorkflow(Connection conn, String schema, String workflowId)
+      throws SQLException {
+    var workflowState =
+        WorkflowDAO.getWorkflowState(
+            conn, Objects.requireNonNull(schema), Objects.requireNonNull(workflowId));
+    if (workflowState == null) {
+      throw new DBOSNonExistentWorkflowException(workflowId);
+    }
+
+    if (workflowState == WorkflowState.CANCELLED) {
+      throw new DBOSWorkflowCancelledException(workflowId);
+    }
+  }
+
+  public static @Nullable WorkflowState getWorkflowState(DbContext ctx, String workflowId)
+      throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return getWorkflowState(conn, ctx.schema(), workflowId);
+    }
+  }
+
+  public static @Nullable WorkflowState getWorkflowState(
+      Connection conn, String schema, String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(Objects.requireNonNull(schema));
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? WorkflowState.valueOf(rs.getString("status")) : null;
+      }
+    }
   }
 
   /**
@@ -765,15 +806,15 @@ public class WorkflowDAO {
     var metrics = new ArrayList<Metric>();
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
     if (input.selectMinCreatedAt()) metrics.add(new Metric("min_created_at", "MIN(created_at)"));
-    if (input.selectMaxQueueWaitMs())
+    if (input.selectMaxQueueWait())
       metrics.add(new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
-    if (input.selectMaxTotalLatencyMs())
+    if (input.selectMaxTotalLatency())
       metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
 
     if (metrics.isEmpty()) {
       throw new IllegalArgumentException(
           "GetWorkflowAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWaitMs)");
+              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWait)");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -793,7 +834,7 @@ public class WorkflowDAO {
     }
     if (input.status() != null && !input.status().isEmpty()) {
       whereConditions.add("status = ANY(?)");
-      parameters.add(input.status());
+      parameters.add(input.status().stream().map(WorkflowState::name).toList());
     }
     if (input.queueName() != null && !input.queueName().isEmpty()) {
       whereConditions.add("queue_name = ANY(?)");
@@ -937,14 +978,14 @@ public class WorkflowDAO {
     record Metric(String alias, String expr) {}
     var metrics = new ArrayList<Metric>();
     if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
-    if (input.selectMaxDurationMs())
+    if (input.selectMaxDuration())
       metrics.add(
           new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
 
     if (metrics.isEmpty()) {
       throw new IllegalArgumentException(
           "GetStepAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMaxDurationMs)");
+              + " (e.g. selectCount, selectMaxDuration)");
     }
 
     List<Object> parameters = new ArrayList<>();
@@ -960,8 +1001,8 @@ public class WorkflowDAO {
 
     if (input.status() != null && !input.status().isEmpty()) {
       // Translate status filter to error IS NULL / IS NOT NULL conditions
-      boolean wantSuccess = input.status().contains("SUCCESS");
-      boolean wantError = input.status().contains("ERROR");
+      boolean wantSuccess = input.status().contains(GetStepAggregatesInput.Status.SUCCESS);
+      boolean wantError = input.status().contains(GetStepAggregatesInput.Status.ERROR);
       if (wantSuccess && !wantError) {
         whereConditions.add("error IS NULL");
       } else if (wantError && !wantSuccess) {
@@ -1065,7 +1106,7 @@ public class WorkflowDAO {
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)
-                ? JsonUtility.fromJson(authenticatedRolesJson, String[].class)
+                ? JsonUtility.fromJson(authenticatedRolesJson, new TypeReference<List<String>>() {})
                 : null,
             loadInput
                 ? SerializationUtil.deserializePositionalArgs(

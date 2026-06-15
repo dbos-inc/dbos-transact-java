@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -28,13 +29,13 @@ public record GetWorkflowAggregatesInput(
     // select metric flags
     boolean selectCount,
     boolean selectMinCreatedAt,
-    boolean selectMaxQueueWaitMs,
-    boolean selectMaxTotalLatencyMs,
+    boolean selectMaxQueueWait,
+    boolean selectMaxTotalLatency,
     // optional time bucketing; null = no bucketing
     Duration timeBucketSize,
     // filters
     List<String> workflowName,
-    List<String> status,
+    List<WorkflowState> status,
     List<String> queueName,
     List<String> executorIds,
     List<String> applicationVersion,
@@ -68,8 +69,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -94,8 +95,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -120,8 +121,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -146,8 +147,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -173,8 +174,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -199,8 +200,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -225,8 +226,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -242,7 +243,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withSelectMaxQueueWaitMs(boolean selectMaxQueueWaitMs) {
+  public GetWorkflowAggregatesInput withSelectMaxQueueWait(boolean selectMaxQueueWait) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
@@ -251,8 +252,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -268,7 +269,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withSelectMaxTotalLatencyMs(boolean selectMaxTotalLatencyMs) {
+  public GetWorkflowAggregatesInput withSelectMaxTotalLatency(boolean selectMaxTotalLatency) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
@@ -277,8 +278,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -303,8 +304,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -329,8 +330,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -346,7 +347,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withStatus(List<String> status) {
+  public GetWorkflowAggregatesInput withStatus(List<WorkflowState> status) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
@@ -355,8 +356,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -370,6 +371,10 @@ public record GetWorkflowAggregatesInput(
         completedBefore,
         dequeuedAfter,
         dequeuedBefore);
+  }
+
+  public GetWorkflowAggregatesInput withStatus(WorkflowState... status) {
+    return withStatus(Arrays.asList(status));
   }
 
   public GetWorkflowAggregatesInput withQueueName(List<String> queueName) {
@@ -381,8 +386,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -407,8 +412,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -433,8 +438,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -459,8 +464,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -485,8 +490,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -511,8 +516,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -537,8 +542,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -563,8 +568,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -589,8 +594,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,
@@ -615,8 +620,8 @@ public record GetWorkflowAggregatesInput(
         groupByApplicationVersion,
         selectCount,
         selectMinCreatedAt,
-        selectMaxQueueWaitMs,
-        selectMaxTotalLatencyMs,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
         timeBucketSize,
         workflowName,
         status,

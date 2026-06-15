@@ -2328,7 +2328,7 @@ public class ConductorTest {
             .instanceName("test-instance" + (index > 0 ? "-" + (index + 1) : ""))
             .authenticatedUser("test-user" + (index > 0 ? "-" + (index + 1) : ""))
             .assumedRole("test-role" + (index > 0 ? "-" + (index + 1) : ""))
-            .authenticatedRoles(new String[] {"role1", "role2"})
+            .authenticatedRoles("role1", "role2")
             .input(new Object[] {"input1", "input2"})
             .output("test-output" + (index > 0 ? "-" + (index + 1) : ""))
             .error(null)
@@ -3102,7 +3102,7 @@ public class ConductorTest {
             new WorkflowAggregateRow(
                 Map.of("status", "SUCCESS", "name", "myWorkflow"), 10L, null, null, null),
             new WorkflowAggregateRow(
-                Map.of("status", "FAILURE", "name", "myWorkflow"), 3L, null, null, null));
+                Map.of("status", "ERROR", "name", "myWorkflow"), 3L, null, null, null));
     when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
 
     try (Conductor conductor = builder.build()) {
@@ -3120,7 +3120,7 @@ public class ConductorTest {
                   "group_by_name",
                   true,
                   "status",
-                  List.of("SUCCESS", "FAILURE"))));
+                  List.of("SUCCESS", "ERROR"))));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
@@ -3129,7 +3129,7 @@ public class ConductorTest {
       GetWorkflowAggregatesInput captured = inputCaptor.getValue();
       assertTrue(captured.groupByStatus());
       assertTrue(captured.groupByName());
-      assertEquals(List.of("SUCCESS", "FAILURE"), captured.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.ERROR), captured.status());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
@@ -3143,7 +3143,7 @@ public class ConductorTest {
       assertEquals("SUCCESS", output.get(0).get("group").get("status").stringValue());
       assertEquals("myWorkflow", output.get(0).get("group").get("name").stringValue());
       assertEquals(10, output.get(0).get("count").asLong());
-      assertEquals("FAILURE", output.get(1).get("group").get("status").stringValue());
+      assertEquals("ERROR", output.get(1).get("group").get("status").stringValue());
       assertEquals(3, output.get(1).get("count").asLong());
     }
   }
@@ -3213,8 +3213,8 @@ public class ConductorTest {
       GetWorkflowAggregatesInput captured = inputCaptor.getValue();
       assertFalse(captured.selectCount());
       assertTrue(captured.selectMinCreatedAt());
-      assertTrue(captured.selectMaxQueueWaitMs());
-      assertTrue(captured.selectMaxTotalLatencyMs());
+      assertTrue(captured.selectMaxQueueWait());
+      assertTrue(captured.selectMaxTotalLatency());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
@@ -3264,7 +3264,7 @@ public class ConductorTest {
       assertTrue(captured.groupByFunctionName());
       assertTrue(captured.groupByStatus());
       assertTrue(captured.selectCount());
-      assertTrue(captured.selectMaxDurationMs());
+      assertTrue(captured.selectMaxDuration());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_step_aggregates", json.get("type").stringValue());
