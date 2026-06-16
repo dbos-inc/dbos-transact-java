@@ -90,7 +90,10 @@ public class Conductor implements AutoCloseable {
     this.dbosExecutor = builder.dbosExecutor;
 
     String appName = builder.appName != null ? builder.appName : dbosExecutor.appName();
-    Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
+    Objects.requireNonNull(appName, "Conductor App Name must not be null");
+    if (appName.isBlank() || appName.isEmpty()) {
+      throw new IllegalArgumentException("Conductor App Name must not be empty or blank");
+    }
 
     String domain = builder.domain;
     if (domain == null) {
