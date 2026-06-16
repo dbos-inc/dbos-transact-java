@@ -35,7 +35,7 @@ public record GetWorkflowAggregatesInput(
     Duration timeBucketSize,
     // filters
     List<String> workflowName,
-    List<WorkflowState> status,
+    List<String> status,
     List<String> queueName,
     List<String> executorIds,
     List<String> applicationVersion,
@@ -347,7 +347,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withStatus(List<WorkflowState> status) {
+  public GetWorkflowAggregatesInput withStatus(List<String> status) {
     return new GetWorkflowAggregatesInput(
         groupByStatus,
         groupByName,
@@ -373,7 +373,7 @@ public record GetWorkflowAggregatesInput(
         dequeuedBefore);
   }
 
-  public GetWorkflowAggregatesInput withStatus(WorkflowState... status) {
+  public GetWorkflowAggregatesInput withStatus(String... status) {
     return withStatus(Arrays.asList(status));
   }
 
