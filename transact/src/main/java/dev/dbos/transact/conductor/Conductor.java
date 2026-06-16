@@ -89,7 +89,7 @@ public class Conductor implements AutoCloseable {
     this.systemDatabase = builder.systemDatabase;
     this.dbosExecutor = builder.dbosExecutor;
 
-    String appName = dbosExecutor.appName();
+    String appName = builder.appName != null ? builder.appName : dbosExecutor.appName();
     Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
 
     String domain = builder.domain;
@@ -125,8 +125,6 @@ public class Conductor implements AutoCloseable {
         .build();
   }
 
-  // TODO: do we need the insecure connection?
-  // Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/346
   private static HttpClient buildHttpClient() {
     try {
       // Intentionally insecure: matches previous Netty InsecureTrustManagerFactory behavior
@@ -466,6 +464,7 @@ public class Conductor implements AutoCloseable {
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private String conductorKey;
+    private String appName;
     private String domain;
     private int pingPeriodMs = 20000;
     private int pingTimeoutMs = 15000;
@@ -475,6 +474,11 @@ public class Conductor implements AutoCloseable {
       systemDatabase = s;
       dbosExecutor = e;
       conductorKey = key;
+    }
+
+    public Builder appName(String appName) {
+      this.appName = appName;
+      return this;
     }
 
     public Builder domain(String domain) {

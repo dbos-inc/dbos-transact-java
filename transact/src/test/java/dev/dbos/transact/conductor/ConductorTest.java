@@ -144,6 +144,34 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void connectsWithExplicitAppName() throws Exception {
+
+    class Listener implements WebSocketTestListener {
+      String resourceDescriptor;
+      CountDownLatch latch = new CountDownLatch(1);
+
+      @Override
+      public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        resourceDescriptor = handshake.getResourceDescriptor();
+        latch.countDown();
+      }
+    }
+
+    Listener listener = new Listener();
+    testServer.setListener(listener);
+
+    // An explicit appName (as the DBOS Cloud path supplies via DBOS__CONDUCTOR_APP_NAME)
+    // overrides the executor's app name in the websocket URL.
+    builder.appName("conductor-app-name");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
+      assertEquals("/websocket/conductor-app-name/conductor-key", listener.resourceDescriptor);
+    }
+  }
+
+  @RetryingTest(3)
   public void sendsPing() throws Exception {
     logger.info("sendsPing Starting");
     class Listener implements WebSocketTestListener {

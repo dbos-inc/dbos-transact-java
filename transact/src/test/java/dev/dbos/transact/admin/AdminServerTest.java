@@ -140,6 +140,21 @@ class AdminServerTest {
   }
 
   @Test
+  public void conductor() throws IOException {
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .get("/conductor")
+          .then()
+          .statusCode(200)
+          .body("status", equalTo(true));
+    }
+  }
+
+  @Test
   public void deactivate() throws IOException {
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();

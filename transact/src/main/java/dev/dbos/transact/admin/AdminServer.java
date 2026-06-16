@@ -40,6 +40,7 @@ public class AdminServer implements AutoCloseable {
 
     Map<String, HttpHandler> staticRoutes = new HashMap<>();
     staticRoutes.put("/dbos-healthz", x -> healthCheck(x));
+    staticRoutes.put("/conductor", x -> conductorStatus(x));
     staticRoutes.put("/dbos-workflow-recovery", x -> workflowRecovery(x)); // post
     staticRoutes.put("/deactivate", x -> deactivate(x));
     staticRoutes.put("/dbos-workflow-queues-metadata", x -> workflowQueuesMetadata(x));
@@ -114,6 +115,14 @@ public class AdminServer implements AutoCloseable {
         200,
         """
         {"status":"healthy"}""");
+  }
+
+  private void conductorStatus(HttpExchange exchange) throws IOException {
+    sendJson(
+        exchange,
+        200,
+        """
+        {"status":true}""");
   }
 
   private void workflowRecovery(HttpExchange exchange) throws IOException {
