@@ -2,6 +2,7 @@ package dev.dbos.transact;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
@@ -214,6 +215,8 @@ public class DBOSClient implements AutoCloseable {
    *     Optional.
    * @param delay The delay before the workflow starts executing. Optional.
    * @param serialization The serialization strategy for workflow arguments. Optional.
+   * @param attributes Custom JSON-serializable attributes to attach to the workflow at creation.
+   *     Optional.
    */
   public record EnqueueOptions(
       @NonNull String workflowName,
@@ -231,7 +234,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable SerializationStrategy serialization,
       @Nullable String authenticatedUser,
       @Nullable String assumedRole,
-      @Nullable List<String> authenticatedRoles) {
+      @Nullable List<String> authenticatedRoles,
+      @Nullable Map<String, Object> attributes) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -275,6 +279,8 @@ public class DBOSClient implements AutoCloseable {
       }
 
       authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
+
+      attributes = validateAttributes(attributes);
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
@@ -284,6 +290,7 @@ public class DBOSClient implements AutoCloseable {
           null,
           null,
           queueName,
+          null,
           null,
           null,
           null,
@@ -305,6 +312,7 @@ public class DBOSClient implements AutoCloseable {
           className,
           null,
           queueName,
+          null,
           null,
           null,
           null,
@@ -342,7 +350,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -369,7 +378,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -396,7 +406,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -423,7 +434,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -450,7 +462,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -477,7 +490,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -504,7 +518,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -530,7 +545,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -558,7 +574,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -585,7 +602,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -614,7 +632,8 @@ public class DBOSClient implements AutoCloseable {
           serialization,
           this.authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -640,7 +659,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           authenticatedUser,
           this.assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -666,7 +686,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           assumedRole,
-          this.authenticatedRoles);
+          this.authenticatedRoles,
+          this.attributes);
     }
 
     /**
@@ -692,7 +713,8 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           this.authenticatedUser,
           this.assumedRole,
-          authenticatedRoles != null ? List.of(authenticatedRoles) : null);
+          authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+          this.attributes);
     }
 
     /**
@@ -720,7 +742,37 @@ public class DBOSClient implements AutoCloseable {
           this.serialization,
           authenticatedUser,
           this.assumedRole,
-          authenticatedRoles != null ? List.of(authenticatedRoles) : null);
+          authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+          this.attributes);
+    }
+
+    /**
+     * Specify custom JSON-serializable attributes to attach to the workflow at creation. Attributes
+     * are recorded in the workflow status and can be used to filter workflows in {@code
+     * listWorkflows}.
+     *
+     * @param attributes the custom attributes, or null to clear
+     * @return New `EnqueueOptions` with the attributes set
+     */
+    public @NonNull EnqueueOptions withAttributes(@Nullable Map<String, Object> attributes) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles,
+          attributes);
     }
   }
 

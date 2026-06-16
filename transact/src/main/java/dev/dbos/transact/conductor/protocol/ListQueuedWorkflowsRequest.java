@@ -84,6 +84,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         body.forked_from,
         body.parent_workflow_id,
         body.was_forked_from,
-        body.has_parent);
+        body.has_parent,
+        null);
   }
 }

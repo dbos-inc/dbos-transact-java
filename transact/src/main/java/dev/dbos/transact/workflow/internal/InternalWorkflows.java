@@ -127,7 +127,9 @@ public class InternalWorkflows {
             .withQueue(options.queueName())
             .withDeduplicationId(hasQueue ? options.deduplicationId() : null)
             .withPriority(hasQueue ? options.priority() : null)
-            .withAppVersion(options.appVersion());
+            .withAppVersion(options.appVersion())
+            // Replay the attributes captured at debounce time.
+            .withAttributes(ctx.workflowAttributes());
     if (ctx.workflowTimeout() != null) {
       startOpts = startOpts.withTimeout(ctx.workflowTimeout());
     }

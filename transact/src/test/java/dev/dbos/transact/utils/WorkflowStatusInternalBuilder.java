@@ -153,6 +153,7 @@ public class WorkflowStatusInternalBuilder {
         timeout,
         deadline,
         parentWorkflowId,
-        serialization);
+        serialization,
+        null);
   }
 }

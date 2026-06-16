@@ -1,6 +1,7 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
@@ -8,6 +9,7 @@ import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -54,9 +56,10 @@ public final class DebouncerClient<R> {
   private final @Nullable Integer priority;
   private final @Nullable String userDeduplicationId;
   private final @Nullable Duration workflowTimeout;
+  private final @Nullable Map<String, Object> attributes;
 
   DebouncerClient(@NonNull DBOSClient client, @NonNull String workflowName) {
-    this(client, workflowName, null, null, null, null, null, null, null, null);
+    this(client, workflowName, null, null, null, null, null, null, null, null, null);
   }
 
   private DebouncerClient(
@@ -69,7 +72,8 @@ public final class DebouncerClient<R> {
       @Nullable String appVersion,
       @Nullable Integer priority,
       @Nullable String userDeduplicationId,
-      @Nullable Duration workflowTimeout) {
+      @Nullable Duration workflowTimeout,
+      @Nullable Map<String, Object> attributes) {
     this.client = Objects.requireNonNull(client, "client must not be null");
     this.workflowName = Objects.requireNonNull(workflowName, "workflowName must not be null");
     this.className = className;
@@ -80,6 +84,7 @@ public final class DebouncerClient<R> {
     this.priority = priority;
     this.userDeduplicationId = userDeduplicationId;
     this.workflowTimeout = workflowTimeout;
+    this.attributes = attributes;
   }
 
   /** Specify the Java class name of the target workflow implementation. */
@@ -94,7 +99,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** Specify the DBOS instance name of the target workflow implementation. */
@@ -109,7 +115,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /**
@@ -130,7 +137,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** See {@link #withQueue(String)}. */
@@ -153,7 +161,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** Target a specific application version for the user workflow. */
@@ -168,7 +177,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** Set the priority for the user workflow (only used when a queue is configured). */
@@ -183,7 +193,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** Set a deduplication ID to be forwarded to the user workflow. */
@@ -198,7 +209,8 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         deduplicationId,
-        workflowTimeout);
+        workflowTimeout,
+        attributes);
   }
 
   /** Set a timeout for the user workflow. */
@@ -213,7 +225,24 @@ public final class DebouncerClient<R> {
         appVersion,
         priority,
         userDeduplicationId,
-        timeout);
+        timeout,
+        attributes);
+  }
+
+  /** Set JSON-serializable custom attributes to be recorded on the user workflow. */
+  public @NonNull DebouncerClient<R> withAttributes(@Nullable Map<String, Object> attributes) {
+    return new DebouncerClient<>(
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout,
+        Validation.validateAttributes(attributes));
   }
 
   /**
@@ -255,7 +284,8 @@ public final class DebouncerClient<R> {
             appVersion,
             priority,
             userDeduplicationId);
-    DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
+    DebouncerContextOptions ctx =
+        new DebouncerContextOptions(userWorkflowId, workflowTimeout, attributes);
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
     var enqueueOpts =

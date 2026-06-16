@@ -2,6 +2,7 @@ package dev.dbos.transact;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Timeout;
@@ -9,6 +10,7 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
@@ -48,6 +50,8 @@ import org.jspecify.annotations.Nullable;
  * @param assumedRole Optional assumed role to associate with the workflow. May be null.
  * @param authenticatedRoles Optional authenticated roles to associate with the workflow. May be
  *     null.
+ * @param attributes Optional JSON-serializable custom attributes to associate with the workflow.
+ *     May be null.
  */
 public record StartWorkflowOptions(
     @Nullable String workflowId,
@@ -61,7 +65,8 @@ public record StartWorkflowOptions(
     @Nullable String appVersion,
     @Nullable String authenticatedUser,
     @Nullable String assumedRole,
-    @Nullable List<String> authenticatedRoles) {
+    @Nullable List<String> authenticatedRoles,
+    @Nullable Map<String, Object> attributes) {
 
   public StartWorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -93,11 +98,12 @@ public record StartWorkflowOptions(
     }
 
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
+    attributes = validateAttributes(attributes);
   }
 
   /** Construct with default options (all fields null). */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -106,7 +112,7 @@ public record StartWorkflowOptions(
    * @param workflowId the workflow ID to assign
    */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -115,7 +121,7 @@ public record StartWorkflowOptions(
    * @param queue the queue to assign the workflow to
    */
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null, null, null, null, null, null);
+    this(null, null, null, queue.name(), null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -137,7 +143,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -159,7 +166,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -211,7 +219,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -233,7 +242,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -266,7 +276,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -289,7 +300,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -311,7 +323,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -333,7 +346,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -355,7 +369,8 @@ public record StartWorkflowOptions(
         appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -377,7 +392,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -399,7 +415,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -422,7 +439,8 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+        this.attributes);
   }
 
   /**
@@ -446,7 +464,31 @@ public record StartWorkflowOptions(
         this.appVersion,
         authenticatedUser,
         this.assumedRole,
-        authenticatedRoles != null ? List.of(authenticatedRoles) : null);
+        authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+        this.attributes);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified custom attributes.
+   *
+   * @param attributes the JSON-serializable custom attributes to assign
+   * @return a new StartWorkflowOptions with the updated attributes
+   */
+  public @NonNull StartWorkflowOptions withAttributes(@Nullable Map<String, Object> attributes) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        attributes);
   }
 
   /**

@@ -2,6 +2,7 @@ package dev.dbos.transact.context;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Timeout;
@@ -9,6 +10,7 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
@@ -23,6 +25,8 @@ import org.jspecify.annotations.Nullable;
  * @param workflowId The ID to be assigned to the next workflow in the DBOS context
  * @param timeout The timeout to be assigned to the next workflow in the DBOS context
  * @param deadline The deadline to be assigned to the next workflow in the DBOS context
+ * @param attributes Custom JSON-serializable attributes to attach to the next workflow. Recorded in
+ *     the workflow status at creation and not inherited by child workflows.
  */
 public record WorkflowOptions(
     @Nullable String workflowId,
@@ -30,7 +34,8 @@ public record WorkflowOptions(
     @Nullable Instant deadline,
     @NonNull Field<String> authenticatedUser,
     @NonNull Field<String> assumedRole,
-    @NonNull Field<List<String>> authenticatedRoles) {
+    @NonNull Field<List<String>> authenticatedRoles,
+    @Nullable Map<String, Object> attributes) {
 
   public WorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -44,16 +49,18 @@ public record WorkflowOptions(
     if (authenticatedRoles instanceof Field.Present<List<String>> p && p.value() != null) {
       authenticatedRoles = Field.of(List.copyOf(p.value()));
     }
+
+    attributes = validateAttributes(attributes);
   }
 
   /** Create a WorkflowOptions with no ID and no timout */
   public WorkflowOptions() {
-    this(null, null, null, Field.absent(), Field.absent(), Field.absent());
+    this(null, null, null, Field.absent(), Field.absent(), Field.absent(), null);
   }
 
   /** Create a WorkflowOptions with a specified workflow ID and no timout */
   public WorkflowOptions(@Nullable String workflowId) {
-    this(workflowId, null, null, Field.absent(), Field.absent(), Field.absent());
+    this(workflowId, null, null, Field.absent(), Field.absent(), Field.absent(), null);
   }
 
   /** Create a workflow options like this one, but with the workflowId set */
@@ -64,7 +71,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -79,7 +87,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /**
@@ -113,7 +122,8 @@ public record WorkflowOptions(
         deadline,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a workflow options like this one, but without a timeout */
@@ -124,7 +134,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user set */
@@ -135,7 +146,8 @@ public record WorkflowOptions(
         this.deadline,
         Field.of(authenticatedUser),
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user cleared */
@@ -146,7 +158,8 @@ public record WorkflowOptions(
         this.deadline,
         Field.of(null),
         this.assumedRole,
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the assumed role set */
@@ -157,7 +170,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         Field.of(assumedRole),
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the assumed role cleared */
@@ -168,7 +182,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         Field.of(null),
-        this.authenticatedRoles);
+        this.authenticatedRoles,
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated roles set */
@@ -179,7 +194,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         this.assumedRole,
-        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null));
+        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated roles cleared */
@@ -190,7 +206,8 @@ public record WorkflowOptions(
         this.deadline,
         this.authenticatedUser,
         this.assumedRole,
-        Field.of(null));
+        Field.of(null),
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user and roles set */
@@ -202,7 +219,8 @@ public record WorkflowOptions(
         this.deadline,
         Field.of(authenticatedUser),
         this.assumedRole,
-        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null));
+        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
+        this.attributes);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user and roles cleared */
@@ -213,7 +231,26 @@ public record WorkflowOptions(
         this.deadline,
         Field.of(null),
         Field.of(null),
-        Field.of(null));
+        Field.of(null),
+        this.attributes);
+  }
+
+  /**
+   * Create a WorkflowOptions like this one, but with the custom workflow attributes set. Attributes
+   * must be JSON-serializable; they are recorded in the workflow status at creation and are not
+   * inherited by child workflows.
+   *
+   * @param attributes custom attributes to attach to the next workflow, or null to clear
+   */
+  public @NonNull WorkflowOptions withAttributes(@Nullable Map<String, Object> attributes) {
+    return new WorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        attributes);
   }
 
   /**
@@ -248,6 +285,9 @@ public record WorkflowOptions(
     if (authenticatedRoles.isPresent()) {
       ctx.nextAuthenticatedRoles = authenticatedRoles;
     }
+    if (attributes != null) {
+      ctx.nextAttributes = attributes;
+    }
 
     return guard;
   }
@@ -261,6 +301,7 @@ public record WorkflowOptions(
     private final Field<String> authenticatedUser;
     private final Field<String> assumedRole;
     private final Field<List<String>> authenticatedRoles;
+    private final Map<String, Object> attributes;
 
     private Guard(@NonNull DBOSContext ctx) {
       this.ctx = ctx;
@@ -270,6 +311,7 @@ public record WorkflowOptions(
       this.authenticatedUser = ctx.nextAuthenticatedUser;
       this.assumedRole = ctx.nextAssumedRole;
       this.authenticatedRoles = ctx.nextAuthenticatedRoles;
+      this.attributes = ctx.nextAttributes;
     }
 
     @Override
@@ -280,6 +322,7 @@ public record WorkflowOptions(
       ctx.nextAuthenticatedUser = authenticatedUser;
       ctx.nextAssumedRole = assumedRole;
       ctx.nextAuthenticatedRoles = authenticatedRoles;
+      ctx.nextAttributes = attributes;
     }
   }
 }

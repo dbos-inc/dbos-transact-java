@@ -148,7 +148,8 @@ class ListCommand implements Runnable {
             null, // forkedFrom
             null, // parentWorkflowId
             null, // wasForkedFrom
-            null // hasParent
+            null, // hasParent
+            null // attributes
             );
 
     var client = dbOptions.createClient();
@@ -202,7 +203,8 @@ class GetCommand implements Runnable {
             null, // forkedFrom
             null, // parentWorkflowId
             null, // wasForkedFrom
-            null // hasParent
+            null, // hasParent
+            null // attributes
             );
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);

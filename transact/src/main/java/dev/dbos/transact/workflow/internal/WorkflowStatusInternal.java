@@ -6,6 +6,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -29,7 +30,9 @@ public record WorkflowStatusInternal(
     Duration timeout,
     Instant deadline,
     String parentWorkflowId,
-    String serialization) {
+    String serialization,
+    /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
+    Map<String, Object> attributes) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {

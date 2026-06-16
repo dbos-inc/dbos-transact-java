@@ -45,7 +45,8 @@ public record ListQueuedWorkflowsRequest(
         fork_from != null ? List.of(fork_from) : null,
         parent_workflow_id != null ? List.of(parent_workflow_id) : null,
         null, // wasForkedFrom
-        null // hasParent
+        null, // hasParent
+        null // attributes
         );
   }
 }

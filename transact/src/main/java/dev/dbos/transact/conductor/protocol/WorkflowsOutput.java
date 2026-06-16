@@ -35,6 +35,7 @@ public class WorkflowsOutput {
   public String DequeuedAt;
   public Boolean WasForkedFrom;
   public String DelayUntilEpochMS;
+  public String Attributes;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -76,5 +77,7 @@ public class WorkflowsOutput {
     this.WasForkedFrom = status.wasForkedFrom();
     this.DelayUntilEpochMS =
         status.delayUntil() == null ? null : String.valueOf(status.delayUntilEpochMs());
+    // JSON rather than toString() so the wire format is parseable by Conductor
+    this.Attributes = status.attributes() != null ? JsonUtility.toJson(status.attributes()) : null;
   }
 }
