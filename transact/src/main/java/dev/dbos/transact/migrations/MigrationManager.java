@@ -441,7 +441,8 @@ public class MigrationManager {
             MIGRATION_36,
             migration37(isCockroach),
             migration38(isCockroach),
-            migration39(useListenNotify));
+            migration39(useListenNotify),
+            MIGRATION_40);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1086,4 +1087,13 @@ public class MigrationManager {
         FOR EACH ROW EXECUTE FUNCTION "%1$s".streams_function();
         """;
   }
+
+  // ADD COLUMN with no default is catalog-only; the partial index built in the same transaction
+  // covers zero rows, so no CONCURRENTLY is needed. The index supports containment (@>) filters on
+  // workflow attributes; on CockroachDB, USING GIN creates an inverted index.
+  static final String MIGRATION_40 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "attributes" JSONB;
+      CREATE INDEX IF NOT EXISTS "idx_workflow_status_attributes" ON "%1$s"."workflow_status" USING GIN ("attributes") WHERE "attributes" IS NOT NULL;
+      """;
 }
