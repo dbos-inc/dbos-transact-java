@@ -309,9 +309,10 @@ public class DBOSExecutor implements AutoCloseable {
         }
       }
 
-      if (config.adminServer()) {
+      if (dbosCloud || config.adminServer()) {
         try {
-          adminServer = new AdminServer(config.adminServerPort(), this, systemDatabase);
+          adminServer =
+              new AdminServer(dbosCloud ? 3001 : config.adminServerPort(), this, systemDatabase);
           adminServer.start();
         } catch (IOException e) {
           logger.error("DBOS Admin Server failed to start", e);
