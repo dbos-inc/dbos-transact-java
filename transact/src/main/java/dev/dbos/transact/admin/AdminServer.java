@@ -1,5 +1,6 @@
 package dev.dbos.transact.admin;
 
+import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;
@@ -179,7 +180,7 @@ public class AdminServer implements AutoCloseable {
     var request = JsonUtility.fromJson(exchange.getRequestBody(), ListWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
-    var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
+    var response = workflows.stream().map(WorkflowsOutput::new).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
 
@@ -189,7 +190,7 @@ public class AdminServer implements AutoCloseable {
     var request = JsonUtility.fromJson(exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
-    var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
+    var response = workflows.stream().map(WorkflowsOutput::new).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
 
@@ -201,7 +202,7 @@ public class AdminServer implements AutoCloseable {
       return;
     }
 
-    var response = WorkflowsOutput.of(workflows.get(0));
+    var response = new WorkflowsOutput(workflows.get(0));
     sendMappedJson(exchange, 200, response);
   }
 
