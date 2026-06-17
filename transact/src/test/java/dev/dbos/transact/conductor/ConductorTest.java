@@ -3129,7 +3129,7 @@ public class ConductorTest {
       GetWorkflowAggregatesInput captured = inputCaptor.getValue();
       assertTrue(captured.groupByStatus());
       assertTrue(captured.groupByName());
-      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.ERROR), captured.status());
+      assertEquals(List.of("SUCCESS", "ERROR"), captured.status());
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_workflow_aggregates", json.get("type").stringValue());
