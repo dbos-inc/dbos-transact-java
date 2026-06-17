@@ -35,6 +35,7 @@ public class WorkflowsOutput {
   public String DequeuedAt;
   public Boolean WasForkedFrom;
   public String DelayUntilEpochMS;
+  public String CompletedAt;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -76,5 +77,7 @@ public class WorkflowsOutput {
     this.WasForkedFrom = status.wasForkedFrom();
     this.DelayUntilEpochMS =
         status.delayUntil() == null ? null : String.valueOf(status.delayUntilEpochMs());
+    this.CompletedAt =
+        status.completedAt() == null ? null : String.valueOf(status.completedAtEpochMs());
   }
 }
