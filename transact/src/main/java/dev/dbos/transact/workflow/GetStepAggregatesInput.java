@@ -24,16 +24,11 @@ public record GetStepAggregatesInput(
     boolean selectCount,
     boolean selectMaxDuration,
     Duration timeBucketSize,
-    List<Status> status,
+    List<String> status,
     List<String> functionName,
     List<String> workflowIdPrefix,
     Instant completedAfter,
     Instant completedBefore) {
-
-  public enum Status {
-    SUCCESS,
-    ERROR
-  }
 
   public GetStepAggregatesInput {
     if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
@@ -115,7 +110,7 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withStatus(List<Status> status) {
+  public GetStepAggregatesInput withStatus(List<String> status) {
     return new GetStepAggregatesInput(
         groupByFunctionName,
         groupByStatus,
@@ -129,7 +124,7 @@ public record GetStepAggregatesInput(
         completedBefore);
   }
 
-  public GetStepAggregatesInput withStatus(Status... status) {
+  public GetStepAggregatesInput withStatus(String... status) {
     return withStatus(Arrays.asList(status));
   }
 
