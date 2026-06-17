@@ -122,6 +122,43 @@ public class WorkflowAttributesTest {
   }
 
   @Test
+  public void emptyMapRecordedAsNull() throws Exception {
+    // An empty attributes map is normalized to null on write (single representation of "none").
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.noopWorkflow(), new StartWorkflowOptions().withAttributes(Map.of()));
+    handle.getResult();
+    assertNull(handle.getStatus().attributes());
+  }
+
+  @Test
+  public void emptyMapOnOptionsClearsContext() throws Exception {
+    // An empty map on StartWorkflowOptions overrides (clears) the context attributes, and is
+    // recorded as null rather than {}.
+    WorkflowHandle<Void, RuntimeException> handle;
+    try (var a = new WorkflowOptions().withAttributes(Map.of("source", "context")).setContext()) {
+      handle =
+          dbos.startWorkflow(
+              () -> proxy.noopWorkflow(), new StartWorkflowOptions().withAttributes(Map.of()));
+    }
+    handle.getResult();
+    assertNull(handle.getStatus().attributes());
+  }
+
+  @Test
+  public void updateToEmptyMapClears() throws Exception {
+    var wfid = UUID.randomUUID().toString();
+    try (var a = new WorkflowOptions().withAttributes(Map.of("customer", "acme")).setContext()) {
+      try (var w = new WorkflowOptions(wfid).setContext()) {
+        proxy.noopWorkflow();
+      }
+    }
+    // Updating to an empty map clears the attributes (stored as null), like passing null.
+    dbos.updateWorkflowAttributes(wfid, Map.of());
+    assertNull(dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
+  }
+
+  @Test
   public void startWorkflowOptionsOverridesContext() throws Exception {
     // Attributes on StartWorkflowOptions take precedence over the context attributes.
     WorkflowHandle<Void, RuntimeException> handle;

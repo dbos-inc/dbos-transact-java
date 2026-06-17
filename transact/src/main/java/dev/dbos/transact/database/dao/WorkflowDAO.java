@@ -245,8 +245,7 @@ public class WorkflowDAO {
         status.authenticatedRoles() != null
             ? JsonUtility.toJson(status.authenticatedRoles())
             : null;
-    var attributesJson =
-        status.attributes() != null ? JsonUtility.toJson(status.attributes()) : null;
+    var attributesJson = attributesToJson(status.attributes());
     try (var stmt = conn.prepareStatement(insertSQL)) {
 
       var now = System.currentTimeMillis();
@@ -578,11 +577,17 @@ public class WorkflowDAO {
     }
   }
 
+  // Normalize an empty attributes map to SQL NULL so "no attributes" has a single representation
+  // and an empty map (e.g. from withAttributes(Map.of())) clears rather than recording "{}".
+  private static String attributesToJson(Map<String, Object> attributes) {
+    return (attributes != null && !attributes.isEmpty()) ? JsonUtility.toJson(attributes) : null;
+  }
+
   public static void updateWorkflowAttributes(
       DbContext ctx, String workflowId, Map<String, Object> attributes) throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
 
-    var attributesJson = attributes != null ? JsonUtility.toJson(attributes) : null;
+    var attributesJson = attributesToJson(attributes);
     var sql =
         """
           UPDATE "%s".workflow_status
