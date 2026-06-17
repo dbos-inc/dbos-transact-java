@@ -5,6 +5,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -55,6 +56,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     public Boolean load_output;
     public Boolean was_forked_from;
     public Boolean has_parent;
+    public Map<String, Object> attributes;
   }
 
   public ListWorkflowsInput asInput() {
@@ -85,6 +87,6 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         body.parent_workflow_id,
         body.was_forked_from,
         body.has_parent,
-        null);
+        body.attributes);
   }
 }
