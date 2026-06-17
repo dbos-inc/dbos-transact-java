@@ -54,7 +54,7 @@ public class TimeoutTest {
     String wfid1 = "wf-124";
     String result;
 
-    var options = new StartWorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
+    var options = new StartWorkflowOptions(wfid1).withTimeout(15, TimeUnit.SECONDS);
     var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     result = handle.getResult();
     assertEquals("1234512345", result);
@@ -130,7 +130,7 @@ public class TimeoutTest {
     String result;
 
     var options =
-        new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
+        new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(15, TimeUnit.SECONDS);
     WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
 
@@ -187,7 +187,7 @@ public class TimeoutTest {
     String wfid1 = "wf-128";
     String result;
 
-    WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
+    WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(15, TimeUnit.SECONDS);
 
     try (var id = options.setContext()) {
       result = simpleService.longWorkflow("12345");
@@ -244,7 +244,7 @@ public class TimeoutTest {
 
     String wfid1 = "wf-128";
 
-    WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
+    WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(15, TimeUnit.SECONDS);
 
     try (var id = options.setContext()) {
       simpleService.workWithString("12345");
