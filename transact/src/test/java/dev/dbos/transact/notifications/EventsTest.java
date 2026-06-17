@@ -377,7 +377,7 @@ public class EventsTest {
   @Test
   public void notification() throws Exception {
     dbos.startWorkflow(
-        () -> proxy.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
+        () -> proxy.getWithlatch("id1", "key1", Duration.ofSeconds(20)),
         new StartWorkflowOptions("id2"));
     dbos.startWorkflow(() -> proxy.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 

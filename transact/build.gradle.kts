@@ -32,6 +32,7 @@ dependencies {
   testImplementation(libs.sqlite.jdbc)
   testImplementation(libs.testcontainers.cockroachdb)
   testImplementation(libs.testcontainers.postgresql)
+  testImplementation(libs.testcontainers.toxiproxy)
 }
 
 val projectVersion = project.version.toString()

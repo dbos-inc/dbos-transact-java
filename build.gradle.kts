@@ -165,7 +165,7 @@ subprojects {
     tasks.withType<Test> { javaLauncher.set(null as JavaLauncher?) }
 
     tasks.withType<Test> {
-      useJUnitPlatform()
+      useJUnitPlatform { if (System.getenv("CI") != "true") excludeTags("ci-only") }
       testLogging {
         events("failed")
         showStandardStreams = true
