@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow;
 
+import static dev.dbos.transact.internal.Validation.validateAttributes;
+
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -34,6 +36,13 @@ public record ListWorkflowsInput(
     Boolean wasForkedFrom,
     Boolean hasParent,
     Map<String, Object> attributes) {
+
+  // Validate the attributes filter here (every convenience constructor, withX copy, and the
+  // conductor/admin asInput() paths route through this canonical constructor) so an invalid filter
+  // fails fast with a clear IllegalArgumentException rather than opaquely in WorkflowDAO's toJson.
+  public ListWorkflowsInput {
+    attributes = validateAttributes(attributes);
+  }
 
   public ListWorkflowsInput() {
     this(

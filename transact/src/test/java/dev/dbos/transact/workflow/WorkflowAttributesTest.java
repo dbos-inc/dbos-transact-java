@@ -343,6 +343,15 @@ public class WorkflowAttributesTest {
   }
 
   @Test
+  public void invalidFilterAttributesRejected() {
+    // A non-JSON-serializable filter value fails fast when building the input, not later in the
+    // DAO.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ListWorkflowsInput().withAttributes(Map.of("bad", new Unserializable())));
+  }
+
+  @Test
   public void invalidAttributesRejected() {
     // A non-JSON-serializable value fails fast when building the options.
     assertThrows(

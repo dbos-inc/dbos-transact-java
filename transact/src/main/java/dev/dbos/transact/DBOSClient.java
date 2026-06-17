@@ -751,7 +751,7 @@ public class DBOSClient implements AutoCloseable {
      * are recorded in the workflow status and can be used to filter workflows in {@code
      * listWorkflows}.
      *
-     * @param attributes the custom attributes, or null to clear
+     * @param attributes the custom attributes, or an empty map to clear
      * @return New `EnqueueOptions` with the attributes set
      */
     public @NonNull EnqueueOptions withAttributes(@Nullable Map<String, Object> attributes) {
@@ -1070,10 +1070,12 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Replace the custom attributes attached to a workflow by ID. Pass null to clear all attributes.
+   * Replace the custom attributes attached to a workflow by ID. Pass null or an empty map to clear
+   * all attributes.
    *
    * @param workflowId ID of the workflow whose attributes to update; must not be null
-   * @param attributes the new JSON-serializable attributes, or null to clear all attributes
+   * @param attributes the new JSON-serializable attributes, or null/empty map to clear all
+   *     attributes
    */
   public void updateWorkflowAttributes(
       @NonNull String workflowId, @Nullable Map<String, Object> attributes) {

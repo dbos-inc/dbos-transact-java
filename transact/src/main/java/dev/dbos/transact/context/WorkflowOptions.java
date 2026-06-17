@@ -240,7 +240,12 @@ public record WorkflowOptions(
    * must be JSON-serializable; they are recorded in the workflow status at creation and are not
    * inherited by child workflows.
    *
-   * @param attributes custom attributes to attach to the next workflow, or null to clear
+   * <p>Pass an empty map to clear attributes. Passing {@code null} leaves any attributes set by an
+   * enclosing block in effect: within a nested {@code WorkflowOptions} block, {@code null} does not
+   * override the outer block's attributes, whereas an empty map does (and is recorded as no
+   * attributes).
+   *
+   * @param attributes custom attributes to attach to the next workflow, or an empty map to clear
    */
   public @NonNull WorkflowOptions withAttributes(@Nullable Map<String, Object> attributes) {
     return new WorkflowOptions(

@@ -471,7 +471,11 @@ public record StartWorkflowOptions(
   /**
    * Returns a new StartWorkflowOptions with the specified custom attributes.
    *
-   * @param attributes the JSON-serializable custom attributes to assign
+   * <p>Pass an empty map to clear attributes. Leaving attributes unset (or {@code null}) falls back
+   * to any attributes set on the surrounding context; an empty map overrides the context and is
+   * recorded as no attributes.
+   *
+   * @param attributes the JSON-serializable custom attributes to assign, or an empty map to clear
    * @return a new StartWorkflowOptions with the updated attributes
    */
   public @NonNull StartWorkflowOptions withAttributes(@Nullable Map<String, Object> attributes) {
