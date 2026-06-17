@@ -140,6 +140,21 @@ class AdminServerTest {
   }
 
   @Test
+  public void conductor() throws IOException {
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .get("/conductor")
+          .then()
+          .statusCode(200)
+          .body("status", equalTo(true));
+    }
+  }
+
+  @Test
   public void deactivate() throws IOException {
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -336,6 +351,39 @@ class AdminServerTest {
       var input = inputCaptor.getValue();
       assertEquals(List.of("WF"), input.workflowIdPrefix());
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00").toInstant(), input.endTime());
+    }
+  }
+
+  @Test
+  public void listWorkflowsArrayFilters() throws IOException {
+    when(mockDB.listWorkflows(any())).thenReturn(new ArrayList<>());
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      // Admin filter fields accept either a scalar or an array (matching the TS admin server).
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body(
+              """
+              {
+                "workflow_name": ["WF1", "WF2"],
+                "status": ["PENDING", "SUCCESS"],
+                "application_version": "v1"
+              }""")
+          .when()
+          .post("/workflows")
+          .then()
+          .statusCode(200);
+
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      var input = inputCaptor.getValue();
+      assertEquals(List.of("WF1", "WF2"), input.workflowName());
+      assertEquals(List.of(WorkflowState.PENDING, WorkflowState.SUCCESS), input.status());
+      assertEquals(List.of("v1"), input.applicationVersion());
     }
   }
 

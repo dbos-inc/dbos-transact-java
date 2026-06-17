@@ -278,20 +278,41 @@ public class DBOSExecutor implements AutoCloseable {
 
       executorService.submit(recoveryTask);
 
-      String conductorKey = config.conductorKey();
-      if (conductorKey != null) {
-        Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
-        String domain = config.conductorDomain();
-        if (domain != null && !domain.trim().isEmpty()) {
-          builder.domain(domain);
+      if (dbosCloud) {
+        String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
+        String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
+        String cloudUrl = System.getenv("DBOS__CONDUCTOR_URL");
+        if (cloudAppName != null
+            && !cloudAppName.isBlank()
+            && cloudKey != null
+            && !cloudKey.isBlank()
+            && cloudUrl != null
+            && !cloudUrl.isBlank()) {
+          logger.debug("Starting Conductor connection (DBOS Cloud)");
+          conductor =
+              new Conductor.Builder(this, systemDatabase, cloudKey)
+                  .appName(cloudAppName)
+                  .domain(cloudUrl)
+                  .build();
+          conductor.start();
         }
-        conductor = builder.build();
-        conductor.start();
+      } else {
+        String conductorKey = config.conductorKey();
+        if (conductorKey != null) {
+          Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
+          String domain = config.conductorDomain();
+          if (domain != null && !domain.trim().isEmpty()) {
+            builder.domain(domain);
+          }
+          conductor = builder.build();
+          conductor.start();
+        }
       }
 
-      if (config.adminServer()) {
+      if (dbosCloud || config.adminServer()) {
         try {
-          adminServer = new AdminServer(config.adminServerPort(), this, systemDatabase);
+          adminServer =
+              new AdminServer(dbosCloud ? 3001 : config.adminServerPort(), this, systemDatabase);
           adminServer.start();
         } catch (IOException e) {
           logger.error("DBOS Admin Server failed to start", e);

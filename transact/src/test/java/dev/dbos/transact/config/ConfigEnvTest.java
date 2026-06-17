@@ -8,14 +8,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.conductor.TestWebSocketServer;
+import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.VersionInfo;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import org.java_websocket.WebSocket;
+import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
@@ -267,6 +273,53 @@ public class ConfigEnvTest {
             dbos.shutdown();
           }
         });
+  }
+
+  @Test
+  public void cloudAutoStartsConductor() throws Exception {
+    var testServer = new TestWebSocketServer(0);
+    testServer.start();
+    assertTrue(testServer.waitStart(5000), "web socket server did not start");
+    int port = testServer.getPort();
+    assertTrue(port != 0, "Invalid Web Socket Server port");
+
+    class Listener implements WebSocketTestListener {
+      volatile String resourceDescriptor;
+      final CountDownLatch latch = new CountDownLatch(1);
+
+      @Override
+      public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        resourceDescriptor = handshake.getResourceDescriptor();
+        latch.countDown();
+      }
+    }
+
+    var listener = new Listener();
+    testServer.setListener(listener);
+
+    // In DBOS Cloud, Conductor connection details come from env vars injected by the platform.
+    // The conductor app name (DBOS__CONDUCTOR_APP_NAME) is distinct from the executor app name.
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true")
+            .and("DBOS_APP_NAME", "env-app-name")
+            .and("DBOS__CONDUCTOR_APP_NAME", "cloud-conductor-app")
+            .and("DBOS__CONDUCTOR_KEY", "cloud-conductor-key")
+            .and("DBOS__CONDUCTOR_URL", "ws://localhost:" + port);
+
+    try {
+      envVars.execute(
+          () -> {
+            try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
+              dbos.launch();
+              assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "conductor did not connect");
+              assertEquals(
+                  "/websocket/cloud-conductor-app/cloud-conductor-key",
+                  listener.resourceDescriptor);
+            }
+          });
+    } finally {
+      testServer.stop();
+    }
   }
 
   @Test
