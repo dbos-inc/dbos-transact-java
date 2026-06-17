@@ -12,6 +12,8 @@ import dev.dbos.transact.database.signal.Subscription;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -216,11 +218,14 @@ class SignalMapTest {
   void testMultipleSubscribersInSeparateThreads() throws Exception {
     var done1 = new CompletableFuture<Void>();
     var done2 = new CompletableFuture<Void>();
+    var subscribed = new CountDownLatch(2);
 
     CompletableFuture.runAsync(
         () -> {
           try {
-            done1.complete(map.subscribe(FOO).get(5, TimeUnit.SECONDS));
+            var sub = map.subscribe(FOO);
+            subscribed.countDown();
+            done1.complete(sub.get(5, TimeUnit.SECONDS));
           } catch (Exception e) {
             done1.completeExceptionally(e);
           }
@@ -228,13 +233,17 @@ class SignalMapTest {
     CompletableFuture.runAsync(
         () -> {
           try {
-            done2.complete(map.subscribe(FOO).get(5, TimeUnit.SECONDS));
+            var sub = map.subscribe(FOO);
+            subscribed.countDown();
+            done2.complete(sub.get(5, TimeUnit.SECONDS));
           } catch (Exception e) {
             done2.completeExceptionally(e);
           }
         });
 
-    Thread.sleep(500);
+    // Ensure both subscriptions are registered before signalling; the signal is one-shot,
+    // so a subscriber that registers after raiseSignal would miss it and time out.
+    assertTrue(subscribed.await(5, TimeUnit.SECONDS), "subscribers did not register in time");
     map.raiseSignal(FOO);
 
     assertTimeoutPreemptively(
@@ -247,16 +256,22 @@ class SignalMapTest {
 
   @Test
   void testConcurrentSignalAndSubscribe() throws Exception {
-    assertTimeoutPreemptively(
-        Duration.ofSeconds(5),
-        () -> {
-          for (int i = 0; i < 1000; i++) {
-            var m = new SignalMap();
-            var sub = m.subscribe(KEY);
-            CompletableFuture.runAsync(() -> m.raiseSignal(KEY));
-            sub.get(1, TimeUnit.SECONDS);
-          }
-        });
+    // Use a dedicated executor so signal dispatch isn't starved by an overloaded common pool.
+    var executor = Executors.newCachedThreadPool();
+    try {
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(10),
+          () -> {
+            for (int i = 0; i < 1000; i++) {
+              var m = new SignalMap();
+              var sub = m.subscribe(KEY);
+              CompletableFuture.runAsync(() -> m.raiseSignal(KEY), executor);
+              sub.get(1, TimeUnit.SECONDS);
+            }
+          });
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   // --- awaitAny ---

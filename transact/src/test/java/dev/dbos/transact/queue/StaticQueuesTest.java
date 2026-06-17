@@ -392,7 +392,8 @@ public class StaticQueuesTest {
     }
     logger.info("Verified intra-wave timing.");
 
-    double periodTolerance = 0.5;
+    // CockroachDB's slower transaction throughput can widen the inter-wave gap as well
+    double periodTolerance = PgContainer.USE_COCKROACH_DB ? 1.0 : 0.5;
     for (int wave = 0; wave < numWaves - 1; wave++) {
       double startOfNextWave = times.get(limit * (wave + 1));
       double startOfCurrentWave = times.get(limit * wave);
