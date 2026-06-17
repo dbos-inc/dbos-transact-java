@@ -46,6 +46,7 @@ public class WorkflowAttributesTest {
     var impl = new AttributesServiceImpl();
     proxy = dbos.registerProxy(AttributesService.class, impl);
     impl.setProxy(proxy);
+    impl.setDbos(dbos);
     dbos.registerQueue(ATTR_QUEUE);
 
     dbos.launch();
@@ -208,6 +209,100 @@ public class WorkflowAttributesTest {
     assertEquals(Set.of(id2), matchedIds(Map.of("meta", Map.of("region", "us-east-1"))));
     // Workflows without attributes never match
     assertEquals(Set.of(), matchedIds(Map.of("missing", "key")));
+  }
+
+  @Test
+  public void updateWorkflowAttributes() throws Exception {
+    // Update fully replaces the recorded attributes.
+    var wfid = UUID.randomUUID().toString();
+    try (var a =
+        new WorkflowOptions().withAttributes(Map.of("customer", "acme", "tier", 1)).setContext()) {
+      try (var w = new WorkflowOptions(wfid).setContext()) {
+        proxy.noopWorkflow();
+      }
+    }
+    assertEquals(
+        Map.of("customer", "acme", "tier", 1),
+        dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
+
+    dbos.updateWorkflowAttributes(wfid, Map.of("customer", "acme", "tier", 2));
+    assertEquals(
+        Map.of("customer", "acme", "tier", 2),
+        dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
+    // The updated attributes are searchable.
+    assertEquals(Set.of(wfid), matchedIds(Map.of("tier", 2)));
+
+    // A workflow created with no attributes can have attributes added.
+    var wfidNoAttrs = UUID.randomUUID().toString();
+    try (var w = new WorkflowOptions(wfidNoAttrs).setContext()) {
+      proxy.noopWorkflow();
+    }
+    assertNull(dbos.listWorkflows(new ListWorkflowsInput(wfidNoAttrs)).get(0).attributes());
+    dbos.updateWorkflowAttributes(wfidNoAttrs, Map.of("added", "later"));
+    assertEquals(
+        Map.of("added", "later"),
+        dbos.listWorkflows(new ListWorkflowsInput(wfidNoAttrs)).get(0).attributes());
+
+    // Passing null clears all attributes.
+    dbos.updateWorkflowAttributes(wfid, null);
+    assertNull(dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
+  }
+
+  @Test
+  public void updateWorkflowAttributesInWorkflow() throws Exception {
+    // Updating attributes from within a workflow is recorded as a single step.
+    var handle = dbos.startWorkflow(() -> proxy.selfUpdateWorkflow(Map.of("phase", "running")));
+    handle.getResult();
+    var wfid = handle.workflowId();
+
+    assertEquals(
+        Map.of("phase", "running"),
+        dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
+
+    var stepNames =
+        dbos.listWorkflowSteps(wfid).stream()
+            .map(StepInfo::functionName)
+            .collect(Collectors.toList());
+    assertEquals(java.util.List.of("DBOS.updateWorkflowAttributes"), stepNames);
+  }
+
+  @Test
+  public void updateWorkflowAttributesClient() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (DBOSClient cl = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE.name())
+              .withAttributes(Map.of("source", "client"));
+      var handle = cl.enqueueWorkflow(options, new Object[] {1});
+      assertEquals(
+          Map.of("source", "client"),
+          cl.getWorkflowStatus(handle.workflowId()).orElseThrow().attributes());
+
+      cl.updateWorkflowAttributes(handle.workflowId(), Map.of("source", "updated"));
+      assertEquals(
+          Map.of("source", "updated"),
+          cl.getWorkflowStatus(handle.workflowId()).orElseThrow().attributes());
+
+      cl.updateWorkflowAttributes(handle.workflowId(), null);
+      assertNull(cl.getWorkflowStatus(handle.workflowId()).orElseThrow().attributes());
+    } finally {
+      qs.unpause();
+    }
+  }
+
+  @Test
+  public void updateInvalidAttributesRejected() {
+    var wfid = UUID.randomUUID().toString();
+    try (var w = new WorkflowOptions(wfid).setContext()) {
+      proxy.noopWorkflow();
+    }
+    // A non-JSON-serializable value fails fast on update, leaving attributes unchanged.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateWorkflowAttributes(wfid, Map.of("bad", new Unserializable())));
+    assertNull(dbos.listWorkflows(new ListWorkflowsInput(wfid)).get(0).attributes());
   }
 
   @Test

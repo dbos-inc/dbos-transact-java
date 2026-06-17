@@ -672,6 +672,23 @@ public class DBOSExecutor implements AutoCloseable {
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
+  /**
+   * Replace the custom attributes attached to a workflow. Pass null to clear all attributes. Safe
+   * to call from within a workflow: the update is recorded as a step so it runs exactly once even
+   * if the workflow is recovered.
+   */
+  public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
+    Objects.requireNonNull(workflowId);
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Updating attributes of workflow: {}", workflowId);
+          systemDatabase.updateWorkflowAttributes(workflowId, attributes);
+          return null; // void
+        },
+        "DBOS.updateWorkflowAttributes",
+        null);
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
       String workflowId, int startStep, ForkOptions options) {
 

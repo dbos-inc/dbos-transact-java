@@ -578,6 +578,28 @@ public class WorkflowDAO {
     }
   }
 
+  public static void updateWorkflowAttributes(
+      DbContext ctx, String workflowId, Map<String, Object> attributes) throws SQLException {
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    var attributesJson = attributes != null ? JsonUtility.toJson(attributes) : null;
+    var sql =
+        """
+          UPDATE "%s".workflow_status
+             SET attributes = ?::jsonb,
+                 updated_at = ?
+           WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, attributesJson);
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, workflowId);
+      stmt.executeUpdate();
+    }
+  }
+
   public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """

@@ -1070,6 +1070,17 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Replace the custom attributes attached to a workflow by ID. Pass null to clear all attributes.
+   *
+   * @param workflowId ID of the workflow whose attributes to update; must not be null
+   * @param attributes the new JSON-serializable attributes, or null to clear all attributes
+   */
+  public void updateWorkflowAttributes(
+      @NonNull String workflowId, @Nullable Map<String, Object> attributes) {
+    systemDatabase.updateWorkflowAttributes(workflowId, attributes);
+  }
+
+  /**
    * Resume a workflow starting from the step after the last complete step. This method allows
    * resuming workflows that were previously interrupted, failed, or canceled. The workflow will
    * continue execution from where it left off, replaying any completed steps deterministically.
