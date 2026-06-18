@@ -1,6 +1,8 @@
 plugins {
   application
   alias(libs.plugins.shadow)
+  id("dbos.java-conventions")
+  id("dbos.quality-conventions")
 }
 
 application { mainClass.set("dev.dbos.transact.cli.Main") }
