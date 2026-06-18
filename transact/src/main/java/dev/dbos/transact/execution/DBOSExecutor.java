@@ -672,6 +672,18 @@ public class DBOSExecutor implements AutoCloseable {
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
+  public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
+    Objects.requireNonNull(workflowId);
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Updating attributes of workflow: {}", workflowId);
+          systemDatabase.updateWorkflowAttributes(workflowId, attributes);
+          return null; // void
+        },
+        "DBOS.updateWorkflowAttributes",
+        null);
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
       String workflowId, int startStep, ForkOptions options) {
 
@@ -1362,7 +1374,8 @@ public class DBOSExecutor implements AutoCloseable {
         new ExecutionOptions(workflowId, td.timeout(), td.deadline())
             .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(ctx.resolveNextAssumedRole())
-            .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles());
+            .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
+            .withAttributes(ctx.resolveNextAttributes());
     if (workflow.serializationStrategy() != null) {
       options = options.withSerialization(workflow.serializationStrategy().formatName());
     }
@@ -1467,7 +1480,11 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedRoles(
                 options != null && options.authenticatedRoles() != null
                     ? options.authenticatedRoles()
-                    : ctx.resolveNextAuthenticatedRoles());
+                    : ctx.resolveNextAuthenticatedRoles())
+            .withAttributes(
+                options != null && options.attributes() != null
+                    ? options.attributes()
+                    : ctx.resolveNextAttributes());
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
@@ -1922,7 +1939,8 @@ public class DBOSExecutor implements AutoCloseable {
             options.timeoutDuration(),
             effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
-            actualSerialization);
+            actualSerialization,
+            options.attributes());
 
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
@@ -1996,7 +2014,8 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             null,
-            serializedArgs.serialization());
+            serializedArgs.serialization(),
+            null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }
 }

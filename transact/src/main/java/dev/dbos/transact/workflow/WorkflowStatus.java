@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -70,7 +71,9 @@ public record WorkflowStatus(
     /** When the workflow completed (terminal states only). */
     Instant completedAt,
     /** Serialized representation of the workflow. */
-    String serialization) {
+    String serialization,
+    /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
+    Map<String, Object> attributes) {
 
   @JsonIgnore
   public Long timeoutMs() {
@@ -151,7 +154,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(wasForkedFrom, that.wasForkedFrom)
         && java.util.Objects.equals(delayUntil, that.delayUntil)
         && java.util.Objects.equals(completedAt, that.completedAt)
-        && java.util.Objects.equals(serialization, that.serialization);
+        && java.util.Objects.equals(serialization, that.serialization)
+        && java.util.Objects.equals(attributes, that.attributes);
   }
 
   /**
@@ -192,6 +196,7 @@ public record WorkflowStatus(
         wasForkedFrom,
         delayUntil,
         completedAt,
-        serialization);
+        serialization,
+        attributes);
   }
 }

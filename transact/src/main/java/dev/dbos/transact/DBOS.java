@@ -911,6 +911,23 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * Replace the custom attributes attached to a workflow by ID. Pass null or an empty map to clear
+   * all attributes.
+   *
+   * <p>Safe to call from within a workflow: the update is recorded as a step so it runs exactly
+   * once even if the workflow is recovered.
+   *
+   * @param workflowId ID of the workflow whose attributes to update; must not be null
+   * @param attributes the new JSON-serializable attributes, or null/empty map to clear all
+   *     attributes
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void updateWorkflowAttributes(
+      @NonNull String workflowId, @Nullable Map<String, Object> attributes) {
+    ensureLaunched("updateWorkflowAttributes").updateWorkflowAttributes(workflowId, attributes);
+  }
+
+  /**
    * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
    * provided step are copied over
    *

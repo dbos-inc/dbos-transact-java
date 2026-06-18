@@ -8,6 +8,7 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class DBOSContext {
@@ -19,6 +20,9 @@ public class DBOSContext {
   Field<String> nextAuthenticatedUser = Field.absent();
   Field<String> nextAssumedRole = Field.absent();
   Field<List<String>> nextAuthenticatedRoles = Field.absent();
+  // Custom attributes to attach to the next workflow started or enqueued in this context.
+  // Not inherited by child workflows: workflows run in a fresh context that does not carry it.
+  Map<String, Object> nextAttributes;
 
   // current workflow fields
   private final String workflowId;
@@ -77,6 +81,7 @@ public class DBOSContext {
     this.nextAuthenticatedUser = other.nextAuthenticatedUser;
     this.nextAssumedRole = other.nextAssumedRole;
     this.nextAuthenticatedRoles = other.nextAuthenticatedRoles;
+    this.nextAttributes = other.nextAttributes;
     this.workflowId = other.workflowId;
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
@@ -238,5 +243,9 @@ public class DBOSContext {
     return nextAuthenticatedRoles instanceof Field.Present<List<String>> p
         ? p.value()
         : authenticatedRoles;
+  }
+
+  public Map<String, Object> resolveNextAttributes() {
+    return nextAttributes;
   }
 }

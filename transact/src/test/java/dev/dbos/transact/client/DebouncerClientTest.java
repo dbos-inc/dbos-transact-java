@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -135,5 +136,17 @@ public class DebouncerClientTest {
     assertEquals(WorkflowState.SUCCESS, status.status());
     assertEquals(USER_QUEUE.name(), status.queueName());
     assertEquals(1, serviceImpl.callCount.get());
+  }
+
+  @Test
+  void debouncerClientForwardsAttributes() throws Exception {
+    var attributes = Map.<String, Object>of("source", "debouncer-client");
+    var handle =
+        debouncer().withAttributes(attributes).debounce("key-attr", Duration.ofMillis(400), "attr");
+
+    assertEquals("result:attr", handle.getResult());
+
+    var status = dbosClient.getWorkflowStatus(handle.workflowId()).orElseThrow();
+    assertEquals(attributes, status.attributes());
   }
 }

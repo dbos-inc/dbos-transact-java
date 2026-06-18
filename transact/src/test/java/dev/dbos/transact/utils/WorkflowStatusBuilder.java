@@ -79,7 +79,8 @@ public class WorkflowStatusBuilder {
         wasForkedFrom,
         delayUntil,
         completedAt,
-        serialization);
+        serialization,
+        null);
   }
 
   public WorkflowStatusBuilder(String workflowId) {

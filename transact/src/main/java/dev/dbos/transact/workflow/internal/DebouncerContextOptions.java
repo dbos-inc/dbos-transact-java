@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -16,4 +17,6 @@ import org.jspecify.annotations.Nullable;
  * <p>Not part of the public API.
  */
 public record DebouncerContextOptions(
-    @NonNull String userWorkflowId, @Nullable Duration workflowTimeout) {}
+    @NonNull String userWorkflowId,
+    @Nullable Duration workflowTimeout,
+    @Nullable Map<String, Object> workflowAttributes) {}

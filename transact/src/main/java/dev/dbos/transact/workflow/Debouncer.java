@@ -257,7 +257,9 @@ public final class Debouncer<R> {
             priority,
             deduplicationId);
     Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
-    DebouncerContextOptions ctx = new DebouncerContextOptions(userWorkflowId, workflowTimeout);
+    var workflowAttributes = DBOSContextHolder.get().resolveNextAttributes();
+    DebouncerContextOptions ctx =
+        new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
     while (true) {

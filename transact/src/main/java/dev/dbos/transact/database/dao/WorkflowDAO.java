@@ -76,7 +76,7 @@ public class WorkflowDAO {
         authenticated_user, assumed_role, authenticated_roles,
         created_at, updated_at, completed_at, started_at_epoch_ms,
         recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
-        forked_from, parent_workflow_id, was_forked_from
+        forked_from, parent_workflow_id, was_forked_from, attributes
       """;
 
   private WorkflowDAO() {}
@@ -213,8 +213,8 @@ public class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            parent_workflow_id, owner_xid, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parent_workflow_id, owner_xid, serialization, attributes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -245,6 +245,7 @@ public class WorkflowDAO {
         status.authenticatedRoles() != null
             ? JsonUtility.toJson(status.authenticatedRoles())
             : null;
+    var attributesJson = attributesToJson(status.attributes());
     try (var stmt = conn.prepareStatement(insertSQL)) {
 
       var now = System.currentTimeMillis();
@@ -280,7 +281,8 @@ public class WorkflowDAO {
 
       stmt.setObject(24, ownerXid);
       stmt.setString(25, status.serialization());
-      stmt.setInt(26, incrementAttempts ? 1 : 0);
+      stmt.setString(26, attributesJson);
+      stmt.setInt(27, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -575,6 +577,34 @@ public class WorkflowDAO {
     }
   }
 
+  // Normalize an empty attributes map to SQL NULL so "no attributes" has a single representation
+  // and an empty map (e.g. from withAttributes(Map.of())) clears rather than recording "{}".
+  private static String attributesToJson(Map<String, Object> attributes) {
+    return (attributes != null && !attributes.isEmpty()) ? JsonUtility.toJson(attributes) : null;
+  }
+
+  public static void updateWorkflowAttributes(
+      DbContext ctx, String workflowId, Map<String, Object> attributes) throws SQLException {
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    var attributesJson = attributesToJson(attributes);
+    var sql =
+        """
+          UPDATE "%s".workflow_status
+             SET attributes = ?::jsonb,
+                 updated_at = ?
+           WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, attributesJson);
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, workflowId);
+      stmt.executeUpdate();
+    }
+  }
+
   public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """
@@ -709,6 +739,12 @@ public class WorkflowDAO {
     if (input.executorIds() != null && !input.executorIds().isEmpty()) {
       whereConditions.add("executor_id = ANY(?)");
       parameters.add(input.executorIds());
+    }
+    if (input.attributes() != null && !input.attributes().isEmpty()) {
+      // Containment (@>) is served by the GIN index on the attributes column and matches
+      // workflows whose attributes contain all the given key-value pairs.
+      whereConditions.add("attributes @> ?::jsonb");
+      parameters.add(JsonUtility.toJson(input.attributes()));
     }
 
     // Only append WHERE keyword if there are actual conditions
@@ -1092,6 +1128,7 @@ public class WorkflowDAO {
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
     String authenticatedRolesJson = rs.getString("authenticated_roles");
+    String attributesJson = rs.getString("attributes");
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
@@ -1134,7 +1171,10 @@ public class WorkflowDAO {
             rs.getObject("was_forked_from", Boolean.class),
             SystemDatabase.toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
             SystemDatabase.toInstant(rs.getObject("completed_at", Long.class)),
-            serialization);
+            serialization,
+            (attributesJson != null)
+                ? JsonUtility.fromJson(attributesJson, new TypeReference<Map<String, Object>>() {})
+                : null);
     return info;
   }
 
@@ -1614,7 +1654,8 @@ public class WorkflowDAO {
       String authenticatedRoles,
       String assumedRole,
       String inputs,
-      String serialization) {}
+      String serialization,
+      String attributes) {}
 
   private static Map<String, ForkWorkflowData> fetchForkWorkflowData(
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
@@ -1622,7 +1663,7 @@ public class WorkflowDAO {
         """
           SELECT workflow_uuid, name, class_name, config_name, application_version,
                  application_id, authenticated_user, authenticated_roles, assumed_role,
-                 inputs, serialization
+                 inputs, serialization, attributes
           FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?)
         """
@@ -1647,7 +1688,8 @@ public class WorkflowDAO {
                     rs.getString("authenticated_roles"),
                     rs.getString("assumed_role"),
                     rs.getString("inputs"),
-                    rs.getString("serialization")));
+                    rs.getString("serialization"),
+                    rs.getString("attributes")));
           }
         }
       } finally {
@@ -1676,14 +1718,14 @@ public class WorkflowDAO {
                 workflow_uuid, status, name, class_name, config_name,
                 application_version, application_id, authenticated_user,
                 authenticated_roles, assumed_role, queue_name, queue_partition_key,
-                inputs, workflow_timeout_ms, forked_from, serialization
+                inputs, workflow_timeout_ms, forked_from, serialization, attributes
               ) VALUES\s
             """
                 .formatted(schema));
 
     StringJoiner rows = new StringJoiner(", ");
     for (int i = 0; i < origIds.size(); i++) {
-      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)");
     }
     sql.append(rows);
 
@@ -1710,6 +1752,7 @@ public class WorkflowDAO {
         stmt.setObject(p++, timeoutMs);
         stmt.setString(p++, origIds.get(i));
         stmt.setString(p++, rd.serialization());
+        stmt.setString(p++, rd.attributes());
       }
       stmt.executeUpdate();
     }

@@ -14,6 +14,7 @@ import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -545,6 +546,11 @@ public class SystemDatabase implements AutoCloseable {
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {
     dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName));
+  }
+
+  public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
+    var validated = Validation.validateAttributes(attributes);
+    dbRetry(() -> WorkflowDAO.updateWorkflowAttributes(ctx, workflowId, validated));
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {

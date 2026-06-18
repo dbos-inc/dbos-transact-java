@@ -10,6 +10,7 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 // Internal execution options record. External API specific records such as StartWorkflowOptions,
 // WorkflowOptions and DBOSClient.EnqueueOptions are converted to ExecutionOptions before execution.
@@ -28,6 +29,7 @@ public record ExecutionOptions(
     String authenticatedUser,
     String assumedRole,
     List<String> authenticatedRoles,
+    Map<String, Object> attributes,
     // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
     boolean isRecoveryRequest,
     boolean isDequeuedRequest) {
@@ -92,6 +94,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         false);
   }
@@ -99,6 +102,7 @@ public record ExecutionOptions(
   public ExecutionOptions(String workflowId) {
     this(
         workflowId,
+        null,
         null,
         null,
         null,
@@ -130,6 +134,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         false);
   }
@@ -149,6 +154,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         true,
         false);
   }
@@ -168,6 +174,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         false,
         true);
   }
@@ -187,6 +194,7 @@ public record ExecutionOptions(
         options.authenticatedUser(),
         options.assumedRole(),
         options.authenticatedRoles(),
+        options.attributes(),
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -209,6 +217,7 @@ public record ExecutionOptions(
         options.authenticatedUser(),
         options.assumedRole(),
         options.authenticatedRoles(),
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -228,6 +237,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -247,6 +257,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -266,6 +277,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -285,6 +297,7 @@ public record ExecutionOptions(
         authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -304,6 +317,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -323,6 +337,27 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         authenticatedRoles,
+        this.attributes,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest);
+  }
+
+  public ExecutionOptions withAttributes(Map<String, Object> attributes) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -342,6 +377,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -361,6 +397,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -380,6 +417,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }
@@ -399,6 +437,7 @@ public record ExecutionOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
+        this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);
   }

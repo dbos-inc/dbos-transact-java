@@ -20,6 +20,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import com.cronutils.model.Cron;
@@ -40,6 +41,11 @@ public class SchedulerService implements AutoCloseable {
       new Class<?>[] {Instant.class, Object.class};
   private static final Duration MAX_JITTER = Duration.ofSeconds(10);
 
+  // During the first minute after startup, poll for schedules every second so schedules registered
+  // around launch are picked up promptly rather than after a full polling interval.
+  private static final Duration STARTUP_FAST_POLL_DURATION = Duration.ofSeconds(60);
+  private static final Duration STARTUP_FAST_POLL_INTERVAL = Duration.ofSeconds(1);
+
   private final DBOSExecutor dbosExecutor;
   private final SystemDatabase systemDatabase;
   private final Duration pollingInterval;
@@ -47,6 +53,9 @@ public class SchedulerService implements AutoCloseable {
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, ScheduledFuture<?>> workflowScheduleFutures =
       new ConcurrentHashMap<>();
+  // Ensures the fast-path poll and the regular fixed-rate poll never run concurrently, which would
+  // otherwise race when scheduling new workflow futures.
+  private final ReentrantLock pollLock = new ReentrantLock();
 
   public SchedulerService(
       DBOSExecutor dbosExecutor, SystemDatabase systemDatabase, Duration pollingInterval) {
@@ -62,6 +71,23 @@ public class SchedulerService implements AutoCloseable {
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         scheduler.scheduleAtFixedRate(
             this::pollWorkflowSchedules, 0, pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+
+        // Fast-path: poll more frequently for the first minute after startup. Only needed when the
+        // configured polling interval is slower than the fast interval.
+        long fastIntervalMs =
+            Math.min(STARTUP_FAST_POLL_INTERVAL.toMillis(), pollingInterval.toMillis());
+        if (fastIntervalMs < pollingInterval.toMillis()) {
+          var fastFuture =
+              scheduler.scheduleAtFixedRate(
+                  this::pollWorkflowSchedules,
+                  fastIntervalMs,
+                  fastIntervalMs,
+                  TimeUnit.MILLISECONDS);
+          scheduler.schedule(
+              () -> fastFuture.cancel(false),
+              STARTUP_FAST_POLL_DURATION.toMillis(),
+              TimeUnit.MILLISECONDS);
+        }
       }
     }
   }
@@ -84,6 +110,11 @@ public class SchedulerService implements AutoCloseable {
   }
 
   private void pollWorkflowSchedules() {
+    // Skip if another poll (fast-path or regular) is already running rather than queueing behind
+    // it.
+    if (!pollLock.tryLock()) {
+      return;
+    }
     try {
       // if execServiceRef is null, the scheduler service was shut down so don't poll schedules
       if (execServiceRef.get() == null) {
@@ -247,6 +278,8 @@ public class SchedulerService implements AutoCloseable {
       // Catch all exceptions to prevent scheduleAtFixedRate from permanently suppressing future
       // poll invocations. A transient DB failure should not permanently disable the scheduler.
       logger.error("pollWorkflowSchedules failed", e);
+    } finally {
+      pollLock.unlock();
     }
   }
 

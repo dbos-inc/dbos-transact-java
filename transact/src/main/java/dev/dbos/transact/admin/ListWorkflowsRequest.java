@@ -52,7 +52,8 @@ public record ListWorkflowsRequest(
         fork_from,
         parent_workflow_id,
         null, // wasForkedFrom
-        null // hasParent
+        null, // hasParent
+        null // attributes
         );
   }
 }
