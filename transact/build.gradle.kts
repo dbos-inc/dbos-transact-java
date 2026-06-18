@@ -1,11 +1,13 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
   id("java-library")
-  alias(libs.plugins.kotlin.jvm)
-  alias(libs.plugins.maven.publish)
+  id("dbos.java-conventions")
+  id("dbos.kotlin-conventions")
+  id("dbos.quality-conventions")
+  id("dbos.publishing-conventions")
 }
+
+// printed once when Gradle configures this project
+println("DBOS Transact version: $version")
 
 dependencies {
   api(libs.jspecify)
@@ -41,13 +43,6 @@ tasks.processResources {
   inputs.property("version", projectVersion)
 
   filesMatching("**/app.properties") { expand(mapOf("projectVersion" to projectVersion)) }
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-  compilerOptions {
-    jvmTarget.set(JvmTarget.JVM_17)
-    freeCompilerArgs.add("-Xjsr305=strict")
-  }
 }
 
 mavenPublishing {

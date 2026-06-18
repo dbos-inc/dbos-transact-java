@@ -1,3 +1,8 @@
+pluginManagement {
+  // Makes the dbos.* convention plugins available to the main build.
+  includeBuild("build-logic")
+}
+
 rootProject.name = "dbos-transact-java"
 
 include(
