@@ -1,4 +1,5 @@
 plugins {
+  id("dbos.base-conventions")
   alias(libs.plugins.spotless)
   alias(libs.plugins.versions)
   // Registers JVM attribute-matching rules (e.g. TargetJvmVersion compatibility) so the

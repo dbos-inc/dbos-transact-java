@@ -1,10 +1,10 @@
 import dev.dbos.build.GitVersion
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
-plugins { java }
-
-group = "dev.dbos"
-version = GitVersion.version(rootDir)
+plugins {
+  java
+  id("dbos.base-conventions")
+}
 
 // Force the published bytecode to be Java 17
 extensions.getByType<JavaPluginExtension>().apply {
