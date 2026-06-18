@@ -1,6 +1,8 @@
 plugins {
   id("java-library")
-  alias(libs.plugins.maven.publish)
+  id("dbos.java-conventions")
+  id("dbos.quality-conventions")
+  id("dbos.publishing-conventions")
 }
 
 mavenPublishing {
