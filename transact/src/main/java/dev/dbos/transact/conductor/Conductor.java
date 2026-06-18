@@ -63,6 +63,20 @@ public class Conductor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
 
+  private static final String hostname = resolveHostname();
+
+  private static String resolveHostname() {
+    try {
+      return InetAddress.getLocalHost().getHostName();
+    } catch (Exception e) {
+      return fallbackHostname(System.getenv("HOSTNAME"));
+    }
+  }
+
+  static String fallbackHostname(String envHostname) {
+    return envHostname != null ? envHostname : "<unknown>";
+  }
+
   private final String url;
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
@@ -741,7 +755,6 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-            String hostname = InetAddress.getLocalHost().getHostName();
             return new ExecutorInfoResponse(
                 message,
                 conductor.dbosExecutor.executorId(),

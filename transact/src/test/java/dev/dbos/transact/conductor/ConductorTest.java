@@ -72,6 +72,7 @@ import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -524,6 +525,16 @@ public class ConductorTest {
       assertNull(jsonNode.get("error_message"));
       assertEquals("{}", jsonNode.get("executor_metadata").toString());
     }
+  }
+
+  @Test
+  public void fallbackHostnameUsesEnvWhenSet() {
+    assertEquals("env-host", Conductor.fallbackHostname("env-host"));
+  }
+
+  @Test
+  public void fallbackHostnameUsesUnknownWhenNull() {
+    assertEquals("<unknown>", Conductor.fallbackHostname(null));
   }
 
   @RetryingTest(3)
