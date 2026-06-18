@@ -289,10 +289,17 @@ public class DynamicQueuesTest {
     // Start with concurrency=1 so only one workflow dequeues at a time.
     dbos.registerQueue("dyn-update-q", QueueOptions.setConcurrency(1));
 
+    // Enqueue the first workflow and wait until it is running, so it deterministically occupies the
+    // single concurrency slot before the others are enqueued. Otherwise any of the three could win
+    // the slot and the ENQUEUED assertions below (which name h2 and h3 specifically) would race.
     var h1 =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(0),
             new StartWorkflowOptions("dyn-wf1").withQueue("dyn-update-q"));
+
+    // Wait for exactly one workflow to be dequeued and start running.
+    impl.wfSemaphore.acquire(1);
+
     var h2 =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(1),
@@ -301,9 +308,6 @@ public class DynamicQueuesTest {
         dbos.startWorkflow(
             () -> service.blockedWorkflow(2),
             new StartWorkflowOptions("dyn-wf3").withQueue("dyn-update-q"));
-
-    // Wait for exactly one workflow to be dequeued and start running.
-    impl.wfSemaphore.acquire(1);
 
     // With concurrency=1 the other two should still be waiting.
     Thread.sleep(200);
@@ -897,19 +901,24 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue("test_queue", QueueOptions.setConcurrency(2));
 
+    // Enqueue the two blocking workflows first and wait until both are running, so they
+    // deterministically occupy the two concurrency slots before the noop workflow is enqueued.
+    // Otherwise the noop could be dispatched into a slot first, run to completion, and the ENQUEUED
+    // assertion below would race.
     var opt1 = new StartWorkflowOptions("wf1").withQueue("test_queue");
     var handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
 
     var opt2 = new StartWorkflowOptions("wf2").withQueue("test_queue");
     var handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
 
-    var opt3 = new StartWorkflowOptions("wf3").withQueue("test_queue");
-    var handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
-
     // each call to blockedWorkflow releases the semaphore once,
     // so block waiting on both calls to release
     impl.wfSemaphore.acquire(2);
 
+    var opt3 = new StartWorkflowOptions("wf3").withQueue("test_queue");
+    var handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
+
+    Thread.sleep(200);
     assertEquals(2, impl.counter.get());
     assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
@@ -1002,15 +1011,19 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
 
+    // Enqueue the blocking workflow first and confirm it is running so it holds the single slot
+    // before the regular workflow is enqueued; otherwise the regular one could be dispatched first.
     var blockedHandle =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(0),
             new StartWorkflowOptions("blocked").withQueue("test_queue"));
+    impl.wfSemaphore.acquire(1);
+
     var regularHandle =
         dbos.startWorkflow(
             () -> service.noopWorkflow(42), new StartWorkflowOptions().withQueue("test_queue"));
 
-    impl.wfSemaphore.acquire(1);
+    Thread.sleep(200);
     assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
 
@@ -1032,15 +1045,19 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
 
+    // Enqueue the blocking workflow first and confirm it is running so it holds the single slot
+    // before the regular workflow is enqueued; otherwise the regular one could be dispatched first.
     var blockedHandle =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue("test_queue"));
+    impl.wfSemaphore.acquire(1);
+
     var regularHandle =
         dbos.startWorkflow(
             () -> service.noopWorkflow(99),
             new StartWorkflowOptions("resumable").withQueue("test_queue"));
 
-    impl.wfSemaphore.acquire(1);
+    Thread.sleep(200);
     assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
 
     var resumedHandle = dbos.<Integer, Exception>resumeWorkflow("resumable");
@@ -1061,14 +1078,18 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue("test_queue", QueueOptions.setWorkerConcurrency(1));
 
+    // Enqueue the blocking workflow first and wait until it is actually running, so it
+    // deterministically occupies the single worker slot before h2 exists. Otherwise the dispatcher
+    // could pick up h2 first, run it to completion, and the ENQUEUED assertion below would race.
     var h1 =
         dbos.startWorkflow(
             () -> service.blockedWorkflow(0), new StartWorkflowOptions().withQueue("test_queue"));
+    impl.wfSemaphore.acquire(1);
+
     var h2 =
         dbos.startWorkflow(
             () -> service.noopWorkflow(1), new StartWorkflowOptions().withQueue("test_queue"));
 
-    impl.wfSemaphore.acquire(1);
     Thread.sleep(2000);
     assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
     assertEquals(1, impl.counter.get());

@@ -274,7 +274,10 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
     if (caught) {
       result += "<Step with long retry should have completed>";
     }
-    if (System.currentTimeMillis() - ctime > 2000) {
+    // The step succeeds on the first retry (intervalSeconds=1). This bound only needs to prove it
+    // did not slide into the second retry, whose backoff is 1s * backOffRate(10) = 10s. Keep it
+    // comfortably between ~1s real time and 10s to avoid flaking on loaded CI runners.
+    if (System.currentTimeMillis() - ctime > 5000) {
       result += "<Step with long retry should have finished faster>";
     }
     if (System.currentTimeMillis() - ctime < 500) {
