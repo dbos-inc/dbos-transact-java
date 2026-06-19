@@ -90,7 +90,7 @@ jobs:
           path: dbos-demo-apps
 
       - name: Download Maven Local artifacts
-        uses: actions/actions/download-artifact@v8
+        uses: actions/download-artifact@v7
         with:
           name: dbos-maven-local
           path: ~/.m2/repository/dev/dbos
