@@ -12,6 +12,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -294,5 +295,81 @@ public class StartWorkflowTest {
     assertNull(status.authenticatedUser());
     assertNull(status.assumedRole());
     assertNull(status.authenticatedRoles());
+  }
+
+  private record ChildOutcome(String result, WorkflowStatus status) {}
+
+  // Starts a parent with a full auth identity, then has the parent start a child via startWorkflow
+  // using a StartWorkflowOptions configured per parentMethod. Returns the child's runtime auth
+  // string (from inside the child) and its persisted status.
+  private ChildOutcome startChild(String parentMethod, String parentId, String childId)
+      throws Exception {
+    var handle =
+        dbos.startWorkflow(
+            () ->
+                switch (parentMethod) {
+                  case "inherit" -> proxy.startChildInheritAuth(childId);
+                  case "override" -> proxy.startChildOverrideAuth(childId);
+                  case "clearAll" -> proxy.startChildClearAllAuth(childId);
+                  case "clearUserAndRoles" -> proxy.startChildClearUserAndRoles(childId);
+                  case "clearAssumedRoleOnly" -> proxy.startChildClearAssumedRoleOnly(childId);
+                  default -> throw new IllegalArgumentException(parentMethod);
+                },
+            new StartWorkflowOptions(parentId)
+                .withAuthentication("parent-user", "parent-role")
+                .withAssumedRole("parent-assumed"));
+    var result = handle.getResult();
+    return new ChildOutcome(result, dbos.retrieveWorkflow(childId).getStatus());
+  }
+
+  @Test
+  void childInheritsParentAuthWhenOptionsAbsent() throws Exception {
+    var child = startChild("inherit", "siwfAuthInheritP", "siwfAuthInheritC");
+
+    assertEquals("parent-user|parent-assumed|parent-role", child.result());
+    assertEquals("parent-user", child.status().authenticatedUser());
+    assertEquals("parent-assumed", child.status().assumedRole());
+    assertEquals(List.of("parent-role"), child.status().authenticatedRoles());
+  }
+
+  @Test
+  void childOverridesParentAuth() throws Exception {
+    var child = startChild("override", "siwfAuthOverrideP", "siwfAuthOverrideC");
+
+    // user and roles overridden; assumedRole left absent, so inherited from the parent
+    assertEquals("override-user|parent-assumed|override-role", child.result());
+    assertEquals("override-user", child.status().authenticatedUser());
+    assertEquals("parent-assumed", child.status().assumedRole());
+    assertEquals(List.of("override-role"), child.status().authenticatedRoles());
+  }
+
+  @Test
+  void childClearsAllAuth() throws Exception {
+    var child = startChild("clearAll", "siwfAuthClearAllP", "siwfAuthClearAllC");
+
+    assertEquals("null|null|null", child.result());
+    assertNull(child.status().authenticatedUser());
+    assertNull(child.status().assumedRole());
+    assertNull(child.status().authenticatedRoles());
+  }
+
+  @Test
+  void childClearsUserAndRolesButInheritsAssumedRole() throws Exception {
+    var child = startChild("clearUserAndRoles", "siwfAuthClearURP", "siwfAuthClearURC");
+
+    assertEquals("null|parent-assumed|null", child.result());
+    assertNull(child.status().authenticatedUser());
+    assertEquals("parent-assumed", child.status().assumedRole());
+    assertNull(child.status().authenticatedRoles());
+  }
+
+  @Test
+  void childClearsAssumedRoleButInheritsUserAndRoles() throws Exception {
+    var child = startChild("clearAssumedRoleOnly", "siwfAuthClearARP", "siwfAuthClearARC");
+
+    assertEquals("parent-user|null|parent-role", child.result());
+    assertEquals("parent-user", child.status().authenticatedUser());
+    assertNull(child.status().assumedRole());
+    assertEquals(List.of("parent-role"), child.status().authenticatedRoles());
   }
 }

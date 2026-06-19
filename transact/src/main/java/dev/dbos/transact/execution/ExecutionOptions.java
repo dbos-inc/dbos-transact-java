@@ -5,6 +5,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -214,9 +215,11 @@ public record ExecutionOptions(
         options.delay(),
         options.appVersion(),
         this.serialization,
-        options.authenticatedUser(),
-        options.assumedRole(),
-        options.authenticatedRoles(),
+        options.authenticatedUser() instanceof Field.Present<String> u ? u.value() : null,
+        options.assumedRole() instanceof Field.Present<String> r ? r.value() : null,
+        options.authenticatedRoles() instanceof Field.Present<List<String>> roles
+            ? roles.value()
+            : null,
         this.attributes,
         this.isRecoveryRequest,
         this.isDequeuedRequest);

@@ -1,6 +1,7 @@
 package dev.dbos.transact.invocation;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Timeout;
@@ -117,5 +118,53 @@ public class HawkServiceImpl implements HawkService {
     try (var _i = new WorkflowOptions().withNoAuthentication().setContext()) {
       return proxy.authContextWorkflow();
     }
+  }
+
+  @Workflow
+  @Override
+  public String startChildInheritAuth(String childId) {
+    var handle =
+        dbos.startWorkflow(() -> proxy.authContextWorkflow(), new StartWorkflowOptions(childId));
+    return handle.getResult();
+  }
+
+  @Workflow
+  @Override
+  public String startChildOverrideAuth(String childId) {
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.authContextWorkflow(),
+            new StartWorkflowOptions(childId).withAuthentication("override-user", "override-role"));
+    return handle.getResult();
+  }
+
+  @Workflow
+  @Override
+  public String startChildClearAllAuth(String childId) {
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.authContextWorkflow(),
+            new StartWorkflowOptions(childId).withNoAuthentication());
+    return handle.getResult();
+  }
+
+  @Workflow
+  @Override
+  public String startChildClearUserAndRoles(String childId) {
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.authContextWorkflow(),
+            new StartWorkflowOptions(childId).withNoAuthenticatedUser().withNoAuthenticatedRoles());
+    return handle.getResult();
+  }
+
+  @Workflow
+  @Override
+  public String startChildClearAssumedRoleOnly(String childId) {
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.authContextWorkflow(),
+            new StartWorkflowOptions(childId).withNoAssumedRole());
+    return handle.getResult();
   }
 }

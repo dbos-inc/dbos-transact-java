@@ -1470,16 +1470,16 @@ public class DBOSExecutor implements AutoCloseable {
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
             .withAuthenticatedUser(
-                options != null && options.authenticatedUser() != null
-                    ? options.authenticatedUser()
+                options != null && options.authenticatedUser().isPresent()
+                    ? options.authenticatedUser().get()
                     : ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(
-                options != null && options.assumedRole() != null
-                    ? options.assumedRole()
+                options != null && options.assumedRole().isPresent()
+                    ? options.assumedRole().get()
                     : ctx.resolveNextAssumedRole())
             .withAuthenticatedRoles(
-                options != null && options.authenticatedRoles() != null
-                    ? options.authenticatedRoles()
+                options != null && options.authenticatedRoles().isPresent()
+                    ? options.authenticatedRoles().get()
                     : ctx.resolveNextAuthenticatedRoles())
             .withAttributes(
                 options != null && options.attributes() != null

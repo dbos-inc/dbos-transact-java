@@ -4,6 +4,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
 
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Timeout;
 
@@ -29,6 +30,11 @@ import org.jspecify.annotations.Nullable;
  *   <li>Authentication context (user, assumed role, roles)
  * </ul>
  *
+ * <p>The authentication fields are three-state {@link Field}s so that "leave at the current
+ * default" can be distinguished from "explicitly clear". An {@linkplain Field.Absent absent} field
+ * inherits the value from the invoking context, a {@linkplain Field.Present present} field with a
+ * value overrides it, and a present field with a {@code null} value clears it.
+ *
  * @param workflowId The unique identifier for the workflow instance. Used for idempotency and
  *     tracking. May be null.
  * @param timeout The timeout configuration specifying how long the workflow may run before
@@ -46,10 +52,12 @@ import org.jspecify.annotations.Nullable;
  *     be null.
  * @param delay Optional delay before the workflow starts executing. May be null.
  * @param appVersion Optional application version to target for workflow execution. May be null.
- * @param authenticatedUser Optional authenticated user to associate with the workflow. May be null.
- * @param assumedRole Optional assumed role to associate with the workflow. May be null.
- * @param authenticatedRoles Optional authenticated roles to associate with the workflow. May be
- *     null.
+ * @param authenticatedUser The authenticated user to associate with the workflow. Absent inherits
+ *     the invoking context's value; present overrides it (a present null clears it).
+ * @param assumedRole The assumed role to associate with the workflow. Absent inherits the invoking
+ *     context's value; present overrides it (a present null clears it).
+ * @param authenticatedRoles The authenticated roles to associate with the workflow. Absent inherits
+ *     the invoking context's value; present overrides it (a present null clears it).
  * @param attributes Optional JSON-serializable custom attributes to associate with the workflow.
  *     May be null.
  */
@@ -63,9 +71,9 @@ public record StartWorkflowOptions(
     @Nullable String queuePartitionKey,
     @Nullable Duration delay,
     @Nullable String appVersion,
-    @Nullable String authenticatedUser,
-    @Nullable String assumedRole,
-    @Nullable List<String> authenticatedRoles,
+    @NonNull Field<String> authenticatedUser,
+    @NonNull Field<String> assumedRole,
+    @NonNull Field<List<String>> authenticatedRoles,
     @Nullable Map<String, Object> attributes) {
 
   public StartWorkflowOptions {
@@ -97,13 +105,28 @@ public record StartWorkflowOptions(
       throw new IllegalArgumentException("appVersion must not be empty");
     }
 
-    authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
+    if (authenticatedRoles instanceof Field.Present<List<String>> p && p.value() != null) {
+      authenticatedRoles = Field.of(List.copyOf(p.value()));
+    }
     attributes = validateAttributes(attributes);
   }
 
-  /** Construct with default options (all fields null). */
+  /** Construct with default options (all fields null/absent). */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        null);
   }
 
   /**
@@ -112,7 +135,20 @@ public record StartWorkflowOptions(
    * @param workflowId the workflow ID to assign
    */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(
+        workflowId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        null);
   }
 
   /**
@@ -121,7 +157,20 @@ public record StartWorkflowOptions(
    * @param queue the queue to assign the workflow to
    */
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null, null, null, null, null, null, null);
+    this(
+        null,
+        null,
+        null,
+        queue.name(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        null);
   }
 
   /**
@@ -374,7 +423,8 @@ public record StartWorkflowOptions(
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified authenticated user.
+   * Returns a new StartWorkflowOptions with the specified authenticated user. Pass {@code null} to
+   * override the invoking context with no authenticated user.
    *
    * @param authenticatedUser the authenticated user to assign
    * @return a new StartWorkflowOptions with the updated authenticated user
@@ -390,14 +440,38 @@ public record StartWorkflowOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        authenticatedUser,
+        Field.of(authenticatedUser),
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes);
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified assumed role.
+   * Returns a new StartWorkflowOptions that clears the authenticated user, overriding the invoking
+   * context rather than inheriting its default.
+   *
+   * @return a new StartWorkflowOptions with the authenticated user cleared
+   */
+  public @NonNull StartWorkflowOptions withNoAuthenticatedUser() {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        Field.of(null),
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified assumed role. Pass {@code null} to
+   * override the invoking context with no assumed role.
    *
    * @param assumedRole the assumed role to assign
    * @return a new StartWorkflowOptions with the updated assumed role
@@ -414,13 +488,37 @@ public record StartWorkflowOptions(
         this.delay,
         this.appVersion,
         this.authenticatedUser,
-        assumedRole,
+        Field.of(assumedRole),
         this.authenticatedRoles,
         this.attributes);
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified authenticated roles.
+   * Returns a new StartWorkflowOptions that clears the assumed role, overriding the invoking
+   * context rather than inheriting its default.
+   *
+   * @return a new StartWorkflowOptions with the assumed role cleared
+   */
+  public @NonNull StartWorkflowOptions withNoAssumedRole() {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        Field.of(null),
+        this.authenticatedRoles,
+        this.attributes);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified authenticated roles. Pass {@code null} to
+   * override the invoking context with no authenticated roles.
    *
    * @param authenticatedRoles the authenticated roles to assign
    * @return a new StartWorkflowOptions with the updated authenticated roles
@@ -439,12 +537,36 @@ public record StartWorkflowOptions(
         this.appVersion,
         this.authenticatedUser,
         this.assumedRole,
-        authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
         this.attributes);
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified authenticated user and roles.
+   * Returns a new StartWorkflowOptions that clears the authenticated roles, overriding the invoking
+   * context rather than inheriting its default.
+   *
+   * @return a new StartWorkflowOptions with the authenticated roles cleared
+   */
+  public @NonNull StartWorkflowOptions withNoAuthenticatedRoles() {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        Field.of(null),
+        this.attributes);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified authenticated user and roles. Pass {@code
+   * null} values to override the invoking context with no authenticated user or roles.
    *
    * @param authenticatedUser the authenticated user to assign
    * @param authenticatedRoles the authenticated roles to assign
@@ -462,9 +584,32 @@ public record StartWorkflowOptions(
         this.queuePartitionKey,
         this.delay,
         this.appVersion,
-        authenticatedUser,
+        Field.of(authenticatedUser),
         this.assumedRole,
-        authenticatedRoles != null ? List.of(authenticatedRoles) : null,
+        authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
+        this.attributes);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions that clears the authenticated user, assumed role, and
+   * authenticated roles, overriding the invoking context rather than inheriting its defaults.
+   *
+   * @return a new StartWorkflowOptions with all authentication context cleared
+   */
+  public @NonNull StartWorkflowOptions withNoAuthentication() {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        Field.of(null),
+        Field.of(null),
+        Field.of(null),
         this.attributes);
   }
 
