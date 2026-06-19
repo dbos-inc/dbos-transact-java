@@ -21,6 +21,14 @@ public class MigrateCommand implements Callable<Integer> {
       description = "The role with which you will run your DBOS application")
   String appRole;
 
+  @Option(
+      names = {"--listen-notify"},
+      negatable = true,
+      defaultValue = "true",
+      description =
+          "Use LISTEN/NOTIFY on the DBOS system database [default: ${DEFAULT-VALUE}]. Use --no-listen-notify to disable.")
+  boolean useListenNotify;
+
   @Mixin DatabaseOptions dbOptions;
 
   @Option(
@@ -38,9 +46,12 @@ public class MigrateCommand implements Callable<Integer> {
     out.format("  System Database: %s\n", dbOptions.url());
     out.format("  System Database User: %s\n", dbOptions.user());
 
-    // TODO: add option for useListenNotify
     MigrationManager.runMigrations(
-        dbOptions.url(), dbOptions.user(), dbOptions.password(), dbOptions.schema(), true);
+        dbOptions.url(),
+        dbOptions.user(),
+        dbOptions.password(),
+        dbOptions.schema(),
+        useListenNotify);
     grantDBOSSchemaPermissions(out, dbOptions.schema());
     return 0;
   }

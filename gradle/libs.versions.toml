@@ -2,6 +2,7 @@
 aspectj = "1.9.25.1"
 assertj = "3.27.7"
 cron-utils = "9.2.1"
+graalvm-native = "0.11.1"
 hibernate = "7.4.1.Final"
 hikaricp = "7.1.0"
 jackson = "3.2.0"
@@ -60,6 +61,7 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 maven-artifact = { module = "org.apache.maven:maven-artifact", version.ref = "maven-artifact" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
+picocli-codegen = { module = "info.picocli:picocli-codegen", version.ref = "picocli" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -82,6 +84,7 @@ testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgr
 testcontainers-toxiproxy = { module = "org.testcontainers:testcontainers-toxiproxy", version.ref = "testcontainers" }
 
 [plugins]
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm-native" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

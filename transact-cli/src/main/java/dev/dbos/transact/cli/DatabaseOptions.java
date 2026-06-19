@@ -1,7 +1,5 @@
 package dev.dbos.transact.cli;
 
-import dev.dbos.transact.DBOSClient;
-
 import picocli.CommandLine.Option;
 
 public class DatabaseOptions {
@@ -44,9 +42,5 @@ public class DatabaseOptions {
 
   public String schema() {
     return this.schema;
-  }
-
-  public DBOSClient createClient() {
-    return new DBOSClient(url(), user(), password(), schema());
   }
 }
