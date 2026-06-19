@@ -45,7 +45,7 @@ object GitVersion {
 
     return when {
       branch == "main" -> "$major.${minor + 1}.$patch-m$commitCount"
-      branch.startsWith("release/v") ->
+      branch.startsWith("release/") ->
         if (commitCount == 0) "$major.$minor.$patch" else "$major.$minor.${patch + 1}-rc$commitCount"
       else -> "$major.${minor + 1}.$patch-a$commitCount-g${gitHash(root)}"
     }

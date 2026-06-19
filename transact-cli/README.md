@@ -1,16 +1,43 @@
 # DBOS CLI
 
-The DBOS CLI is a command-line interface for managing DBOS workflows.
+The DBOS CLI is a command-line interface for managing the DBOS system database.
 
 ## Installation
 
-DBOS CLI is distributed as a JAR with dependencies (also known as a fat or uber JAR).
-It is run from the command line with the `-jar` option of the [`java` command](https://docs.oracle.com/en/java/javase/17/docs/specs/man/java.html).
+DBOS CLI is distributed in two forms:
+
+* A native executable (`dbos`) that runs directly without a JVM. This is the
+  recommended way to run the CLI.
+
+  ```shell
+  $ dbos --version
+  dbos v0.10.0
+  ```
+
+* A JAR with dependencies (also known as a fat or uber JAR), run with the
+  `-jar` option of the [`java` command](https://docs.oracle.com/en/java/javase/17/docs/specs/man/java.html).
+
+  ```shell
+  $ java -jar dbos.jar --version
+  dbos v0.10.0
+  ```
+
+The examples below use the native `dbos` executable; substitute
+`java -jar dbos.jar` if you are using the JAR.
+
+### Building the native executable
+
+The native executable is built with [GraalVM Native Image](https://www.graalvm.org/latest/reference-manual/native-image/)
+via the [Gradle native-build-tools plugin](https://graalvm.github.io/native-build-tools/latest/gradle-plugin.html):
 
 ```shell
-$ java -jar dbos.jar --version
-dbos v0.7.0
+./gradlew :transact-cli:nativeCompile
 ```
+
+The build downloads a GraalVM toolchain automatically (via the foojay toolchain
+resolver) and writes the executable to
+`transact-cli/build/native/nativeCompile/dbos`. Native Image requires a local C
+toolchain (`gcc`/`clang`, `glibc`/`zlib` development headers) on the build machine.
 
 ## Configuration
 
@@ -33,13 +60,13 @@ These values can be specified on the command line or via environment variables.
 Example:
 ```bash
 # Using command-line flag (highest priority)
-java -jar dbos.jar migrate --db-url jdbc:postgresql://localhost/mydb -U user -P password
+dbos migrate --db-url jdbc:postgresql://localhost/mydb -U user -P password
 
 # Using environment variable (lowest priority)
 export DBOS_SYSTEM_JDBC_URL=jdbc:postgresql://localhost/mydb
 export PGUSER=user
 export PGPASSWORD=password
-java -jar dbos.jar migrate
+dbos migrate
 ```
 
 ### Database Schema Configuration
@@ -49,10 +76,7 @@ By default, DBOS creates its system tables in the `dbos` schema. You can specify
 Example:
 ```bash
 # Use a custom schema for all DBOS system tables
-java -jar dbos.jar migrate --schema myapp_schema
-
-# All workflow commands will use the specified schema
-java -jar dbos.jar workflow list --schema myapp_schema
+dbos migrate --schema myapp_schema
 ```
 
 ## Commands
@@ -62,11 +86,13 @@ Create DBOS system tables in your database. This command runs the migration comm
 
 **Options:**
 - `-r, --app-role <role>` - The role with which you will run your DBOS application
+- `--[no-]listen-notify` - Use LISTEN/NOTIFY on the DBOS system database (default: enabled). Pass `--no-listen-notify` to disable.
 
 **Usage:**
 ```bash
-java -jar dbos.jar migrate
-java -jar dbos.jar migrate --app-role myapp_role
+dbos migrate
+dbos migrate --app-role myapp_role
+dbos migrate --no-listen-notify
 ```
 
 ### `dbos reset`
@@ -77,116 +103,8 @@ Reset the DBOS system database, deleting metadata about past workflows and steps
 
 **Usage:**
 ```bash
-java -jar dbos.jar reset
-java -jar dbos.jar reset --yes  # Skip confirmation
-```
-
-### `dbos postgres`
-Manage a local PostgreSQL database with Docker for development.
-
-#### `dbos postgres start`
-Start a local Postgres database container with pgvector extension.
-
-**Options:**
-- `-c, --container-name` - Docker container name, defaults to dbos-db
-- `-i, --image-name` - Docker image name, defaults to pgvector/pgvector:pg16
-
-**Usage:**
-```bash
-java -jar dbos.jar postgres start
-```
-
-Creates a PostgreSQL container with:
-- Container name: `dbos-db` (unless overridden by `--container-name`)
-- Port: 5432
-- Default database: `dbos`
-- Default user: `postgres`
-- Default password: `dbos`
-
-#### `dbos postgres stop`
-Stop the local Postgres database container.
-
-**Usage:**
-```bash
-java -jar dbos.jar postgres stop
-```
-**Options:**
-- `-c, --container-name` - Docker container name, defaults to dbos-db
-
-### `dbos workflow`
-Manage DBOS workflows.
-
-#### `dbos workflow list`
-List workflows for your application.
-
-**Options:**
-- `-l, --limit <number>` - Limit the results returned (default: 10)
-- `-o, --offset <number>` - Offset for pagination
-- `-S, --status <status>` - Filter by status (PENDING, SUCCESS, ERROR, ENQUEUED, CANCELLED, or MAX_RECOVERY_ATTEMPTS_EXCEEDED)
-- `-n, --name <name>` - Retrieve workflows with this name
-- `-v, --application-version <version>` - Retrieve workflows with this application version
-- `-s, --start-time <timestamp>` - Retrieve workflows starting after this timestamp (ISO 8601)
-- `-e, --end-time <timestamp>` - Retrieve workflows starting before this timestamp (ISO 8601)
-- `-q, --queue <queue>` - Retrieve workflows on this queue
-- `-Q, --queues-only` - Retrieve only queued workflows
-- `-d, --sort-desc` - Sort the results in descending order (older first)
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow list
-java -jar dbos.jar workflow list --limit 50 --status SUCCESS
-java -jar dbos.jar workflow list --name "ProcessOrder"
-```
-
-#### `dbos workflow get [workflow-id]`
-Retrieve the status of a specific workflow.
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow get abc123def456
-```
-
-Returns detailed information about the workflow including its status, start time, end time, and other metadata.
-
-#### `dbos workflow steps [workflow-id]`
-List the steps of a workflow.
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow steps abc123def456
-```
-
-Shows all the steps executed within a workflow, their status, and execution details.
-
-#### `dbos workflow cancel [workflow-id]`
-Cancel a workflow so it is no longer automatically retried or restarted.
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow cancel abc123def456
-```
-
-#### `dbos workflow resume [workflow-id]`
-Resume a workflow that has been cancelled.
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow resume abc123def456
-```
-
-#### `dbos workflow fork [workflow-id]`
-Fork a workflow from the beginning or from a specific step.
-
-**Options:**
-- `-s, --step <number>` - Restart from this step (default: 1)
-- `-f, --forked-workflow-id <id>` - Custom workflow ID for the forked workflow
-- `-a, --application-version <version>` - Application version for the forked workflow
-
-**Usage:**
-```bash
-java -jar dbos.jar workflow fork abc123def456
-java -jar dbos.jar workflow fork abc123def456 --step 3
-java -jar dbos.jar workflow fork abc123def456 --forked-workflow-id custom-id-123
+dbos reset
+dbos reset --yes  # Skip confirmation
 ```
 
 ### `dbos version`
@@ -194,7 +112,7 @@ Show the version and exit.
 
 **Usage:**
 ```bash
-java -jar dbos.jar --version
+dbos --version
 ```
 
 ## License

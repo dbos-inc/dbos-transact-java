@@ -10,13 +10,12 @@ on:
     SIGNING_KEY:
       required: true
     SIGNING_KEY_PASSWORD:
-      required: true      
+      required: true
   workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -29,7 +28,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Publish
+      - name: Build
+        run: ./gradlew assemble
+
+      # only publish main & release/* builds to maven central
+      - name: Publish to Maven Central
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         run: ./gradlew publishToMavenCentral
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -37,33 +41,141 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
 
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: jars
+          path: transact*/build/libs/*.jar
+
+  # GraalVM Native Image cannot cross-compile, so each platform's binary is
+  # built on its own native runner.
+  #
+  # windows-arm64 is intentionally absent: GraalVM ships no windows-aarch64
+  # Native Image distribution, so native-image cannot run there (even though
+  # GitHub now offers windows-11-arm runners). Windows-on-ARM runs the
+  # windows-x64 binary via the OS's built-in x64 emulation.
+  #
+  # Native images are built on every run and uploaded as build artifacts; the
+  # `release` job only attaches them to a GitHub Release for release builds.
+  build-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    platform: linux-x64,   ext: '' }
+          - { os: ubuntu-24.04-arm, platform: linux-arm64, ext: '' }
+          - { os: macos-latest,     platform: macos-arm64, ext: '' }
+          - { os: macos-13,         platform: macos-x64,   ext: '' }
+          - { os: windows-latest,   platform: windows-x64, ext: '.exe' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # fetch-depth 0 needed for version calculation
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm-community'
+
+      - name: Build native image
+        # auto-download=false forces Gradle to use the GraalVM installed above
+        # rather than re-provisioning a toolchain via the foojay resolver.
+        run: ./gradlew :transact-cli:nativeCompile -Porg.gradle.java.installations.auto-download=false
+        shell: bash
+
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p staged
+          cd transact-cli/build/native/nativeCompile
+          if [ -n "${{ matrix.ext }}" ]; then
+            7z a "$GITHUB_WORKSPACE/staged/dbos-${{ matrix.platform }}.zip" "dbos${{ matrix.ext }}"
+          else
+            tar czf "$GITHUB_WORKSPACE/staged/dbos-${{ matrix.platform }}.tar.gz" dbos
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbos-${{ matrix.platform }}
+          path: staged/*
+
+  release:
+    needs: [publish, build-native]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # fetch-depth 0 needed for version calculation
+
+      - name: Set up OpenJDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
       - name: Get Gradle project version
         id: get_version
         run: |
           VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
-          COMMIT_COUNT=$(./gradlew properties -q | grep '^commitCount:' | awk '{print $2}')
           TAGS=$(git tag --points-at HEAD)
 
-          echo "Project version: $VERSION, commit Count: $COMMIT_COUNT, tags: $TAGS"
+          echo "Project version: $VERSION, tags: $TAGS"
 
           if [ -z "$TAGS" ]; then
             echo "is_tagged=false" >> $GITHUB_OUTPUT
           else
             echo "is_tagged=true" >> $GITHUB_OUTPUT
           fi
+
+          # A final release is bare semver (X.Y.Z); any suffix (-rc, -m, -a) is a prerelease.
+          if echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Download jars
+        uses: actions/download-artifact@v4
+        with:
+          name: jars
+          path: jars
+
+      - name: Download native binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: native
+          pattern: dbos-*
+          merge-multiple: true
+
+      - name: Stage release assets
+        id: stage
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          mkdir -p release-assets
+          # Include the fat CLI jar (dbos.jar) and every other module's jars,
+          # but exclude the thin transact-cli library jar (transact-cli-*.jar).
+          find jars -name '*.jar' ! -name 'transact-cli-*.jar' -exec cp {} release-assets/ \;
+          for f in native/dbos-*; do
+            base=$(basename "$f")        # e.g. dbos-linux-x64.tar.gz
+            rest=${base#dbos-}           # e.g. linux-x64.tar.gz
+            cp "$f" "release-assets/dbos-${VERSION}-${rest}"
+          done
+          ls -la release-assets
 
       - name: Github Release
-        if: |
-          startsWith(github.ref, 'refs/heads/release/v') && 
-          steps.get_version.outputs.is_tagged == 'true'
+        if: steps.get_version.outputs.is_tagged == 'true'
         uses: softprops/action-gh-release@v2.1.0
         with:
           name: ${{ steps.get_version.outputs.version }}
           tag_name: ${{ steps.get_version.outputs.version }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
+          prerelease: ${{ steps.get_version.outputs.prerelease }}
           files: |
-            transact*/build/libs/*.jar
-
+            release-assets/*
