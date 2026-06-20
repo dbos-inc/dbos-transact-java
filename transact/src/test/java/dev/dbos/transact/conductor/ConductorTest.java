@@ -567,7 +567,8 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      // "body" must be an object for list_workflows; passing a string causes deserialization failure
+      // "body" must be an object for list_workflows; passing a string causes deserialization
+      // failure
       listener.sendRawJson(
           "{\"type\":\"list_workflows\",\"request_id\":\"req-bad-body-99\",\"body\":\"not-an-object\"}");
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");

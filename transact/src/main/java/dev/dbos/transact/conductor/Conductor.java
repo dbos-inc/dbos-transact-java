@@ -256,7 +256,8 @@ public class Conductor implements AutoCloseable {
         try {
           writeFragmentedResponse(
               ws,
-              new BaseResponse(typeNode.stringValue(), requestIdNode.stringValue(), "Unknown message type"),
+              new BaseResponse(
+                  typeNode.stringValue(), requestIdNode.stringValue(), "Unknown message type"),
               mapper);
         } catch (Exception e) {
           logger.error("Error writing unknown-type error response", e);
@@ -751,7 +752,8 @@ public class Conductor implements AutoCloseable {
       case CANCEL -> handleCancel(this, (CancelRequest) message);
       case DELETE -> handleDelete(this, (DeleteRequest) message);
       case EXECUTOR_INFO -> handleExecutorInfo(this, (ExecutorInfoRequest) message);
-      case EXIST_PENDING_WORKFLOWS -> handleExistPendingWorkflows(this, (ExistPendingWorkflowsRequest) message);
+      case EXIST_PENDING_WORKFLOWS ->
+          handleExistPendingWorkflows(this, (ExistPendingWorkflowsRequest) message);
       case EXPORT_WORKFLOW -> handleExportWorkflow(this, (ExportWorkflowRequest) message, ws);
       case FORK_FROM_FAILURE -> handleForkFromFailure(this, (ForkFromFailureRequest) message);
       case FORK_WORKFLOW -> handleFork(this, (ForkWorkflowRequest) message);
@@ -759,14 +761,19 @@ public class Conductor implements AutoCloseable {
       case GET_QUEUE -> handleGetQueue(this, (GetQueueRequest) message);
       case GET_SCHEDULE -> handleGetSchedule(this, (GetScheduleRequest) message);
       case GET_STEP_AGGREGATES -> handleGetStepAggregates(this, (GetStepAggregatesRequest) message);
-      case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, (GetWorkflowAggregatesRequest) message);
+      case GET_WORKFLOW_AGGREGATES ->
+          handleGetWorkflowAggregates(this, (GetWorkflowAggregatesRequest) message);
       case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, (GetWorkflowEventsRequest) message);
-      case GET_WORKFLOW_NOTIFICATIONS -> handleGetWorkflowNotifications(this, (GetWorkflowNotificationsRequest) message);
-      case GET_WORKFLOW_STREAMS -> handleGetWorkflowStreams(this, (GetWorkflowStreamsRequest) message);
+      case GET_WORKFLOW_NOTIFICATIONS ->
+          handleGetWorkflowNotifications(this, (GetWorkflowNotificationsRequest) message);
+      case GET_WORKFLOW_STREAMS ->
+          handleGetWorkflowStreams(this, (GetWorkflowStreamsRequest) message);
       case GET_WORKFLOW -> handleGetWorkflow(this, (GetWorkflowRequest) message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, (ImportWorkflowRequest) message);
-      case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, (ListApplicationVersionsRequest) message);
-      case LIST_QUEUED_WORKFLOWS -> handleListQueuedWorkflows(this, (ListQueuedWorkflowsRequest) message);
+      case LIST_APPLICATION_VERSIONS ->
+          handleListApplicationVersions(this, (ListApplicationVersionsRequest) message);
+      case LIST_QUEUED_WORKFLOWS ->
+          handleListQueuedWorkflows(this, (ListQueuedWorkflowsRequest) message);
       case LIST_QUEUES -> handleListQueues(this, (ListQueuesRequest) message);
       case LIST_SCHEDULES -> handleListSchedules(this, (ListSchedulesRequest) message);
       case LIST_STEPS -> handleListSteps(this, (ListStepsRequest) message);
@@ -777,7 +784,8 @@ public class Conductor implements AutoCloseable {
       case RESUME -> handleResume(this, (ResumeRequest) message);
       case RESUME_SCHEDULE -> handleResumeSchedule(this, (ResumeScheduleRequest) message);
       case RETENTION -> handleRetention(this, (RetentionRequest) message);
-      case SET_LATEST_APPLICATION_VERSION -> handleSetLatestApplicationVersion(this, (SetLatestApplicationVersionRequest) message);
+      case SET_LATEST_APPLICATION_VERSION ->
+          handleSetLatestApplicationVersion(this, (SetLatestApplicationVersionRequest) message);
       case TRIGGER_SCHEDULE -> handleTriggerSchedule(this, (TriggerScheduleRequest) message);
     };
   }
@@ -799,7 +807,8 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleRecovery(Conductor conductor, RecoveryRequest request) {
+  static CompletableFuture<BaseResponse> handleRecovery(
+      Conductor conductor, RecoveryRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
@@ -863,7 +872,8 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleRestart(Conductor conductor, RestartRequest request) {
+  static CompletableFuture<BaseResponse> handleRestart(
+      Conductor conductor, RestartRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
@@ -878,7 +888,8 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleFork(Conductor conductor, ForkWorkflowRequest request) {
+  static CompletableFuture<BaseResponse> handleFork(
+      Conductor conductor, ForkWorkflowRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
           if (request.body.workflow_id == null || request.body.start_step == null) {
@@ -980,7 +991,8 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleListSteps(Conductor conductor, ListStepsRequest request) {
+  static CompletableFuture<BaseResponse> handleListSteps(
+      Conductor conductor, ListStepsRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
@@ -1032,10 +1044,10 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleRetention(Conductor conductor, RetentionRequest request) {
+  static CompletableFuture<BaseResponse> handleRetention(
+      Conductor conductor, RetentionRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
-
           try {
             var cutoff =
                 request.body.gc_cutoff_epoch_ms == null
@@ -1065,7 +1077,6 @@ public class Conductor implements AutoCloseable {
       Conductor conductor, GetMetricsRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
-
           try {
             if (request.metric_class.equals("workflow_step_count")) {
               var metrics =
@@ -1452,7 +1463,8 @@ public class Conductor implements AutoCloseable {
         });
   }
 
-  static CompletableFuture<BaseResponse> handleGetQueue(Conductor conductor, GetQueueRequest request) {
+  static CompletableFuture<BaseResponse> handleGetQueue(
+      Conductor conductor, GetQueueRequest request) {
     return CompletableFuture.supplyAsync(
         () -> {
           try {

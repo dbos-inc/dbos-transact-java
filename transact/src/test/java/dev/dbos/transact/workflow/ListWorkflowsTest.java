@@ -888,16 +888,14 @@ public class ListWorkflowsTest {
     // completedAfter(+1150): wf-alpha-2 and wf-gamma-1 = 2
     List<WorkflowStatus> after =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withCompletedAfter(Instant.ofEpochMilli(baseTime + 1150)));
+            new ListWorkflowsInput().withCompletedAfter(Instant.ofEpochMilli(baseTime + 1150)));
     assertEquals(2, after.size());
     after.forEach(wf -> assertTrue(wf.completedAt().toEpochMilli() >= baseTime + 1150));
 
     // completedBefore(+1150): wf-alpha-1 = 1
     List<WorkflowStatus> before =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withCompletedBefore(Instant.ofEpochMilli(baseTime + 1150)));
+            new ListWorkflowsInput().withCompletedBefore(Instant.ofEpochMilli(baseTime + 1150)));
     assertEquals(1, before.size());
     assertEquals("wf-alpha-1", before.get(0).workflowId());
 
@@ -915,8 +913,7 @@ public class ListWorkflowsTest {
     // completedAfter past all — null-completed_at rows excluded = 0
     List<WorkflowStatus> none =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withCompletedAfter(Instant.ofEpochMilli(baseTime + 2000)));
+            new ListWorkflowsInput().withCompletedAfter(Instant.ofEpochMilli(baseTime + 2000)));
     assertEquals(0, none.size());
   }
 
@@ -927,16 +924,14 @@ public class ListWorkflowsTest {
     // dequeuedAfter(+2050): both wf-beta-1 and wf-gamma-2 = 2
     List<WorkflowStatus> after =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withDequeuedAfter(Instant.ofEpochMilli(baseTime + 2050)));
+            new ListWorkflowsInput().withDequeuedAfter(Instant.ofEpochMilli(baseTime + 2050)));
     assertEquals(2, after.size());
     after.forEach(wf -> assertTrue(wf.startedAt().toEpochMilli() >= baseTime + 2050));
 
     // dequeuedBefore(+2150): only wf-beta-1 (+2100) = 1
     List<WorkflowStatus> before =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withDequeuedBefore(Instant.ofEpochMilli(baseTime + 2150)));
+            new ListWorkflowsInput().withDequeuedBefore(Instant.ofEpochMilli(baseTime + 2150)));
     assertEquals(1, before.size());
     assertEquals("wf-beta-1", before.get(0).workflowId());
 
@@ -952,8 +947,7 @@ public class ListWorkflowsTest {
     // dequeuedAfter past all — null-started_at rows excluded = 0
     List<WorkflowStatus> none =
         dbos.listWorkflows(
-            new ListWorkflowsInput()
-                .withDequeuedAfter(Instant.ofEpochMilli(baseTime + 3000)));
+            new ListWorkflowsInput().withDequeuedAfter(Instant.ofEpochMilli(baseTime + 3000)));
     assertEquals(0, none.size());
   }
 
