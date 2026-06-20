@@ -26,6 +26,10 @@ public class ListWorkflowsRequest extends BaseMessage {
 
     public String start_time;
     public String end_time;
+    public String completed_after;
+    public String completed_before;
+    public String dequeued_after;
+    public String dequeued_before;
 
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> status;
@@ -85,6 +89,10 @@ public class ListWorkflowsRequest extends BaseMessage {
         body.parent_workflow_id,
         body.was_forked_from,
         body.has_parent,
-        body.attributes);
+        body.attributes,
+        body.completed_after != null ? Instant.parse(body.completed_after) : null,
+        body.completed_before != null ? Instant.parse(body.completed_before) : null,
+        body.dequeued_after != null ? Instant.parse(body.dequeued_after) : null,
+        body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null);
   }
 }

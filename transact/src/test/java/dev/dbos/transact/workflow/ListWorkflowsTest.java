@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
  * ListWorkflowsInput} can be exercised deterministically and without the overhead of actually
  * running workflows.
  *
- * <p>Test data (10 rows, created_at = baseTime + offset ms):
+ * <p>Test data (11 rows, created_at = baseTime + offset ms):
  *
  * <pre>
  *  UUID          | status    | name    | class  | config | queue | exec   | ver  | user   | parent     | forkedFrom | +ms
@@ -42,7 +42,14 @@ import org.junit.jupiter.api.*;
  *  wf-delayed-1  | DELAYED   | delayed | ClassD | instC  | q4    | exec-2 | v1.0 | user-b | -          | -          | +750
  * </pre>
  *
- * Status totals: SUCCESS=5, ERROR=1, ENQUEUED=2, PENDING=1, CANCELLED=1, DELAYED=1
+ * <p>Status totals: SUCCESS=5, ERROR=1, ENQUEUED=2, PENDING=1, CANCELLED=1, DELAYED=1
+ *
+ * <p>Additional columns set via UPDATE after the main insert:
+ *
+ * <ul>
+ *   <li>{@code completed_at}: wf-alpha-1=+1100, wf-alpha-2=+1200, wf-gamma-1=+1600 (others null)
+ *   <li>{@code started_at_epoch_ms} (dequeued-at): wf-beta-1=+2100, wf-gamma-2=+2200 (others null)
+ * </ul>
  */
 public class ListWorkflowsTest {
 
@@ -260,6 +267,41 @@ public class ListWorkflowsTest {
                 "UPDATE \"dbos\".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ?")) {
       ps2.setString(1, "wf-alpha-1");
       ps2.executeUpdate();
+    }
+
+    // Set completed_at for three completed workflows
+    try (var conn = dataSource.getConnection();
+        var ps3 =
+            conn.prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET completed_at = ? WHERE workflow_uuid = ?")) {
+      Object[][] completions = {
+        {baseTime + 1100, "wf-alpha-1"},
+        {baseTime + 1200, "wf-alpha-2"},
+        {baseTime + 1600, "wf-gamma-1"},
+      };
+      for (Object[] row : completions) {
+        ps3.setLong(1, (Long) row[0]);
+        ps3.setString(2, (String) row[1]);
+        ps3.addBatch();
+      }
+      ps3.executeBatch();
+    }
+
+    // Set started_at_epoch_ms (dequeued-at) for two queued workflows
+    try (var conn = dataSource.getConnection();
+        var ps4 =
+            conn.prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET started_at_epoch_ms = ? WHERE workflow_uuid = ?")) {
+      Object[][] dequeued = {
+        {baseTime + 2100, "wf-beta-1"},
+        {baseTime + 2200, "wf-gamma-2"},
+      };
+      for (Object[] row : dequeued) {
+        ps4.setLong(1, (Long) row[0]);
+        ps4.setString(2, (String) row[1]);
+        ps4.addBatch();
+      }
+      ps4.executeBatch();
     }
   }
 
@@ -837,6 +879,82 @@ public class ListWorkflowsTest {
             new ListWorkflowsInput().withParentWorkflowId(List.of("wf-alpha-1", "wf-gamma-1")));
     assertEquals(1, parentMulti.size());
     assertEquals("wf-child-1", parentMulti.get(0).workflowId());
+  }
+
+  @Test
+  public void testFilterByCompletedAt() throws Exception {
+    // Only wf-alpha-1 (+1100), wf-alpha-2 (+1200), wf-gamma-1 (+1600) have completed_at set.
+
+    // completedAfter(+1150): wf-alpha-2 and wf-gamma-1 = 2
+    List<WorkflowStatus> after =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withCompletedAfter(Instant.ofEpochMilli(baseTime + 1150)));
+    assertEquals(2, after.size());
+    after.forEach(wf -> assertTrue(wf.completedAt().toEpochMilli() >= baseTime + 1150));
+
+    // completedBefore(+1150): wf-alpha-1 = 1
+    List<WorkflowStatus> before =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withCompletedBefore(Instant.ofEpochMilli(baseTime + 1150)));
+    assertEquals(1, before.size());
+    assertEquals("wf-alpha-1", before.get(0).workflowId());
+
+    // completedAfter(+1050) + completedBefore(+1250): wf-alpha-1 and wf-alpha-2 = 2
+    List<WorkflowStatus> window =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withCompletedAfter(Instant.ofEpochMilli(baseTime + 1050))
+                .withCompletedBefore(Instant.ofEpochMilli(baseTime + 1250)));
+    assertEquals(2, window.size());
+    var windowIds = window.stream().map(WorkflowStatus::workflowId).toList();
+    assertTrue(windowIds.contains("wf-alpha-1"));
+    assertTrue(windowIds.contains("wf-alpha-2"));
+
+    // completedAfter past all — null-completed_at rows excluded = 0
+    List<WorkflowStatus> none =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withCompletedAfter(Instant.ofEpochMilli(baseTime + 2000)));
+    assertEquals(0, none.size());
+  }
+
+  @Test
+  public void testFilterByDequeuedAt() throws Exception {
+    // Only wf-beta-1 (+2100) and wf-gamma-2 (+2200) have started_at_epoch_ms set.
+
+    // dequeuedAfter(+2050): both wf-beta-1 and wf-gamma-2 = 2
+    List<WorkflowStatus> after =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withDequeuedAfter(Instant.ofEpochMilli(baseTime + 2050)));
+    assertEquals(2, after.size());
+    after.forEach(wf -> assertTrue(wf.startedAt().toEpochMilli() >= baseTime + 2050));
+
+    // dequeuedBefore(+2150): only wf-beta-1 (+2100) = 1
+    List<WorkflowStatus> before =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withDequeuedBefore(Instant.ofEpochMilli(baseTime + 2150)));
+    assertEquals(1, before.size());
+    assertEquals("wf-beta-1", before.get(0).workflowId());
+
+    // dequeuedAfter(+2050) + dequeuedBefore(+2150): only wf-beta-1 = 1
+    List<WorkflowStatus> window =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withDequeuedAfter(Instant.ofEpochMilli(baseTime + 2050))
+                .withDequeuedBefore(Instant.ofEpochMilli(baseTime + 2150)));
+    assertEquals(1, window.size());
+    assertEquals("wf-beta-1", window.get(0).workflowId());
+
+    // dequeuedAfter past all — null-started_at rows excluded = 0
+    List<WorkflowStatus> none =
+        dbos.listWorkflows(
+            new ListWorkflowsInput()
+                .withDequeuedAfter(Instant.ofEpochMilli(baseTime + 3000)));
+    assertEquals(0, none.size());
   }
 
   @Test

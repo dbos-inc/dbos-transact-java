@@ -16,6 +16,10 @@ public record ListWorkflowsRequest(
     @JsonDeserialize(using = StringOrListDeserializer.class) List<String> authenticated_user,
     String start_time,
     String end_time,
+    String completed_after,
+    String completed_before,
+    String dequeued_after,
+    String dequeued_before,
     @JsonDeserialize(using = StringOrListDeserializer.class) List<String> status,
     @JsonDeserialize(using = StringOrListDeserializer.class) List<String> application_version,
     @JsonDeserialize(using = StringOrListDeserializer.class) List<String> fork_from,
@@ -53,7 +57,10 @@ public record ListWorkflowsRequest(
         parent_workflow_id,
         null, // wasForkedFrom
         null, // hasParent
-        null // attributes
-        );
+        null, // attributes
+        completed_after != null ? Instant.parse(completed_after) : null,
+        completed_before != null ? Instant.parse(completed_before) : null,
+        dequeued_after != null ? Instant.parse(dequeued_after) : null,
+        dequeued_before != null ? Instant.parse(dequeued_before) : null);
   }
 }

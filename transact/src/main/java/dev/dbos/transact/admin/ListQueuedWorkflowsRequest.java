@@ -49,7 +49,11 @@ public record ListQueuedWorkflowsRequest(
         parent_workflow_id,
         null, // wasForkedFrom
         null, // hasParent
-        null // attributes
+        null, // attributes
+        null, // completedAfter
+        null, // completedBefore
+        null, // dequeuedAfter
+        null // dequeuedBefore
         );
   }
 }

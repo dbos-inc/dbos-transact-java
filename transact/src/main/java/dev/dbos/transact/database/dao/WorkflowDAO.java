@@ -728,6 +728,22 @@ public class WorkflowDAO {
       whereConditions.add("created_at <= ?");
       parameters.add(input.endTime().toEpochMilli());
     }
+    if (input.completedAfter() != null) {
+      whereConditions.add("completed_at >= ?");
+      parameters.add(input.completedAfter().toEpochMilli());
+    }
+    if (input.completedBefore() != null) {
+      whereConditions.add("completed_at <= ?");
+      parameters.add(input.completedBefore().toEpochMilli());
+    }
+    if (input.dequeuedAfter() != null) {
+      whereConditions.add("started_at_epoch_ms >= ?");
+      parameters.add(input.dequeuedAfter().toEpochMilli());
+    }
+    if (input.dequeuedBefore() != null) {
+      whereConditions.add("started_at_epoch_ms <= ?");
+      parameters.add(input.dequeuedBefore().toEpochMilli());
+    }
     if (input.status() != null && !input.status().isEmpty()) {
       whereConditions.add("status = ANY(?)");
       parameters.add(input.status());

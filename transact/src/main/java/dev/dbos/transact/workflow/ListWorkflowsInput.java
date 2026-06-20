@@ -35,7 +35,11 @@ public record ListWorkflowsInput(
     List<String> parentWorkflowId,
     Boolean wasForkedFrom,
     Boolean hasParent,
-    Map<String, Object> attributes) {
+    Map<String, Object> attributes,
+    Instant completedAfter,
+    Instant completedBefore,
+    Instant dequeuedAfter,
+    Instant dequeuedBefore) {
 
   // Validate the attributes filter here (every convenience constructor, withX copy, and the
   // conductor/admin asInput() paths route through this canonical constructor) so an invalid filter
@@ -47,7 +51,7 @@ public record ListWorkflowsInput(
   public ListWorkflowsInput() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public ListWorkflowsInput(String workflowId) {
@@ -57,6 +61,10 @@ public record ListWorkflowsInput(
   public ListWorkflowsInput(List<String> workflowIds) {
     this(
         workflowIds,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,
@@ -106,7 +114,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withStatus(List<WorkflowState> status) {
@@ -133,7 +145,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withStartTime(Instant startTime) {
@@ -160,7 +176,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withEndTime(Instant endTime) {
@@ -187,7 +207,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withWorkflowName(List<String> workflowName) {
@@ -214,7 +238,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withClassName(String className) {
@@ -241,7 +269,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withInstanceName(String instanceName) {
@@ -268,7 +300,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withApplicationVersion(List<String> applicationVersion) {
@@ -295,7 +331,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withAuthenticatedUser(List<String> authenticatedUser) {
@@ -322,7 +362,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withLimit(Integer limit) {
@@ -349,7 +393,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withOffset(Integer offset) {
@@ -376,7 +424,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withSortDesc(Boolean sortDesc) {
@@ -403,7 +455,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -430,7 +486,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withLoadInput(Boolean loadInput) {
@@ -457,7 +517,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withLoadOutput(Boolean loadOutput) {
@@ -484,7 +548,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withQueueName(List<String> queueName) {
@@ -511,7 +579,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withQueuesOnly(Boolean queuesOnly) {
@@ -538,7 +610,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withExecutorIds(List<String> executorIds) {
@@ -565,7 +641,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withForkedFrom(List<String> forkedFrom) {
@@ -592,7 +672,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withParentWorkflowId(List<String> parentWorkflowId) {
@@ -619,7 +703,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withWasForkedFrom(Boolean wasForkedFrom) {
@@ -646,7 +734,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withHasParent(Boolean hasParent) {
@@ -673,7 +765,11 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   public ListWorkflowsInput withAttributes(Map<String, Object> attributes) {
@@ -700,7 +796,135 @@ public record ListWorkflowsInput(
         parentWorkflowId,
         wasForkedFrom,
         hasParent,
-        attributes);
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public ListWorkflowsInput withCompletedAfter(Instant completedAfter) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public ListWorkflowsInput withCompletedBefore(Instant completedBefore) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public ListWorkflowsInput withDequeuedAfter(Instant dequeuedAfter) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
+  }
+
+  public ListWorkflowsInput withDequeuedBefore(Instant dequeuedBefore) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore);
   }
 
   // Single value overloads for list parameters
