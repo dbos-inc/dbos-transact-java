@@ -41,7 +41,11 @@ public class GetWorkflowRequest extends BaseMessage {
         null, // parentWorkflowId
         null, // wasForkedFrom
         null, // hasParent
-        null // attributes
+        null, // attributes
+        null, // completedAfter
+        null, // completedBefore
+        null, // dequeuedAfter
+        null // dequeuedBefore
         );
   }
 }

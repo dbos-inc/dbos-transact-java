@@ -326,6 +326,17 @@ public class ConductorTest {
       this.webSocket.sendFragmentedFrame(Opcode.TEXT, lastChunk, true);
     }
 
+    public void sendRawJson(String json) {
+      this.webSocket.send(json);
+    }
+
+    public void sendRaw(String type, String requestId) throws Exception {
+      Map<String, Object> msg = new LinkedHashMap<>();
+      msg.put("type", type);
+      msg.put("request_id", requestId);
+      this.webSocket.send(ConductorTest.mapper.writeValueAsString(msg));
+    }
+
     public void send(MessageType type, String requestId, Map<String, Object> fields, int chunkSize)
         throws Exception {
       logger.debug("sending {}", type.getValue());
@@ -524,6 +535,49 @@ public class ConductorTest {
       assertEquals(DBOS.version(), jsonNode.get("dbos_version").stringValue());
       assertNull(jsonNode.get("error_message"));
       assertEquals("{}", jsonNode.get("executor_metadata").toString());
+    }
+  }
+
+  @RetryingTest(3)
+  public void unknownMessageTypeReturnsErrorResponse() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.sendRaw("not_a_real_message_type", "req-unknown-42");
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode response = mapper.readTree(listener.message);
+      assertEquals("not_a_real_message_type", response.get("type").stringValue());
+      assertEquals("req-unknown-42", response.get("request_id").stringValue());
+      assertNotNull(response.get("error_message"));
+      assertTrue(response.get("error_message").stringValue().toLowerCase().contains("unknown"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void malformedMessageBodyReturnsErrorResponse() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // "body" must be an object for list_workflows; passing a string causes deserialization
+      // failure
+      listener.sendRawJson(
+          "{\"type\":\"list_workflows\",\"request_id\":\"req-bad-body-99\",\"body\":\"not-an-object\"}");
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode response = mapper.readTree(listener.message);
+      assertEquals("list_workflows", response.get("type").stringValue());
+      assertEquals("req-bad-body-99", response.get("request_id").stringValue());
+      assertNotNull(response.get("error_message"));
+      assertFalse(response.get("error_message").stringValue().isEmpty());
     }
   }
 

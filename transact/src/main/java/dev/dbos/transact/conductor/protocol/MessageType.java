@@ -52,7 +52,7 @@ public enum MessageType {
         return type;
       }
     }
-    throw new IllegalArgumentException("Unknown message type: " + value);
+    return null;
   }
 
   @Override
