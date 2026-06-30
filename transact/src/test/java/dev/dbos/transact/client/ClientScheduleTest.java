@@ -183,7 +183,7 @@ public class ClientScheduleTest {
       var replaced = client.getSchedule("apply-1").orElseThrow();
       assertEquals("0/10 * * * * *", replaced.cron());
       assertNotNull(replaced.id());
-      assertNotEquals(originalId, replaced.id()); // new UUID assigned
+      assertEquals(originalId, replaced.id()); // schedule_id preserved across upsert
       assertNull(replaced.lastFiredAt());
       var created = client.getSchedule("apply-2").orElseThrow();
       assertNotNull(created.id());

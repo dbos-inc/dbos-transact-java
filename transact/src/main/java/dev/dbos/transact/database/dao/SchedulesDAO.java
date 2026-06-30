@@ -239,8 +239,7 @@ public class SchedulesDAO {
       conn.setAutoCommit(false);
       try {
         for (WorkflowSchedule schedule : schedules) {
-          deleteSchedule(conn, ctx.schema(), schedule.scheduleName());
-          createSchedule(
+          upsertSchedule(
               conn,
               ctx.schema(),
               ctx.serializer(),
@@ -254,6 +253,55 @@ public class SchedulesDAO {
         conn.rollback();
         throw e;
       }
+    }
+  }
+
+  // Idempotent upsert by schedule_name, so concurrent applySchedules calls for the same name
+  // can't race each other into a duplicate-key error. On conflict, schedule_id, status, and
+  // last_fired_at are preserved from the existing row; the poller detects the changed
+  // definition and restarts the schedule's future.
+  private static void upsertSchedule(
+      Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
+      throws SQLException {
+
+    SchedulerService.CRON_PARSER.parse(schedule.cron());
+
+    String sql =
+        """
+        INSERT INTO "%s".workflow_schedules
+            (schedule_id, schedule_name, workflow_name, workflow_class_name,
+             schedule, status, context, last_fired_at, automatic_backfill,
+             cron_timezone, queue_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (schedule_name) DO UPDATE SET
+            workflow_name = EXCLUDED.workflow_name,
+            workflow_class_name = EXCLUDED.workflow_class_name,
+            schedule = EXCLUDED.schedule,
+            context = EXCLUDED.context,
+            automatic_backfill = EXCLUDED.automatic_backfill,
+            cron_timezone = EXCLUDED.cron_timezone,
+            queue_name = EXCLUDED.queue_name
+        """
+            .formatted(schema);
+
+    var serializedContext =
+        SerializationUtil.serializeValue(
+            schedule.context(), serializer != null ? serializer.name() : null, serializer);
+
+    var timeZone = schedule.cronTimezone() == null ? null : schedule.cronTimezone().getId();
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, schedule.id() != null ? schedule.id() : UUID.randomUUID().toString());
+      ps.setString(2, schedule.scheduleName());
+      ps.setString(3, schedule.workflowName());
+      ps.setString(4, schedule.className());
+      ps.setString(5, schedule.cron());
+      ps.setString(6, schedule.status().name());
+      ps.setString(7, serializedContext.serializedValue());
+      ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
+      ps.setBoolean(9, schedule.automaticBackfill());
+      ps.setString(10, timeZone);
+      ps.setString(11, schedule.queueName());
+      ps.executeUpdate();
     }
   }
 
