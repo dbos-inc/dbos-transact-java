@@ -42,7 +42,7 @@ public class SchedulesDAO {
     // language
     Objects.requireNonNull(schedule.status(), "status must not be null");
     Objects.requireNonNull(schedule.cron(), "cron must not be null");
-    SchedulerService.CRON_PARSER.parse(schedule.cron());
+    SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
 
     String sql =
         """
@@ -264,7 +264,7 @@ public class SchedulesDAO {
       Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
       throws SQLException {
 
-    SchedulerService.CRON_PARSER.parse(schedule.cron());
+    SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
 
     String sql =
         """

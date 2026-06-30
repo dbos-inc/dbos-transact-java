@@ -247,7 +247,6 @@ public class SchedulerService implements AutoCloseable {
     }
 
     var running = new RunningSchedule(schedule);
-    runningSchedules.put(schedule.id(), running);
 
     var task =
         new Runnable() {
@@ -259,10 +258,13 @@ public class SchedulerService implements AutoCloseable {
 
           ZonedDateTime nextTime = ZonedDateTime.now(timeZone);
 
-          public void schedule() {
-            executionTime
+          // Returns true if a future was scheduled for the next execution, false if the cron
+          // expression has no next execution (eg. a day-of-month/month combination that can
+          // never occur, like April 31st).
+          public boolean schedule() {
+            return executionTime
                 .nextExecution(nextTime)
-                .ifPresent(
+                .map(
                     cronTime -> {
                       this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
                       var prevFuture =
@@ -277,7 +279,9 @@ public class SchedulerService implements AutoCloseable {
                         }
                         prevFuture.cancel(false);
                       }
-                    });
+                      return true;
+                    })
+                .orElse(false);
           }
 
           @Override
@@ -320,7 +324,14 @@ public class SchedulerService implements AutoCloseable {
           }
         };
 
-    task.schedule();
+    if (task.schedule()) {
+      runningSchedules.put(schedule.id(), running);
+    } else {
+      logger.error(
+          "Workflow schedule {} cron expression {} has no upcoming execution; not starting",
+          schedule.scheduleName(),
+          schedule.cron());
+    }
   }
 
   private ScheduledFuture<?> scheduleTask(ZonedDateTime nextTime, Runnable task) {

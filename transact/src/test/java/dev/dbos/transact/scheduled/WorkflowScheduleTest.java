@@ -309,6 +309,10 @@ class WorkflowScheduleTest {
       }
     } finally {
       executor.shutdown();
+      if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+        executor.shutdownNow();
+        fail("executor did not terminate promptly");
+      }
     }
 
     var schedules = dbos.listSchedules(null, null, null);
