@@ -34,11 +34,10 @@ import org.slf4j.LoggerFactory;
 
 public class SchedulerService implements AutoCloseable {
 
-  // Tracks a running schedule: the definition fields are a snapshot used to detect definition
-  // changes, the future is the currently scheduled task which is replaced on every firing.
-  // Context is compared as its raw serialized string (from ScheduleRecord) rather than the
-  // deserialized value, since the deserialized value's class may not implement a meaningful
-  // equals().
+  // Tracks a running schedule: the definition fields are a snapshot of the schedule fields used to
+  // detect changes, the future is the currently scheduled task which is replaced on every firing.
+  // Context is compared as its raw serialized string since the deserialized value's class may not
+  // implement a meaningful equals().
   private record RunningSchedule(
       String workflowName,
       String className,
@@ -46,7 +45,10 @@ public class SchedulerService implements AutoCloseable {
       String context,
       ZoneId cronTimezone,
       String queueName,
-      AtomicReference<ScheduledFuture<?>> future) {
+      AtomicReference<ScheduledFuture<?>> future,
+      // Set by cancelWorkflowSchedule so a task that's already mid-execution won't reschedule
+      // itself after being removed from the map.
+      AtomicBoolean canceled) {
 
     RunningSchedule(ScheduleRecord record) {
       this(
@@ -56,7 +58,8 @@ public class SchedulerService implements AutoCloseable {
           record.context(),
           record.cronTimezone(),
           record.queueName(),
-          new AtomicReference<>());
+          new AtomicReference<>(),
+          new AtomicBoolean());
     }
 
     boolean matches(ScheduleRecord record) {
@@ -89,8 +92,7 @@ public class SchedulerService implements AutoCloseable {
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, RunningSchedule> runningSchedules =
       new ConcurrentHashMap<>();
-  // Ensures the fast-path poll and the regular fixed-rate poll never run concurrently, which would
-  // otherwise race when scheduling new workflow futures.
+  // Ensure the fast-path poll and the regular fixed-rate poll never run concurrently
   private final ReentrantLock pollLock = new ReentrantLock();
 
   public SchedulerService(
@@ -265,15 +267,18 @@ public class SchedulerService implements AutoCloseable {
 
           // Returns true if a future was scheduled for the next execution, false if the cron
           // expression has no next execution (eg. a day-of-month/month combination that can
-          // never occur, like April 31st).
+          // never occur, like April 31st) or if the schedule was already canceled.
           public boolean schedule() {
+            if (running.canceled().get()) {
+              return false;
+            }
             return executionTime
                 .nextExecution(nextTime)
                 .map(
                     cronTime -> {
                       this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
-                      var prevFuture =
-                          running.future().getAndSet(scheduleTask(this.nextTime, this));
+                      var newFuture = scheduleTask(this.nextTime, this);
+                      var prevFuture = running.future().getAndSet(newFuture);
                       // prevFuture should be null or a scheduled task that already fired.
                       // cancel it anyway just to be sure
                       if (prevFuture != null) {
@@ -283,6 +288,11 @@ public class SchedulerService implements AutoCloseable {
                               wfSchedule.scheduleName());
                         }
                         prevFuture.cancel(false);
+                      }
+                      // Cancel the future if the schedule has been cancelled since check at the top
+                      // of the schedule() method
+                      if (running.canceled().get() && newFuture != null) {
+                        newFuture.cancel(false);
                       }
                       return true;
                     })
@@ -294,6 +304,10 @@ public class SchedulerService implements AutoCloseable {
             // if execServiceRef is null, the scheduler service was shut down so don't start
             // the workflow or schedule the next execution
             if (execServiceRef.get() == null) {
+              return;
+            }
+            // Also don't execute or schedule next execution if the schedule is cancelled
+            if (running.canceled().get()) {
               return;
             }
 
@@ -360,6 +374,8 @@ public class SchedulerService implements AutoCloseable {
   private void cancelWorkflowSchedule(String scheduleId) {
     var running = runningSchedules.remove(scheduleId);
     if (running != null) {
+      // Set before reading future() so a task mid-execution sees it once it reschedules itself.
+      running.canceled().set(true);
       var future = running.future().get();
       if (future != null) {
         future.cancel(false);
