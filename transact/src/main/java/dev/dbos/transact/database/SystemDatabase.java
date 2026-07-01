@@ -6,6 +6,7 @@ import dev.dbos.transact.database.dao.ApplicationVersionDAO;
 import dev.dbos.transact.database.dao.ExternalStateDAO;
 import dev.dbos.transact.database.dao.NotificationsDAO;
 import dev.dbos.transact.database.dao.QueuesDAO;
+import dev.dbos.transact.database.dao.ScheduleRecord;
 import dev.dbos.transact.database.dao.SchedulesDAO;
 import dev.dbos.transact.database.dao.StepsDAO;
 import dev.dbos.transact.database.dao.StreamsDAO;
@@ -610,6 +611,19 @@ public class SystemDatabase implements AutoCloseable {
       List<String> scheduleNamePrefixes) {
     return dbRetry(
         () -> SchedulesDAO.listSchedules(ctx, statuses, workflowNames, scheduleNamePrefixes));
+  }
+
+  // Raw form of listSchedules used by the scheduler's poller; see ScheduleRecord for why.
+  public List<ScheduleRecord> listScheduleRecords(
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes) {
+    return dbRetry(
+        () -> SchedulesDAO.listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes));
+  }
+
+  public @Nullable DBOSSerializer serializer() {
+    return ctx.serializer();
   }
 
   public void pauseSchedule(String name) {

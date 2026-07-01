@@ -42,7 +42,7 @@ public class SchedulesDAO {
     // language
     Objects.requireNonNull(schedule.status(), "status must not be null");
     Objects.requireNonNull(schedule.cron(), "cron must not be null");
-    SchedulerService.CRON_PARSER.parse(schedule.cron());
+    SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
 
     String sql =
         """
@@ -87,8 +87,21 @@ public class SchedulesDAO {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes)
       throws SQLException {
+    return listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes).stream()
+        .map(r -> r.toWorkflowSchedule(ctx.serializer()))
+        .toList();
+  }
 
-    DBOSSerializer serializer = ctx.serializer();
+  // Raw form of listSchedules: keeps context as its serialized string instead of deserializing it.
+  // Used by the scheduler's poller to detect definition changes without relying on the equals() of
+  // whatever type the deserialized context happens to be.
+  public static List<ScheduleRecord> listScheduleRecords(
+      DbContext ctx,
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes)
+      throws SQLException {
+
     StringBuilder sql =
         new StringBuilder(
             """
@@ -135,9 +148,9 @@ public class SchedulesDAO {
           }
         }
         try (ResultSet rs = ps.executeQuery()) {
-          List<WorkflowSchedule> results = new ArrayList<>();
+          List<ScheduleRecord> results = new ArrayList<>();
           while (rs.next()) {
-            results.add(rowToSchedule(rs, serializer));
+            results.add(rowToScheduleRecord(rs));
           }
           return results;
         }
@@ -151,7 +164,12 @@ public class SchedulesDAO {
 
   public static Optional<WorkflowSchedule> getSchedule(DbContext ctx, String name)
       throws SQLException {
-    DBOSSerializer serializer = ctx.serializer();
+    return getScheduleRecord(ctx, name).map(r -> r.toWorkflowSchedule(ctx.serializer()));
+  }
+
+  // Raw form of getSchedule: keeps context as its serialized string instead of deserializing it.
+  public static Optional<ScheduleRecord> getScheduleRecord(DbContext ctx, String name)
+      throws SQLException {
     String sql =
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
@@ -167,7 +185,7 @@ public class SchedulesDAO {
       ps.setString(1, name);
       try (ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          return Optional.of(rowToSchedule(rs, serializer));
+          return Optional.of(rowToScheduleRecord(rs));
         }
         return Optional.empty();
       }
@@ -239,8 +257,7 @@ public class SchedulesDAO {
       conn.setAutoCommit(false);
       try {
         for (WorkflowSchedule schedule : schedules) {
-          deleteSchedule(conn, ctx.schema(), schedule.scheduleName());
-          createSchedule(
+          upsertSchedule(
               conn,
               ctx.schema(),
               ctx.serializer(),
@@ -257,22 +274,67 @@ public class SchedulesDAO {
     }
   }
 
-  private static WorkflowSchedule rowToSchedule(ResultSet rs, DBOSSerializer serializer)
+  // Idempotent upsert by schedule_name, so concurrent applySchedules calls for the same name
+  // can't race each other into a duplicate-key error. On conflict, schedule_id, status, and
+  // last_fired_at are preserved from the existing row; the poller detects the changed
+  // definition and restarts the schedule's future.
+  private static void upsertSchedule(
+      Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
       throws SQLException {
-    Object context =
-        SerializationUtil.deserializeValue(
-            rs.getString(7), serializer != null ? serializer.name() : null, serializer);
+
+    SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
+
+    String sql =
+        """
+        INSERT INTO "%s".workflow_schedules
+            (schedule_id, schedule_name, workflow_name, workflow_class_name,
+             schedule, status, context, last_fired_at, automatic_backfill,
+             cron_timezone, queue_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (schedule_name) DO UPDATE SET
+            workflow_name = EXCLUDED.workflow_name,
+            workflow_class_name = EXCLUDED.workflow_class_name,
+            schedule = EXCLUDED.schedule,
+            context = EXCLUDED.context,
+            automatic_backfill = EXCLUDED.automatic_backfill,
+            cron_timezone = EXCLUDED.cron_timezone,
+            queue_name = EXCLUDED.queue_name
+        """
+            .formatted(schema);
+
+    var serializedContext =
+        SerializationUtil.serializeValue(
+            schedule.context(), serializer != null ? serializer.name() : null, serializer);
+
+    var timeZone = schedule.cronTimezone() == null ? null : schedule.cronTimezone().getId();
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, schedule.id() != null ? schedule.id() : UUID.randomUUID().toString());
+      ps.setString(2, schedule.scheduleName());
+      ps.setString(3, schedule.workflowName());
+      ps.setString(4, schedule.className());
+      ps.setString(5, schedule.cron());
+      ps.setString(6, schedule.status().name());
+      ps.setString(7, serializedContext.serializedValue());
+      ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
+      ps.setBoolean(9, schedule.automaticBackfill());
+      ps.setString(10, timeZone);
+      ps.setString(11, schedule.queueName());
+      ps.executeUpdate();
+    }
+  }
+
+  private static ScheduleRecord rowToScheduleRecord(ResultSet rs) throws SQLException {
     String lastFiredAtStr = rs.getString(8);
     String timeZoneStr = rs.getString(10);
 
-    return new WorkflowSchedule(
+    return new ScheduleRecord(
         rs.getString(1),
         rs.getString(2),
         rs.getString(3),
         rs.getString(4),
         rs.getString(5),
         ScheduleStatus.valueOf(rs.getString(6)),
-        context,
+        rs.getString(7),
         lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
         timeZoneStr != null ? ZoneId.of(timeZoneStr) : null,

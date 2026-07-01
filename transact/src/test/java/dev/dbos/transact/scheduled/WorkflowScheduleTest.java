@@ -247,11 +247,124 @@ class WorkflowScheduleTest {
     var replaced = dbos.getSchedule("apply-1").orElseThrow();
     assertEquals("0/10 * * * * *", replaced.cron());
     assertNotNull(replaced.id());
-    assertNotEquals(originalId, replaced.id()); // new UUID assigned
+    assertEquals(originalId, replaced.id()); // schedule_id preserved across upsert
     assertNull(replaced.lastFiredAt());
     var created = dbos.getSchedule("apply-2").orElseThrow();
     assertNotNull(created.id());
     assertNull(created.lastFiredAt());
+  }
+
+  @Test
+  public void applySchedulesPreservesRuntimeState() {
+    // A re-apply replaces the definition but must not clobber runtime state (status,
+    // last_fired_at, schedule_id).
+    registerAndLaunch();
+
+    dbos.applySchedules(
+        new WorkflowSchedule("state-keep", workflowName(), className(), "0 0 0 1 1 *")
+            .withContext("v1"));
+    var originalId = dbos.getSchedule("state-keep").orElseThrow().id();
+    dbos.pauseSchedule("state-keep");
+    DBOSTestAccess.getSystemDatabase(dbos)
+        .updateScheduleLastFiredAt("state-keep", Instant.parse("2020-01-01T00:00:00Z"));
+
+    dbos.applySchedules(
+        new WorkflowSchedule("state-keep", workflowName(), className(), "0 0 0 1 1 *")
+            .withContext("v2"));
+
+    var sched = dbos.getSchedule("state-keep").orElseThrow();
+    assertEquals(originalId, sched.id()); // preserved
+    assertEquals(ScheduleStatus.PAUSED, sched.status()); // preserved
+    assertEquals(Instant.parse("2020-01-01T00:00:00Z"), sched.lastFiredAt()); // preserved
+    assertEquals("v2", sched.context()); // definition still updated
+  }
+
+  @Test
+  public void applySchedulesConcurrent() throws Exception {
+    // Concurrent applies of the same schedule must be idempotent: one row, no error.
+    registerAndLaunch();
+
+    int numWorkers = 8;
+    var barrier = new java.util.concurrent.CyclicBarrier(numWorkers);
+    var executor = java.util.concurrent.Executors.newFixedThreadPool(numWorkers);
+    try {
+      var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+      for (int i = 0; i < numWorkers; i++) {
+        futures.add(
+            executor.submit(
+                () -> {
+                  try {
+                    barrier.await(30, TimeUnit.SECONDS);
+                  } catch (Exception e) {
+                    throw new RuntimeException(e);
+                  }
+                  dbos.applySchedules(
+                      new WorkflowSchedule(
+                              "shared-schedule", workflowName(), className(), "* * * * * *")
+                          .withContext("us"));
+                }));
+      }
+      for (var f : futures) {
+        f.get(30, TimeUnit.SECONDS); // surface any exception raised by a worker
+      }
+    } finally {
+      executor.shutdown();
+      if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+        executor.shutdownNow();
+        fail("executor did not terminate promptly");
+      }
+    }
+
+    var schedules = dbos.listSchedules(null, null, null);
+    assertEquals(1, schedules.size());
+    assertEquals("shared-schedule", schedules.get(0).scheduleName());
+    assertEquals("* * * * * *", schedules.get(0).cron());
+    assertEquals("us", schedules.get(0).context());
+    var scheduleId = schedules.get(0).id();
+
+    // Re-applying leaves one row, updated in place, preserving schedule_id.
+    dbos.applySchedules(
+        new WorkflowSchedule("shared-schedule", workflowName(), className(), "0 0 * * * *")
+            .withContext("eu"));
+    schedules = dbos.listSchedules(null, null, null);
+    assertEquals(1, schedules.size());
+    assertEquals(scheduleId, schedules.get(0).id());
+    assertEquals("0 0 * * * *", schedules.get(0).cron());
+    assertEquals("eu", schedules.get(0).context());
+  }
+
+  @Test
+  public void applySchedulesLiveUpdate() throws Exception {
+    // Re-applying a changed schedule must take effect live: the poller detects the modified
+    // definition and restarts the schedule's future with the new context, preserving schedule_id.
+    var impl = registerAndLaunch();
+
+    dbos.applySchedules(
+        new WorkflowSchedule("live-update", workflowName(), className(), "* * * * * *")
+            .withContext("v1"));
+
+    waitUntil(() -> "v1".equals(impl.lastContext), Duration.ofSeconds(10));
+
+    // Re-apply the same schedule with a new context.
+    impl.reset();
+    dbos.applySchedules(
+        new WorkflowSchedule("live-update", workflowName(), className(), "* * * * * *")
+            .withContext("v2"));
+
+    // The running poller must pick up the new context and fire it.
+    waitUntil(() -> "v2".equals(impl.lastContext), Duration.ofSeconds(10));
+  }
+
+  private static void waitUntil(java.util.function.BooleanSupplier condition, Duration timeout)
+      throws InterruptedException {
+    long deadline = System.currentTimeMillis() + timeout.toMillis();
+    while (System.currentTimeMillis() < deadline) {
+      if (condition.getAsBoolean()) {
+        return;
+      }
+      Thread.sleep(100);
+    }
+    assertTrue(condition.getAsBoolean(), "condition not met within " + timeout);
   }
 
   @Test
