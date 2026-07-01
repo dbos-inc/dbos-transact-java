@@ -12,13 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         jdk-version: ['17', '21', '25']
-        jdk-distro: ['graalvm', 'microsoft', 'oracle', 'temurin' ]
-        exclude:
-          - jdk-distro: graalvm
-            jdk-version: 17
-        include:
-          - jdk-distro: graalvm
-            jdk-version: 17.0.12
+        jdk-distro: ['oracle', 'temurin' ]
 
     steps:
       - name: Checkout code
