@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.dao.ScheduleRecord;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
 import java.time.Duration;
@@ -35,33 +36,36 @@ public class SchedulerService implements AutoCloseable {
 
   // Tracks a running schedule: the definition fields are a snapshot used to detect definition
   // changes, the future is the currently scheduled task which is replaced on every firing.
+  // Context is compared as its raw serialized string (from ScheduleRecord) rather than the
+  // deserialized value, since the deserialized value's class may not implement a meaningful
+  // equals().
   private record RunningSchedule(
       String workflowName,
       String className,
       String cron,
-      Object context,
+      String context,
       ZoneId cronTimezone,
       String queueName,
       AtomicReference<ScheduledFuture<?>> future) {
 
-    RunningSchedule(WorkflowSchedule schedule) {
+    RunningSchedule(ScheduleRecord record) {
       this(
-          schedule.workflowName(),
-          schedule.className(),
-          schedule.cron(),
-          schedule.context(),
-          schedule.cronTimezone(),
-          schedule.queueName(),
+          record.workflowName(),
+          record.className(),
+          record.cron(),
+          record.context(),
+          record.cronTimezone(),
+          record.queueName(),
           new AtomicReference<>());
     }
 
-    boolean matches(WorkflowSchedule schedule) {
-      return Objects.equals(workflowName, schedule.workflowName())
-          && Objects.equals(className, schedule.className())
-          && Objects.equals(cron, schedule.cron())
-          && Objects.equals(context, schedule.context())
-          && Objects.equals(cronTimezone, schedule.cronTimezone())
-          && Objects.equals(queueName, schedule.queueName());
+    boolean matches(ScheduleRecord record) {
+      return Objects.equals(workflowName, record.workflowName())
+          && Objects.equals(className, record.className())
+          && Objects.equals(cron, record.cron())
+          && Objects.equals(context, record.context())
+          && Objects.equals(cronTimezone, record.cronTimezone())
+          && Objects.equals(queueName, record.queueName());
     }
   }
 
@@ -152,7 +156,7 @@ public class SchedulerService implements AutoCloseable {
         return;
       }
 
-      var schedules = dbosExecutor.listSchedules(null, null, null);
+      var schedules = systemDatabase.listScheduleRecords(null, null, null);
       if (logger.isDebugEnabled()) {
         logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
         for (var s : schedules) {
@@ -162,7 +166,7 @@ public class SchedulerService implements AutoCloseable {
       }
 
       // shut down any running schedule that isn't in the list of current schedules
-      var currentIds = schedules.stream().map(WorkflowSchedule::id).collect(Collectors.toSet());
+      var currentIds = schedules.stream().map(ScheduleRecord::id).collect(Collectors.toSet());
       for (var key : runningSchedules.keySet()) {
         if (!currentIds.contains(key)) {
           cancelWorkflowSchedule(key);
@@ -200,14 +204,14 @@ public class SchedulerService implements AutoCloseable {
 
   // allowBackfill should be false when restarting an already-running schedule whose definition
   // changed; backfill only applies the first time a schedule starts firing.
-  private void startWorkflowSchedule(WorkflowSchedule schedule, boolean allowBackfill) {
+  private void startWorkflowSchedule(ScheduleRecord record, boolean allowBackfill) {
     var optRegWf =
-        dbosExecutor.getRegisteredWorkflow(schedule.workflowName(), schedule.className(), "");
+        dbosExecutor.getRegisteredWorkflow(record.workflowName(), record.className(), "");
     if (optRegWf.isEmpty()) {
       logger.error(
           "Workflow schedule {} has missing workflow function {}",
-          schedule.scheduleName(),
-          RegisteredWorkflow.fullyQualifiedName(schedule.workflowName(), schedule.className()));
+          record.scheduleName(),
+          RegisteredWorkflow.fullyQualifiedName(record.workflowName(), record.className()));
       return;
     }
 
@@ -215,38 +219,39 @@ public class SchedulerService implements AutoCloseable {
     if (!Arrays.equals(regWorkflow.workflowMethod().getParameterTypes(), EXPECTED_PARAMETERS)) {
       logger.error(
           "Workflow schedule {} workflow {} has invalid signature, signature must be (Instant, Object)",
-          schedule.scheduleName(),
+          record.scheduleName(),
           regWorkflow.fullyQualifiedName());
       return;
     }
 
     final String queueName =
-        Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
+        Objects.requireNonNullElse(record.queueName(), Constants.DBOS_INTERNAL_QUEUE);
     if (dbosExecutor.findQueue(queueName).isEmpty()) {
-      logger.error("Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
+      logger.error("Workflow schedule {} has invalid queue {}", record.scheduleName(), queueName);
       return;
     }
 
     Cron cron;
     try {
-      cron = CRON_PARSER.parse(schedule.cron()).validate();
+      cron = CRON_PARSER.parse(record.cron()).validate();
     } catch (Exception e) {
       logger.error(
           "Workflow schedule {} has invalid cron expression {}",
-          schedule.scheduleName(),
-          schedule.cron(),
+          record.scheduleName(),
+          record.cron(),
           e);
       return;
     }
 
     if (allowBackfill
-        && schedule.automaticBackfill()
-        && schedule.lastFiredAt() != null
-        && schedule.lastFiredAt().isBefore(Instant.now())) {
-      dbosExecutor.backfillSchedule(schedule.scheduleName(), schedule.lastFiredAt(), Instant.now());
+        && record.automaticBackfill()
+        && record.lastFiredAt() != null
+        && record.lastFiredAt().isBefore(Instant.now())) {
+      dbosExecutor.backfillSchedule(record.scheduleName(), record.lastFiredAt(), Instant.now());
     }
 
-    var running = new RunningSchedule(schedule);
+    var running = new RunningSchedule(record);
+    var schedule = record.toWorkflowSchedule(systemDatabase.serializer());
 
     var task =
         new Runnable() {

@@ -87,8 +87,21 @@ public class SchedulesDAO {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes)
       throws SQLException {
+    return listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes).stream()
+        .map(r -> r.toWorkflowSchedule(ctx.serializer()))
+        .toList();
+  }
 
-    DBOSSerializer serializer = ctx.serializer();
+  // Raw form of listSchedules: keeps context as its serialized string instead of deserializing it.
+  // Used by the scheduler's poller to detect definition changes without relying on the equals() of
+  // whatever type the deserialized context happens to be.
+  public static List<ScheduleRecord> listScheduleRecords(
+      DbContext ctx,
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes)
+      throws SQLException {
+
     StringBuilder sql =
         new StringBuilder(
             """
@@ -135,9 +148,9 @@ public class SchedulesDAO {
           }
         }
         try (ResultSet rs = ps.executeQuery()) {
-          List<WorkflowSchedule> results = new ArrayList<>();
+          List<ScheduleRecord> results = new ArrayList<>();
           while (rs.next()) {
-            results.add(rowToSchedule(rs, serializer));
+            results.add(rowToScheduleRecord(rs));
           }
           return results;
         }
@@ -151,7 +164,12 @@ public class SchedulesDAO {
 
   public static Optional<WorkflowSchedule> getSchedule(DbContext ctx, String name)
       throws SQLException {
-    DBOSSerializer serializer = ctx.serializer();
+    return getScheduleRecord(ctx, name).map(r -> r.toWorkflowSchedule(ctx.serializer()));
+  }
+
+  // Raw form of getSchedule: keeps context as its serialized string instead of deserializing it.
+  public static Optional<ScheduleRecord> getScheduleRecord(DbContext ctx, String name)
+      throws SQLException {
     String sql =
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
@@ -167,7 +185,7 @@ public class SchedulesDAO {
       ps.setString(1, name);
       try (ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          return Optional.of(rowToSchedule(rs, serializer));
+          return Optional.of(rowToScheduleRecord(rs));
         }
         return Optional.empty();
       }
@@ -305,22 +323,18 @@ public class SchedulesDAO {
     }
   }
 
-  private static WorkflowSchedule rowToSchedule(ResultSet rs, DBOSSerializer serializer)
-      throws SQLException {
-    Object context =
-        SerializationUtil.deserializeValue(
-            rs.getString(7), serializer != null ? serializer.name() : null, serializer);
+  private static ScheduleRecord rowToScheduleRecord(ResultSet rs) throws SQLException {
     String lastFiredAtStr = rs.getString(8);
     String timeZoneStr = rs.getString(10);
 
-    return new WorkflowSchedule(
+    return new ScheduleRecord(
         rs.getString(1),
         rs.getString(2),
         rs.getString(3),
         rs.getString(4),
         rs.getString(5),
         ScheduleStatus.valueOf(rs.getString(6)),
-        context,
+        rs.getString(7),
         lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
         timeZoneStr != null ? ZoneId.of(timeZoneStr) : null,
