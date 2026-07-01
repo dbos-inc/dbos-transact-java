@@ -139,7 +139,7 @@ public class QueuesDAO {
       boolean isLatestVersion = true;
       String latestVersionQuery =
           """
-            SELECT version_name FROM "%1$s".application_versions
+            SELECT version_name FROM "%s".application_versions
             ORDER BY version_timestamp DESC LIMIT 1
           """
               .formatted(ctx.schema());
