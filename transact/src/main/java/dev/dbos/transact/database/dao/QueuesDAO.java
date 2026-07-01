@@ -139,14 +139,14 @@ public class QueuesDAO {
       var query =
           """
             SELECT workflow_uuid
-            FROM "%s".workflow_status
+            FROM "%1$s".workflow_status
             WHERE queue_name = ?
               AND status = ?
               AND (application_version = ? OR (application_version IS NULL AND ? = (
-                    SELECT version_name FROM "%s".application_versions
+                    SELECT version_name FROM "%1$s".application_versions
                     ORDER BY version_timestamp DESC LIMIT 1)))
           """
-              .formatted(ctx.schema(), ctx.schema());
+              .formatted(ctx.schema());
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
