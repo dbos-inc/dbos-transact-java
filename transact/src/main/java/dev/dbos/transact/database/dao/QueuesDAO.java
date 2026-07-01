@@ -134,15 +134,19 @@ public class QueuesDAO {
         maxTasks = Math.min(maxTasks, availableTasks);
       }
 
+      // Version-less workflows (application_version IS NULL) are only dequeued
+      // when this worker is running the latest registered application version.
       var query =
           """
             SELECT workflow_uuid
             FROM "%s".workflow_status
             WHERE queue_name = ?
               AND status = ?
-              AND (application_version = ? OR application_version IS NULL)
+              AND (application_version = ? OR (application_version IS NULL AND ? = (
+                    SELECT version_name FROM "%s".application_versions
+                    ORDER BY version_timestamp DESC LIMIT 1)))
           """
-              .formatted(ctx.schema());
+              .formatted(ctx.schema(), ctx.schema());
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
@@ -164,8 +168,9 @@ public class QueuesDAO {
         ps.setString(1, queue.name());
         ps.setString(2, WorkflowState.ENQUEUED.name());
         ps.setString(3, appVersion);
+        ps.setString(4, appVersion);
         if (partitionKey != null) {
-          ps.setString(4, partitionKey);
+          ps.setString(5, partitionKey);
         }
 
         try (ResultSet rs = ps.executeQuery()) {
