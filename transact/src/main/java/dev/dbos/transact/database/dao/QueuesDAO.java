@@ -158,10 +158,10 @@ public class QueuesDAO {
       var query =
           """
             SELECT workflow_uuid
-            FROM "%1$s".workflow_status
+            FROM "%s".workflow_status
             WHERE queue_name = ?
               AND status = ?
-              AND %2$s
+              AND %s
           """
               .formatted(ctx.schema(), versionClause);
       if (partitionKey != null) {
@@ -185,9 +185,8 @@ public class QueuesDAO {
         ps.setString(1, queue.name());
         ps.setString(2, WorkflowState.ENQUEUED.name());
         ps.setString(3, appVersion);
-        ps.setString(4, appVersion);
         if (partitionKey != null) {
-          ps.setString(5, partitionKey);
+          ps.setString(4, partitionKey);
         }
 
         try (ResultSet rs = ps.executeQuery()) {
