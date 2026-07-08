@@ -1,9 +1,12 @@
 package dev.dbos.transact.workflow;
 
+import static dev.dbos.transact.internal.Validation.validateAttributes;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Input for {@code getWorkflowAggregates}.
@@ -45,19 +48,21 @@ public record GetWorkflowAggregatesInput(
     Instant completedAfter,
     Instant completedBefore,
     Instant dequeuedAfter,
-    Instant dequeuedBefore) {
+    Instant dequeuedBefore,
+    Map<String, Object> attributes) {
 
   public GetWorkflowAggregatesInput {
     if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
       throw new IllegalArgumentException("timeBucketSize must be > 0");
     }
+    attributes = validateAttributes(attributes);
   }
 
   /** Constructs a default input with {@code selectCount=true} and no group-by or filter flags. */
   public GetWorkflowAggregatesInput() {
     this(
         false, false, false, false, false, true, false, false, false, null, null, null, null, null,
-        null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null);
   }
 
   public GetWorkflowAggregatesInput withGroupByStatus(boolean groupByStatus) {
@@ -83,7 +88,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withGroupByName(boolean groupByName) {
@@ -109,7 +115,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withGroupByQueueName(boolean groupByQueueName) {
@@ -135,7 +142,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withGroupByExecutorId(boolean groupByExecutorId) {
@@ -161,7 +169,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withGroupByApplicationVersion(
@@ -188,7 +197,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withSelectCount(boolean selectCount) {
@@ -214,7 +224,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withSelectMinCreatedAt(boolean selectMinCreatedAt) {
@@ -240,7 +251,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withSelectMaxQueueWait(boolean selectMaxQueueWait) {
@@ -266,7 +278,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withSelectMaxTotalLatency(boolean selectMaxTotalLatency) {
@@ -292,7 +305,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withTimeBucketSize(Duration timeBucketSize) {
@@ -318,7 +332,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withWorkflowName(List<String> workflowName) {
@@ -344,7 +359,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withStatus(List<String> status) {
@@ -370,7 +386,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withStatus(String... status) {
@@ -400,7 +417,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withExecutorIds(List<String> executorIds) {
@@ -426,7 +444,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withApplicationVersion(List<String> applicationVersion) {
@@ -452,7 +471,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -478,7 +498,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withStartTime(Instant startTime) {
@@ -504,7 +525,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withEndTime(Instant endTime) {
@@ -530,7 +552,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withCompletedAfter(Instant completedAfter) {
@@ -556,7 +579,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withCompletedBefore(Instant completedBefore) {
@@ -582,7 +606,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withDequeuedAfter(Instant dequeuedAfter) {
@@ -608,7 +633,8 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
   }
 
   public GetWorkflowAggregatesInput withDequeuedBefore(Instant dequeuedBefore) {
@@ -634,6 +660,34 @@ public record GetWorkflowAggregatesInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        attributes);
+  }
+
+  public GetWorkflowAggregatesInput withAttributes(Map<String, Object> attributes) {
+    return new GetWorkflowAggregatesInput(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        attributes);
   }
 }

@@ -5,6 +5,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public class WorkflowStatusInternalBuilder {
   private String workflowId;
@@ -27,6 +28,8 @@ public class WorkflowStatusInternalBuilder {
   private Instant deadline;
   private String parentWorkflowId;
   private String serialization;
+  private String scheduleName;
+  private Map<String, Object> attributes;
 
   public static WorkflowStatusInternalBuilder create(String workflowId) {
     return new WorkflowStatusInternalBuilder().workflowId(workflowId);
@@ -132,6 +135,16 @@ public class WorkflowStatusInternalBuilder {
     return this;
   }
 
+  public WorkflowStatusInternalBuilder scheduleName(String scheduleName) {
+    this.scheduleName = scheduleName;
+    return this;
+  }
+
+  public WorkflowStatusInternalBuilder attributes(Map<String, Object> attributes) {
+    this.attributes = attributes;
+    return this;
+  }
+
   public WorkflowStatusInternal build() {
     return new WorkflowStatusInternal(
         workflowId,
@@ -154,6 +167,7 @@ public class WorkflowStatusInternalBuilder {
         deadline,
         parentWorkflowId,
         serialization,
-        null);
+        attributes,
+        scheduleName);
   }
 }

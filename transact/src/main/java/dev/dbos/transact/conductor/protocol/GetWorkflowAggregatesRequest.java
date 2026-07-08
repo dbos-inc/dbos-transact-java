@@ -5,6 +5,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -40,6 +41,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
     public List<String> executor_id;
     public List<String> queue_name;
     public List<String> workflow_id_prefix;
+    public Map<String, Object> attributes;
   }
 
   public GetWorkflowAggregatesInput toInput() {
@@ -75,6 +77,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         body.completed_after != null ? Instant.parse(body.completed_after) : null,
         body.completed_before != null ? Instant.parse(body.completed_before) : null,
         body.dequeued_after != null ? Instant.parse(body.dequeued_after) : null,
-        body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null);
+        body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null,
+        body.attributes);
   }
 }

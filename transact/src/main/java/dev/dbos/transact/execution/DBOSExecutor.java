@@ -941,6 +941,7 @@ public class DBOSExecutor implements AutoCloseable {
           schedule.context(),
           schedule.queueName(),
           next.toInstant(),
+          schedule.scheduleName(),
           systemDatabase,
           serializer);
 
@@ -979,6 +980,7 @@ public class DBOSExecutor implements AutoCloseable {
         schedule.context(),
         schedule.queueName(),
         now,
+        schedule.scheduleName(),
         systemDatabase,
         serializer);
     return workflowId;
@@ -991,6 +993,7 @@ public class DBOSExecutor implements AutoCloseable {
       Object context,
       String queueName,
       @NonNull Instant scheduledAt,
+      String scheduleName,
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
     var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
@@ -998,7 +1001,10 @@ public class DBOSExecutor implements AutoCloseable {
     var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
 
     var options =
-        new ExecutionOptions(workflowId).withQueueName(queueName).withAppVersion(latestAppVersion);
+        new ExecutionOptions(workflowId)
+            .withQueueName(queueName)
+            .withAppVersion(latestAppVersion)
+            .withScheduleName(scheduleName);
     enqueueWorkflow(
         workflowName,
         className,
@@ -1447,6 +1453,16 @@ public class DBOSExecutor implements AutoCloseable {
   // start a registered workflow, separated out so it can be used by event listeners
   public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
       RegisteredWorkflow workflow, Object[] args, StartWorkflowOptions options) {
+    return startRegisteredWorkflow(workflow, args, options, null);
+  }
+
+  // overload used by SchedulerService: scheduleName is set only for schedule-triggered
+  // executions, never by user-facing StartWorkflowOptions.
+  <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
+      RegisteredWorkflow workflow,
+      Object[] args,
+      StartWorkflowOptions options,
+      String scheduleName) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
     var childWorkflowId =
@@ -1484,7 +1500,8 @@ public class DBOSExecutor implements AutoCloseable {
             .withAttributes(
                 options != null && options.attributes() != null
                     ? options.attributes()
-                    : ctx.resolveNextAttributes());
+                    : ctx.resolveNextAttributes())
+            .withScheduleName(scheduleName);
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
@@ -1940,7 +1957,8 @@ public class DBOSExecutor implements AutoCloseable {
             effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization,
-            options.attributes());
+            options.attributes(),
+            options.scheduleName());
 
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
@@ -2015,6 +2033,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             serializedArgs.serialization(),
+            null,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }

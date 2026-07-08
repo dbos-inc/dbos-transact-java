@@ -32,7 +32,9 @@ public record ExecutionOptions(
     Map<String, Object> attributes,
     // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
     boolean isRecoveryRequest,
-    boolean isDequeuedRequest) {
+    boolean isDequeuedRequest,
+    // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
+    String scheduleName) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -96,7 +98,8 @@ public record ExecutionOptions(
         null,
         null,
         false,
-        false);
+        false,
+        null);
   }
 
   public ExecutionOptions(String workflowId) {
@@ -116,7 +119,8 @@ public record ExecutionOptions(
         null,
         null,
         false,
-        false);
+        false,
+        null);
   }
 
   public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
@@ -136,7 +140,8 @@ public record ExecutionOptions(
         null,
         null,
         false,
-        false);
+        false,
+        null);
   }
 
   public ExecutionOptions asRecoveryRequest() {
@@ -156,7 +161,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         true,
-        false);
+        false,
+        this.scheduleName);
   }
 
   public ExecutionOptions asDequeuedRequest(String queueName, String partitionKey) {
@@ -176,7 +182,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         false,
-        true);
+        true,
+        this.scheduleName);
   }
 
   public ExecutionOptions withOptions(DBOSClient.EnqueueOptions options) {
@@ -196,7 +203,8 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         options.attributes(),
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withOptions(StartWorkflowOptions options) {
@@ -219,7 +227,8 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -239,7 +248,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withPriority(Integer priority) {
@@ -259,7 +269,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -279,7 +290,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
@@ -299,7 +311,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withAssumedRole(String assumedRole) {
@@ -319,7 +332,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withAuthenticatedRoles(List<String> authenticatedRoles) {
@@ -339,7 +353,8 @@ public record ExecutionOptions(
         authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withAttributes(Map<String, Object> attributes) {
@@ -359,7 +374,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withQueueName(String queueName) {
@@ -379,7 +395,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withTimeout(Duration timeout) {
@@ -399,7 +416,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withTimeout(Timeout timeout) {
@@ -419,7 +437,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
   }
 
   public ExecutionOptions withDeadline(Instant deadline) {
@@ -439,7 +458,29 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.isRecoveryRequest,
-        this.isDequeuedRequest);
+        this.isDequeuedRequest,
+        this.scheduleName);
+  }
+
+  public ExecutionOptions withScheduleName(String scheduleName) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.isRecoveryRequest,
+        this.isDequeuedRequest,
+        scheduleName);
   }
 
   public Duration timeoutDuration() {

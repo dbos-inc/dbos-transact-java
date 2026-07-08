@@ -53,7 +53,8 @@ public record ListQueuedWorkflowsRequest(
         null, // completedAfter
         null, // completedBefore
         null, // dequeuedAfter
-        null // dequeuedBefore
+        null, // dequeuedBefore
+        null // scheduleName
         );
   }
 }

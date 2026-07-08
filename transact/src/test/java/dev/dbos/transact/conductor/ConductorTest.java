@@ -1623,6 +1623,72 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canListQueuedWorkflowsWithCompletedAndDequeuedFilters() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "completed_after", "2024-06-01T00:00:00Z",
+              "completed_before", "2024-06-02T00:00:00Z",
+              "dequeued_after", "2024-06-01T01:00:00Z",
+              "dequeued_before", "2024-06-01T23:00:00Z");
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(
+          OffsetDateTime.parse("2024-06-01T00:00:00Z").toInstant(), input.completedAfter());
+      assertEquals(
+          OffsetDateTime.parse("2024-06-02T00:00:00Z").toInstant(), input.completedBefore());
+      assertEquals(OffsetDateTime.parse("2024-06-01T01:00:00Z").toInstant(), input.dequeuedAfter());
+      assertEquals(
+          OffsetDateTime.parse("2024-06-01T23:00:00Z").toInstant(), input.dequeuedBefore());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListWorkflowsWithScheduleNameFilter() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    WorkflowStatus status =
+        new WorkflowStatusBuilder("wf-sched-1")
+            .status(WorkflowState.SUCCESS)
+            .workflowName("WF1")
+            .scheduleName("my-schedule")
+            .build();
+    when(mockExec.listWorkflows(any())).thenReturn(List.of(status));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of("schedule_name", "my-schedule");
+      listener.send(MessageType.LIST_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("my-schedule"), input.scheduleName());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      JsonNode outputNode = jsonNode.get("output");
+      assertEquals(1, outputNode.size());
+      assertEquals("my-schedule", outputNode.get(0).get("ScheduleName").stringValue());
+    }
+  }
+
+  @RetryingTest(3)
   public void canGetWorkflow() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -3319,6 +3385,38 @@ public class ConductorTest {
       assertEquals(1_700_000_000_000L, out.get(0).get("min_created_at").asLong());
       assertEquals(50L, out.get(0).get("max_queue_wait_ms").asLong());
       assertEquals(200L, out.get(0).get("max_total_latency_ms").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesWithAttributes() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(new WorkflowAggregateRow(Map.of("status", "SUCCESS"), 1L, null, null, null));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-attrs",
+          Map.of(
+              "body", Map.of("group_by_status", true, "attributes", Map.of("team", "payments"))));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertEquals(Map.of("team", "payments"), captured.attributes());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").stringValue());
+      assertNull(json.get("error_message"));
     }
   }
 

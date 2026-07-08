@@ -45,7 +45,8 @@ public class GetWorkflowRequest extends BaseMessage {
         null, // completedAfter
         null, // completedBefore
         null, // dequeuedAfter
-        null // dequeuedBefore
+        null, // dequeuedBefore
+        null // scheduleName
         );
   }
 }

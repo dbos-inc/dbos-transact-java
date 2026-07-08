@@ -442,7 +442,8 @@ public class MigrationManager {
             migration37(isCockroach),
             migration38(isCockroach),
             migration39(useListenNotify),
-            MIGRATION_40);
+            MIGRATION_40,
+            MIGRATION_41);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1095,5 +1096,13 @@ public class MigrationManager {
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "attributes" JSONB;
       CREATE INDEX IF NOT EXISTS "idx_workflow_status_attributes" ON "%1$s"."workflow_status" USING GIN ("attributes") WHERE "attributes" IS NOT NULL;
+      """;
+
+  // ADD COLUMN with no default is catalog-only; the partial index covers zero rows, so no
+  // CONCURRENTLY is needed. Tracks which schedule (if any) triggered a workflow instance.
+  static final String MIGRATION_41 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "schedule_name" TEXT;
+      CREATE INDEX IF NOT EXISTS "idx_workflow_status_schedule_name" ON "%1$s"."workflow_status" ("schedule_name") WHERE "schedule_name" IS NOT NULL;
       """;
 }
