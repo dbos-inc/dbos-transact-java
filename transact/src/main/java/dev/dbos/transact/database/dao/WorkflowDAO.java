@@ -76,7 +76,7 @@ public class WorkflowDAO {
         authenticated_user, assumed_role, authenticated_roles,
         created_at, updated_at, completed_at, started_at_epoch_ms,
         recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
-        forked_from, parent_workflow_id, was_forked_from, attributes
+        forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name
       """;
 
   private WorkflowDAO() {}
@@ -213,8 +213,8 @@ public class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            parent_workflow_id, owner_xid, serialization, attributes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            parent_workflow_id, owner_xid, serialization, attributes, schedule_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -282,7 +282,8 @@ public class WorkflowDAO {
       stmt.setObject(24, ownerXid);
       stmt.setString(25, status.serialization());
       stmt.setString(26, attributesJson);
-      stmt.setInt(27, incrementAttempts ? 1 : 0);
+      stmt.setString(27, status.scheduleName());
+      stmt.setInt(28, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -686,6 +687,10 @@ public class WorkflowDAO {
       whereConditions.add("forked_from = ANY(?)");
       parameters.add(input.forkedFrom());
     }
+    if (input.scheduleName() != null && !input.scheduleName().isEmpty()) {
+      whereConditions.add("schedule_name = ANY(?)");
+      parameters.add(input.scheduleName());
+    }
     if (input.parentWorkflowId() != null && !input.parentWorkflowId().isEmpty()) {
       whereConditions.add("parent_workflow_id = ANY(?)");
       parameters.add(input.parentWorkflowId());
@@ -931,6 +936,12 @@ public class WorkflowDAO {
         parameters.add(prefix + "%");
       }
       whereConditions.add(prefixOr.toString());
+    }
+    if (input.attributes() != null && !input.attributes().isEmpty()) {
+      // Containment (@>) is served by the GIN index on the attributes column and matches
+      // workflows whose attributes contain all the given key-value pairs.
+      whereConditions.add("attributes @> ?::jsonb");
+      parameters.add(JsonUtility.toJson(input.attributes()));
     }
 
     if (whereConditions.length() > 0) {
@@ -1190,7 +1201,8 @@ public class WorkflowDAO {
             serialization,
             (attributesJson != null)
                 ? JsonUtility.fromJson(attributesJson, new TypeReference<Map<String, Object>>() {})
-                : null);
+                : null,
+            rs.getString("schedule_name"));
     return info;
   }
 

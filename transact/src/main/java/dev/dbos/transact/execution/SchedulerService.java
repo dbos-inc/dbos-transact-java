@@ -332,7 +332,8 @@ public class SchedulerService implements AutoCloseable {
                   new StartWorkflowOptions(workflowId)
                       .withQueue(queueName)
                       .withAppVersion(appVersion);
-              dbosExecutor.startRegisteredWorkflow(regWorkflow, args, options);
+              dbosExecutor.startRegisteredWorkflow(
+                  regWorkflow, args, options, wfSchedule.scheduleName());
               systemDatabase.updateScheduleLastFiredAt(
                   wfSchedule.scheduleName(), nextTime.toInstant());
             } catch (Exception e) {

@@ -32,7 +32,9 @@ public record WorkflowStatusInternal(
     String parentWorkflowId,
     String serialization,
     /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
-    Map<String, Object> attributes) {
+    Map<String, Object> attributes,
+    /** Name of the schedule that triggered this workflow, if any. Set only by the scheduler. */
+    String scheduleName) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {

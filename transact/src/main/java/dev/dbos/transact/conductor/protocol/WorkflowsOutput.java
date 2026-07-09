@@ -37,6 +37,7 @@ public class WorkflowsOutput {
   public String DelayUntilEpochMS;
   public String CompletedAt;
   public String Attributes;
+  public String ScheduleName;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -82,5 +83,6 @@ public class WorkflowsOutput {
         status.completedAt() == null ? null : String.valueOf(status.completedAtEpochMs());
     // JSON rather than toString() so the wire format is parseable by Conductor
     this.Attributes = status.attributes() != null ? JsonUtility.toJson(status.attributes()) : null;
+    this.ScheduleName = status.scheduleName();
   }
 }

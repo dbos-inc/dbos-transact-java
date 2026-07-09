@@ -530,6 +530,26 @@ class WorkflowScheduleTest {
     assertThrows(IllegalStateException.class, () -> dbos.triggerSchedule("no-such-sched"));
   }
 
+  @Test
+  public void triggerScheduleSetsScheduleName() throws Exception {
+    var impl = registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("trigger-name-sched", workflowName(), className(), "0 0 0 1 1 *"));
+
+    impl.reset();
+    var handle = dbos.<Void, RuntimeException>triggerSchedule("trigger-name-sched");
+    handle.getResult();
+
+    var status = dbos.listWorkflows(new ListWorkflowsInput(handle.workflowId())).get(0);
+    assertEquals("trigger-name-sched", status.scheduleName());
+
+    // Filterable by scheduleName
+    var filtered =
+        dbos.listWorkflows(new ListWorkflowsInput().withScheduleName("trigger-name-sched"));
+    assertTrue(filtered.stream().anyMatch(w -> w.workflowId().equals(handle.workflowId())));
+  }
+
   // ── backfillSchedule ──────────────────────────────────────────────────────
 
   @Test
@@ -566,6 +586,25 @@ class WorkflowScheduleTest {
     var t = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     var handles = dbos.backfillSchedule("backfill-empty", t, t);
     assertEquals(0, handles.size());
+  }
+
+  @Test
+  public void backfillScheduleSetsScheduleName() throws Exception {
+    var impl = registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("backfill-name-sched", workflowName(), className(), "0 * * * * *"));
+
+    var start = Instant.parse("2024-01-01T10:00:30Z");
+    var end = Instant.parse("2024-01-01T10:01:30Z");
+
+    impl.reset();
+    var handles = dbos.backfillSchedule("backfill-name-sched", start, end);
+    assertEquals(1, handles.size());
+    handles.get(0).getResult();
+
+    var status = handles.get(0).getStatus();
+    assertEquals("backfill-name-sched", status.scheduleName());
   }
 
   @Test
@@ -779,5 +818,23 @@ class WorkflowScheduleTest {
     assertTrue(
         impl.latch.await(15, TimeUnit.SECONDS),
         "Expected latch to count down to zero within 15 seconds");
+  }
+
+  @Test
+  public void liveScheduleFiringSetsScheduleName() throws Exception {
+    var impl = registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("live-name-sched", "latchedRun", className(), "0/1 * * * * *"));
+
+    assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
+
+    var workflows =
+        dbos.listWorkflows(new ListWorkflowsInput().withScheduleName("live-name-sched"));
+    assertFalse(workflows.isEmpty());
+    for (var wf : workflows) {
+      assertEquals("live-name-sched", wf.scheduleName());
+      assertTrue(wf.workflowId().startsWith("sched-live-name-sched-"));
+    }
   }
 }

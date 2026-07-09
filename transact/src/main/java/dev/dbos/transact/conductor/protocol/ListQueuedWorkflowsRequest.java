@@ -27,6 +27,10 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
 
     public String start_time;
     public String end_time;
+    public String completed_after;
+    public String completed_before;
+    public String dequeued_after;
+    public String dequeued_before;
 
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> status;
@@ -88,10 +92,10 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         body.was_forked_from,
         body.has_parent,
         body.attributes,
-        null, // completedAfter
-        null, // completedBefore
-        null, // dequeuedAfter
-        null // dequeuedBefore
-        );
+        body.completed_after != null ? Instant.parse(body.completed_after) : null,
+        body.completed_before != null ? Instant.parse(body.completed_before) : null,
+        body.dequeued_after != null ? Instant.parse(body.dequeued_after) : null,
+        body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null,
+        null); // scheduleName
   }
 }

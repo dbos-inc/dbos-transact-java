@@ -39,7 +39,8 @@ public record ListWorkflowsInput(
     Instant completedAfter,
     Instant completedBefore,
     Instant dequeuedAfter,
-    Instant dequeuedBefore) {
+    Instant dequeuedBefore,
+    List<String> scheduleName) {
 
   // Validate the attributes filter here (every convenience constructor, withX copy, and the
   // conductor/admin asInput() paths route through this canonical constructor) so an invalid filter
@@ -51,7 +52,7 @@ public record ListWorkflowsInput(
   public ListWorkflowsInput() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public ListWorkflowsInput(String workflowId) {
@@ -61,6 +62,7 @@ public record ListWorkflowsInput(
   public ListWorkflowsInput(List<String> workflowIds) {
     this(
         workflowIds,
+        null,
         null,
         null,
         null,
@@ -118,7 +120,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withStatus(List<WorkflowState> status) {
@@ -149,7 +152,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withStartTime(Instant startTime) {
@@ -180,7 +184,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withEndTime(Instant endTime) {
@@ -211,7 +216,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withWorkflowName(List<String> workflowName) {
@@ -242,7 +248,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withClassName(String className) {
@@ -273,7 +280,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withInstanceName(String instanceName) {
@@ -304,7 +312,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withApplicationVersion(List<String> applicationVersion) {
@@ -335,7 +344,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withAuthenticatedUser(List<String> authenticatedUser) {
@@ -366,7 +376,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withLimit(Integer limit) {
@@ -397,7 +408,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withOffset(Integer offset) {
@@ -428,7 +440,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withSortDesc(Boolean sortDesc) {
@@ -459,7 +472,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -490,7 +504,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withLoadInput(Boolean loadInput) {
@@ -521,7 +536,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withLoadOutput(Boolean loadOutput) {
@@ -552,7 +568,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withQueueName(List<String> queueName) {
@@ -583,7 +600,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withQueuesOnly(Boolean queuesOnly) {
@@ -614,7 +632,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withExecutorIds(List<String> executorIds) {
@@ -645,7 +664,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withForkedFrom(List<String> forkedFrom) {
@@ -676,7 +696,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withParentWorkflowId(List<String> parentWorkflowId) {
@@ -707,7 +728,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withWasForkedFrom(Boolean wasForkedFrom) {
@@ -738,7 +760,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withHasParent(Boolean hasParent) {
@@ -769,7 +792,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withAttributes(Map<String, Object> attributes) {
@@ -800,7 +824,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withCompletedAfter(Instant completedAfter) {
@@ -831,7 +856,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withCompletedBefore(Instant completedBefore) {
@@ -862,7 +888,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withDequeuedAfter(Instant dequeuedAfter) {
@@ -893,7 +920,8 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
   }
 
   public ListWorkflowsInput withDequeuedBefore(Instant dequeuedBefore) {
@@ -924,7 +952,40 @@ public record ListWorkflowsInput(
         completedAfter,
         completedBefore,
         dequeuedAfter,
-        dequeuedBefore);
+        dequeuedBefore,
+        scheduleName);
+  }
+
+  public ListWorkflowsInput withScheduleName(List<String> scheduleName) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        scheduleName);
   }
 
   // Single value overloads for list parameters
@@ -966,5 +1027,9 @@ public record ListWorkflowsInput(
 
   public ListWorkflowsInput withParentWorkflowId(String parentWorkflowId) {
     return withParentWorkflowId(List.of(parentWorkflowId));
+  }
+
+  public ListWorkflowsInput withScheduleName(String scheduleName) {
+    return withScheduleName(List.of(scheduleName));
   }
 }

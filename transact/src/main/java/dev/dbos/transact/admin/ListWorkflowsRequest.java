@@ -61,6 +61,7 @@ public record ListWorkflowsRequest(
         completed_after != null ? Instant.parse(completed_after) : null,
         completed_before != null ? Instant.parse(completed_before) : null,
         dequeued_after != null ? Instant.parse(dequeued_after) : null,
-        dequeued_before != null ? Instant.parse(dequeued_before) : null);
+        dequeued_before != null ? Instant.parse(dequeued_before) : null,
+        null); // scheduleName
   }
 }

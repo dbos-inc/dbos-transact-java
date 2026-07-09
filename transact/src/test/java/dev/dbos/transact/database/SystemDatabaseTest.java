@@ -1565,6 +1565,42 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testGetWorkflowAggregatesWithAttributesFilter() throws Exception {
+    // importWorkflow doesn't carry attributes, so insert directly via initWorkflowStatus.
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("agg-attr-wf-1")
+            .workflowName("WorkflowA")
+            .attributes(Map.of("team", "payments"))
+            .build(),
+        5,
+        false,
+        false);
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("agg-attr-wf-2")
+            .workflowName("WorkflowA")
+            .attributes(Map.of("team", "growth"))
+            .build(),
+        5,
+        false,
+        false);
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("agg-attr-wf-3").workflowName("WorkflowA").build(),
+        5,
+        false,
+        false);
+
+    var input =
+        new GetWorkflowAggregatesInput()
+            .withGroupByName(true)
+            .withAttributes(Map.of("team", "payments"));
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    assertEquals(1, rows.size());
+    assertEquals("WorkflowA", rows.get(0).group().get("name"));
+    assertEquals(1, rows.get(0).count());
+  }
+
+  @Test
   public void testGetWorkflowAggregatesIdPrefix() throws Exception {
     sysdb.importWorkflow(
         List.of(

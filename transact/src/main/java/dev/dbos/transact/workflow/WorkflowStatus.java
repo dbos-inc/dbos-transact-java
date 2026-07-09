@@ -73,7 +73,9 @@ public record WorkflowStatus(
     /** Serialized representation of the workflow. */
     String serialization,
     /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
-    Map<String, Object> attributes) {
+    Map<String, Object> attributes,
+    /** Name of the schedule that triggered this workflow, if any. */
+    String scheduleName) {
 
   @JsonIgnore
   public Long timeoutMs() {
@@ -155,7 +157,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(delayUntil, that.delayUntil)
         && java.util.Objects.equals(completedAt, that.completedAt)
         && java.util.Objects.equals(serialization, that.serialization)
-        && java.util.Objects.equals(attributes, that.attributes);
+        && java.util.Objects.equals(attributes, that.attributes)
+        && java.util.Objects.equals(scheduleName, that.scheduleName);
   }
 
   /**
@@ -197,6 +200,7 @@ public record WorkflowStatus(
         delayUntil,
         completedAt,
         serialization,
-        attributes);
+        attributes,
+        scheduleName);
   }
 }
