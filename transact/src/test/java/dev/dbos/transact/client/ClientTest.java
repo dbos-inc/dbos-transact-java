@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
@@ -506,6 +507,55 @@ public class ClientTest {
       assertEquals("bob", childStatus.authenticatedUser());
       assertEquals(List.of("viewer"), childStatus.authenticatedRoles());
     }
+  }
+
+  @Test
+  public void versionlessWorkflowDequeuedOnlyWhenWorkerIsLatest() throws Exception {
+    // The worker runs app version "v1.0.0" (set in beforeEach), registered at launch.
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    String workerVersion = DBOSTestAccess.getDbosExecutor(dbos).appVersion();
+    assertEquals("v1.0.0", workerVersion);
+
+    // Register a newer version so this worker is NOT running the latest registered version.
+    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", Instant.now().plus(Duration.ofHours(1)));
+    assertEquals("v2.0.0", sysdb.getLatestApplicationVersion().versionName());
+
+    // Enqueue a version-less workflow via the client (application_version stays NULL).
+    String versionlessId = "versionless-" + UUID.randomUUID();
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withWorkflowId(versionlessId);
+      client.enqueueWorkflow(options, new Object[] {1, "versionless"});
+    }
+    var versionlessHandle = dbos.retrieveWorkflow(versionlessId);
+    var versionlessRow = DBUtils.getWorkflowRow(dataSource, versionlessId);
+    assertEquals(WorkflowState.ENQUEUED.name(), versionlessRow.status());
+    assertNull(versionlessRow.applicationVersion());
+
+    // Enqueue a workflow tagged with the worker's current version via the in-process API.
+    String taggedId = "tagged-" + UUID.randomUUID();
+    var taggedHandle =
+        dbos.startWorkflow(
+            () -> service.enqueueTest(2, "tagged"),
+            new StartWorkflowOptions(taggedId).withQueue("testQueue"));
+
+    // The version-matched workflow is dequeued and completes even though the worker is not latest.
+    assertEquals("2-tagged", taggedHandle.getResult());
+    assertEquals(workerVersion, DBUtils.getWorkflowRow(dataSource, taggedId).applicationVersion());
+
+    // The version-less workflow must NOT be dequeued while the worker is not the latest version.
+    Thread.sleep(2000); // allow several queue poll cycles to run
+    assertEquals(WorkflowState.ENQUEUED, versionlessHandle.getStatus().status());
+    assertNull(DBUtils.getWorkflowRow(dataSource, versionlessId).applicationVersion());
+
+    // Promote the worker's version to latest; the version-less workflow should now run.
+    sysdb.updateApplicationVersionTimestamp(workerVersion, Instant.now().plus(Duration.ofHours(2)));
+    assertEquals(workerVersion, sysdb.getLatestApplicationVersion().versionName());
+
+    assertEquals("1-versionless", versionlessHandle.getResult());
+    assertEquals(WorkflowState.SUCCESS, versionlessHandle.getStatus().status());
   }
 
   @Test
