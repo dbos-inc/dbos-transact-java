@@ -1746,6 +1746,17 @@ public class DBOSExecutor implements AutoCloseable {
           if (activeWorkflows.putIfAbsent(workflowId, bucket) != null) {
             throw new DBOSWorkflowExecutionConflictException(workflowId);
           }
+          // Release the active-ID entry before the terminal outcome write becomes durable:
+          // once it is visible, a resume can re-dispatch this workflow to this executor, and
+          // a stale entry would reject that dispatch. The once-guard keeps the finally
+          // backstop from removing an entry a resumed execution re-acquired in the meantime.
+          var activeReleased = new AtomicBoolean(false);
+          Runnable releaseActive =
+              () -> {
+                if (activeReleased.compareAndSet(false, true)) {
+                  activeWorkflows.remove(workflowId);
+                }
+              };
           try {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
@@ -1778,6 +1789,7 @@ public class DBOSExecutor implements AutoCloseable {
               return null;
             }
 
+            releaseActive.run();
             persistWorkflowOutput(workflowId, output, initResult.serialization());
 
             return output;
@@ -1806,14 +1818,16 @@ public class DBOSExecutor implements AutoCloseable {
             // DBOSAwaitedWorkflowCancelledException.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
+              releaseActive.run();
               throw cancelled;
             }
 
+            releaseActive.run();
             persistWorkflowError(workflowId, actual, initResult.serialization());
             throw e;
           } finally {
             DBOSContextHolder.clear();
-            activeWorkflows.remove(workflowId);
+            releaseActive.run();
           }
         };
 
