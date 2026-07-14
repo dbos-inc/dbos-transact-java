@@ -336,13 +336,13 @@ public class WorkflowDAO {
           "updateWorkflowOutcome called with non-terminal status: " + status);
     }
 
-    // Only a PENDING row can receive an outcome: any other status means this run was
-    // superseded (cancelled during its final step, re-enqueued by a concurrent resume, ...).
+    // Never overwrite a CANCELLED workflow: a workflow cancelled during its final step must not
+    // subsequently complete.
     var sql =
         """
           UPDATE "%s".workflow_status
           SET status = ?, output = ?, error = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
-          WHERE workflow_uuid = ? AND status = ?
+          WHERE workflow_uuid = ? AND status != ?
         """
             .formatted(schema);
 
@@ -354,7 +354,7 @@ public class WorkflowDAO {
       stmt.setLong(4, now);
       stmt.setLong(5, now);
       stmt.setString(6, workflowId);
-      stmt.setString(7, WorkflowState.PENDING.name());
+      stmt.setString(7, WorkflowState.CANCELLED.name());
 
       if (stmt.executeUpdate() == 0) {
         // The guarded UPDATE matched no rows. Re-read status to check whether the workflow
