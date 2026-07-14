@@ -357,9 +357,8 @@ public class WorkflowDAO {
       stmt.setString(7, WorkflowState.PENDING.name());
 
       if (stmt.executeUpdate() == 0) {
-        // The guarded UPDATE matched no rows. Re-read the status: a completed
-        // (SUCCESS/ERROR) row makes the refusal an idempotent no-op; anything else means
-        // this run was cancelled or superseded, so raise it as cancelled.
+        // The guarded UPDATE matched no rows. Re-read status to check whether the workflow
+        // was cancelled; if so, raise so it ends as CANCELLED rather than completing.
         var readSql =
             """
             SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
@@ -368,12 +367,8 @@ public class WorkflowDAO {
         try (var readStmt = conn.prepareStatement(readSql)) {
           readStmt.setString(1, workflowId);
           try (var rs = readStmt.executeQuery()) {
-            if (rs.next()) {
-              var current = rs.getString(1);
-              if (!WorkflowState.SUCCESS.name().equals(current)
-                  && !WorkflowState.ERROR.name().equals(current)) {
-                throw new DBOSWorkflowCancelledException(workflowId);
-              }
+            if (rs.next() && WorkflowState.CANCELLED.name().equals(rs.getString(1))) {
+              throw new DBOSWorkflowCancelledException(workflowId);
             }
           }
         }
