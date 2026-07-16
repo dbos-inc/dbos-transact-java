@@ -2,6 +2,7 @@ package dev.dbos.transact.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.migrations.MigrationManager;
@@ -21,10 +22,14 @@ public class MigratePrintOnlyTest {
   public void printOnly() {
     var cmd = new CommandLine(new DBOSCommand());
     var sw = new StringWriter();
+    var ew = new StringWriter();
     cmd.setOut(new PrintWriter(sw));
+    cmd.setErr(new PrintWriter(ew));
 
     var exitCode = cmd.execute("migrate", "--print-only");
     assertEquals(0, exitCode);
+    // No credentials: full fresh script, silently (stdout must be pipeable to a .sql file).
+    assertEquals("", ew.toString());
 
     var sql = sw.toString();
     assertFalse(sql.contains("Starting DBOS migrations"));
@@ -102,6 +107,99 @@ public class MigratePrintOnlyTest {
     var latest = MigrationManager.getMigrations(schema, true, false).size();
     assertTrue(
         sql.contains("UPDATE \"%s\".dbos_migrations SET version = %d;".formatted(schema, latest)));
+  }
+
+  @Test
+  public void printOnlyConnectionFailureFallsBackToFreshScript() {
+    var cmd = new CommandLine(new DBOSCommand());
+    var sw = new StringWriter();
+    var ew = new StringWriter();
+    cmd.setOut(new PrintWriter(sw));
+    cmd.setErr(new PrintWriter(ew));
+
+    var exitCode =
+        cmd.execute(
+            "migrate",
+            "--print-only",
+            "-D=jdbc:postgresql://127.0.0.1:1/nosuchdb?connectTimeout=2",
+            "-U=nobody",
+            "-P=nothing");
+    assertEquals(0, exitCode);
+    assertEquals("", ew.toString());
+
+    var sql = sw.toString();
+    assertTrue(sql.startsWith("-- DBOS system database migration script for schema \"dbos\"."));
+    assertTrue(sql.contains("CREATE SCHEMA IF NOT EXISTS \"dbos\";"));
+    assertTrue(sql.contains("INSERT INTO \"dbos\".dbos_migrations (version) VALUES (1);"));
+  }
+
+  @Test
+  public void printOnlyDelta() {
+    var latest = MigrationManager.getMigrations("dbos", true, false).size();
+    var from = latest - 2;
+    var sql = MigrationManager.generateMigrationScript("dbos", true, from);
+
+    // Delta prelude: no schema/table creation, no fresh guard; exact-version guard instead.
+    assertTrue(
+        sql.startsWith(
+            "-- DBOS system database delta migration script for schema \"dbos\" (version %d to %d)."
+                .formatted(from, latest)));
+    assertFalse(sql.contains("CREATE SCHEMA"));
+    assertFalse(sql.contains("CREATE TABLE IF NOT EXISTS \"dbos\".dbos_migrations"));
+    assertFalse(sql.contains("fresh databases only"));
+    assertTrue(sql.contains("IF existing_version IS DISTINCT FROM %d THEN".formatted(from)));
+
+    // Only migrations from+1..latest appear.
+    for (var v = 1; v <= from; v++) {
+      assertFalse(sql.contains("-- DBOS system database migration %d\n".formatted(v)));
+    }
+    for (var v = from + 1; v <= latest; v++) {
+      assertTrue(sql.contains("-- DBOS system database migration %d\n".formatted(v)));
+    }
+    // Migration 10 is out of range, so its conditional block is absent.
+    assertFalse(sql.contains("table_constraints"));
+
+    // Bookkeeping: UPDATE only, never INSERT.
+    assertFalse(sql.contains("INSERT INTO \"dbos\".dbos_migrations"));
+    assertTrue(
+        sql.contains("UPDATE \"dbos\".dbos_migrations SET version = %d;".formatted(from + 1)));
+    assertTrue(sql.contains("UPDATE \"dbos\".dbos_migrations SET version = %d;".formatted(latest)));
+  }
+
+  @Test
+  public void printOnlyDeltaFunnySchema() {
+    var schema = "F8nny_sCHem@-n@m3";
+    var latest = MigrationManager.getMigrations(schema, true, false).size();
+    var from = 9; // puts migration 10 in the delta range
+    var sql = MigrationManager.generateMigrationScript(schema, true, from);
+
+    assertTrue(sql.contains("SELECT version INTO existing_version FROM \"%s\"".formatted(schema)));
+    assertTrue(sql.contains("WHERE table_schema = '%s' AND table_name".formatted(schema)));
+    assertTrue(
+        sql.contains(
+            "ALTER TABLE \"%s\".notifications ADD PRIMARY KEY (message_uuid);".formatted(schema)));
+    assertTrue(
+        sql.contains("UPDATE \"%s\".dbos_migrations SET version = %d;".formatted(schema, latest)));
+    assertFalse(sql.contains(schema + ".")); // never unquoted in identifier position
+    // Bookkeeping starts with an UPDATE, never an INSERT (function bodies in
+    // migrations 14/38 legitimately INSERT INTO workflow_status).
+    assertFalse(sql.contains("INSERT INTO \"%s\".dbos_migrations".formatted(schema)));
+  }
+
+  @Test
+  public void printOnlyUpToDateAndInvalidFromVersion() {
+    var latest = MigrationManager.getMigrations("dbos", true, false).size();
+    assertEquals(
+        "-- Database is already at the latest DBOS schema version (%d); nothing to do.\n"
+            .formatted(latest),
+        MigrationManager.generateMigrationScript("dbos", true, latest));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> MigrationManager.generateMigrationScript("dbos", true, -1));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> MigrationManager.generateMigrationScript("dbos", true, latest + 1));
   }
 
   @ParameterizedTest

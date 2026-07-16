@@ -60,7 +60,9 @@ public class MigrateCommand implements Callable<Integer> {
     var out = spec.commandLine().getOut();
 
     if (printOnly) {
-      out.print(MigrationManager.generateMigrationScript(dbOptions.schema(), useListenNotify));
+      out.print(
+          MigrationManager.generateMigrationScript(
+              dbOptions.schema(), useListenNotify, resolveCurrentVersion()));
       if (appRole != null && !appRole.isEmpty()) {
         var schema = SystemDatabase.sanitizeSchema(dbOptions.schema());
         out.format("%n-- Grant %s schema permissions to %s%n", schema, appRole);
@@ -84,6 +86,33 @@ public class MigrateCommand implements Callable<Integer> {
         useListenNotify);
     grantDBOSSchemaPermissions(out, dbOptions.schema());
     return 0;
+  }
+
+  // Best-effort, read-only. Returns the current dbos_migrations version, or 0 (fresh script)
+  // when no URL is configured, the connection fails, or the migrations table does not exist.
+  // Deliberately silent so --print-only output stays pure SQL and pipeable.
+  int resolveCurrentVersion() {
+    if (dbOptions.url() == null) {
+      return 0;
+    }
+    var schema = SystemDatabase.sanitizeSchema(dbOptions.schema());
+    try (var conn =
+        DriverManager.getConnection(dbOptions.url(), dbOptions.user(), dbOptions.password())) {
+      var sql =
+          "SELECT 1 FROM information_schema.tables"
+              + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, schema);
+        try (var rs = stmt.executeQuery()) {
+          if (!rs.next()) {
+            return 0;
+          }
+        }
+      }
+      return MigrationManager.getCurrentSysDbVersion(conn, schema);
+    } catch (SQLException e) {
+      return 0;
+    }
   }
 
   void grantDBOSSchemaPermissions(PrintWriter out, String schema) throws SQLException {

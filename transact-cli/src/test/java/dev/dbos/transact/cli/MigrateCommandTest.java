@@ -145,6 +145,85 @@ public class MigrateCommandTest {
         reapplied.getStderr());
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {Constants.DB_SCHEMA, "F8nny_sCHem@-n@m3"})
+  public void migrate_print_only_delta(String schema) throws Exception {
+    var latest = MigrationManager.getMigrations(schema, true, false).size();
+    var from = latest - 3;
+
+    // Build a genuinely partial database at version `from` by applying the fresh
+    // script only up through migration `from`'s bookkeeping.
+    var fresh = MigrationManager.generateMigrationScript(schema, true);
+    var marker = "\n-- DBOS system database migration %d\n".formatted(from + 1);
+    var idx = fresh.indexOf(marker);
+    assertTrue(idx > 0);
+    var partial = pgContainer.execPsql(fresh.substring(0, idx));
+    assertEquals(0, partial.getExitCode(), partial.getStderr());
+    assertEquals(from, currentVersion(schema));
+
+    // The CLI connects, reads the version, and prints a delta.
+    var delta = runPrintOnly(schema);
+    assertTrue(delta.contains("IF existing_version IS DISTINCT FROM %d THEN".formatted(from)));
+    assertFalse(delta.contains("CREATE SCHEMA"));
+    assertFalse(delta.contains("INSERT INTO \"%s\".dbos_migrations".formatted(schema)));
+    assertFalse(delta.contains("-- DBOS system database migration %d\n".formatted(from)));
+    assertTrue(delta.contains("-- DBOS system database migration %d\n".formatted(from + 1)));
+
+    var applied = pgContainer.execPsql(delta);
+    assertEquals(0, applied.getExitCode(), applied.getStderr());
+    assertEquals(latest, currentVersion(schema));
+
+    // Re-applying the delta fails the exact-version guard under ON_ERROR_STOP.
+    var reapplied = pgContainer.execPsql(delta);
+    assertNotEquals(0, reapplied.getExitCode());
+    assertTrue(
+        reapplied.getStderr().contains("upgrades from version %d".formatted(from)),
+        reapplied.getStderr());
+    assertEquals(latest, currentVersion(schema));
+
+    // An up-to-date database prints only the nothing-to-do comment.
+    assertEquals(
+        "-- Database is already at the latest DBOS schema version (%d); nothing to do.\n"
+            .formatted(latest),
+        runPrintOnly(schema));
+
+    // The fresh script against an already-migrated database fails fast.
+    var freshOnMigrated = pgContainer.execPsql(fresh);
+    assertNotEquals(0, freshOnMigrated.getExitCode());
+    assertTrue(
+        freshOnMigrated.getStderr().contains("this script is for fresh databases only"),
+        freshOnMigrated.getStderr());
+  }
+
+  String runPrintOnly(String schema) {
+    var cmd = new CommandLine(new DBOSCommand());
+    var sw = new StringWriter();
+    var ew = new StringWriter();
+    cmd.setOut(new PrintWriter(sw));
+    cmd.setErr(new PrintWriter(ew));
+
+    var args =
+        Stream.of(List.of("migrate", "--print-only", "--schema", schema), pgContainer.options())
+            .flatMap(Collection::stream)
+            .toArray(String[]::new);
+
+    assertEquals(0, cmd.execute(args));
+    assertEquals("", ew.toString());
+    return sw.toString();
+  }
+
+  int currentVersion(String schema) throws SQLException {
+    try (var conn = pgContainer.connection();
+        var stmt = conn.createStatement();
+        var rs =
+            stmt.executeQuery("SELECT version FROM \"%s\".dbos_migrations".formatted(schema))) {
+      assertTrue(rs.next());
+      var version = rs.getInt(1);
+      assertFalse(rs.next());
+      return version;
+    }
+  }
+
   boolean checkTable(String schema, String table) throws SQLException {
     var sql =
         "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?)";

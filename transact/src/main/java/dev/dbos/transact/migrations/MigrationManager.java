@@ -61,37 +61,80 @@ public class MigrationManager {
    * already contains a row.
    */
   public static String generateMigrationScript(String schema, boolean useListenNotify) {
+    return generateMigrationScript(schema, useListenNotify, 0);
+  }
+
+  /**
+   * Generates the SQL script that upgrades a database from {@code fromVersion} (0 = fresh) to the
+   * latest DBOS schema version. Requires no connection. Fresh scripts abort (under psql
+   * ON_ERROR_STOP) if migrations were already applied; delta scripts abort unless the database is
+   * exactly at {@code fromVersion}.
+   */
+  public static String generateMigrationScript(
+      String schema, boolean useListenNotify, int fromVersion) {
     schema = SystemDatabase.sanitizeSchema(schema);
     if (schema.contains("'") || schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
     }
 
-    var sb = new StringBuilder();
-    sb.append("-- DBOS system database migration script for schema \"%s\".\n".formatted(schema));
-    sb.append("-- For FRESH databases only; aborts if DBOS migrations were already applied.\n");
-    sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
-    sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
-    sb.append(
-        "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
-            .formatted(schema));
-    sb.append(
-        """
-
-        -- Fail fast if this is not a fresh database.
-        DO $$
-        DECLARE
-            existing_version BIGINT;
-        BEGIN
-            SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
-            IF existing_version IS NOT NULL THEN
-                RAISE EXCEPTION 'DBOS schema %1$s is already at version %%; this script is for fresh databases only. Use dbos migrate instead.', existing_version;
-            END IF;
-        END $$;
-        """
-            .formatted(schema));
-
     var migrations = getMigrations(schema, useListenNotify, false);
-    for (var i = 0; i < migrations.size(); i++) {
+    var latest = migrations.size();
+    if (fromVersion < 0 || fromVersion > latest) {
+      throw new IllegalArgumentException(
+          "fromVersion must be between 0 and %d, got %d".formatted(latest, fromVersion));
+    }
+    if (fromVersion == latest) {
+      return "-- Database is already at the latest DBOS schema version (%d); nothing to do.\n"
+          .formatted(latest);
+    }
+
+    var sb = new StringBuilder();
+    if (fromVersion == 0) {
+      sb.append("-- DBOS system database migration script for schema \"%s\".\n".formatted(schema));
+      sb.append("-- For FRESH databases only; aborts if DBOS migrations were already applied.\n");
+      sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
+      sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
+      sb.append(
+          "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
+              .formatted(schema));
+      sb.append(
+          """
+
+          -- Fail fast if this is not a fresh database.
+          DO $$
+          DECLARE
+              existing_version BIGINT;
+          BEGIN
+              SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
+              IF existing_version IS NOT NULL THEN
+                  RAISE EXCEPTION 'DBOS schema %1$s is already at version %%; this script is for fresh databases only. Use dbos migrate instead.', existing_version;
+              END IF;
+          END $$;
+          """
+              .formatted(schema));
+    } else {
+      sb.append(
+          "-- DBOS system database delta migration script for schema \"%s\" (version %d to %d).\n"
+              .formatted(schema, fromVersion, latest));
+      sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
+      sb.append(
+          """
+
+          -- Fail fast unless the database is exactly at the expected version.
+          DO $$
+          DECLARE
+              existing_version BIGINT;
+          BEGIN
+              SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
+              IF existing_version IS DISTINCT FROM %2$d THEN
+                  RAISE EXCEPTION 'DBOS schema %1$s is at version %% but this script upgrades from version %2$d; regenerate it with dbos migrate --print-only.', existing_version;
+              END IF;
+          END $$;
+          """
+              .formatted(schema, fromVersion));
+    }
+
+    for (var i = fromVersion; i < migrations.size(); i++) {
       var version = i + 1;
       sb.append("\n-- DBOS system database migration %d\n".formatted(version));
       var sql = migrations.get(i).strip();
