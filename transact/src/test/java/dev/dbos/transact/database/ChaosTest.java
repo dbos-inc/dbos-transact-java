@@ -190,9 +190,12 @@ public class ChaosTest {
 
           // Scenario 1: proxy disabled — simulates a sustained network partition
           proxy.disable();
+          // Dedicated thread: this blocks in dbRetry while the proxy is down, and must
+          // not pin a common ForkJoinPool worker (starves unrelated tests' callbacks).
           var wf1 =
               CompletableFuture.supplyAsync(
-                  () -> dbos.startWorkflow(() -> svc.dbLossBetweenSteps()));
+                  () -> dbos.startWorkflow(() -> svc.dbLossBetweenSteps()),
+                  r -> new Thread(r, "chaos-wf1").start());
           Thread.sleep(3000);
           proxy.enable();
           assertEquals("Hehehe", wf1.get(10, TimeUnit.SECONDS).getResult());
