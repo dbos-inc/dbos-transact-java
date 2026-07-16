@@ -1,5 +1,6 @@
 package dev.dbos.transact.cli;
 
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
 
 import java.io.PrintWriter;
@@ -29,6 +30,11 @@ public class MigrateCommand implements Callable<Integer> {
           "Use LISTEN/NOTIFY on the DBOS system database [default: ${DEFAULT-VALUE}]. Use --no-listen-notify to disable.")
   boolean useListenNotify;
 
+  @Option(
+      names = {"--print-only"},
+      description = "Print the migration SQL to stdout without connecting to the database")
+  boolean printOnly;
+
   @Mixin DatabaseOptions dbOptions;
 
   @Option(
@@ -39,9 +45,33 @@ public class MigrateCommand implements Callable<Integer> {
 
   @Spec CommandSpec spec;
 
+  static final String[] GRANT_QUERIES = {
+    "GRANT USAGE ON SCHEMA %s TO %s",
+    "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s",
+    "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s",
+    "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %s TO %s",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON TABLES TO %s",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON SEQUENCES TO %s",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT EXECUTE ON FUNCTIONS TO %s"
+  };
+
   @Override
   public Integer call() throws Exception {
     var out = spec.commandLine().getOut();
+
+    if (printOnly) {
+      out.print(MigrationManager.generateMigrationScript(dbOptions.schema(), useListenNotify));
+      if (appRole != null && !appRole.isEmpty()) {
+        var schema = SystemDatabase.sanitizeSchema(dbOptions.schema());
+        out.format("%n-- Grant %s schema permissions to %s%n", schema, appRole);
+        for (var query : GRANT_QUERIES) {
+          out.println(query.formatted(schema, appRole) + ";");
+        }
+      }
+      out.flush();
+      return 0;
+    }
+
     out.println("Starting DBOS migrations");
     out.format("  System Database: %s\n", dbOptions.url());
     out.format("  System Database User: %s\n", dbOptions.user());
@@ -66,19 +96,10 @@ public class MigrateCommand implements Callable<Integer> {
         "Granting permissions for the %s schema to %s in database %s\n",
         schema, appRole, dbOptions.url());
 
-    String[] queries = {
-      "GRANT USAGE ON SCHEMA %s TO %s",
-      "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s",
-      "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s",
-      "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %s TO %s",
-      "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON TABLES TO %s",
-      "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON SEQUENCES TO %s",
-      "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT EXECUTE ON FUNCTIONS TO %s"
-    };
     try (var conn =
             DriverManager.getConnection(dbOptions.url(), dbOptions.user(), dbOptions.password());
         var stmt = conn.createStatement()) {
-      for (var query : queries) {
+      for (var query : GRANT_QUERIES) {
         query = query.formatted(schema, appRole);
         stmt.execute(query);
       }

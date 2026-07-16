@@ -54,6 +54,48 @@ public class MigrationManager {
     }
   }
 
+  /**
+   * Generates the full SQL script that migrations would execute on a fresh Postgres database,
+   * including schema creation and dbos_migrations version bookkeeping. Requires no connection.
+   */
+  public static String generateMigrationScript(String schema, boolean useListenNotify) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
+
+    var sb = new StringBuilder();
+    sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
+    sb.append(
+        "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
+            .formatted(schema));
+
+    var migrations = getMigrations(schema, useListenNotify, false);
+    for (var i = 0; i < migrations.size(); i++) {
+      var version = i + 1;
+      sb.append("\n-- DBOS system database migration %d\n".formatted(version));
+      var sql = migrations.get(i).strip();
+      if (version == 10) {
+        // Migration 10 adds the notifications primary key; on a fresh database
+        // migration 1 already created it, so only the version is recorded.
+        sql = "";
+      }
+      if (!sql.isEmpty()) {
+        sb.append(sql);
+        if (!sql.endsWith(";")) {
+          sb.append(';');
+        }
+        sb.append('\n');
+      }
+      if (version == 1) {
+        sb.append("INSERT INTO \"%s\".dbos_migrations (version) VALUES (1);\n".formatted(schema));
+      } else {
+        sb.append("UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, version));
+      }
+    }
+    return sb.toString();
+  }
+
   private static boolean shouldMigrate(
       Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
       throws SQLException {
