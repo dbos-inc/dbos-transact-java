@@ -56,7 +56,9 @@ public class MigrationManager {
 
   /**
    * Generates the full SQL script that migrations would execute on a fresh Postgres database,
-   * including schema creation and dbos_migrations version bookkeeping. Requires no connection.
+   * including schema creation and dbos_migrations version bookkeeping. Requires no connection. The
+   * script is for fresh databases only and fails fast (under psql ON_ERROR_STOP) if dbos_migrations
+   * already contains a row.
    */
   public static String generateMigrationScript(String schema, boolean useListenNotify) {
     schema = SystemDatabase.sanitizeSchema(schema);
@@ -65,9 +67,27 @@ public class MigrationManager {
     }
 
     var sb = new StringBuilder();
+    sb.append("-- DBOS system database migration script for schema \"%s\".\n".formatted(schema));
+    sb.append("-- For FRESH databases only; aborts if DBOS migrations were already applied.\n");
+    sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
     sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
     sb.append(
         "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
+            .formatted(schema));
+    sb.append(
+        """
+
+        -- Fail fast if this is not a fresh database.
+        DO $$
+        DECLARE
+            existing_version BIGINT;
+        BEGIN
+            SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
+            IF existing_version IS NOT NULL THEN
+                RAISE EXCEPTION 'DBOS schema %1$s is already at version %%; this script is for fresh databases only. Use dbos migrate instead.', existing_version;
+            END IF;
+        END $$;
+        """
             .formatted(schema));
 
     var migrations = getMigrations(schema, useListenNotify, false);
@@ -76,9 +96,24 @@ public class MigrationManager {
       sb.append("\n-- DBOS system database migration %d\n".formatted(version));
       var sql = migrations.get(i).strip();
       if (version == 10) {
-        // Migration 10 adds the notifications primary key; on a fresh database
-        // migration 1 already created it, so only the version is recorded.
-        sql = "";
+        // Same conditional the migration runner applies at execution time.
+        sql =
+            """
+            -- Mirrors the runner's guard: add the notifications primary key only if one
+            -- does not already exist (migration 1 creates it on fresh databases).
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE table_schema = '%1$s' AND table_name = 'notifications'
+                      AND constraint_type = 'PRIMARY KEY'
+                ) THEN
+                    %2$s
+                END IF;
+            END $$;
+            """
+                .formatted(schema, sql)
+                .strip();
       }
       if (!sql.isEmpty()) {
         sb.append(sql);

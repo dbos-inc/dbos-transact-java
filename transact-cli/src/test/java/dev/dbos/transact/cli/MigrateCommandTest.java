@@ -1,10 +1,13 @@
 package dev.dbos.transact.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.migrations.MigrationManager;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -103,6 +106,43 @@ public class MigrateCommandTest {
     assertEquals(0, exitCode);
 
     assertTrue(checkTable(schema, "workflow_status"));
+  }
+
+  @Test
+  public void migrate_print_only_apply_funny_schema() throws Exception {
+    var schema = "F8nny_sCHem@-n@m3";
+
+    var cmd = new CommandLine(new DBOSCommand());
+    var sw = new StringWriter();
+    cmd.setOut(new PrintWriter(sw));
+    var exitCode = cmd.execute("migrate", "--print-only", "--schema", schema);
+    assertEquals(0, exitCode);
+    var script = sw.toString();
+
+    // Apply the printed script to a fresh database with psql ON_ERROR_STOP.
+    var applied = pgContainer.execPsql(script);
+    assertEquals(0, applied.getExitCode(), applied.getStderr());
+
+    assertTrue(checkTable(schema, "dbos_migrations"));
+    assertTrue(checkTable(schema, "workflow_status"));
+    assertTrue(checkTable(schema, "notifications"));
+
+    var latest = MigrationManager.getMigrations(schema, true, false).size();
+    try (var conn = pgContainer.connection();
+        var stmt = conn.createStatement();
+        var rs =
+            stmt.executeQuery("SELECT version FROM \"%s\".dbos_migrations".formatted(schema))) {
+      assertTrue(rs.next());
+      assertEquals(latest, rs.getInt(1));
+      assertFalse(rs.next());
+    }
+
+    // Re-applying must abort immediately: the script is for fresh databases only.
+    var reapplied = pgContainer.execPsql(script);
+    assertNotEquals(0, reapplied.getExitCode());
+    assertTrue(
+        reapplied.getStderr().contains("this script is for fresh databases only"),
+        reapplied.getStderr());
   }
 
   boolean checkTable(String schema, String table) throws SQLException {
