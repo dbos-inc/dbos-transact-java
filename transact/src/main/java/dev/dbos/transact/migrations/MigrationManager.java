@@ -54,24 +54,19 @@ public class MigrationManager {
     }
   }
 
-  /**
-   * Generates the full SQL script that migrations would execute on a fresh Postgres database,
-   * including schema creation and dbos_migrations version bookkeeping. Requires no connection. The
-   * script is for fresh databases only and fails fast (under psql ON_ERROR_STOP) if dbos_migrations
-   * already contains a row.
-   */
+  /** Generates the SQL script of all migrations, for fresh Postgres databases only. */
   public static String generateMigrationScript(String schema, boolean useListenNotify) {
-    return generateMigrationScript(schema, useListenNotify, 0);
+    return generateMigrationScript(schema, useListenNotify, 1);
   }
 
   /**
-   * Generates the SQL script that upgrades a database from {@code fromVersion} (0 = fresh) to the
-   * latest DBOS schema version. Requires no connection. Fresh scripts abort (under psql
-   * ON_ERROR_STOP) if migrations were already applied; delta scripts abort unless the database is
-   * exactly at {@code fromVersion}.
+   * Generates the SQL script of migrations {@code startMigration} (1-based, inclusive) through
+   * latest, with dbos_migrations version bookkeeping mirroring the runner. When {@code
+   * startMigration} is 1 the script includes the schema and dbos_migrations prelude and is for
+   * fresh databases only. Requires no connection.
    */
   public static String generateMigrationScript(
-      String schema, boolean useListenNotify, int fromVersion) {
+      String schema, boolean useListenNotify, int startMigration) {
     schema = SystemDatabase.sanitizeSchema(schema);
     if (schema.contains("'") || schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
@@ -79,96 +74,43 @@ public class MigrationManager {
 
     var migrations = getMigrations(schema, useListenNotify, false);
     var latest = migrations.size();
-    if (fromVersion < 0 || fromVersion > latest) {
+    if (startMigration < 1 || startMigration > latest) {
       throw new IllegalArgumentException(
-          "fromVersion must be between 0 and %d, got %d".formatted(latest, fromVersion));
-    }
-    if (fromVersion == latest) {
-      return "-- Database is already at the latest DBOS schema version (%d); nothing to do.\n"
-          .formatted(latest);
+          "startMigration must be between 1 and %d, got %d".formatted(latest, startMigration));
     }
 
     var sb = new StringBuilder();
-    if (fromVersion == 0) {
-      sb.append("-- DBOS system database migration script for schema \"%s\".\n".formatted(schema));
-      sb.append("-- For FRESH databases only; aborts if DBOS migrations were already applied.\n");
-      sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
+    if (startMigration == 1) {
+      sb.append("-- This script is for FRESH databases only.\n");
       sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
       sb.append(
           "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
               .formatted(schema));
-      sb.append(
-          """
-
-          -- Fail fast if this is not a fresh database.
-          DO $$
-          DECLARE
-              existing_version BIGINT;
-          BEGIN
-              SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
-              IF existing_version IS NOT NULL THEN
-                  RAISE EXCEPTION 'DBOS schema %1$s is already at version %%; this script is for fresh databases only. Use dbos migrate instead.', existing_version;
-              END IF;
-          END $$;
-          """
-              .formatted(schema));
-    } else {
-      sb.append(
-          "-- DBOS system database delta migration script for schema \"%s\" (version %d to %d).\n"
-              .formatted(schema, fromVersion, latest));
-      sb.append("-- Apply with: psql -v ON_ERROR_STOP=1 -f <this script>\n");
-      sb.append(
-          """
-
-          -- Fail fast unless the database is exactly at the expected version.
-          DO $$
-          DECLARE
-              existing_version BIGINT;
-          BEGIN
-              SELECT version INTO existing_version FROM "%1$s".dbos_migrations LIMIT 1;
-              IF existing_version IS DISTINCT FROM %2$d THEN
-                  RAISE EXCEPTION 'DBOS schema %1$s is at version %% but this script upgrades from version %2$d; regenerate it with dbos migrate --print-only.', existing_version;
-              END IF;
-          END $$;
-          """
-              .formatted(schema, fromVersion));
     }
 
-    for (var i = fromVersion; i < migrations.size(); i++) {
-      var version = i + 1;
-      sb.append("\n-- DBOS system database migration %d\n".formatted(version));
-      var sql = migrations.get(i).strip();
-      if (version == 10) {
-        // Same conditional the migration runner applies at execution time.
-        sql =
-            """
-            -- Mirrors the runner's guard: add the notifications primary key only if one
-            -- does not already exist (migration 1 creates it on fresh databases).
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.table_constraints
-                    WHERE table_schema = '%1$s' AND table_name = 'notifications'
-                      AND constraint_type = 'PRIMARY KEY'
-                ) THEN
-                    %2$s
-                END IF;
-            END $$;
-            """
-                .formatted(schema, sql)
-                .strip();
-      }
-      if (!sql.isEmpty()) {
+    var versionRowExists = startMigration > 1;
+    for (var i = startMigration; i <= latest; i++) {
+      var sql = migrations.get(i - 1).strip();
+      if (i == 10) {
+        // Migration 10 backfills the notifications primary key, which
+        // migration 1 already creates on a fresh database.
+        sb.append("-- Migration 10 skipped: not applicable on fresh databases\n");
+      } else if (!sql.isEmpty()) {
+        sb.append("-- Migration %d\n".formatted(i));
         sb.append(sql);
         if (!sql.endsWith(";")) {
           sb.append(';');
         }
         sb.append('\n');
       }
-      if (version == 1) {
-        sb.append("INSERT INTO \"%s\".dbos_migrations (version) VALUES (1);\n".formatted(schema));
+      // Per-migration version bookkeeping, mirroring the runner: an
+      // interrupted apply can be resumed from the next migration number.
+      if (versionRowExists) {
+        sb.append("UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, i));
       } else {
-        sb.append("UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, version));
+        sb.append(
+            "INSERT INTO \"%s\".dbos_migrations (version) VALUES (%d);\n".formatted(schema, i));
+        versionRowExists = true;
       }
     }
     return sb.toString();

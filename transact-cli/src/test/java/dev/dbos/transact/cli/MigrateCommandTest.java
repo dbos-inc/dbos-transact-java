@@ -2,7 +2,6 @@ package dev.dbos.transact.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -11,6 +10,7 @@ import dev.dbos.transact.migrations.MigrationManager;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -109,15 +109,13 @@ public class MigrateCommandTest {
   }
 
   @Test
-  public void migrate_print_only_apply_funny_schema() throws Exception {
+  public void migrate_print_migrations_apply_funny_schema() throws Exception {
     var schema = "F8nny_sCHem@-n@m3";
 
-    var cmd = new CommandLine(new DBOSCommand());
-    var sw = new StringWriter();
-    cmd.setOut(new PrintWriter(sw));
-    var exitCode = cmd.execute("migrate", "--print-only", "--schema", schema);
-    assertEquals(0, exitCode);
-    var script = sw.toString();
+    var script = runPrint("--schema", schema, "--print-migrations", "all");
+    assertTrue(script.contains("-- Migration 10 skipped: not applicable on fresh databases"));
+    assertFalse(script.contains("ADD PRIMARY KEY (message_uuid)"));
+    assertFalse(script.contains("DO $$"));
 
     // Apply the printed script to a fresh database with psql ON_ERROR_STOP.
     var applied = pgContainer.execPsql(script);
@@ -128,74 +126,88 @@ public class MigrateCommandTest {
     assertTrue(checkTable(schema, "notifications"));
 
     var latest = MigrationManager.getMigrations(schema, true, false).size();
-    try (var conn = pgContainer.connection();
-        var stmt = conn.createStatement();
-        var rs =
-            stmt.executeQuery("SELECT version FROM \"%s\".dbos_migrations".formatted(schema))) {
-      assertTrue(rs.next());
-      assertEquals(latest, rs.getInt(1));
-      assertFalse(rs.next());
-    }
+    assertEquals(latest, currentVersion(schema));
 
-    // Re-applying must abort immediately: the script is for fresh databases only.
-    var reapplied = pgContainer.execPsql(script);
-    assertNotEquals(0, reapplied.getExitCode());
-    assertTrue(
-        reapplied.getStderr().contains("this script is for fresh databases only"),
-        reapplied.getStderr());
+    // A real migration run now considers the database up to date.
+    var cmd = new CommandLine(new DBOSCommand());
+    cmd.setOut(new PrintWriter(new StringWriter()));
+    var args =
+        Stream.of(List.of("migrate", "--schema", schema), pgContainer.options())
+            .flatMap(Collection::stream)
+            .toArray(String[]::new);
+    assertEquals(0, cmd.execute(args));
+    assertEquals(latest, currentVersion(schema));
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {Constants.DB_SCHEMA, "F8nny_sCHem@-n@m3"})
-  public void migrate_print_only_delta(String schema) throws Exception {
+  @Test
+  public void migrate_print_from_migration() throws Exception {
+    var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, false).size();
-    var from = latest - 3;
 
-    // Build a genuinely partial database at version `from` by applying the fresh
-    // script only up through migration `from`'s bookkeeping.
-    var fresh = MigrationManager.generateMigrationScript(schema, true);
-    var marker = "\n-- DBOS system database migration %d\n".formatted(from + 1);
-    var idx = fresh.indexOf(marker);
+    // Bring a fresh database to version latest-1 by truncating the full script.
+    var full = runPrint("--print-migrations", "all");
+    var marker = "UPDATE \"%s\".dbos_migrations SET version = %d;".formatted(schema, latest - 1);
+    var idx = full.indexOf(marker);
     assertTrue(idx > 0);
-    var partial = pgContainer.execPsql(fresh.substring(0, idx));
-    assertEquals(0, partial.getExitCode(), partial.getStderr());
-    assertEquals(from, currentVersion(schema));
+    var appliedPartial = pgContainer.execPsql(full.substring(0, idx + marker.length()) + "\n");
+    assertEquals(0, appliedPartial.getExitCode(), appliedPartial.getStderr());
+    assertEquals(latest - 1, currentVersion(schema));
 
-    // The CLI connects, reads the version, and prints a delta.
-    var delta = runPrintOnly(schema);
-    assertTrue(delta.contains("IF existing_version IS DISTINCT FROM %d THEN".formatted(from)));
-    assertFalse(delta.contains("CREATE SCHEMA"));
-    assertFalse(delta.contains("INSERT INTO \"%s\".dbos_migrations".formatted(schema)));
-    assertFalse(delta.contains("-- DBOS system database migration %d\n".formatted(from)));
-    assertTrue(delta.contains("-- DBOS system database migration %d\n".formatted(from + 1)));
-
-    var applied = pgContainer.execPsql(delta);
+    // The last migration printed alone applies on top of version latest-1.
+    var single = runPrint("--print-migrations", String.valueOf(latest));
+    assertFalse(single.contains("CREATE SCHEMA"));
+    assertFalse(single.contains("DO $$"));
+    assertFalse(single.contains("INSERT INTO \"%s\".dbos_migrations".formatted(schema)));
+    var applied = pgContainer.execPsql(single);
     assertEquals(0, applied.getExitCode(), applied.getStderr());
     assertEquals(latest, currentVersion(schema));
-
-    // Re-applying the delta fails the exact-version guard under ON_ERROR_STOP.
-    var reapplied = pgContainer.execPsql(delta);
-    assertNotEquals(0, reapplied.getExitCode());
-    assertTrue(
-        reapplied.getStderr().contains("upgrades from version %d".formatted(from)),
-        reapplied.getStderr());
-    assertEquals(latest, currentVersion(schema));
-
-    // An up-to-date database prints only the nothing-to-do comment.
-    assertEquals(
-        "-- Database is already at the latest DBOS schema version (%d); nothing to do.\n"
-            .formatted(latest),
-        runPrintOnly(schema));
-
-    // The fresh script against an already-migrated database fails fast.
-    var freshOnMigrated = pgContainer.execPsql(fresh);
-    assertNotEquals(0, freshOnMigrated.getExitCode());
-    assertTrue(
-        freshOnMigrated.getStderr().contains("this script is for fresh databases only"),
-        freshOnMigrated.getStderr());
   }
 
-  String runPrintOnly(String schema) {
+  @Test
+  public void migrate_print_user_role_grants_access() throws Exception {
+    var schema = "F8nny_sCHem@-n@m3";
+    var role = "my-app-role";
+
+    var script = runPrint("--schema", schema, "--print-migrations", "all");
+    var roleScript = runPrint("--schema", schema, "--print-user-role", "--app-role", role);
+    assertTrue(
+        roleScript.contains("GRANT USAGE ON SCHEMA \"%s\" TO \"%s\";".formatted(schema, role)));
+    for (var line : roleScript.split("\n")) {
+      assertTrue(
+          line.startsWith("--") || line.startsWith("GRANT") || line.startsWith("ALTER"),
+          "unexpected output: " + line);
+    }
+
+    try (var conn = pgContainer.connection();
+        var stmt = conn.createStatement()) {
+      stmt.execute("DROP ROLE IF EXISTS \"%s\"".formatted(role));
+      stmt.execute("CREATE ROLE \"%s\" LOGIN PASSWORD 'app_role_pwd'".formatted(role));
+    }
+    try {
+      for (var s : List.of(script, roleScript)) {
+        var applied = pgContainer.execPsql(s);
+        assertEquals(0, applied.getExitCode(), applied.getStderr());
+      }
+
+      // The app role can query the DBOS schema.
+      var latest = MigrationManager.getMigrations(schema, true, false).size();
+      try (var conn = DriverManager.getConnection(pgContainer.jdbcUrl(), role, "app_role_pwd");
+          var stmt = conn.createStatement();
+          var rs =
+              stmt.executeQuery("SELECT version FROM \"%s\".dbos_migrations".formatted(schema))) {
+        assertTrue(rs.next());
+        assertEquals(latest, rs.getInt(1));
+      }
+    } finally {
+      try (var conn = pgContainer.connection();
+          var stmt = conn.createStatement()) {
+        stmt.execute("DROP OWNED BY \"%s\"".formatted(role));
+        stmt.execute("DROP ROLE \"%s\"".formatted(role));
+      }
+    }
+  }
+
+  String runPrint(String... printArgs) {
     var cmd = new CommandLine(new DBOSCommand());
     var sw = new StringWriter();
     var ew = new StringWriter();
@@ -203,11 +215,11 @@ public class MigrateCommandTest {
     cmd.setErr(new PrintWriter(ew));
 
     var args =
-        Stream.of(List.of("migrate", "--print-only", "--schema", schema), pgContainer.options())
+        Stream.of(List.of("migrate"), List.of(printArgs), pgContainer.options())
             .flatMap(Collection::stream)
             .toArray(String[]::new);
 
-    assertEquals(0, cmd.execute(args));
+    assertEquals(0, cmd.execute(args), ew.toString());
     assertEquals("", ew.toString());
     return sw.toString();
   }
