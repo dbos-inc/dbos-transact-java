@@ -233,7 +233,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorService = executorServiceSupplier.get();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
-      systemDatabase = SystemDatabase.create(config);
+      systemDatabase = SystemDatabase.create(config, this.executorId);
       systemDatabase.start();
 
       systemDatabase.createApplicationVersion(this.appVersion);

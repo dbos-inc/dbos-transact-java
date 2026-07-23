@@ -107,14 +107,15 @@ public class SystemDatabase implements AutoCloseable {
       String schema,
       boolean created,
       DBOSSerializer serializer,
-      boolean useListenNotify) {
+      boolean useListenNotify,
+      String executorId) {
     validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain double quotes");
     }
 
-    this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get);
+    this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get, executorId);
     this.created = created;
     try {
       useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
@@ -136,32 +137,42 @@ public class SystemDatabase implements AutoCloseable {
       String schema,
       DBOSSerializer serializer,
       boolean useListenNotify) {
-    this(createDataSource(url, user, password), schema, true, serializer, useListenNotify);
+    this(createDataSource(url, user, password), schema, true, serializer, useListenNotify, null);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true);
+    this(createDataSource(url, user, password), schema, true, null, true, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true);
+    this(dataSource, schema, false, null, true, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer, true);
+    this(dataSource, schema, false, serializer, true, null);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
+    return create(config, null);
+  }
+
+  public static SystemDatabase create(DBOSConfig config, String executorId) {
     if (config.dataSource() == null) {
       return new SystemDatabase(
-          config.databaseUrl(),
-          config.dbUser(),
-          config.dbPassword(),
+          createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword()),
           config.databaseSchema(),
+          true,
           config.serializer(),
-          config.useListenNotify());
+          config.useListenNotify(),
+          executorId);
     } else {
-      return new SystemDatabase(config.dataSource(), config.databaseSchema(), config.serializer());
+      return new SystemDatabase(
+          config.dataSource(),
+          config.databaseSchema(),
+          false,
+          config.serializer(),
+          true,
+          executorId);
     }
   }
 
