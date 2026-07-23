@@ -9,7 +9,11 @@ import java.util.function.BooleanSupplier;
 import javax.sql.DataSource;
 
 public record DbContext(
-    DataSource dataSource, String schema, DBOSSerializer serializer, BooleanSupplier closed) {
+    DataSource dataSource,
+    String schema,
+    DBOSSerializer serializer,
+    BooleanSupplier closed,
+    String executorId) {
 
   public Connection getConnection() throws SQLException {
     return dataSource.getConnection();

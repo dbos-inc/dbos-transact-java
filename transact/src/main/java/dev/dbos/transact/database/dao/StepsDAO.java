@@ -34,19 +34,26 @@ public class StepsDAO {
       DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
-      recordStepResult(conn, ctx.schema(), result, startTimeEpochMs, endTimeEpochMs);
+      recordStepResult(
+          conn, ctx.schema(), ctx.executorId(), result, startTimeEpochMs, endTimeEpochMs);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
   static void recordStepResult(
-      Connection conn, String schema, StepResult result, long startTimeEpochMs)
+      Connection conn, String schema, String executorId, StepResult result, long startTimeEpochMs)
       throws SQLException {
-    recordStepResult(conn, schema, result, startTimeEpochMs, System.currentTimeMillis());
+    recordStepResult(
+        conn, schema, executorId, result, startTimeEpochMs, System.currentTimeMillis());
   }
 
   static void recordStepResult(
-      Connection conn, String schema, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
+      Connection conn,
+      String schema,
+      String executorId,
+      StepResult result,
+      Long startTimeEpochMs,
+      Long endTimeEpochMs)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -59,6 +66,7 @@ public class StepsDAO {
         """
             .formatted(schema);
 
+    boolean won = false;
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, result.workflowId());
       stmt.setInt(2, result.stepId());
@@ -86,14 +94,17 @@ public class StepsDAO {
       stmt.setObject(8, endTimeEpochMs);
 
       try (ResultSet rs = stmt.executeQuery()) {
-        if (rs.next() && endTimeEpochMs != null) {
-          long completedAt = rs.getLong("completed_at_epoch_ms");
-          if (completedAt != endTimeEpochMs) {
-            logger.warn(
-                String.format(
-                    "Step output for %s:%d-%s was already recorded",
-                    result.workflowId(), result.stepId(), result.stepName()));
-            throw new DBOSWorkflowExecutionConflictException(result.workflowId());
+        if (rs.next()) {
+          won = true;
+          if (endTimeEpochMs != null) {
+            long completedAt = rs.getLong("completed_at_epoch_ms");
+            if (completedAt != endTimeEpochMs) {
+              logger.warn(
+                  String.format(
+                      "Step output for %s:%d-%s was already recorded",
+                      result.workflowId(), result.stepId(), result.stepName()));
+              throw new DBOSWorkflowExecutionConflictException(result.workflowId());
+            }
           }
         }
       }
@@ -103,6 +114,20 @@ public class StepsDAO {
         throw new DBOSWorkflowExecutionConflictException(result.workflowId());
       } else {
         throw e;
+      }
+    }
+
+    if (won && executorId != null) {
+      String updateSql =
+          """
+            UPDATE "%s".workflow_status SET executor_id = ? WHERE workflow_uuid = ? AND executor_id IS DISTINCT FROM ?
+          """
+              .formatted(schema);
+      try (var stmt = conn.prepareStatement(updateSql)) {
+        stmt.setString(1, executorId);
+        stmt.setString(2, result.workflowId());
+        stmt.setString(3, executorId);
+        stmt.executeUpdate();
       }
     }
   }
@@ -297,7 +322,8 @@ public class StepsDAO {
       var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
       if (checkpointName == null) {
         var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
-        recordStepResult(conn, ctx.schema(), output, System.currentTimeMillis(), null);
+        recordStepResult(
+            conn, ctx.schema(), ctx.executorId(), output, System.currentTimeMillis(), null);
         return true;
       } else {
         return patchName.equals(checkpointName);
