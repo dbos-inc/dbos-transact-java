@@ -65,7 +65,7 @@ public class StreamsDAO {
 
         var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
         StepsDAO.recordStepResult(
-            conn, ctx.schema(), output, startTime, System.currentTimeMillis());
+            conn, ctx.schema(), ctx.executorId(), output, startTime, System.currentTimeMillis());
 
         conn.commit();
 

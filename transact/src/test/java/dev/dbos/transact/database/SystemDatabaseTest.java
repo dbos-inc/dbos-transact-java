@@ -2645,7 +2645,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false);
+    return new DbContext(ds, schema, null, () -> false, null);
   }
 
   @Test
