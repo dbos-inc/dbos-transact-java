@@ -109,6 +109,34 @@ public class DBOSExecutor implements AutoCloseable {
 
   private record QueueBucket(String queueName, String partitionKey) {}
 
+  // Owns this executor's active-ID entry for a workflow. Construction acquires the entry
+  // (throwing on conflict); release is idempotent, so the try-with-resources backstop never
+  // removes an entry a resumed execution re-acquired after an explicit release().
+  private final class ActiveWorkflowGuard implements AutoCloseable {
+    private final AtomicBoolean released = new AtomicBoolean(false);
+    private final String workflowId;
+
+    ActiveWorkflowGuard(String workflowId, QueueBucket bucket) {
+      if (activeWorkflows.putIfAbsent(workflowId, bucket) != null) {
+        throw new DBOSWorkflowExecutionConflictException(workflowId);
+      }
+      this.workflowId = workflowId;
+    }
+
+    // Must run before a terminal outcome write becomes durable: once it is visible, a resume
+    // can re-dispatch this workflow to this executor, and a stale entry would reject it.
+    void release() {
+      if (released.compareAndSet(false, true)) {
+        activeWorkflows.remove(workflowId);
+      }
+    }
+
+    @Override
+    public void close() {
+      release();
+    }
+  }
+
   private static final ThreadLocal<Consumer<Invocation>> HOOK_HOLDER = new ThreadLocal<>();
   private static final QueueBucket NO_QUEUE = new QueueBucket(null, null);
 
@@ -1743,21 +1771,8 @@ public class DBOSExecutor implements AutoCloseable {
               finalOptions.isDequeuedRequest()
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
-          if (activeWorkflows.putIfAbsent(workflowId, bucket) != null) {
-            throw new DBOSWorkflowExecutionConflictException(workflowId);
-          }
-          // Release the active-ID entry before the terminal outcome write becomes durable:
-          // once it is visible, a resume can re-dispatch this workflow to this executor, and
-          // a stale entry would reject that dispatch. The once-guard keeps the finally
-          // backstop from removing an entry a resumed execution re-acquired in the meantime.
-          var activeReleased = new AtomicBoolean(false);
-          Runnable releaseActive =
-              () -> {
-                if (activeReleased.compareAndSet(false, true)) {
-                  activeWorkflows.remove(workflowId);
-                }
-              };
-          try {
+          var active = new ActiveWorkflowGuard(workflowId, bucket);
+          try (active) {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
                 workflow.fullyQualifiedName(),
@@ -1789,7 +1804,7 @@ public class DBOSExecutor implements AutoCloseable {
               return null;
             }
 
-            releaseActive.run();
+            active.release();
             persistWorkflowOutput(workflowId, output, initResult.serialization());
 
             return output;
@@ -1818,16 +1833,15 @@ public class DBOSExecutor implements AutoCloseable {
             // DBOSAwaitedWorkflowCancelledException.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
-              releaseActive.run();
               throw cancelled;
             }
 
-            releaseActive.run();
+            // active is already closed here: try-with-resources closes before catch runs,
+            // so the entry is released before this terminal write becomes durable.
             persistWorkflowError(workflowId, actual, initResult.serialization());
             throw e;
           } finally {
             DBOSContextHolder.clear();
-            releaseActive.run();
           }
         };
 
