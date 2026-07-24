@@ -54,6 +54,68 @@ public class MigrationManager {
     }
   }
 
+  /** Generates the SQL script of all migrations, for fresh Postgres databases only. */
+  public static String generateMigrationScript(String schema, boolean useListenNotify) {
+    return generateMigrationScript(schema, useListenNotify, 1);
+  }
+
+  /**
+   * Generates the SQL script of migrations {@code startMigration} (1-based, inclusive) through
+   * latest, with dbos_migrations version bookkeeping mirroring the runner. When {@code
+   * startMigration} is 1 the script includes the schema and dbos_migrations prelude and is for
+   * fresh databases only. Requires no connection.
+   */
+  public static String generateMigrationScript(
+      String schema, boolean useListenNotify, int startMigration) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
+
+    var migrations = getMigrations(schema, useListenNotify, false);
+    var latest = migrations.size();
+    if (startMigration < 1 || startMigration > latest) {
+      throw new IllegalArgumentException(
+          "startMigration must be between 1 and %d, got %d".formatted(latest, startMigration));
+    }
+
+    var sb = new StringBuilder();
+    if (startMigration == 1) {
+      sb.append("-- This script is for FRESH databases only.\n");
+      sb.append("CREATE SCHEMA IF NOT EXISTS \"%s\";\n".formatted(schema));
+      sb.append(
+          "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY);\n"
+              .formatted(schema));
+    }
+
+    var versionRowExists = startMigration > 1;
+    for (var i = startMigration; i <= latest; i++) {
+      var sql = migrations.get(i - 1).strip();
+      if (i == 10) {
+        // Migration 10 backfills the notifications primary key, which
+        // migration 1 already creates on a fresh database.
+        sb.append("-- Migration 10 skipped: not applicable on fresh databases\n");
+      } else if (!sql.isEmpty()) {
+        sb.append("-- Migration %d\n".formatted(i));
+        sb.append(sql);
+        if (!sql.endsWith(";")) {
+          sb.append(';');
+        }
+        sb.append('\n');
+      }
+      // Per-migration version bookkeeping, mirroring the runner: an
+      // interrupted apply can be resumed from the next migration number.
+      if (versionRowExists) {
+        sb.append("UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, i));
+      } else {
+        sb.append(
+            "INSERT INTO \"%s\".dbos_migrations (version) VALUES (%d);\n".formatted(schema, i));
+        versionRowExists = true;
+      }
+    }
+    return sb.toString();
+  }
+
   private static boolean shouldMigrate(
       Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
       throws SQLException {
