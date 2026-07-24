@@ -10,6 +10,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Semaphore;
 
+import org.testcontainers.containers.Container;
+import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class PgContainer implements AutoCloseable {
@@ -94,6 +96,14 @@ public class PgContainer implements AutoCloseable {
 
   public Connection connection() throws SQLException {
     return DriverManager.getConnection(jdbcUrl(), username(), password());
+  }
+
+  /** Applies a SQL script with psql -v ON_ERROR_STOP=1 inside the container. */
+  public Container.ExecResult execPsql(String script) throws Exception {
+    var path = "/tmp/" + UUID.randomUUID() + ".sql";
+    pgContainer.copyFileToContainer(Transferable.of(script), path);
+    return pgContainer.execInContainer(
+        "psql", "-v", "ON_ERROR_STOP=1", "-U", username(), "-d", dbName, "-f", path);
   }
 
   public List<String> options() {
