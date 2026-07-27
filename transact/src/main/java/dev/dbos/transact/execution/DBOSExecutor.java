@@ -1771,8 +1771,7 @@ public class DBOSExecutor implements AutoCloseable {
               finalOptions.isDequeuedRequest()
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
-          var active = new ActiveWorkflowGuard(workflowId, bucket);
-          try (active) {
+          try (var active = new ActiveWorkflowGuard(workflowId, bucket)) {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
                 workflow.fullyQualifiedName(),
