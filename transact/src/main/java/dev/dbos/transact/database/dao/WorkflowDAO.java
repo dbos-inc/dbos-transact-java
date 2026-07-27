@@ -1276,7 +1276,7 @@ public class WorkflowDAO {
         new StepResult(parentId, functionId, functionName, null, null, null, null)
             .withChildWorkflowId(childId);
     try (var conn = ctx.getConnection()) {
-      StepsDAO.recordStepResult(conn, ctx.schema(), ctx.executorId(), result, null, null);
+      StepsDAO.recordStepResult(ctx, conn, result, null, null);
     }
   }
 
@@ -1799,6 +1799,32 @@ public class WorkflowDAO {
       stmt.executeUpdate();
     } finally {
       arr.free();
+    }
+  }
+
+  /**
+   * Claims {@code workflowId} for {@code executorId}, skipping the write when the workflow is
+   * already stamped with it. No-ops when {@code executorId} is null, as it is for contexts that
+   * have no executor identity of their own (such as {@link dev.dbos.transact.DBOSClient}).
+   *
+   * <p>Runs on the caller's connection so it joins the caller's transaction.
+   */
+  static void restampExecutorId(
+      Connection conn, String schema, String workflowId, @Nullable String executorId)
+      throws SQLException {
+    if (executorId == null) {
+      return;
+    }
+    String sql =
+        """
+            UPDATE "%s".workflow_status SET executor_id = ? WHERE workflow_uuid = ? AND executor_id IS DISTINCT FROM ?
+          """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, executorId);
+      stmt.setString(2, workflowId);
+      stmt.setString(3, executorId);
+      stmt.executeUpdate();
     }
   }
 

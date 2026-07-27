@@ -34,29 +34,22 @@ public class StepsDAO {
       DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
-      recordStepResult(
-          conn, ctx.schema(), ctx.executorId(), result, startTimeEpochMs, endTimeEpochMs);
+      recordStepResult(ctx, conn, result, startTimeEpochMs, endTimeEpochMs);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
   static void recordStepResult(
-      Connection conn, String schema, String executorId, StepResult result, long startTimeEpochMs)
+      DbContext ctx, Connection conn, StepResult result, long startTimeEpochMs)
       throws SQLException {
-    recordStepResult(
-        conn, schema, executorId, result, startTimeEpochMs, System.currentTimeMillis());
+    recordStepResult(ctx, conn, result, startTimeEpochMs, System.currentTimeMillis());
   }
 
   static void recordStepResult(
-      Connection conn,
-      String schema,
-      String executorId,
-      StepResult result,
-      Long startTimeEpochMs,
-      Long endTimeEpochMs)
+      DbContext ctx, Connection conn, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
       throws SQLException {
 
-    Objects.requireNonNull(schema);
+    String schema = Objects.requireNonNull(ctx.schema());
     String sql =
         """
           INSERT INTO "%s".operation_outputs
@@ -117,18 +110,8 @@ public class StepsDAO {
       }
     }
 
-    if (won && executorId != null) {
-      String updateSql =
-          """
-            UPDATE "%s".workflow_status SET executor_id = ? WHERE workflow_uuid = ? AND executor_id IS DISTINCT FROM ?
-          """
-              .formatted(schema);
-      try (var stmt = conn.prepareStatement(updateSql)) {
-        stmt.setString(1, executorId);
-        stmt.setString(2, result.workflowId());
-        stmt.setString(3, executorId);
-        stmt.executeUpdate();
-      }
+    if (won) {
+      WorkflowDAO.restampExecutorId(conn, schema, result.workflowId(), ctx.executorId());
     }
   }
 
@@ -322,8 +305,7 @@ public class StepsDAO {
       var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
       if (checkpointName == null) {
         var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
-        recordStepResult(
-            conn, ctx.schema(), ctx.executorId(), output, System.currentTimeMillis(), null);
+        recordStepResult(ctx, conn, output, System.currentTimeMillis(), null);
         return true;
       } else {
         return patchName.equals(checkpointName);

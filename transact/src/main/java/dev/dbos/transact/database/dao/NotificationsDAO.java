@@ -204,8 +204,7 @@ public class NotificationsDAO {
 
         if (workflowId != null) {
           var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-          StepsDAO.recordStepResult(
-              conn, ctx.schema(), ctx.executorId(), output, startTime, System.currentTimeMillis());
+          StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
         }
 
         conn.commit();
@@ -341,7 +340,7 @@ public class NotificationsDAO {
         var output =
             new StepResult(
                 workflowId, stepId, stepName, serializedMessage, null, null, serialization);
-        StepsDAO.recordStepResult(conn, ctx.schema(), ctx.executorId(), output, startTime);
+        StepsDAO.recordStepResult(ctx, conn, output, startTime);
 
         conn.commit();
         return deserializedMessage;
@@ -443,7 +442,7 @@ public class NotificationsDAO {
         if (asStep) {
           StepResult output =
               new StepResult(workflowId, functionId, functionName, null, null, null, null);
-          StepsDAO.recordStepResult(conn, ctx.schema(), ctx.executorId(), output, startTime);
+          StepsDAO.recordStepResult(ctx, conn, output, startTime);
         }
 
         conn.commit();

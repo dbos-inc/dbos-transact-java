@@ -64,8 +64,7 @@ public class StreamsDAO {
         insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
 
         var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
-        StepsDAO.recordStepResult(
-            conn, ctx.schema(), ctx.executorId(), output, startTime, System.currentTimeMillis());
+        StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
 
         conn.commit();
 
