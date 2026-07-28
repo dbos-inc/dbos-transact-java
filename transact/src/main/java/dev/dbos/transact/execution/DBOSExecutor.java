@@ -1834,12 +1834,18 @@ public class DBOSExecutor implements AutoCloseable {
 
             logger.error("executeWorkflow {}", workflowId, actual);
 
-            // Skip persistWorkflowError for cancelled workflows: the DB already holds CANCELLED
-            // (the terminal state), so the write would be refused anyway, and rethrowing here
-            // preserves the getResult() conversion to DBOSAwaitedWorkflowCancelledException.
+            // The run observed its own cancellation (checkWorkflow only throws this after
+            // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
+            // the row, and adopt the recorded outcome: normally the row is still CANCELLED
+            // and awaitWorkflowResult throws DBOSAwaitedWorkflowCancelledException, but a
+            // concurrent resume may have taken the workflow back, in which case the recorded
+            // outcome is the truth.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
-              throw cancelled;
+              logger.warn(
+                  "Workflow was cancelled during execution. Waiting for the recorded outcome. workflowId {}",
+                  workflowId);
+              return awaitWorkflowResult(workflowId);
             }
 
             // The outcome write found no workflow_status row at all (the workflow was deleted

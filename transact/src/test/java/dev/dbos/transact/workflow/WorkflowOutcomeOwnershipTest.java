@@ -6,8 +6,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -61,6 +63,19 @@ public class WorkflowOutcomeOwnershipTest {
     impl.releaseLatches.put(workflowId, new CountDownLatch(1));
     var handle =
         dbos.startWorkflow(() -> proxy.blockedWorkflow(), new StartWorkflowOptions(workflowId));
+    impl.startedLatches.get(workflowId).await();
+    return handle;
+  }
+
+  // Starts a run that will observe its own cancellation once released, and returns once it is
+  // blocked inside the workflow function, with its row PENDING.
+  private WorkflowHandle<String, ?> startSelfCancellingRun(String workflowId)
+      throws InterruptedException {
+    impl.startedLatches.put(workflowId, new CountDownLatch(1));
+    impl.releaseLatches.put(workflowId, new CountDownLatch(1));
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.selfCancellingWorkflow(), new StartWorkflowOptions(workflowId));
     impl.startedLatches.get(workflowId).await();
     return handle;
   }
@@ -233,10 +248,48 @@ public class WorkflowOutcomeOwnershipTest {
         handle::getResult,
         "a run whose row vanished must not report a completion");
   }
+
+  @Test
+  public void cancelledRunAdoptsARecordedOutcome() throws Exception {
+    // A run that observes its own cancellation adopts the recorded outcome rather than trusting
+    // its local view: here a concurrent "resume" already rewrote the row to SUCCESS, so the
+    // handle reports that outcome instead of a cancellation that is no longer the workflow's
+    // state.
+    var workflowId = "outcome-ownership-cancel-adopt-%d".formatted(System.currentTimeMillis());
+    var handle = startSelfCancellingRun(workflowId);
+    var recorded = serializeValue("recorded-after-cancel");
+    rewriteRow(workflowId, WorkflowState.SUCCESS, recorded, null);
+    releaseRun(workflowId);
+
+    assertEquals(
+        "recorded-after-cancel",
+        handle.getResult(),
+        "the run must adopt the recorded outcome, not report its cancellation");
+
+    var row = readRow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
+    assertEquals(recorded, row.output(), "the recorded output must not be overwritten");
+  }
+
+  @Test
+  public void cancelledRunStillReportsCancellationForACancelledRow() throws Exception {
+    var workflowId = "outcome-ownership-cancelled-%d".formatted(System.currentTimeMillis());
+    var handle = startSelfCancellingRun(workflowId);
+    rewriteRow(workflowId, WorkflowState.CANCELLED, null, null);
+    releaseRun(workflowId);
+
+    assertThrows(
+        DBOSAwaitedWorkflowCancelledException.class,
+        handle::getResult,
+        "a genuinely cancelled workflow must still report its cancellation");
+    assertEquals(WorkflowState.CANCELLED.name(), readRow(workflowId).status());
+  }
 }
 
 interface OutcomeOwnershipService {
   String blockedWorkflow() throws InterruptedException;
+
+  String selfCancellingWorkflow() throws InterruptedException;
 }
 
 class OutcomeOwnershipServiceImpl implements OutcomeOwnershipService {
@@ -253,5 +306,16 @@ class OutcomeOwnershipServiceImpl implements OutcomeOwnershipService {
     startedLatches.get(wfId).countDown();
     releaseLatches.get(wfId).await();
     return "own-result";
+  }
+
+  // Stands in for a run that observes its own cancellation mid-flight: the cancellation is
+  // thrown only after the test has rewritten the row.
+  @Override
+  @Workflow
+  public String selfCancellingWorkflow() throws InterruptedException {
+    var wfId = DBOSContextHolder.get().getWorkflowId();
+    startedLatches.get(wfId).countDown();
+    releaseLatches.get(wfId).await();
+    throw new DBOSWorkflowCancelledException(wfId);
   }
 }
