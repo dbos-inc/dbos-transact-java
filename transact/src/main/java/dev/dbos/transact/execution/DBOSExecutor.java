@@ -1804,7 +1804,16 @@ public class DBOSExecutor implements AutoCloseable {
             }
 
             active.release();
-            persistWorkflowOutput(workflowId, output, initResult.serialization());
+            if (!persistWorkflowOutput(workflowId, output, initResult.serialization())) {
+              // The row was not PENDING: this run no longer owns the workflow's outcome. It
+              // may have been cancelled, dead-lettered, completed by a concurrent execution,
+              // or handed back to the queue by a resume. Park the execution and wait for the
+              // recorded outcome to become visible.
+              logger.warn(
+                  "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
+                  workflowId);
+              return awaitWorkflowResult(workflowId);
+            }
 
             return output;
           } catch (DBOSWorkflowExecutionConflictException e) {
@@ -1826,18 +1835,31 @@ public class DBOSExecutor implements AutoCloseable {
             logger.error("executeWorkflow {}", workflowId, actual);
 
             // Skip persistWorkflowError for cancelled workflows: the DB already holds CANCELLED
-            // (the terminal state), and calling persistWorkflowError would cause
-            // updateWorkflowOutcome to throw DBOSWorkflowCancelledException from inside the
-            // catch block, bypassing the getResult() conversion to
-            // DBOSAwaitedWorkflowCancelledException.
+            // (the terminal state), so the write would be refused anyway, and rethrowing here
+            // preserves the getResult() conversion to DBOSAwaitedWorkflowCancelledException.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
               throw cancelled;
             }
 
+            // The outcome write found no workflow_status row at all (the workflow was deleted
+            // or garbage collected): deliver the error as the workflow's outcome; there is
+            // nothing left to record onto.
+            if (actual instanceof DBOSNonExistentWorkflowException nonExistent
+                && workflowId.equals(nonExistent.workflowId())) {
+              throw nonExistent;
+            }
+
             // active is already closed here: try-with-resources closes before catch runs,
             // so the entry is released before this terminal write becomes durable.
-            persistWorkflowError(workflowId, actual, initResult.serialization());
+            if (!persistWorkflowError(workflowId, actual, initResult.serialization())) {
+              // The row was not PENDING: this run no longer owns the workflow's outcome
+              // (see the equivalent refusal on the success path above).
+              logger.warn(
+                  "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
+                  workflowId);
+              return awaitWorkflowResult(workflowId);
+            }
             throw e;
           } finally {
             DBOSContextHolder.clear();
@@ -2007,14 +2029,14 @@ public class DBOSExecutor implements AutoCloseable {
     return initResult[0];
   }
 
-  private void persistWorkflowOutput(String workflowId, Object result, String serialization) {
+  private boolean persistWorkflowOutput(String workflowId, Object result, String serialization) {
     var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
-    systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
+    return systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
   }
 
-  private void persistWorkflowError(String workflowId, Throwable error, String serialization) {
+  private boolean persistWorkflowError(String workflowId, Throwable error, String serialization) {
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
-    systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
+    return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
   }
 
   /**

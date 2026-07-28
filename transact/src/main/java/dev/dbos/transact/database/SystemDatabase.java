@@ -366,9 +366,11 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING and this
+   *     execution no longer owns the workflow's outcome
    */
-  public void recordWorkflowOutput(String workflowId, String result) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
+  public boolean recordWorkflowOutput(String workflowId, String result) {
+    return dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
   }
 
   /**
@@ -376,9 +378,11 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING and this
+   *     execution no longer owns the workflow's outcome
    */
-  public void recordWorkflowError(String workflowId, String error) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
+  public boolean recordWorkflowError(String workflowId, String error) {
+    return dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
   }
 
   /**
