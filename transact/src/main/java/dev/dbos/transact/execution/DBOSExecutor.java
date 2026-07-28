@@ -1817,8 +1817,14 @@ public class DBOSExecutor implements AutoCloseable {
 
             return output;
           } catch (DBOSWorkflowExecutionConflictException e) {
-            // don't persist execution conflict exception
-            throw e;
+            // Another execution owns this workflow (a concurrent run recorded a step
+            // checkpoint, or the workflow is already active on this executor). Never
+            // persist the conflict: park the execution and deliver the recorded outcome
+            // through this run's own future.
+            logger.warn(
+                "Aborting duplicate execution of workflow. Waiting for the recorded outcome. workflowId {}",
+                workflowId);
+            return awaitWorkflowResult(workflowId);
           } catch (Exception e) {
             Throwable actual = e;
 

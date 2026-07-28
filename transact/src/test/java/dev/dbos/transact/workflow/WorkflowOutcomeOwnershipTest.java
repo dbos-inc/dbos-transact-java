@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -283,6 +284,42 @@ public class WorkflowOutcomeOwnershipTest {
         handle::getResult,
         "a genuinely cancelled workflow must still report its cancellation");
     assertEquals(WorkflowState.CANCELLED.name(), readRow(workflowId).status());
+  }
+
+  @Test
+  public void conflictingExecutionParksAndAdoptsTheRecordedOutcome() throws Exception {
+    // A recovery dispatch of a workflow that is already active on this executor loses the
+    // start race: it must park and adopt the outcome recorded by the run that owns the
+    // workflow, not surface the conflict.
+    var workflowId = "outcome-ownership-conflict-%d".formatted(System.currentTimeMillis());
+    var handle = startBlockedRun(workflowId);
+
+    var duplicate =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .<String, Exception>executeWorkflowById(workflowId, true, false);
+
+    var done =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try {
+                return duplicate.getResult();
+              } catch (Exception e) {
+                throw new CompletionException(e);
+              }
+            });
+
+    assertThrows(
+        TimeoutException.class,
+        () -> done.get(3, TimeUnit.SECONDS),
+        "the duplicate must wait for the owning execution");
+
+    releaseRun(workflowId);
+
+    assertEquals(
+        "own-result",
+        done.get(30, TimeUnit.SECONDS),
+        "the duplicate must adopt the recorded outcome");
+    assertEquals("own-result", handle.getResult());
   }
 }
 
