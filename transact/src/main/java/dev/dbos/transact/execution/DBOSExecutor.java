@@ -1095,8 +1095,18 @@ public class DBOSExecutor implements AutoCloseable {
         workflowId);
   }
 
+  // A missing row normally means the workflow just hasn't been inserted yet (an unchecked
+  // retrieve, or a debounced workflow whose row appears only after the debounce period), so
+  // polling is correct. Callers that know the row must already exist (a run parking on an
+  // outcome it just failed to write) pass failIfMissing to fail fast instead of polling
+  // forever.
   private <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+    return awaitWorkflowResult(workflowId, false);
+  }
+
+  private <T, E extends Exception> T awaitWorkflowResult(String workflowId, boolean failIfMissing)
+      throws E {
+    var result = systemDatabase.<T>awaitWorkflowResult(workflowId, failIfMissing);
     return Result.<T, E>process(result);
   }
 
@@ -1808,11 +1818,13 @@ public class DBOSExecutor implements AutoCloseable {
               // The row was not PENDING: this run no longer owns the workflow's outcome. It
               // may have been cancelled, dead-lettered, completed by a concurrent execution,
               // or handed back to the queue by a resume. Park the execution and wait for the
-              // recorded outcome to become visible.
+              // recorded outcome to become visible. The row is known to have existed (this run
+              // just tried to write to it), so failIfMissing: a missing row means it was
+              // deleted, and the park surfaces DBOSNonExistentWorkflowException.
               logger.warn(
                   "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
                   workflowId);
-              return awaitWorkflowResult(workflowId);
+              return awaitWorkflowResult(workflowId, true);
             }
 
             return output;
@@ -1820,11 +1832,12 @@ public class DBOSExecutor implements AutoCloseable {
             // Another execution owns this workflow (a concurrent run recorded a step
             // checkpoint, or the workflow is already active on this executor). Never
             // persist the conflict: park the execution and deliver the recorded outcome
-            // through this run's own future.
+            // through this run's own future. The row is known to have existed, so
+            // failIfMissing: a missing row means it was deleted.
             logger.warn(
                 "Aborting duplicate execution of workflow. Waiting for the recorded outcome. workflowId {}",
                 workflowId);
-            return awaitWorkflowResult(workflowId);
+            return awaitWorkflowResult(workflowId, true);
           } catch (Exception e) {
             Throwable actual = e;
 
@@ -1845,18 +1858,19 @@ public class DBOSExecutor implements AutoCloseable {
             // the row, and adopt the recorded outcome: normally the row is still CANCELLED
             // and awaitWorkflowResult throws DBOSAwaitedWorkflowCancelledException, but a
             // concurrent resume may have taken the workflow back, in which case the recorded
-            // outcome is the truth.
+            // outcome is the truth. The row is known to have existed (the cancellation was
+            // read from it), so failIfMissing: a missing row means it was deleted.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
               logger.warn(
                   "Workflow was cancelled during execution. Waiting for the recorded outcome. workflowId {}",
                   workflowId);
-              return awaitWorkflowResult(workflowId);
+              return awaitWorkflowResult(workflowId, true);
             }
 
-            // The outcome write found no workflow_status row at all (the workflow was deleted
-            // or garbage collected): deliver the error as the workflow's outcome; there is
-            // nothing left to record onto.
+            // The park after a refused outcome write found no workflow_status row at all (the
+            // workflow was deleted or garbage collected): deliver the error as the workflow's
+            // outcome; there is nothing left to record onto.
             if (actual instanceof DBOSNonExistentWorkflowException nonExistent
                 && workflowId.equals(nonExistent.workflowId())) {
               throw nonExistent;
@@ -1870,7 +1884,7 @@ public class DBOSExecutor implements AutoCloseable {
               logger.warn(
                   "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
                   workflowId);
-              return awaitWorkflowResult(workflowId);
+              return awaitWorkflowResult(workflowId, true);
             }
             throw e;
           } finally {

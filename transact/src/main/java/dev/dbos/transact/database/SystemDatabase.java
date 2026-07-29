@@ -473,7 +473,19 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
+    return awaitWorkflowResult(workflowId, false);
+  }
+
+  /**
+   * Awaits a workflow's recorded outcome. A missing row normally means the workflow just hasn't
+   * been inserted yet (an unchecked retrieve, or a debounced workflow whose row appears only after
+   * the debounce period), so by default it is polled for. Callers that know the row must already
+   * exist pass {@code failIfMissing} to fail fast instead.
+   */
+  public <T> Result<T> awaitWorkflowResult(String workflowId, boolean failIfMissing) {
+    return dbRetry(
+        () ->
+            WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId, failIfMissing));
   }
 
   public List<String> startQueuedWorkflows(

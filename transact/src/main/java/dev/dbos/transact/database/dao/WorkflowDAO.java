@@ -325,9 +325,10 @@ public class WorkflowDAO {
    * execution is already running and the status is PENDING. However, both executions should be
    * deterministic and idempotent.)
    *
-   * <p>Returning false means the row was CANCELLED, dead-lettered, already terminal, or handed to
-   * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume). If the row does not exist at
-   * all, a {@link DBOSNonExistentWorkflowException} is thrown.
+   * <p>Returning false means the row was CANCELLED, dead-lettered, already terminal, handed to
+   * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume), or gone entirely. Callers
+   * that need to distinguish a deleted row do so when they park on the recorded outcome (see {@link
+   * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
    */
   static boolean updateWorkflowOutcome(
       Connection conn,
@@ -365,25 +366,7 @@ public class WorkflowDAO {
       stmt.setString(6, workflowId);
       stmt.setString(7, WorkflowState.PENDING.name());
 
-      if (stmt.executeUpdate() == 0) {
-        // The guarded UPDATE matched no rows. Re-read (only on this rare no-op path) to
-        // distinguish a row this run no longer owns from a row that is gone.
-        var readSql =
-            """
-            SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-            """
-                .formatted(schema);
-        try (var readStmt = conn.prepareStatement(readSql)) {
-          readStmt.setString(1, workflowId);
-          try (var rs = readStmt.executeQuery()) {
-            if (!rs.next()) {
-              throw new DBOSNonExistentWorkflowException(workflowId);
-            }
-          }
-        }
-        return false;
-      }
-      return true;
+      return stmt.executeUpdate() != 0;
     }
   }
 
@@ -1221,9 +1204,19 @@ public class WorkflowDAO {
     return info;
   }
 
+  /**
+   * Poll the workflow's row until it reaches a terminal state, then return the recorded outcome.
+   *
+   * <p>A missing row normally means the workflow just hasn't been inserted yet (an unchecked
+   * retrieve, or a debounced workflow whose row appears only after the debounce period), so polling
+   * is correct. Callers that know the row must already exist (a run parking on an outcome it just
+   * failed to write) pass {@code failIfMissing} to fail fast with {@link
+   * DBOSNonExistentWorkflowException} instead of polling forever.
+   */
   @SuppressWarnings("unchecked")
   public static <T> Result<T> awaitWorkflowResult(
-      DbContext ctx, Duration dbPollingInterval, String workflowId) throws SQLException {
+      DbContext ctx, Duration dbPollingInterval, String workflowId, boolean failIfMissing)
+      throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
     final String sql =
@@ -1271,6 +1264,10 @@ public class WorkflowDAO {
               default -> {}
             }
             // Status is PENDING or other - continue polling
+          } else if (failIfMissing) {
+            // The caller knows the row must already exist, so a missing row means it was
+            // deleted: fail fast instead of polling forever.
+            throw new DBOSNonExistentWorkflowException(workflowId);
           }
           // Row not found - workflow hasn't appeared yet, continue polling
         }
