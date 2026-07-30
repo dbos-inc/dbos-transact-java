@@ -318,7 +318,19 @@ public class WorkflowDAO {
     }
   }
 
-  static void updateWorkflowOutcome(
+  /**
+   * Record a workflow's terminal outcome, reporting whether the write landed. The write applies
+   * only to a PENDING row: a run owns its workflow's outcome exactly as long as the row says that
+   * run is what the workflow is doing. (Note: this does not prevent a write when another concurrent
+   * execution is already running and the status is PENDING. However, both executions should be
+   * deterministic and idempotent.)
+   *
+   * <p>Returning false means the row was CANCELLED, dead-lettered, already terminal, handed to
+   * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume), or gone entirely. Callers
+   * that need to distinguish a deleted row do so when they park on the recorded outcome (see {@link
+   * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
+   */
+  static boolean updateWorkflowOutcome(
       Connection conn,
       String schema,
       String workflowId,
@@ -336,13 +348,11 @@ public class WorkflowDAO {
           "updateWorkflowOutcome called with non-terminal status: " + status);
     }
 
-    // Never overwrite a CANCELLED workflow: a workflow cancelled during its final step must not
-    // subsequently complete.
     var sql =
         """
           UPDATE "%s".workflow_status
           SET status = ?, output = ?, error = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
-          WHERE workflow_uuid = ? AND status != ?
+          WHERE workflow_uuid = ? AND status = ?
         """
             .formatted(schema);
 
@@ -354,25 +364,9 @@ public class WorkflowDAO {
       stmt.setLong(4, now);
       stmt.setLong(5, now);
       stmt.setString(6, workflowId);
-      stmt.setString(7, WorkflowState.CANCELLED.name());
+      stmt.setString(7, WorkflowState.PENDING.name());
 
-      if (stmt.executeUpdate() == 0) {
-        // The guarded UPDATE matched no rows. Re-read status to check whether the workflow
-        // was cancelled; if so, raise so it ends as CANCELLED rather than completing.
-        var readSql =
-            """
-            SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-            """
-                .formatted(schema);
-        try (var readStmt = conn.prepareStatement(readSql)) {
-          readStmt.setString(1, workflowId);
-          try (var rs = readStmt.executeQuery()) {
-            if (rs.next() && WorkflowState.CANCELLED.name().equals(rs.getString(1))) {
-              throw new DBOSWorkflowCancelledException(workflowId);
-            }
-          }
-        }
-      }
+      return stmt.executeUpdate() != 0;
     }
   }
 
@@ -381,12 +375,14 @@ public class WorkflowDAO {
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING
    */
-  public static void recordWorkflowOutput(DbContext ctx, String workflowId, String result)
+  public static boolean recordWorkflowOutput(DbContext ctx, String workflowId, String result)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
-      updateWorkflowOutcome(conn, ctx.schema(), workflowId, WorkflowState.SUCCESS, result, null);
+      return updateWorkflowOutcome(
+          conn, ctx.schema(), workflowId, WorkflowState.SUCCESS, result, null);
     }
   }
 
@@ -395,12 +391,14 @@ public class WorkflowDAO {
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING
    */
-  public static void recordWorkflowError(DbContext ctx, String workflowId, String error)
+  public static boolean recordWorkflowError(DbContext ctx, String workflowId, String error)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
-      updateWorkflowOutcome(conn, ctx.schema(), workflowId, WorkflowState.ERROR, null, error);
+      return updateWorkflowOutcome(
+          conn, ctx.schema(), workflowId, WorkflowState.ERROR, null, error);
     }
   }
 
@@ -1206,14 +1204,24 @@ public class WorkflowDAO {
     return info;
   }
 
+  /**
+   * Poll the workflow's row until it reaches a terminal state, then return the recorded outcome.
+   *
+   * <p>A missing row normally means the workflow just hasn't been inserted yet (an unchecked
+   * retrieve, or a debounced workflow whose row appears only after the debounce period), so polling
+   * is correct. Callers that know the row must already exist (a run parking on an outcome it just
+   * failed to write) pass {@code failIfMissing} to fail fast with {@link
+   * DBOSNonExistentWorkflowException} instead of polling forever.
+   */
   @SuppressWarnings("unchecked")
   public static <T> Result<T> awaitWorkflowResult(
-      DbContext ctx, Duration dbPollingInterval, String workflowId) throws SQLException {
+      DbContext ctx, Duration dbPollingInterval, String workflowId, boolean failIfMissing)
+      throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
     final String sql =
         """
-          SELECT status, output, error, serialization
+          SELECT status, output, error, serialization, recovery_attempts
           FROM "%s".workflow_status
           WHERE workflow_uuid = ?
         """
@@ -1246,9 +1254,20 @@ public class WorkflowDAO {
               }
               case CANCELLED -> throw new DBOSAwaitedWorkflowCancelledException(workflowId);
 
+              case MAX_RECOVERY_ATTEMPTS_EXCEEDED -> {
+                // A workflow is dead-lettered by the attempt that pushes recovery_attempts
+                // past maxRetries+1, so a dead-lettered row carries maxRetries+2 attempts.
+                int maxRetries = Math.max(0, rs.getInt("recovery_attempts") - 2);
+                throw new DBOSMaxRecoveryAttemptsExceededException(workflowId, maxRetries);
+              }
+
               default -> {}
             }
             // Status is PENDING or other - continue polling
+          } else if (failIfMissing) {
+            // The caller knows the row must already exist, so a missing row means it was
+            // deleted: fail fast instead of polling forever.
+            throw new DBOSNonExistentWorkflowException(workflowId);
           }
           // Row not found - workflow hasn't appeared yet, continue polling
         }

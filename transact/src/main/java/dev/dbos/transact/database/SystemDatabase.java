@@ -366,9 +366,11 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING and this
+   *     execution no longer owns the workflow's outcome
    */
-  public void recordWorkflowOutput(String workflowId, String result) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
+  public boolean recordWorkflowOutput(String workflowId, String result) {
+    return dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
   }
 
   /**
@@ -376,9 +378,11 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
+   * @return true if the outcome was recorded, false if the row is no longer PENDING and this
+   *     execution no longer owns the workflow's outcome
    */
-  public void recordWorkflowError(String workflowId, String error) {
-    dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
+  public boolean recordWorkflowError(String workflowId, String error) {
+    return dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
   }
 
   /**
@@ -469,7 +473,19 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
+    return awaitWorkflowResult(workflowId, false);
+  }
+
+  /**
+   * Awaits a workflow's recorded outcome. A missing row normally means the workflow just hasn't
+   * been inserted yet (an unchecked retrieve, or a debounced workflow whose row appears only after
+   * the debounce period), so by default it is polled for. Callers that know the row must already
+   * exist pass {@code failIfMissing} to fail fast instead.
+   */
+  public <T> Result<T> awaitWorkflowResult(String workflowId, boolean failIfMissing) {
+    return dbRetry(
+        () ->
+            WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId, failIfMissing));
   }
 
   public List<String> startQueuedWorkflows(
