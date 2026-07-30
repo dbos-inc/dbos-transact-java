@@ -1062,8 +1062,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> T getResult(String workflowId) throws E {
+    return getResult(workflowId, false);
+  }
+
+  public <T, E extends Exception> T getResult(String workflowId, boolean failIfMissing) throws E {
     return this.runDbosFunctionAsStep(
-        () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
+        () -> awaitWorkflowResult(workflowId, failIfMissing), "DBOS.getResult", workflowId);
   }
 
   @SuppressWarnings("unchecked")
@@ -1766,7 +1770,11 @@ public class DBOSExecutor implements AutoCloseable {
       return retrieveWorkflow(workflowId);
     }
     if (initResult.status().equals(WorkflowState.SUCCESS)) {
-      return retrieveWorkflow(workflowId);
+      // The workflow already completed: its recorded outcome is this call's result. The row
+      // is known to have existed (persistWorkflow just read this status from it), so
+      // failIfMissing: a row deleted in the meantime surfaces
+      // DBOSNonExistentWorkflowException instead of polling forever.
+      return new WorkflowHandleDBPoll<>(this, workflowId, true);
     } else if (initResult.status().equals(WorkflowState.ERROR)) {
       logger.warn("Idempotency check not impl for error");
     } else if (initResult.status().equals(WorkflowState.CANCELLED)) {

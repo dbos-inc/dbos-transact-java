@@ -251,6 +251,28 @@ public class WorkflowOutcomeOwnershipTest {
   }
 
   @Test
+  public void completedWorkflowWhoseRowVanishesFailsWithNonExistentWorkflow() throws Exception {
+    var workflowId = "outcome-ownership-completed-deleted-%d".formatted(System.currentTimeMillis());
+    var handle = startBlockedRun(workflowId);
+    releaseRun(workflowId);
+    assertEquals("own-result", handle.getResult());
+
+    // A dispatch of an already-completed workflow does not re-execute it: it hands back a
+    // handle onto the recorded outcome. That row was just read, so a row that is gone by the
+    // time the outcome is read was deleted — fail fast instead of polling for a row that will
+    // never reappear.
+    var redispatched =
+        DBOSTestAccess.getDbosExecutor(dbos)
+            .<String, Exception>executeWorkflowById(workflowId, true, false);
+    deleteRow(workflowId);
+
+    assertThrows(
+        DBOSNonExistentWorkflowException.class,
+        redispatched::getResult,
+        "a completed workflow whose row was deleted must not be polled for");
+  }
+
+  @Test
   public void cancelledRunAdoptsARecordedOutcome() throws Exception {
     // A run that observes its own cancellation adopts the recorded outcome rather than trusting
     // its local view: here a concurrent "resume" already rewrote the row to SUCCESS, so the
