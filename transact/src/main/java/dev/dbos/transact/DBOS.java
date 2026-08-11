@@ -1,5 +1,6 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.DBOSClient.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -11,6 +12,8 @@ import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
+import dev.dbos.transact.json.PortableWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.Debouncer;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -252,6 +255,17 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * List database-backed dynamic queues owned by these applications, plus unclaimed ones. Must be
+   * called after launch.
+   *
+   * @param applicationName the applications whose queues to list; null lists this application's
+   * @return matching queues
+   */
+  public @NonNull List<Queue> listQueues(@Nullable List<String> applicationName) {
+    return ensureLaunched("listQueues").listDynamicQueues(applicationName);
+  }
+
+  /**
    * Register all workflows and steps in the provided class instance
    *
    * @param <T> The interface type for the instance
@@ -476,6 +490,57 @@ public class DBOS implements AutoCloseable {
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, null);
+  }
+
+  /**
+   * Enqueue a workflow by name, without a reference to its function.
+   *
+   * <p>Takes the same {@link EnqueueOptions} as {@link DBOSClient#enqueueWorkflow} and writes the
+   * same row, so the workflow may be implemented by another process — or in another language — as
+   * long as it shares this system database. Safe to call from inside a workflow: the enqueued
+   * workflow is recorded as a child, so a replay after a crash returns a handle to the original
+   * rather than enqueueing a second one.
+   *
+   * <p>Unlike {@link #startWorkflow}, the options are deliberately not validated against the local
+   * workflow and queue registries, and the application version is left unset unless given. An unset
+   * version is only dequeued by an executor running the owning application's latest registered
+   * version.
+   *
+   * <p>The enqueued workflow is owned by this application unless {@link
+   * DBOSClient.EnqueueOptions#applicationName} names another one.
+   *
+   * @param <T> Return type of the workflow
+   * @param <E> Type of checked exception thrown by the workflow, if any
+   * @param options Options describing the workflow to enqueue
+   * @param args Positional arguments to pass to the workflow function
+   * @return A handle to the enqueued workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      @NonNull EnqueueOptions options, @Nullable Object[] args) {
+    var serializationFormat =
+        options.serialization() != null ? options.serialization().formatName() : null;
+    return ensureLaunched("enqueueWorkflow")
+        .enqueueWorkflowByName(options, args, null, serializationFormat);
+  }
+
+  /**
+   * Enqueue a workflow by name using portable JSON serialization, for targets that take named
+   * arguments — a Python workflow with keyword arguments, say.
+   *
+   * <p>See {@link #enqueueWorkflow(EnqueueOptions, Object[])} for the semantics.
+   *
+   * @param <T> Return type of the workflow
+   * @param options Options describing the workflow to enqueue
+   * @param positionalArgs Positional arguments to pass to the workflow function
+   * @param namedArgs Named arguments to pass to the workflow function (e.g. Python kwargs)
+   * @return A handle to the enqueued workflow
+   */
+  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
+      @NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs) {
+    return ensureLaunched("enqueuePortableWorkflow")
+        .enqueueWorkflowByName(options, positionalArgs, namedArgs, SerializationUtil.PORTABLE);
   }
 
   /**
@@ -1018,6 +1083,25 @@ public class DBOS implements AutoCloseable {
       @Nullable List<String> workflowName,
       @Nullable List<String> namePrefix) {
     return ensureLaunched("listSchedules").listSchedules(status, workflowName, namePrefix);
+  }
+
+  /**
+   * List schedules with optional filters, scoped to the given applications.
+   *
+   * @param status filter by status (e.g. "ACTIVE", "PAUSED"); null means no filter
+   * @param workflowName filter by workflow name; null means no filter
+   * @param namePrefix filter by schedule name prefix; null means no filter
+   * @param applicationName list only schedules owned by these applications, plus unclaimed ones;
+   *     null lists this application's
+   * @return matching schedules
+   */
+  public @NonNull List<WorkflowSchedule> listSchedules(
+      @Nullable List<ScheduleStatus> status,
+      @Nullable List<String> workflowName,
+      @Nullable List<String> namePrefix,
+      @Nullable List<String> applicationName) {
+    return ensureLaunched("listSchedules")
+        .listSchedules(status, workflowName, namePrefix, applicationName);
   }
 
   /**

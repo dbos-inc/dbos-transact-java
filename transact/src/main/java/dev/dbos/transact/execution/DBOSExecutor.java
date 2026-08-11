@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
@@ -526,6 +527,10 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.listQueues();
   }
 
+  public List<Queue> listDynamicQueues(@Nullable List<String> applicationName) {
+    return systemDatabase.listQueues(applicationName);
+  }
+
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
     if (alertHandler != null) {
       alertHandler.invoke(name, message, metadata);
@@ -870,8 +875,16 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
+    return listSchedules(statuses, workflowNames, namePrefixes, null);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> namePrefixes,
+      @Nullable List<String> applicationNames) {
     return this.runDbosFunctionAsStep(
-        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
+        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes, applicationNames),
         "DBOS.listSchedules",
         null);
   }
@@ -1547,6 +1560,92 @@ public class DBOSExecutor implements AutoCloseable {
                     : ctx.resolveNextAttributes())
             .withScheduleName(scheduleName);
     return executeWorkflow(workflow, args, execOptions, parent);
+  }
+
+  /**
+   * Enqueue a workflow by name, without a reference to its function. The target may live in another
+   * process or another language, so nothing here consults the local workflow registry and nothing
+   * validates the queue against it.
+   *
+   * <p>Safe to call from inside a workflow: the enqueued workflow is recorded as a child, so a
+   * replay after a crash returns a handle to the original rather than enqueueing a second one.
+   *
+   * <p>Unlike {@link #startRegisteredWorkflow}, the application version is left unset unless the
+   * caller gives one. An unset version is only dequeued by an executor running the owning
+   * application's latest registered version.
+   */
+  public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
+      DBOSClient.EnqueueOptions options,
+      Object[] positionalArgs,
+      Map<String, Object> namedArgs,
+      String serializationFormat) {
+
+    Objects.requireNonNull(options, "options must not be null");
+    if (options.timeout() != null && options.deadline() != null) {
+      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
+    }
+
+    var ctx = DBOSContextHolder.get();
+    // Throws if called from a step, and takes the caller's next function ID when in a workflow.
+    var parent = getParent(ctx);
+    // In a workflow the derived ID makes a crash-replay collide with the original enqueue rather
+    // than enqueueing a second workflow.
+    var childWorkflowId =
+        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    var workflowId =
+        Objects.requireNonNullElseGet(
+            options.workflowId(),
+            () ->
+                Objects.requireNonNullElseGet(
+                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+
+    if (parent != null) {
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      if (childId.isPresent()) {
+        return retrieveWorkflow(childId.get());
+      }
+    }
+
+    // Without an explicit timeout, inherit an ambient one, else the parent's propagated deadline.
+    // Timeout.of(null) is Timeout.none(), which is an explicit "no timeout" that clears the
+    // parent's deadline; only a null Timeout falls through to what the context already carries.
+    var td =
+        ctx.resolveTimeoutAndDeadline(
+            options.timeout() != null ? Timeout.of(options.timeout()) : null, options.deadline());
+    var execOptions =
+        new ExecutionOptions(workflowId)
+            .withOptions(options)
+            .withTimeout(td.timeout())
+            .withDeadline(td.deadline())
+            .withSerialization(serializationFormat)
+            .withAuthenticatedUser(
+                options.authenticatedUser() != null
+                    ? options.authenticatedUser()
+                    : ctx.resolveNextAuthenticatedUser())
+            .withAssumedRole(
+                options.assumedRole() != null
+                    ? options.assumedRole()
+                    : ctx.resolveNextAssumedRole())
+            .withAuthenticatedRoles(
+                options.authenticatedRoles() != null
+                    ? options.authenticatedRoles()
+                    : ctx.resolveNextAuthenticatedRoles());
+
+    enqueueWorkflow(
+        options.workflowName(),
+        options.className(),
+        options.instanceName(),
+        null, // maxRetries
+        positionalArgs,
+        namedArgs,
+        execOptions,
+        parent,
+        executorId(),
+        appId(),
+        systemDatabase,
+        this.serializer);
+
+    return new WorkflowHandleDBPoll<>(this, workflowId);
   }
 
   // run an existing workflow via its workflow ID

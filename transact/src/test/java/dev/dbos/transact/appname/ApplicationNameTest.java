@@ -2,6 +2,7 @@ package dev.dbos.transact.appname;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +35,9 @@ import org.junit.jupiter.api.Test;
 
 interface AppNameService {
   String greet(String name);
+
+  String enqueueGreet(
+      String workflowName, String className, String queueName, String childId, String arg);
 }
 
 class AppNameServiceImpl implements AppNameService {
@@ -46,6 +50,18 @@ class AppNameServiceImpl implements AppNameService {
   @Workflow
   public String greet(String name) {
     return dbos.runStep(() -> "hello " + name, "greetStep");
+  }
+
+  @Override
+  @Workflow
+  public String enqueueGreet(
+      String workflowName, String className, String queueName, String childId, String arg) {
+    dbos.enqueueWorkflow(
+        new DBOSClient.EnqueueOptions(workflowName, queueName)
+            .withClassName(className)
+            .withWorkflowId(childId),
+        new Object[] {arg});
+    return childId;
   }
 }
 
@@ -471,5 +487,29 @@ public class ApplicationNameTest {
         SystemDatabase.create(pgContainer.dbosConfig("configured-app"), "exec-1", "resolved-app")) {
       assertEquals("resolved-app", sysdb.applicationName());
     }
+  }
+
+  // ==================== Enqueue by name ====================
+
+  @Test
+  void enqueueByNameWithNoTimeoutInheritsTheParentsTimeout() throws Exception {
+    try (var o =
+        new WorkflowOptions("wf-dl-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
+      serviceA.enqueueGreet(
+          "greet", AppNameServiceImpl.class.getName(), "queue-a", "wf-dl-child", "x");
+    }
+
+    // An unset timeout must fall through to what the parent propagates. Treating it as an explicit
+    // "no timeout" instead would leave the child unbounded. A queued workflow carries the timeout
+    // rather than a deadline, since its clock only starts when it is dequeued.
+    var parentTimeout = timeoutMs("wf-dl-parent");
+    assertNotNull(parentTimeout);
+    assertEquals(parentTimeout, timeoutMs("wf-dl-child"));
+  }
+
+  private String timeoutMs(String workflowId) throws SQLException {
+    return scalar(
+        "SELECT workflow_timeout_ms FROM \"dbos\".workflow_status WHERE workflow_uuid = ?",
+        workflowId);
   }
 }
