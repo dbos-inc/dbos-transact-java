@@ -153,6 +153,11 @@ public class StreamsDAO {
         """
             .formatted(ctx.schema());
 
+    // Set once the producer is seen inactive. The value read and the status check are separate
+    // statements, so the producer may commit its last value between them; once it is terminal all
+    // of its writes are committed, so one more pass drains that value instead of dropping it.
+    var finalRead = false;
+
     while (true) {
       ctx.checkClosed();
       try (var sub = createSubscription.apply(new SignalKey.Stream(workflowId, key))) {
@@ -172,9 +177,14 @@ public class StreamsDAO {
               return deserialized;
             }
           }
+          if (finalRead) {
+            // The drain pass found nothing, so the stream really has ended here.
+            return SystemDatabase.END_OF_STREAM;
+          }
           var state = WorkflowDAO.getWorkflowState(ctx, workflowId);
           if (state == null || !state.isActive()) {
-            return SystemDatabase.END_OF_STREAM;
+            finalRead = true;
+            continue;
           }
         }
         SignalMap.awaitAny(dbPollingInterval, sub);
