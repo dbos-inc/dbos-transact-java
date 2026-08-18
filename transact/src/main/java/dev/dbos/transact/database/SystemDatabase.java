@@ -58,10 +58,19 @@ public class SystemDatabase implements AutoCloseable {
 
   public static final Object END_OF_STREAM = new Object();
 
+  /**
+   * Carries wake-ups between the processes sharing this system database, in both directions: a
+   * notification seen on the wire becomes a local signal, and a local write becomes a notification
+   * for everyone else. Absent where the database has no LISTEN/NOTIFY, in which case waiters are
+   * still woken directly by a writer in their own process and otherwise re-poll.
+   */
   public interface NotificationSource {
     void start();
 
     void close();
+
+    /** Push a wake-up on {@code channel} to the other processes. Only after the write commits. */
+    void push(String channel, String payload);
   }
 
   class NullNotificationSource implements NotificationSource {
@@ -71,6 +80,9 @@ public class SystemDatabase implements AutoCloseable {
 
     @Override
     public void close() {}
+
+    @Override
+    public void push(String channel, String payload) {}
   }
 
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
@@ -108,7 +120,8 @@ public class SystemDatabase implements AutoCloseable {
       boolean created,
       DBOSSerializer serializer,
       boolean useListenNotify,
-      String executorId) {
+      String executorId,
+      Duration notificationCoalesceInterval) {
     validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
@@ -126,7 +139,7 @@ public class SystemDatabase implements AutoCloseable {
 
     notificationSource =
         useListenNotify
-            ? new NotificationListenerSource(dataSource, signalMap::raiseSignal)
+            ? new ListenNotifySource(ctx, notificationCoalesceInterval, signalMap::raiseSignal)
             : new NullNotificationSource();
   }
 
@@ -137,19 +150,26 @@ public class SystemDatabase implements AutoCloseable {
       String schema,
       DBOSSerializer serializer,
       boolean useListenNotify) {
-    this(createDataSource(url, user, password), schema, true, serializer, useListenNotify, null);
+    this(
+        createDataSource(url, user, password),
+        schema,
+        true,
+        serializer,
+        useListenNotify,
+        null,
+        null);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true, null);
+    this(createDataSource(url, user, password), schema, true, null, true, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null);
+    this(dataSource, schema, false, null, true, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer, true, null);
+    this(dataSource, schema, false, serializer, true, null, null);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
@@ -164,7 +184,8 @@ public class SystemDatabase implements AutoCloseable {
           true,
           config.serializer(),
           config.useListenNotify(),
-          executorId);
+          executorId,
+          config.notificationCoalesceInterval());
     } else {
       return new SystemDatabase(
           config.dataSource(),
@@ -172,7 +193,8 @@ public class SystemDatabase implements AutoCloseable {
           false,
           config.serializer(),
           true,
-          executorId);
+          executorId,
+          config.notificationCoalesceInterval());
     }
   }
 
@@ -539,6 +561,7 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             NotificationsDAO.setEvent(
                 ctx, workflowId, functionId, key, message, asStep, serialization));
+    signal(new SignalKey.Event(workflowId, key));
   }
 
   public Object getEvent(String targetId, String key, Duration timeout, GetEventCaller caller) {
@@ -703,6 +726,7 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             StreamsDAO.writeStreamFromStep(
                 ctx, workflowId, functionId, key, value, serializationFormat));
+    signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void writeStreamFromWorkflow(
@@ -711,10 +735,25 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             StreamsDAO.writeStreamFromWorkflow(
                 ctx, workflowId, functionId, key, value, serializationFormat));
+    signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
     dbRetry(() -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
+    // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
+    signal(new SignalKey.Stream(workflowId, key));
+  }
+
+  /**
+   * Wake everyone waiting for a value on {@code key}: the waiters in this process directly, with no
+   * round trip, and those in other processes through the notifier's next batch.
+   *
+   * <p>Called only after the write has committed. Signalling before would let a woken waiter
+   * re-read ahead of the row becoming visible and go back to sleep until its next poll.
+   */
+  private void signal(SignalKey key) {
+    signalMap.raiseSignal(key.toString());
+    notificationSource.push(key.channel(), key.payload());
   }
 
   public Object readStream(String workflowId, String key, int offset) {

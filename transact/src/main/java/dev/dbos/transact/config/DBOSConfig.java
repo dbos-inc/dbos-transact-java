@@ -59,6 +59,9 @@ import org.jspecify.annotations.Nullable;
  *     uses the system default
  * @param useListenNotify whether to use PostgreSQL {@code LISTEN}/{@code NOTIFY} for real-time
  *     workflow wake-ups instead of polling
+ * @param notificationCoalesceInterval how often stream and workflow-event wake-ups this process
+ *     writes are pushed to other processes, batched. Bounds the latency the batching adds and caps
+ *     the rate of notifying commits. Null uses the 10ms default; must be at least 1ms
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -79,7 +82,14 @@ public record DBOSConfig(
     @NonNull Set<String> listenQueues,
     @Nullable DBOSSerializer serializer,
     @Nullable Duration schedulerPollingInterval,
-    boolean useListenNotify) {
+    boolean useListenNotify,
+    @Nullable Duration notificationCoalesceInterval) {
+
+  /** Default flush interval for batched stream and workflow-event notifications. */
+  public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
+
+  /** Smallest configurable flush interval; below this the batching buys nothing. */
+  public static final Duration MIN_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(1);
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -97,6 +107,14 @@ public record DBOSConfig(
     }
     if (executorId != null && executorId.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.executorId must not be empty if specified");
+    }
+
+    if (notificationCoalesceInterval != null
+        && notificationCoalesceInterval.compareTo(MIN_NOTIFICATION_COALESCE_INTERVAL) < 0) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.notificationCoalesceInterval must be at least "
+              + MIN_NOTIFICATION_COALESCE_INTERVAL.toMillis()
+              + "ms if specified");
     }
 
     listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
@@ -143,7 +161,8 @@ public record DBOSConfig(
         (other.listenQueues == null ? null : Set.copyOf(other.listenQueues)),
         other.serializer,
         other.schedulerPollingInterval,
-        other.useListenNotify);
+        other.useListenNotify,
+        other.notificationCoalesceInterval);
   }
 
   /**
@@ -161,7 +180,8 @@ public record DBOSConfig(
         appName, null, null, null, null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null, null, false, null, null, null, true); // useListenNotify
+        null, null, null, null, null, null, false, null, null, null, true, // useListenNotify
+        null); // notificationCoalesceInterval
   }
 
   /**
@@ -210,7 +230,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -234,7 +255,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -258,7 +280,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -282,7 +305,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /**
@@ -311,7 +335,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /**
@@ -340,7 +365,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /**
@@ -369,7 +395,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -393,7 +420,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code conductorKey} set to {@code v}. */
@@ -417,7 +445,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code conductorDomain} set to {@code v}. */
@@ -441,7 +470,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -465,7 +495,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -489,7 +520,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -513,7 +545,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -537,7 +570,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -571,7 +605,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /**
@@ -660,7 +695,8 @@ public record DBOSConfig(
         v,
         serializer,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -684,7 +720,8 @@ public record DBOSConfig(
         listenQueues,
         v,
         schedulerPollingInterval,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -708,7 +745,8 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         v,
-        useListenNotify);
+        useListenNotify,
+        notificationCoalesceInterval);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -732,6 +770,44 @@ public record DBOSConfig(
         listenQueues,
         serializer,
         schedulerPollingInterval,
+        v,
+        notificationCoalesceInterval);
+  }
+
+  /**
+   * Returns a copy of this config with {@code notificationCoalesceInterval} set to {@code v}.
+   *
+   * <p>Stream and workflow-event wake-ups this process writes are queued and pushed to the other
+   * processes listening for them once per interval, rather than one notifying transaction per row.
+   * A shorter interval lowers wake-up latency elsewhere; a longer one lowers the rate of notifying
+   * commits, each of which takes a global lock in PostgreSQL. Waiters in this process are woken
+   * immediately either way, and every waiter re-polls regardless, so this trades latency against
+   * database contention and never against delivery.
+   *
+   * @param v flush interval, at least 1ms; null for the 10ms default
+   * @return a copy with the interval set
+   */
+  public @NonNull DBOSConfig withNotificationCoalesceInterval(@Nullable Duration v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
         v);
   }
 
@@ -743,7 +819,8 @@ public record DBOSConfig(
         dataSource=%s, databaseSchema=%s, adminServer=%s, adminServerPort=%d, \
         migrate=%s, conductorKey=%s, conductorDomain=%s, \
         conductorExecutorMetadata=%s, appVersion=%s, executorId=%s, enablePatching=%s, \
-        listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s]
+        listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
+        notificationCoalesceInterval=%s]
         """
         .formatted(
             appName,
@@ -763,6 +840,7 @@ public record DBOSConfig(
             listenQueues,
             serializer != null ? serializer.name() : null,
             schedulerPollingInterval,
-            useListenNotify);
+            useListenNotify,
+            notificationCoalesceInterval);
   }
 }
