@@ -5,6 +5,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -182,7 +183,12 @@ public class StreamsDAO {
             return SystemDatabase.END_OF_STREAM;
           }
           var state = WorkflowDAO.getWorkflowState(ctx, workflowId);
-          if (state == null || !state.isActive()) {
+          if (state == null) {
+            // Python and TS read the status alongside every value and raise here; this reads it
+            // only on a miss, which reaches the same conclusion for a workflow that never existed.
+            throw new DBOSNonExistentWorkflowException(workflowId);
+          }
+          if (!state.isActive()) {
             finalRead = true;
             continue;
           }
