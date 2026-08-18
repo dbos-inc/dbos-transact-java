@@ -71,6 +71,11 @@ public class SystemDatabase implements AutoCloseable {
 
     /** Push a wake-up on {@code channel} to the other processes. Only after the write commits. */
     void push(String channel, String payload);
+
+    /** Whether a listener is delivering notifications, which sets the re-check interval below. */
+    default boolean isRunning() {
+      return false;
+    }
   }
 
   class NullNotificationSource implements NotificationSource {
@@ -99,7 +104,26 @@ public class SystemDatabase implements AutoCloseable {
   private final Function<SignalKey, Subscription> createSubscription =
       key -> signalMap.subscribe(key.toString());
   private final NotificationSource notificationSource;
-  private final Duration dbPollingInterval = Duration.ofSeconds(1);
+
+  /**
+   * How long a wait re-queries at when nothing is pushing it: awaiting a result, every stream read,
+   * and recv and getEvent with no listener running.
+   */
+  private static final Duration DB_POLLING_INTERVAL = Duration.ofSeconds(1);
+
+  /**
+   * How long recv and getEvent wait before re-querying, when a listener is running.
+   *
+   * <p>The listener signals them promptly, so the re-check is only a safety net: against a
+   * notification dropped on the wire or missed across a reconnect, and against a writer that died
+   * between committing and its notifier flushing. Without a listener the re-check is the only
+   * delivery mechanism, so {@link #DB_POLLING_INTERVAL} is used instead.
+   *
+   * <p>A stream read does not use this, and polls at {@link #DB_POLLING_INTERVAL} whatever the
+   * listener is doing: besides a value arriving, which is pushed, it is also watching for the
+   * producer to terminate, and nothing pushes that. Python and Go draw the line in the same place.
+   */
+  private static final Duration NOTIFICATION_FALLBACK_INTERVAL = Duration.ofSeconds(60);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -254,6 +278,11 @@ public class SystemDatabase implements AutoCloseable {
     if (created && ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
       hikariDataSource.close();
     }
+  }
+
+  /** For recv and getEvent only; see {@link #NOTIFICATION_FALLBACK_INTERVAL}. */
+  private Duration notificationRecheckInterval() {
+    return notificationSource.isRunning() ? NOTIFICATION_FALLBACK_INTERVAL : DB_POLLING_INTERVAL;
   }
 
   public void start() {
@@ -491,7 +520,9 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
+    // Not a notification wait: no channel carries workflow completion, so this poll is the only
+    // delivery mechanism and stays short whether or not a listener is running.
+    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, DB_POLLING_INTERVAL, workflowId));
   }
 
   public List<String> startQueuedWorkflows(
@@ -546,7 +577,7 @@ public class SystemDatabase implements AutoCloseable {
                 timeout,
                 timeoutStepId,
                 topic,
-                dbPollingInterval,
+                notificationRecheckInterval(),
                 createSubscription));
   }
 
@@ -568,7 +599,13 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                ctx, targetId, key, timeout, caller, dbPollingInterval, createSubscription));
+                ctx,
+                targetId,
+                key,
+                timeout,
+                caller,
+                notificationRecheckInterval(),
+                createSubscription));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
@@ -760,7 +797,7 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             StreamsDAO.readStream(
-                ctx, workflowId, key, offset, dbPollingInterval, createSubscription));
+                ctx, workflowId, key, offset, DB_POLLING_INTERVAL, createSubscription));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {

@@ -120,6 +120,11 @@ class ListenNotifySource implements NotificationSource {
     logger.debug("Notification transport stopped");
   }
 
+  @Override
+  public boolean isRunning() {
+    return listenerThread.get() != null;
+  }
+
   /**
    * Queue a wake-up for the processes listening on {@code channel}. Call only after the write has
    * committed, or a woken waiter may re-read before the row is visible and go back to sleep until
