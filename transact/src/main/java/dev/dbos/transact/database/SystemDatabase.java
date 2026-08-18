@@ -72,7 +72,17 @@ public class SystemDatabase implements AutoCloseable {
     /** Push a wake-up on {@code channel} to the other processes. Only after the write commits. */
     void push(String channel, String payload);
 
-    /** Whether a listener is delivering notifications, which sets the re-check interval below. */
+    /**
+     * Whether a listener has been started for this source, which selects the re-check interval the
+     * waits use.
+     *
+     * <p>This is "does this process have push delivery at all", not "could a notification arrive
+     * this instant": it stays true across a reconnect, when nothing is being delivered. Narrowing
+     * it to the live connection would not help much -- the interval is chosen once per wait, so a
+     * wait already sleeping when the connection drops sits out its interval either way, and the gap
+     * is the second or two the listener takes to notice and reconnect. Python's _listener_running
+     * is set once and left set for the same reason.
+     */
     default boolean isRunning() {
       return false;
     }
