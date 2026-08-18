@@ -62,6 +62,10 @@ import org.jspecify.annotations.Nullable;
  * @param notificationCoalesceInterval how often stream and workflow-event wake-ups this process
  *     writes are pushed to other processes, batched. Bounds the latency the batching adds and caps
  *     the rate of notifying commits. Null uses the 10ms default; must be at least 1ms
+ * @param databasePollingConcurrency how many DB-backed polling reads (from waits such as awaiting a
+ *     result, recv, getEvent, and reading a stream) may run against the system database at once, so
+ *     a polling storm cannot crowd the control plane out of the pool. Null uses half the pool (at
+ *     least one); non-positive removes the cap
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -83,7 +87,8 @@ public record DBOSConfig(
     @Nullable DBOSSerializer serializer,
     @Nullable Duration schedulerPollingInterval,
     boolean useListenNotify,
-    @Nullable Duration notificationCoalesceInterval) {
+    @Nullable Duration notificationCoalesceInterval,
+    @Nullable Integer databasePollingConcurrency) {
 
   /** Default flush interval for batched stream and workflow-event notifications. */
   public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
@@ -162,7 +167,8 @@ public record DBOSConfig(
         other.serializer,
         other.schedulerPollingInterval,
         other.useListenNotify,
-        other.notificationCoalesceInterval);
+        other.notificationCoalesceInterval,
+        other.databasePollingConcurrency);
   }
 
   /**
@@ -181,7 +187,8 @@ public record DBOSConfig(
         3001, // adminServerPort
         true, // migrate
         null, null, null, null, null, null, false, null, null, null, true, // useListenNotify
-        null); // notificationCoalesceInterval
+        null, // notificationCoalesceInterval
+        null); // databasePollingConcurrency
   }
 
   /**
@@ -231,7 +238,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -256,7 +264,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -281,7 +290,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -306,7 +316,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /**
@@ -336,7 +347,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /**
@@ -366,7 +378,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /**
@@ -396,7 +409,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -421,7 +435,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code conductorKey} set to {@code v}. */
@@ -446,7 +461,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code conductorDomain} set to {@code v}. */
@@ -471,7 +487,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -496,7 +513,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -521,7 +539,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -546,7 +565,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -571,7 +591,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -606,7 +627,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /**
@@ -696,7 +718,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -721,7 +744,8 @@ public record DBOSConfig(
         v,
         schedulerPollingInterval,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -746,7 +770,8 @@ public record DBOSConfig(
         serializer,
         v,
         useListenNotify,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -771,7 +796,8 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         v,
-        notificationCoalesceInterval);
+        notificationCoalesceInterval,
+        databasePollingConcurrency);
   }
 
   /**
@@ -808,6 +834,44 @@ public record DBOSConfig(
         serializer,
         schedulerPollingInterval,
         useListenNotify,
+        v,
+        databasePollingConcurrency);
+  }
+
+  /**
+   * Returns a copy of this config with {@code databasePollingConcurrency} set to {@code v}.
+   *
+   * <p>Wait operations re-query the system database on an interval. Each query is brief, but a
+   * large number of waiters ticking together reach for the pool at the same moment and queue the
+   * control plane -- enqueue and dequeue, status writes, recovery, cancellation -- behind them.
+   * This caps how many of those reads run at once, so the rest of the pool stays reachable.
+   *
+   * @param v maximum concurrent polling reads; null for half the pool (at least one), or a
+   *     non-positive value to remove the cap
+   * @return a copy with the limit set
+   */
+  public @NonNull DBOSConfig withDatabasePollingConcurrency(@Nullable Integer v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
         v);
   }
 
@@ -820,7 +884,7 @@ public record DBOSConfig(
         migrate=%s, conductorKey=%s, conductorDomain=%s, \
         conductorExecutorMetadata=%s, appVersion=%s, executorId=%s, enablePatching=%s, \
         listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
-        notificationCoalesceInterval=%s]
+        notificationCoalesceInterval=%s, databasePollingConcurrency=%s]
         """
         .formatted(
             appName,
@@ -841,6 +905,7 @@ public record DBOSConfig(
             serializer != null ? serializer.name() : null,
             schedulerPollingInterval,
             useListenNotify,
-            notificationCoalesceInterval);
+            notificationCoalesceInterval,
+            databasePollingConcurrency);
   }
 }

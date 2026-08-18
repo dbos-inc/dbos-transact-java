@@ -1048,7 +1048,7 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5, false, false);
     sysdb.recordWorkflowOutput(workflowId, null);
 
-    var ctx = new DbContext(dataSource, "dbos", null, () -> false, null);
+    var ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
     var signals = new SignalMap();
     var passes = new AtomicInteger();
 
@@ -2694,7 +2694,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null);
+    return new DbContext(ds, schema, null, () -> false, null, new PollingLimiter(0));
   }
 
   @Test

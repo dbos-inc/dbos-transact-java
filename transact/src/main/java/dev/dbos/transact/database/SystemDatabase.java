@@ -125,6 +125,22 @@ public class SystemDatabase implements AutoCloseable {
    */
   private static final Duration NOTIFICATION_FALLBACK_INTERVAL = Duration.ofSeconds(60);
 
+  /** Maximum pool size of a data source DBOS creates, and the assumed size of one it is handed. */
+  static final int DEFAULT_POOL_SIZE = 10;
+
+  /**
+   * Half the pool by default (at least one), leaving the rest reachable by the control plane. A
+   * configured value is taken as given, including a non-positive one, which turns the limiter off.
+   */
+  static int resolvePollingConcurrency(DataSource dataSource, @Nullable Integer configured) {
+    if (configured != null) {
+      return configured;
+    }
+    var poolSize =
+        dataSource instanceof HikariDataSource hds ? hds.getMaximumPoolSize() : DEFAULT_POOL_SIZE;
+    return Math.max(1, poolSize / 2);
+  }
+
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
       String productName = conn.getMetaData().getDatabaseProductName();
@@ -145,14 +161,18 @@ public class SystemDatabase implements AutoCloseable {
       DBOSSerializer serializer,
       boolean useListenNotify,
       String executorId,
-      Duration notificationCoalesceInterval) {
+      Duration notificationCoalesceInterval,
+      Integer pollingConcurrency) {
     validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain double quotes");
     }
 
-    this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get, executorId);
+    var pollingLimiter =
+        new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
+    this.ctx =
+        new DbContext(dataSource, schema, serializer, this.closed::get, executorId, pollingLimiter);
     this.created = created;
     try {
       useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
@@ -181,19 +201,20 @@ public class SystemDatabase implements AutoCloseable {
         serializer,
         useListenNotify,
         null,
+        null,
         null);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true, null, null);
+    this(createDataSource(url, user, password), schema, true, null, true, null, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null, null);
+    this(dataSource, schema, false, null, true, null, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer, true, null, null);
+    this(dataSource, schema, false, serializer, true, null, null, null);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
@@ -209,7 +230,8 @@ public class SystemDatabase implements AutoCloseable {
           config.serializer(),
           config.useListenNotify(),
           executorId,
-          config.notificationCoalesceInterval());
+          config.notificationCoalesceInterval(),
+          config.databasePollingConcurrency());
     } else {
       return new SystemDatabase(
           config.dataSource(),
@@ -218,7 +240,8 @@ public class SystemDatabase implements AutoCloseable {
           config.serializer(),
           true,
           executorId,
-          config.notificationCoalesceInterval());
+          config.notificationCoalesceInterval(),
+          config.databasePollingConcurrency());
     }
   }
 
@@ -244,8 +267,8 @@ public class SystemDatabase implements AutoCloseable {
     config.setConnectionTimeout(10000);
     config.setValidationTimeout(2000);
     config.setInitializationFailTimeout(-1);
-    config.setMaximumPoolSize(10);
-    config.setMinimumIdle(10);
+    config.setMaximumPoolSize(DEFAULT_POOL_SIZE);
+    config.setMinimumIdle(DEFAULT_POOL_SIZE);
 
     config.addDataSourceProperty("tcpKeepAlive", "true");
     config.addDataSourceProperty("connectTimeout", "10");

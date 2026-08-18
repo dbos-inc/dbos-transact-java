@@ -49,7 +49,7 @@ class ListenNotifySourceTest {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
     dataSource = pgContainer.dataSource();
-    ctx = new DbContext(dataSource, "dbos", null, () -> false, null);
+    ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
   }
 
   @Test
