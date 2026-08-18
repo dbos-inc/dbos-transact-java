@@ -22,7 +22,7 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47);
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
@@ -505,7 +505,13 @@ public class MigrationManager {
             migration38(isCockroach),
             migration39(useListenNotify),
             MIGRATION_40,
-            MIGRATION_41);
+            MIGRATION_41,
+            MIGRATION_42,
+            MIGRATION_43,
+            MIGRATION_44,
+            migration45(isCockroach),
+            migration46(isCockroach),
+            migration47(isCockroach));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1167,4 +1173,73 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "schedule_name" TEXT;
       CREATE INDEX IF NOT EXISTS "idx_workflow_status_schedule_name" ON "%1$s"."workflow_status" ("schedule_name") WHERE "schedule_name" IS NOT NULL;
       """;
+
+  // A debounced workflow is enqueued DELAYED holding its debounce key as its deduplication_id; each
+  // bounce extends delay_until_epoch_ms, capped at debounce_deadline_epoch_ms. is_debounced marks
+  // the deduplication ID as a debounce key to clear on the DELAYED -> ENQUEUED transition. Java's
+  // debouncer does not use these columns, but a peer SDK sharing this system database does, and
+  // only
+  // one SDK gets to migrate a given database. ADD COLUMN with a constant default is catalog-only,
+  // so
+  // no CONCURRENTLY is needed.
+  static final String MIGRATION_42 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "debounce_deadline_epoch_ms" BIGINT DEFAULT NULL;
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "is_debounced" BOOLEAN NOT NULL DEFAULT FALSE;
+      """;
+
+  // Drop the streams NOTIFY trigger; stream writes are pushed by the notifier off the write path.
+  //
+  // Unconditional, unlike the migrations that create these triggers. Both statements are IF EXISTS
+  // no-ops where the objects were never created, on PostgreSQL and on CockroachDB alike, and
+  // gating them on useListenNotify would leave a hole: a process running without LISTEN/NOTIFY
+  // that happens to be the one advancing the version past here would skip the drop, and no later
+  // process would ever retry it. The triggers would survive forever on that database, still
+  // sending a notification inside every write transaction -- which is the cost this removes.
+  static final String MIGRATION_43 =
+      """
+      DROP TRIGGER IF EXISTS dbos_streams_trigger ON "%1$s".streams;
+      DROP FUNCTION IF EXISTS "%1$s".streams_function();
+      """;
+
+  // Drop the workflow_events NOTIFY trigger; events are pushed by the notifier off the write path.
+  // Unconditional, for the reason on migration 43.
+  static final String MIGRATION_44 =
+      """
+      DROP TRIGGER IF EXISTS dbos_workflow_events_trigger ON "%1$s".workflow_events;
+      DROP FUNCTION IF EXISTS "%1$s".workflow_events_function();
+      """;
+
+  // Extends idx_workflow_status_in_flight with queue_partition_key, so a lookup scoped to one
+  // partition stays selective when many partitions are active. Superseded by the v2 index in
+  // migration 46 and dropped in 47, so on a fresh database this exists only in between.
+  static String migration45(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_partition_dequeue\""
+        + " ON \"%1$s\".\"workflow_status\""
+        + " (\"queue_name\", \"status\", \"queue_partition_key\", \"priority\", \"created_at\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING') AND \"queue_partition_key\" IS NOT NULL";
+  }
+
+  // The trailing workflow_uuid totalizes the dequeue order, which the v1 index left ambiguous.
+  // This is the index the partitioned dequeue in QueuesDAO.startQueuedWorkflows reads through:
+  // queue_name, status and queue_partition_key are all equality-matched there, and priority and
+  // created_at are its ordering.
+  static String migration46(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_partition_dequeue_v2\""
+        + " ON \"%1$s\".\"workflow_status\""
+        + " (\"queue_name\", \"status\", \"queue_partition_key\", \"priority\", \"created_at\","
+        + " \"workflow_uuid\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING') AND \"queue_partition_key\" IS NOT NULL";
+  }
+
+  // Superseded by idx_workflow_status_partition_dequeue_v2.
+  static String migration47(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_partition_dequeue\"";
+  }
 }

@@ -44,14 +44,19 @@ class MigrationManagerTest {
   // Expected functions after migrations (always present)
   static final String[] EXPECTED_FUNCTIONS = {"enqueue_workflow", "send_message"};
 
-  // Expected LISTEN/NOTIFY functions after migrations (PG only, absent on CRDB)
-  static final String[] EXPECTED_NOTIFY_FUNCTIONS = {
-    "notifications_function", "workflow_events_function"
-  };
+  // Expected LISTEN/NOTIFY functions after migrations (PG only, absent on CRDB). Only the
+  // notifications trigger survives: migrations 43 and 44 drop the streams and workflow_events ones,
+  // whose wakeups the application now pushes itself.
+  static final String[] EXPECTED_NOTIFY_FUNCTIONS = {"notifications_function"};
 
   // Expected LISTEN/NOTIFY triggers after migrations (PG only, absent on CRDB)
-  static final String[] EXPECTED_NOTIFY_TRIGGERS = {
-    "dbos_notifications_trigger", "dbos_workflow_events_trigger"
+  static final String[] EXPECTED_NOTIFY_TRIGGERS = {"dbos_notifications_trigger"};
+
+  // Dropped by migrations 43 and 44 (PG only; never created on CRDB)
+  static final String[] RETIRED_NOTIFY_FUNCTIONS = {"streams_function", "workflow_events_function"};
+
+  static final String[] RETIRED_NOTIFY_TRIGGERS = {
+    "dbos_streams_trigger", "dbos_workflow_events_trigger"
   };
 
   @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
@@ -473,6 +478,103 @@ class MigrationManagerTest {
 
     try (var conn = dataSource.getConnection()) {
       assertEquals(expectedFinal, getVersion(conn));
+    }
+  }
+
+  @Test
+  void testMigrations42To47_ConvergeOnTheOtherSDKsSchema() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    try (var conn = dataSource.getConnection()) {
+      // 42: written by a peer SDK's debouncer, never by Java's.
+      assertColumnExists(conn, "workflow_status", "debounce_deadline_epoch_ms");
+      assertColumnExists(conn, "workflow_status", "is_debounced");
+
+      // 43 and 44: the streams and workflow_events wakeups are pushed by the application now, so
+      // their per-row triggers are gone. The notifications trigger stays — it fires in the writing
+      // transaction so a recv is never woken before the row it would read has committed.
+      if (!PgContainer.USE_COCKROACH_DB) {
+        for (String function : RETIRED_NOTIFY_FUNCTIONS) {
+          assertFunctionAbsent(conn, function);
+        }
+        for (String trigger : RETIRED_NOTIFY_TRIGGERS) {
+          assertTriggerAbsent(conn, trigger);
+        }
+        assertTriggerExists(conn, "dbos_notifications_trigger");
+      }
+
+      // 46 supersedes 45, and 47 drops it, leaving the one index the partitioned dequeue reads.
+      assertIndexExists(conn, "idx_workflow_status_partition_dequeue_v2");
+      assertIndexAbsent(conn, "idx_workflow_status_partition_dequeue");
+    }
+  }
+
+  @Test
+  void testEmptyMigrationsStillAdvanceTheVersion() throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    // Migration 39 creates the streams trigger, so it has nothing to do without LISTEN/NOTIFY.
+    // The slot still has to be walked: skipping it outright would renumber every migration after
+    // it, and the shared base at 100 requires every SDK to agree on the index.
+    var migrations = MigrationManager.getMigrations(schema, false, PgContainer.USE_COCKROACH_DB);
+    assertTrue(migrations.get(38).isBlank(), "Migration 39 is empty without LISTEN/NOTIFY");
+
+    // The trigger drops are not gated the same way: they run either way, so a database whose
+    // triggers exist is cleaned up by whichever process advances the version past them.
+    assertFalse(migrations.get(42).isBlank(), "Migration 43 runs without LISTEN/NOTIFY");
+    assertFalse(migrations.get(43).isBlank(), "Migration 44 runs without LISTEN/NOTIFY");
+
+    var dbosConfig = pgContainer.dbosConfig().withUseListenNotify(false);
+    MigrationManager.runMigrations(dbosConfig);
+
+    // Rewind behind the empty slot and re-run: the runner must walk through it, not stall.
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate("UPDATE \"%s\".dbos_migrations SET version = 38".formatted(schema));
+    }
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(migrations.size(), getVersion(conn));
+    }
+  }
+
+  @Test
+  void testGeneratedScriptSkipsEmptyMigrationsButRecordsThem() {
+    var schema = Constants.DB_SCHEMA;
+    var script = MigrationManager.generateMigrationScript(schema, false, 1);
+
+    assertFalse(script.contains("-- Migration 39\n"), "Empty migration 39 emits no SQL");
+    assertTrue(
+        script.contains("SET version = 39;"), "Empty migration 39 still advances the version");
+    assertTrue(script.contains("-- Migration 42\n"), "Migration 42 emits SQL");
+  }
+
+  static void assertIndexExists(Connection conn, String indexName) throws Exception {
+    assertTrue(indexExists(conn, indexName), "Index %s should exist".formatted(indexName));
+  }
+
+  static void assertIndexAbsent(Connection conn, String indexName) throws Exception {
+    assertFalse(indexExists(conn, indexName), "Index %s should not exist".formatted(indexName));
+  }
+
+  private static boolean indexExists(Connection conn, String indexName) throws Exception {
+    String sql =
+        "SELECT 1 FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid"
+            + " WHERE n.nspname = ? AND c.relname = ? AND c.relkind = 'i'";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      ps.setString(2, indexName);
+      try (var rs = ps.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  static void assertColumnExists(Connection conn, String tableName, String columnName)
+      throws Exception {
+    try (ResultSet rs =
+        conn.getMetaData().getColumns(null, Constants.DB_SCHEMA, tableName, columnName)) {
+      assertTrue(rs.next(), "Column %s.%s should exist".formatted(tableName, columnName));
     }
   }
 
