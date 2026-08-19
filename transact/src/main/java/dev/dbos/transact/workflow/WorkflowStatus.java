@@ -75,7 +75,12 @@ public record WorkflowStatus(
     /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
     Map<String, Object> attributes,
     /** Name of the schedule that triggered this workflow, if any. */
-    String scheduleName) {
+    String scheduleName,
+    /**
+     * The application that owns this workflow, or null if it is unclaimed and so belongs to every
+     * application sharing the system database.
+     */
+    String applicationName) {
 
   @JsonIgnore
   public Long timeoutMs() {

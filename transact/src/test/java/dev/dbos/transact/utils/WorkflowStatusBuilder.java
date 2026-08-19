@@ -48,6 +48,7 @@ public class WorkflowStatusBuilder {
   private Instant completedAt;
   private String serialization;
   private String scheduleName;
+  private String applicationName;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -82,7 +83,8 @@ public class WorkflowStatusBuilder {
         completedAt,
         serialization,
         null,
-        scheduleName);
+        scheduleName,
+        applicationName);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -236,6 +238,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder serialization(String serialization) {
     this.serialization = serialization;
+    return this;
+  }
+
+  public WorkflowStatusBuilder applicationName(String applicationName) {
+    this.applicationName = applicationName;
     return this;
   }
 

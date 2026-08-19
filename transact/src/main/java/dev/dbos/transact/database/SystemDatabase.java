@@ -17,6 +17,7 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -171,6 +172,7 @@ public class SystemDatabase implements AutoCloseable {
       DBOSSerializer serializer,
       boolean useListenNotify,
       String executorId,
+      @Nullable String appName,
       Duration notificationCoalesceInterval,
       Integer pollingConcurrency) {
     validatePostgresDataSource(dataSource);
@@ -182,7 +184,8 @@ public class SystemDatabase implements AutoCloseable {
     var pollingLimiter =
         new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
     this.ctx =
-        new DbContext(dataSource, schema, serializer, this.closed::get, executorId, pollingLimiter);
+        new DbContext(
+            dataSource, schema, serializer, this.closed::get, executorId, appName, pollingLimiter);
     this.created = created;
     try {
       useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
@@ -203,7 +206,8 @@ public class SystemDatabase implements AutoCloseable {
       String password,
       String schema,
       DBOSSerializer serializer,
-      boolean useListenNotify) {
+      boolean useListenNotify,
+      @Nullable String appName) {
     this(
         createDataSource(url, user, password),
         schema,
@@ -211,27 +215,32 @@ public class SystemDatabase implements AutoCloseable {
         serializer,
         useListenNotify,
         null,
+        appName,
         null,
         null);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true, null, null, null);
+    this(createDataSource(url, user, password), schema, true, null, true, null, null, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null, null, null);
+    this(dataSource, schema, false, null, true, null, null, null, null);
   }
 
-  public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer, true, null, null, null);
+  public SystemDatabase(
+      DataSource dataSource, String schema, DBOSSerializer serializer, @Nullable String appName) {
+    this(dataSource, schema, false, serializer, true, null, appName, null, null);
   }
 
-  public static SystemDatabase create(DBOSConfig config) {
-    return create(config, null);
-  }
-
-  public static SystemDatabase create(DBOSConfig config, String executorId) {
+  /**
+   * @param appName the application the rows written through this handle belong to. Pass the
+   *     executor's resolved name rather than {@code config.appName()}: on DBOS Cloud the executor
+   *     takes its name from {@code DBOS_APP_NAME}, and row ownership must be the same identity that
+   *     the application version hashes and that the peer-ownership checks compare against.
+   */
+  public static SystemDatabase create(
+      DBOSConfig config, @Nullable String executorId, @Nullable String appName) {
     if (config.dataSource() == null) {
       return new SystemDatabase(
           createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword()),
@@ -240,6 +249,7 @@ public class SystemDatabase implements AutoCloseable {
           config.serializer(),
           config.useListenNotify(),
           executorId,
+          appName,
           config.notificationCoalesceInterval(),
           config.databasePollingConcurrency());
     } else {
@@ -250,9 +260,19 @@ public class SystemDatabase implements AutoCloseable {
           config.serializer(),
           true,
           executorId,
+          appName,
           config.notificationCoalesceInterval(),
           config.databasePollingConcurrency());
     }
+  }
+
+  /**
+   * The application this handle acts for. Rows it writes are owned by that application, and reads
+   * it does not scope explicitly are scoped to it. Null for a handle given no application, which
+   * writes unclaimed rows and reads every application's.
+   */
+  public @Nullable String applicationName() {
+    return ctx.appName();
   }
 
   Optional<HikariConfig> getConfig() {
@@ -495,6 +515,11 @@ public class SystemDatabase implements AutoCloseable {
         () -> WorkflowDAO.findWorkflowIdByDeduplicationId(ctx, queueName, deduplicationId));
   }
 
+  public @Nullable DeduplicationHolder findDeduplicationHolder(
+      String queueName, String deduplicationId) {
+    return dbRetry(() -> WorkflowDAO.findDeduplicationHolder(ctx, queueName, deduplicationId));
+  }
+
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }
@@ -528,7 +553,11 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<Queue> listQueues() {
-    return dbRetry(() -> QueuesDAO.listQueues(ctx));
+    return listQueues(null);
+  }
+
+  public List<Queue> listQueues(@Nullable List<String> applicationName) {
+    return dbRetry(() -> QueuesDAO.listQueues(ctx, applicationName));
   }
 
   public boolean deleteQueue(String name) {
@@ -726,8 +755,18 @@ public class SystemDatabase implements AutoCloseable {
       List<ScheduleStatus> statuses,
       List<String> workflowNames,
       List<String> scheduleNamePrefixes) {
+    return listSchedules(statuses, workflowNames, scheduleNamePrefixes, null);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes,
+      @Nullable List<String> applicationName) {
     return dbRetry(
-        () -> SchedulesDAO.listSchedules(ctx, statuses, workflowNames, scheduleNamePrefixes));
+        () ->
+            SchedulesDAO.listSchedules(
+                ctx, statuses, workflowNames, scheduleNamePrefixes, applicationName));
   }
 
   // Raw form of listSchedules used by the scheduler's poller; see ScheduleRecord for why.

@@ -10,7 +10,8 @@ public record QueueOutput(
     Double rate_limit_period_sec,
     boolean priority_enabled,
     boolean partition_queue,
-    double polling_interval_sec) {
+    double polling_interval_sec,
+    String application_name) {
 
   public static QueueOutput from(Queue q) {
     Queue.RateLimit rl = q.rateLimit();
@@ -22,6 +23,7 @@ public record QueueOutput(
         rl != null ? rl.period().toMillis() / 1000.0 : null,
         q.priorityEnabled(),
         q.partitioningEnabled(),
-        q.pollingInterval().toMillis() / 1000.0);
+        q.pollingInterval().toMillis() / 1000.0,
+        q.applicationName());
   }
 }

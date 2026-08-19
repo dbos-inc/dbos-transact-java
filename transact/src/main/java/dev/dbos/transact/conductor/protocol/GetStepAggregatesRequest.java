@@ -23,6 +23,7 @@ public class GetStepAggregatesRequest extends BaseMessage {
     public List<String> status;
     public List<String> function_name;
     public List<String> workflow_id_prefix;
+    public List<String> application_name;
     public String completed_after;
     public String completed_before;
   }
@@ -44,6 +45,7 @@ public class GetStepAggregatesRequest extends BaseMessage {
         body.function_name,
         body.workflow_id_prefix,
         body.completed_after != null ? Instant.parse(body.completed_after) : null,
-        body.completed_before != null ? Instant.parse(body.completed_before) : null);
+        body.completed_before != null ? Instant.parse(body.completed_before) : null,
+        body.application_name);
   }
 }

@@ -21,18 +21,24 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.UUID;
 
+import org.jspecify.annotations.Nullable;
+
 public class SchedulesDAO {
 
   private SchedulesDAO() {}
 
   public static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
     try (Connection conn = ctx.getConnection()) {
-      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule);
+      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule, ctx.appName());
     }
   }
 
   static void createSchedule(
-      Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
+      Connection conn,
+      String schema,
+      DBOSSerializer serializer,
+      WorkflowSchedule schedule,
+      @Nullable String appName)
       throws SQLException {
 
     Objects.requireNonNull(schedule, "schedule must not be null");
@@ -44,13 +50,23 @@ public class SchedulesDAO {
     Objects.requireNonNull(schedule.cron(), "cron must not be null");
     SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
 
+    var owner =
+        RowOwner.resolve(
+            conn,
+            schema,
+            "workflow_schedules",
+            "schedule_name",
+            schedule.scheduleName(),
+            appName,
+            "Schedule");
+
     String sql =
         """
         INSERT INTO "%s".workflow_schedules
             (schedule_id, schedule_name, workflow_name, workflow_class_name,
              schedule, status, context, last_fired_at, automatic_backfill,
-             cron_timezone, queue_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cron_timezone, queue_name, application_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
@@ -71,6 +87,7 @@ public class SchedulesDAO {
       ps.setBoolean(9, schedule.automaticBackfill());
       ps.setString(10, timeZone);
       ps.setString(11, schedule.queueName());
+      ps.setString(12, owner);
       ps.executeUpdate();
     } catch (SQLException e) {
       if ("23505".equals(e.getSQLState())) {
@@ -87,7 +104,22 @@ public class SchedulesDAO {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes)
       throws SQLException {
-    return listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes).stream()
+    return listSchedules(ctx, statuses, workflowNames, scheduleNamePrefixes, null);
+  }
+
+  /**
+   * Lists schedules owned by {@code applicationName}, plus unclaimed ones. Null lists this
+   * application's own; an explicitly empty list covers every application's.
+   */
+  public static List<WorkflowSchedule> listSchedules(
+      DbContext ctx,
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes,
+      @Nullable List<String> applicationName)
+      throws SQLException {
+    return listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes, applicationName)
+        .stream()
         .map(r -> r.toWorkflowSchedule(ctx.serializer()))
         .toList();
   }
@@ -101,19 +133,35 @@ public class SchedulesDAO {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes)
       throws SQLException {
+    return listScheduleRecords(ctx, statuses, workflowNames, scheduleNamePrefixes, null);
+  }
+
+  public static List<ScheduleRecord> listScheduleRecords(
+      DbContext ctx,
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes,
+      @Nullable List<String> applicationName)
+      throws SQLException {
 
     StringBuilder sql =
         new StringBuilder(
             """
             SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
                    schedule, status, context, last_fired_at, automatic_backfill,
-                   cron_timezone, queue_name
+                   cron_timezone, queue_name, application_name
             FROM "%s".workflow_schedules
             WHERE TRUE
             """
                 .formatted(ctx.schema()));
 
     List<Object> params = new ArrayList<>();
+
+    var appNames = ctx.scopeNames(applicationName);
+    if (appNames != null) {
+      sql.append(" AND (application_name = ANY(?) OR application_name IS NULL)");
+      params.add(appNames.toArray(String[]::new));
+    }
 
     if (statuses != null && !statuses.isEmpty()) {
       sql.append(" AND status = ANY(?)");
@@ -174,7 +222,7 @@ public class SchedulesDAO {
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
                schedule, status, context, last_fired_at, automatic_backfill,
-               cron_timezone, queue_name
+               cron_timezone, queue_name, application_name
         FROM "%s".workflow_schedules
         WHERE schedule_name = ?
         """
@@ -264,12 +312,17 @@ public class SchedulesDAO {
               schedule
                   .withScheduleId(UUID.randomUUID().toString())
                   .withStatus(ScheduleStatus.ACTIVE)
-                  .withLastFiredAt(null));
+                  .withLastFiredAt(null),
+              ctx.appName());
         }
         conn.commit();
-      } catch (SQLException e) {
+      } catch (SQLException | RuntimeException e) {
+        // A name owned by another application throws DBOSApplicationNameConflictException, and an
+        // invalid cron throws too; both must roll back the schedules already written above.
         conn.rollback();
         throw e;
+      } finally {
+        conn.setAutoCommit(true);
       }
     }
   }
@@ -279,18 +332,32 @@ public class SchedulesDAO {
   // last_fired_at are preserved from the existing row; the poller detects the changed
   // definition and restarts the schedule's future.
   private static void upsertSchedule(
-      Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
+      Connection conn,
+      String schema,
+      DBOSSerializer serializer,
+      WorkflowSchedule schedule,
+      @Nullable String appName)
       throws SQLException {
 
     SchedulerService.CRON_PARSER.parse(schedule.cron()).validate();
+
+    var owner =
+        RowOwner.resolve(
+            conn,
+            schema,
+            "workflow_schedules",
+            "schedule_name",
+            schedule.scheduleName(),
+            appName,
+            "Schedule");
 
     String sql =
         """
         INSERT INTO "%s".workflow_schedules
             (schedule_id, schedule_name, workflow_name, workflow_class_name,
              schedule, status, context, last_fired_at, automatic_backfill,
-             cron_timezone, queue_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cron_timezone, queue_name, application_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (schedule_name) DO UPDATE SET
             workflow_name = EXCLUDED.workflow_name,
             workflow_class_name = EXCLUDED.workflow_class_name,
@@ -298,7 +365,10 @@ public class SchedulesDAO {
             context = EXCLUDED.context,
             automatic_backfill = EXCLUDED.automatic_backfill,
             cron_timezone = EXCLUDED.cron_timezone,
-            queue_name = EXCLUDED.queue_name
+            queue_name = EXCLUDED.queue_name,
+            -- Claim only an unclaimed row, so a registration landing between the ownership
+            -- check above and this write keeps the name it just took.
+            application_name = COALESCE(workflow_schedules.application_name, EXCLUDED.application_name)
         """
             .formatted(schema);
 
@@ -319,6 +389,7 @@ public class SchedulesDAO {
       ps.setBoolean(9, schedule.automaticBackfill());
       ps.setString(10, timeZone);
       ps.setString(11, schedule.queueName());
+      ps.setString(12, owner);
       ps.executeUpdate();
     }
   }
@@ -338,6 +409,7 @@ public class SchedulesDAO {
         lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
         timeZoneStr != null ? ZoneId.of(timeZoneStr) : null,
-        rs.getString(11));
+        rs.getString(11),
+        rs.getString(12));
   }
 }

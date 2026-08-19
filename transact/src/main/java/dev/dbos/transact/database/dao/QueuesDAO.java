@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +63,8 @@ public class QueuesDAO {
               AND status NOT IN (?, ?)
               AND started_at_epoch_ms > ?
             """
-                .formatted(ctx.schema());
+                    .formatted(ctx.schema())
+                + ctx.andAppScope();
         if (partitionKey != null) {
           limiterQuery += " AND queue_partition_key = ?";
         }
@@ -71,8 +74,9 @@ public class QueuesDAO {
           ps.setString(2, WorkflowState.ENQUEUED.name());
           ps.setString(3, WorkflowState.DELAYED.name());
           ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
+          var index = ctx.bindAppScope(ps, 5);
           if (partitionKey != null) {
-            ps.setString(5, partitionKey);
+            ps.setString(index, partitionKey);
           }
 
           try (ResultSet rs = ps.executeQuery()) {
@@ -102,7 +106,8 @@ public class QueuesDAO {
               FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
-                .formatted(ctx.schema());
+                    .formatted(ctx.schema())
+                + ctx.andAppScope();
         if (partitionKey != null) {
           globalPendingQuery += " AND queue_partition_key = ?";
         }
@@ -111,8 +116,9 @@ public class QueuesDAO {
         try (PreparedStatement ps = connection.prepareStatement(globalPendingQuery)) {
           ps.setString(1, queue.name());
           ps.setString(2, WorkflowState.PENDING.name());
+          var index = ctx.bindAppScope(ps, 3);
           if (partitionKey != null) {
-            ps.setString(3, partitionKey);
+            ps.setString(index, partitionKey);
           }
 
           try (ResultSet rs = ps.executeQuery()) {
@@ -140,13 +146,16 @@ public class QueuesDAO {
       String latestVersionQuery =
           """
             SELECT version_name FROM "%s".application_versions
-            ORDER BY version_timestamp DESC LIMIT 1
           """
-              .formatted(ctx.schema());
-      try (var ps = connection.prepareStatement(latestVersionQuery);
-          ResultSet rs = ps.executeQuery()) {
-        if (rs.next()) {
-          isLatestVersion = rs.getString(1).equals(appVersion);
+                  .formatted(ctx.schema())
+              + ctx.whereAppScope()
+              + " ORDER BY version_timestamp DESC LIMIT 1";
+      try (var ps = connection.prepareStatement(latestVersionQuery)) {
+        ctx.bindAppScope(ps, 1);
+        try (ResultSet rs = ps.executeQuery()) {
+          if (rs.next()) {
+            isLatestVersion = rs.getString(1).equals(appVersion);
+          }
         }
       }
 
@@ -163,7 +172,8 @@ public class QueuesDAO {
               AND status = ?
               AND %s
           """
-              .formatted(ctx.schema(), versionClause);
+                  .formatted(ctx.schema(), versionClause)
+              + ctx.andAppScope();
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
@@ -185,8 +195,9 @@ public class QueuesDAO {
         ps.setString(1, queue.name());
         ps.setString(2, WorkflowState.ENQUEUED.name());
         ps.setString(3, appVersion);
+        var index = ctx.bindAppScope(ps, 4);
         if (partitionKey != null) {
-          ps.setString(4, partitionKey);
+          ps.setString(index, partitionKey);
         }
 
         try (ResultSet rs = ps.executeQuery()) {
@@ -287,12 +298,14 @@ public class QueuesDAO {
             AND status = ?
             AND queue_partition_key IS NOT NULL
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope();
 
     try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, queueName);
       stmt.setString(2, WorkflowState.ENQUEUED.name());
+      ctx.bindAppScope(stmt, 3);
 
       try (ResultSet rs = stmt.executeQuery()) {
         List<String> partitions = new ArrayList<>();
@@ -317,8 +330,8 @@ public class QueuesDAO {
         """
         INSERT INTO "%s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
-            priority_enabled, partition_queue, polling_interval_sec, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema());
@@ -332,15 +345,23 @@ public class QueuesDAO {
           priority_enabled      = ?,
           partition_queue       = ?,
           polling_interval_sec  = ?,
-          updated_at            = ?
+          updated_at            = ?,
+          -- Claim only an unclaimed row, so a registration landing between the ownership
+          -- check above and this write keeps the name it just took.
+          application_name      = COALESCE(application_name, ?)
         WHERE name = ?
         """
             .formatted(ctx.schema());
 
     try (Connection connection = ctx.getConnection()) {
+      // Read the current owner first: the writes below are silent about why they declined to claim.
+      var owner =
+          RowOwner.resolve(
+              connection, ctx.schema(), "queues", "name", queue.name(), ctx.appName(), "Queue");
       boolean inserted;
       try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-        bindQueueParams(ps, queue, 1);
+        var index = bindQueueParams(ps, queue, 1);
+        ps.setString(index, owner);
         inserted = ps.executeUpdate() == 1;
       }
       if (!inserted && updateExisting) {
@@ -359,7 +380,8 @@ public class QueuesDAO {
           ps.setBoolean(6, queue.partitioningEnabled());
           ps.setDouble(7, queue.pollingInterval().toMillis() / 1000.0);
           ps.setLong(8, System.currentTimeMillis());
-          ps.setString(9, queue.name());
+          ps.setString(9, owner);
+          ps.setString(10, queue.name());
           ps.executeUpdate();
         }
       }
@@ -367,7 +389,8 @@ public class QueuesDAO {
     }
   }
 
-  private static void bindQueueParams(PreparedStatement ps, Queue queue, int offset)
+  /** Binds a queue row's columns from {@code offset}, returning the next free index. */
+  private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
     ps.setString(offset, queue.name());
     setNullableInt(ps, offset + 1, queue.concurrency());
@@ -384,6 +407,7 @@ public class QueuesDAO {
     ps.setBoolean(offset + 6, queue.partitioningEnabled());
     ps.setDouble(offset + 7, queue.pollingInterval().toMillis() / 1000.0);
     ps.setLong(offset + 8, System.currentTimeMillis());
+    return offset + 9;
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
@@ -391,7 +415,7 @@ public class QueuesDAO {
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec
+          priority_enabled, partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         WHERE name = ?
         """
@@ -410,24 +434,47 @@ public class QueuesDAO {
   }
 
   public static List<Queue> listQueues(DbContext ctx) throws SQLException {
+    return listQueues(ctx, null);
+  }
+
+  /**
+   * Lists queues owned by {@code applicationName}, plus unclaimed ones. Null lists this
+   * application's own; an explicitly empty list covers every application's.
+   */
+  public static List<Queue> listQueues(DbContext ctx, @Nullable List<String> applicationName)
+      throws SQLException {
+    var names = ctx.scopeNames(applicationName);
+    var scope =
+        names == null ? "" : " WHERE (application_name = ANY(?) OR application_name IS NULL)";
     final String sql =
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec
+          priority_enabled, partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
-        ORDER BY name
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + scope
+            + " ORDER BY name";
 
     try (Connection connection = ctx.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        ResultSet rs = stmt.executeQuery()) {
-      List<Queue> queues = new ArrayList<>();
-      while (rs.next()) {
-        queues.add(queueFromResultSet(rs));
+        PreparedStatement stmt = connection.prepareStatement(sql)) {
+      Array namesArray = null;
+      if (names != null) {
+        namesArray = connection.createArrayOf("text", names.toArray());
+        stmt.setArray(1, namesArray);
       }
-      return queues;
+      try (ResultSet rs = stmt.executeQuery()) {
+        List<Queue> queues = new ArrayList<>();
+        while (rs.next()) {
+          queues.add(queueFromResultSet(rs));
+        }
+        return queues;
+      } finally {
+        if (namesArray != null) {
+          namesArray.free();
+        }
+      }
     }
   }
 
@@ -528,7 +575,8 @@ public class QueuesDAO {
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        rs.getString("application_name"));
   }
 
   private static Queue queueFromOptions(String name, QueueOptions options) {
@@ -556,7 +604,8 @@ public class QueuesDAO {
         priorityEnabledVal,
         partitionQueueVal,
         rateLimit,
-        pollingIntervalVal);
+        pollingIntervalVal,
+        null); // the owner is resolved and written separately by upsertQueue
   }
 
   private static void setNullableInt(PreparedStatement stmt, int index, Integer value)

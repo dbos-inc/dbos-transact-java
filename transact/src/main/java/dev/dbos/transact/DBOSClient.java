@@ -12,6 +12,7 @@ import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -137,8 +138,35 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       boolean useListenNotify) {
+    this(url, user, password, schema, serializer, useListenNotify, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String applicationName) {
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(url, user, password, schema, serializer, useListenNotify);
+    systemDatabase =
+        new SystemDatabase(
+            url, user, password, schema, serializer, useListenNotify, applicationName);
   }
 
   /**
@@ -171,8 +199,35 @@ public class DBOSClient implements AutoCloseable {
       @NonNull DataSource dataSource,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
+    this(dataSource, schema, serializer, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      @Nullable String applicationName) {
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(dataSource, schema, serializer);
+    systemDatabase = new SystemDatabase(dataSource, schema, serializer, applicationName);
+  }
+
+  /**
+   * The application this client acts on behalf of, or null if it writes unclaimed rows and reads
+   * every application's.
+   */
+  public @Nullable String applicationName() {
+    return systemDatabase.applicationName();
   }
 
   /**
@@ -1022,6 +1077,19 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * As above, with the application owning the holding workflow. The deduplication index is global
+   * across the applications sharing a system database, so the holder may be a peer's.
+   *
+   * @param queueName name of the queue to search
+   * @param deduplicationId deduplication ID to look up
+   * @return the holder, or {@code null} if no active workflow holds that deduplication ID
+   */
+  public @Nullable DeduplicationHolder findDeduplicationHolder(
+      @NonNull String queueName, @NonNull String deduplicationId) {
+    return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
+  }
+
+  /**
    * Create a {@link DebouncerClient} that coalesces repeated calls on the same key into a single
    * execution of the named workflow.
    *
@@ -1315,6 +1383,20 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * List schedules owned by the given applications, plus unclaimed ones.
+   *
+   * @param applicationName the applications whose schedules to list. Null lists this client's own
+   *     application's; an empty list covers every application's.
+   */
+  public @NonNull List<WorkflowSchedule> listSchedules(
+      @Nullable List<ScheduleStatus> status,
+      @Nullable List<String> workflowName,
+      @Nullable List<String> namePrefix,
+      @Nullable List<String> applicationName) {
+    return systemDatabase.listSchedules(status, workflowName, namePrefix, applicationName);
+  }
+
+  /**
    * Delete a schedule by name. No-op if the schedule does not exist.
    *
    * @param name schedule name
@@ -1478,6 +1560,16 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<Queue> listQueues() {
     return systemDatabase.listQueues();
+  }
+
+  /**
+   * List database-backed queues owned by the given applications, plus unclaimed ones.
+   *
+   * @param applicationName the applications whose queues to list. Null lists this client's own
+   *     application's; an empty list covers every application's.
+   */
+  public @NonNull List<Queue> listQueues(@Nullable List<String> applicationName) {
+    return systemDatabase.listQueues(applicationName);
   }
 
   /**

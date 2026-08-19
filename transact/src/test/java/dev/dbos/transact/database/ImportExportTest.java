@@ -40,7 +40,7 @@ public class ImportExportTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
-    sysdb = SystemDatabase.create(dbosConfig);
+    sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
   }
 

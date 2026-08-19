@@ -53,8 +53,8 @@ public class StepsDAO {
     String sql =
         """
           INSERT INTO "%s".operation_outputs
-            (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, application_name)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT DO NOTHING RETURNING completed_at_epoch_ms
         """
             .formatted(schema);
@@ -85,6 +85,7 @@ public class StepsDAO {
 
       stmt.setObject(7, startTimeEpochMs);
       stmt.setObject(8, endTimeEpochMs);
+      stmt.setString(9, ctx.appName());
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {

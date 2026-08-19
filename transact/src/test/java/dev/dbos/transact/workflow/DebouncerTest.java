@@ -9,6 +9,8 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
@@ -472,6 +474,123 @@ public class DebouncerTest {
 
   // Flip the (completed) debouncer workflow back to PENDING, retrying until it has reached SUCCESS
   // so the result is deterministic regardless of how the debouncer's async completion interleaves.
+
+  public interface JoiningOrchestrator {
+    String joinDebounce(String key, String arg);
+  }
+
+  public static class JoiningOrchestratorImpl implements JoiningOrchestrator {
+    private final DBOS dbos;
+    private final DebouncedService svc;
+
+    public JoiningOrchestratorImpl(DBOS dbos, DebouncedService svc) {
+      this.dbos = dbos;
+      this.svc = svc;
+    }
+
+    /**
+     * Debounces from inside a workflow, which is what makes the holder lookup a durable step --
+     * outside one it is a plain call and nothing is recorded.
+     */
+    @Override
+    @Workflow
+    public String joinDebounce(String key, String arg) {
+      return dbos.<String>debouncer()
+          .debounce(key, Duration.ofSeconds(5), () -> svc.process(arg))
+          .workflowId();
+    }
+  }
+
+  /**
+   * Before this SDK carried application names, the DBOS.lookupDebouncer step recorded the holder's
+   * workflow id on its own rather than a DeduplicationHolder. A workflow that recorded one then and
+   * replays now must still resume, which only happens when the application version is pinned across
+   * the upgrade -- patching mode pins it -- since the SDK version is otherwise hashed into the
+   * computed version and recovery only claims workflows matching it.
+   */
+  @Test
+  public void replaysALookupDebouncerStepRecordedBeforeApplicationNames() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+
+    // A holder for the key, so the orchestrator's own enqueue collides and it takes the join path.
+    var holder =
+        dbos.<String>debouncer()
+            .debounce("replay-key", Duration.ofSeconds(5), () -> svc.process("first"));
+
+    var orchestratorId = "wf-replay-orchestrator";
+    String userWorkflowId;
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      userWorkflowId = orch.joinDebounce("replay-key", "second");
+    }
+    assertNotNull(userWorkflowId);
+
+    // Rewrite the recorded step to the shape the previous version wrote: the bare workflow id.
+    var recorded = lookupDebouncerStep(orchestratorId);
+    var legacy =
+        SerializationUtil.serializeValue(holder.workflowId(), recorded.serialization(), null);
+    overwriteStepOutput(orchestratorId, recorded.functionId(), legacy.serializedValue());
+
+    // Replay it. Every step after the lookup replays from its own recorded row, so the debouncer
+    // needs nothing further from this test -- only the doctored row is in question.
+    flipToPending(orchestratorId);
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var recoveredHandles = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    var replayed =
+        recoveredHandles.stream().filter(h -> orchestratorId.equals(h.workflowId())).findFirst();
+    assertTrue(replayed.isPresent(), "orchestrator was not recovered");
+
+    // Without the adapter this throws ClassCastException instead of resuming: the recorded String
+    // cannot be assigned to DeduplicationHolder.
+    assertEquals(userWorkflowId, replayed.get().getResult());
+    assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
+  }
+
+  private record RecordedStep(int functionId, String serialization) {}
+
+  private RecordedStep lookupDebouncerStep(String workflowId) throws SQLException {
+    var sql =
+        "SELECT function_id, serialization FROM dbos.operation_outputs"
+            + " WHERE workflow_uuid = ? AND function_name = ?";
+    try (Connection conn = pgContainer.dataSource().getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, "DBOS.lookupDebouncer");
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next(), "no DBOS.lookupDebouncer step was recorded");
+        return new RecordedStep(rs.getInt("function_id"), rs.getString("serialization"));
+      }
+    }
+  }
+
+  private void overwriteStepOutput(String workflowId, int functionId, String output)
+      throws SQLException {
+    var sql =
+        "UPDATE dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ?";
+    try (Connection conn = pgContainer.dataSource().getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, output);
+      stmt.setString(2, workflowId);
+      stmt.setInt(3, functionId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
+  private void flipToPending(String workflowId) throws SQLException {
+    var sql =
+        "UPDATE dbos.workflow_status SET status = ?, queue_name = NULL, updated_at = ?"
+            + " WHERE workflow_uuid = ?";
+    try (Connection conn = pgContainer.dataSource().getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, WorkflowState.PENDING.name());
+      stmt.setLong(2, Instant.now().toEpochMilli());
+      stmt.setString(3, workflowId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
   private void awaitDebouncerFlippedToPending(Duration timeout) throws Exception {
     var sql =
         "UPDATE dbos.workflow_status SET status = ?, queue_name = NULL, updated_at = ?"

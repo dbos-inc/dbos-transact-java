@@ -277,12 +277,16 @@ public final class Debouncer<R> {
         // When called from inside a workflow, record the result as a durable step so that
         // replay returns the same debouncer id and the subsequent send/getEvent steps stay
         // deterministic. Mirrors Python's call_function_as_step("DBOS.get_deduplicated_workflow").
-        String existingDebouncerId =
+        // Typed as Object so that replay does not cast the recorded value: a step recorded
+        // before this SDK carried application names holds a bare workflow id, and
+        // toDeduplicationHolder adapts it.
+        Object recorded =
             executor.runDbosFunctionAsStep(
-                () -> lookupExistingDebouncerId(debouncerDeduplicationId),
+                () -> (Object) lookupExistingDebouncer(debouncerDeduplicationId),
                 "DBOS.lookupDebouncer",
                 null);
-        if (existingDebouncerId == null) {
+        DeduplicationHolder holder = toDeduplicationHolder(recorded);
+        if (holder == null) {
           // The existing debouncer finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
           logger.debug(
@@ -290,6 +294,14 @@ public final class Debouncer<R> {
               debouncerDeduplicationId);
           continue;
         }
+        // A peer's debouncer is not ours to extend: it dequeues on that application's account, so
+        // it may never run at all from here, and the retry below would spin forever waiting for an
+        // ack. Surface the collision the way a plain deduplicated enqueue would.
+        if (holder.isForeignTo(executor.appName())) {
+          throw new DBOSQueueDuplicatedException(
+              userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, debouncerDeduplicationId);
+        }
+        String existingDebouncerId = holder.workflowId();
         DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
         // messageId is the idempotency key — exactly-once delivery.
         dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
@@ -319,7 +331,33 @@ public final class Debouncer<R> {
     }
   }
 
-  private @Nullable String lookupExistingDebouncerId(String deduplicationId) {
-    return executor.findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+  private @Nullable DeduplicationHolder lookupExistingDebouncer(String deduplicationId) {
+    return executor.findDeduplicationHolder(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+  }
+
+  /**
+   * Adapts a recorded {@code DBOS.lookupDebouncer} step to the shape this version expects.
+   *
+   * <p>Before application names, the step recorded the holder's workflow id on its own. A workflow
+   * that recorded one under that version and replays under this one still has to resume. That
+   * replay only happens when the application version is pinned across the upgrade — patching mode
+   * does exactly that — because the SDK version is otherwise hashed into the computed application
+   * version, and recovery only claims workflows matching it.
+   *
+   * <p>Such a holder predates ownership, so it is reported unclaimed. That is also how it behaved
+   * when it was recorded: every application sharing the system database treated it as its own.
+   */
+  static @Nullable DeduplicationHolder toDeduplicationHolder(@Nullable Object recorded) {
+    if (recorded == null) {
+      return null;
+    }
+    if (recorded instanceof DeduplicationHolder holder) {
+      return holder;
+    }
+    if (recorded instanceof String workflowId) {
+      return new DeduplicationHolder(workflowId, null);
+    }
+    throw new IllegalStateException(
+        "DBOS.lookupDebouncer recorded an unexpected %s".formatted(recorded.getClass().getName()));
   }
 }

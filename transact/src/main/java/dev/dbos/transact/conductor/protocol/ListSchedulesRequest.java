@@ -16,6 +16,7 @@ public class ListSchedulesRequest extends BaseMessage {
       @JsonDeserialize(using = StringOrListDeserializer.class) List<String> status,
       @JsonDeserialize(using = StringOrListDeserializer.class) List<String> workflow_name,
       @JsonDeserialize(using = StringOrListDeserializer.class) List<String> schedule_name_prefix,
+      @JsonDeserialize(using = StringOrListDeserializer.class) List<String> application_name,
       Boolean load_context) {}
 
   public ListSchedulesRequest() {}
@@ -39,6 +40,11 @@ public class ListSchedulesRequest extends BaseMessage {
 
   public List<String> scheduleNamePrefixes() {
     return body == null ? null : body.schedule_name_prefix();
+  }
+
+  /** A Conductor predating the filter sends nothing, leaving the listing scoped to this app. */
+  public List<String> applicationName() {
+    return body == null ? null : body.application_name();
   }
 
   public boolean loadContext() {

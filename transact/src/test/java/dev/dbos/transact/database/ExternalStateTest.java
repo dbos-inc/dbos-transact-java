@@ -29,7 +29,7 @@ public class ExternalStateTest {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
 
-    systemDatabase = SystemDatabase.create(dbosConfig);
+    systemDatabase = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
   }
 
   @Test

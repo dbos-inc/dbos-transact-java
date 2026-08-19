@@ -27,6 +27,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -228,8 +229,12 @@ public class DBOSExecutor implements AutoCloseable {
       this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
+        // The resolved name, not config.appName(): on DBOS Cloud the executor takes its name
+        // from DBOS_APP_NAME, and the version hash must key on the same identity that owns the
+        // rows and that the peer-ownership checks compare against.
         this.appVersion =
-            AppVersionComputer.computeAppVersion(DBOS.version(), workflowMap.values());
+            AppVersionComputer.computeAppVersion(
+                DBOS.version(), this.appName, workflowMap.values());
       }
 
       if (config.conductorKey() != null) {
@@ -261,7 +266,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorService = executorServiceSupplier.get();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
-      systemDatabase = SystemDatabase.create(config, this.executorId);
+      systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
 
       systemDatabase.createApplicationVersion(this.appVersion);
@@ -424,6 +429,11 @@ public class DBOSExecutor implements AutoCloseable {
   public @Nullable String findWorkflowIdByDeduplicationId(
       String queueName, String deduplicationId) {
     return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
+  }
+
+  public @Nullable DeduplicationHolder findDeduplicationHolder(
+      String queueName, String deduplicationId) {
+    return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
   }
 
   QueueService getQueueService() {

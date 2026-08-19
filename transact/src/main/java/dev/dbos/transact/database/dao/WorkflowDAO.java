@@ -16,6 +16,7 @@ import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -76,10 +77,28 @@ public class WorkflowDAO {
         authenticated_user, assumed_role, authenticated_roles,
         created_at, updated_at, completed_at, started_at_epoch_ms,
         recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
-        forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name
+        forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name,
+        application_name
       """;
 
   private WorkflowDAO() {}
+
+  /**
+   * Scopes a listing to the applications asked for, or to this one by default, plus unclaimed rows,
+   * which belong to every application. Adds nothing when the scope is empty: an explicitly empty
+   * filter, or a nameless owner, lists every application's rows.
+   */
+  private static void addAppScope(
+      DbContext ctx,
+      StringJoiner whereConditions,
+      List<Object> parameters,
+      @Nullable List<String> requested) {
+    var names = ctx.scopeNames(requested);
+    if (names != null) {
+      whereConditions.add("(application_name = ANY(?) OR application_name IS NULL)");
+      parameters.add(names);
+    }
+  }
 
   public static WorkflowInitResult initWorkflowStatus(
       DbContext ctx,
@@ -102,7 +121,12 @@ public class WorkflowDAO {
 
         InsertWorkflowResult resRow =
             insertWorkflowStatus(
-                conn, ctx.schema(), initStatus, ownerXid, isRecoveryRequest || isDequeuedRequest);
+                conn,
+                ctx.schema(),
+                initStatus,
+                ownerXid,
+                isRecoveryRequest || isDequeuedRequest,
+                ctx.appName());
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -198,7 +222,8 @@ public class WorkflowDAO {
       String schema,
       WorkflowStatusInternal status,
       String ownerXid,
-      boolean incrementAttempts)
+      boolean incrementAttempts,
+      @Nullable String appName)
       throws SQLException {
 
     logger.debug("insertWorkflowStatus workflowId {}", status.workflowId());
@@ -213,8 +238,9 @@ public class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            parent_workflow_id, owner_xid, serialization, attributes, schedule_name
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+            parent_workflow_id, owner_xid, serialization, attributes, schedule_name,
+            application_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -227,7 +253,8 @@ public class WorkflowDAO {
                   WHEN EXCLUDED.status != 'ENQUEUED' AND EXCLUDED.status != 'DELAYED'
                   THEN EXCLUDED.executor_id
                   ELSE workflow_status.executor_id
-              END
+              END,
+              application_name = COALESCE(workflow_status.application_name, EXCLUDED.application_name)
           RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization
         """
             .formatted(schema);
@@ -283,7 +310,8 @@ public class WorkflowDAO {
       stmt.setString(25, status.serialization());
       stmt.setString(26, attributesJson);
       stmt.setString(27, status.scheduleName());
-      stmt.setInt(28, incrementAttempts ? 1 : 0);
+      stmt.setString(28, appName);
+      stmt.setInt(29, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -418,7 +446,8 @@ public class WorkflowDAO {
     // between these two statements is replayed and retried. ON CONFLICT makes the insert
     // idempotent and the outcome update is safe to repeat.
     try (var conn = ctx.getConnection()) {
-      insertWorkflowStatus(conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false);
+      insertWorkflowStatus(
+          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false, ctx.appName());
       updateWorkflowOutcome(
           conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
     }
@@ -521,9 +550,24 @@ public class WorkflowDAO {
    */
   public static @Nullable String findWorkflowIdByDeduplicationId(
       DbContext ctx, String queueName, String deduplicationId) throws SQLException {
+    var holder = findDeduplicationHolder(ctx, queueName, deduplicationId);
+    return holder == null ? null : holder.workflowId();
+  }
+
+  /**
+   * The workflow currently holding a given (queue_name, deduplication_id) pair, with the
+   * application that owns it, or {@code null} if the pair is unheld. Uses the UNIQUE index on that
+   * pair for O(1) lookup.
+   *
+   * <p>That index is global across the applications sharing the system database, so the holder is
+   * not necessarily ours. The read is deliberately unscoped: a caller cannot steer around a holder
+   * it cannot see, and the debouncer needs the owner precisely so it can refuse.
+   */
+  public static @Nullable DeduplicationHolder findDeduplicationHolder(
+      DbContext ctx, String queueName, String deduplicationId) throws SQLException {
     var sql =
         """
-          SELECT workflow_uuid
+          SELECT workflow_uuid, application_name
             FROM "%s".workflow_status
            WHERE queue_name = ?
              AND deduplication_id = ?
@@ -535,7 +579,10 @@ public class WorkflowDAO {
       stmt.setString(1, queueName);
       stmt.setString(2, deduplicationId);
       try (var rs = stmt.executeQuery()) {
-        return rs.next() ? rs.getString("workflow_uuid") : null;
+        return rs.next()
+            ? new DeduplicationHolder(
+                rs.getString("workflow_uuid"), rs.getString("application_name"))
+            : null;
       }
     }
   }
@@ -612,13 +659,15 @@ public class WorkflowDAO {
            WHERE status = ?
              AND delay_until_epoch_ms <= ?
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope();
 
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
       stmt.setString(2, WorkflowState.DELAYED.name());
       stmt.setLong(3, System.currentTimeMillis());
+      ctx.bindAppScope(stmt, 4);
 
       stmt.executeUpdate();
     }
@@ -765,6 +814,7 @@ public class WorkflowDAO {
       whereConditions.add("attributes @> ?::jsonb");
       parameters.add(JsonUtility.toJson(input.attributes()));
     }
+    addAppScope(ctx, whereConditions, parameters, input.applicationName());
 
     // Only append WHERE keyword if there are actual conditions
     if (whereConditions.length() > 0) {
@@ -842,6 +892,8 @@ public class WorkflowDAO {
     if (input.groupByExecutorId()) dims.add(new GroupDim("executor_id", "executor_id"));
     if (input.groupByApplicationVersion())
       dims.add(new GroupDim("application_version", "application_version"));
+    if (input.groupByApplicationName())
+      dims.add(new GroupDim("application_name", "application_name"));
     // Time bucket: floor(created_at / bucket) * bucket
     boolean hasBucket = input.timeBucketSize() != null;
     if (hasBucket) {
@@ -941,6 +993,7 @@ public class WorkflowDAO {
       whereConditions.add("attributes @> ?::jsonb");
       parameters.add(JsonUtility.toJson(input.attributes()));
     }
+    addAppScope(ctx, whereConditions, parameters, input.applicationName());
 
     if (whereConditions.length() > 0) {
       sqlBuilder.append(" WHERE ").append(whereConditions);
@@ -1091,6 +1144,7 @@ public class WorkflowDAO {
       whereConditions.add("completed_at_epoch_ms <= ?");
       parameters.add(input.completedBefore().toEpochMilli());
     }
+    addAppScope(ctx, whereConditions, parameters, input.applicationName());
 
     if (whereConditions.length() > 0) {
       sqlBuilder.append(" WHERE ").append(whereConditions);
@@ -1200,7 +1254,8 @@ public class WorkflowDAO {
             (attributesJson != null)
                 ? JsonUtility.fromJson(attributesJson, new TypeReference<Map<String, Object>>() {})
                 : null,
-            rs.getString("schedule_name"));
+            rs.getString("schedule_name"),
+            rs.getString("application_name"));
     return info;
   }
 
@@ -1666,7 +1721,8 @@ public class WorkflowDAO {
             applicationVersion,
             queueName,
             queuePartitionKey,
-            timeoutMs);
+            timeoutMs,
+            ctx.appName());
 
         markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
@@ -1681,7 +1737,8 @@ public class WorkflowDAO {
           }
         }
         if (!copyOrigIds.isEmpty()) {
-          batchCopyWorkflowData(conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps);
+          batchCopyWorkflowData(
+              conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, ctx.appName());
         }
 
         conn.commit();
@@ -1756,7 +1813,8 @@ public class WorkflowDAO {
       String applicationVersion,
       String queueName,
       String queuePartitionKey,
-      @Nullable Long timeoutMs)
+      @Nullable Long timeoutMs,
+      @Nullable String appName)
       throws SQLException {
 
     StringBuilder sql =
@@ -1766,14 +1824,15 @@ public class WorkflowDAO {
                 workflow_uuid, status, name, class_name, config_name,
                 application_version, application_id, authenticated_user,
                 authenticated_roles, assumed_role, queue_name, queue_partition_key,
-                inputs, workflow_timeout_ms, forked_from, serialization, attributes
+                inputs, workflow_timeout_ms, forked_from, serialization, attributes,
+                application_name
               ) VALUES\s
             """
                 .formatted(schema));
 
     StringJoiner rows = new StringJoiner(", ");
     for (int i = 0; i < origIds.size(); i++) {
-      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)");
+      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
     }
     sql.append(rows);
 
@@ -1801,6 +1860,7 @@ public class WorkflowDAO {
         stmt.setString(p++, origIds.get(i));
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
+        stmt.setString(p++, appName);
       }
       stmt.executeUpdate();
     }
@@ -1853,7 +1913,8 @@ public class WorkflowDAO {
       String schema,
       List<String> origIds,
       List<String> forkIds,
-      List<Integer> startSteps)
+      List<Integer> startSteps,
+      @Nullable String appName)
       throws SQLException {
 
     StringJoiner valueRows = new StringJoiner(", ");
@@ -1868,10 +1929,11 @@ public class WorkflowDAO {
             + """
               INSERT INTO "%1$s".operation_outputs
                 (workflow_uuid, function_id, output, error, function_name,
-                 child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization)
+                 child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization,
+                 application_name)
               SELECT m.fork_id, oo.function_id, oo.output, oo.error, oo.function_name,
                      oo.child_workflow_id, oo.started_at_epoch_ms, oo.completed_at_epoch_ms,
-                     oo.serialization
+                     oo.serialization, ?
               FROM mapping m
               JOIN "%1$s".operation_outputs oo
                 ON oo.workflow_uuid = m.orig_id AND oo.function_id < m.start_step
@@ -1934,20 +1996,27 @@ public class WorkflowDAO {
           stmt.setString(p++, forkIds.get(i));
           stmt.setInt(p++, startSteps.get(i));
         }
+        // The copied steps take the forking application, like the forked workflow row itself.
+        if (sql.equals(ooSql)) {
+          stmt.setString(p++, appName);
+        }
         stmt.executeUpdate();
       }
     }
   }
 
-  private static Instant getRowsCutoff(Connection conn, String schema, long rowsThreshold)
+  private static Instant getRowsCutoff(DbContext ctx, Connection conn, long rowsThreshold)
       throws SQLException {
     String sql =
         """
-          SELECT created_at FROM "%s".workflow_status ORDER BY created_at DESC OFFSET ? LIMIT 1
+          SELECT created_at FROM "%s".workflow_status
         """
-            .formatted(schema);
+                .formatted(ctx.schema())
+            + ctx.whereAppScope()
+            + " ORDER BY created_at DESC OFFSET ? LIMIT 1";
     try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setLong(1, rowsThreshold - 1);
+      var index = ctx.bindAppScope(stmt, 1);
+      stmt.setLong(index, rowsThreshold - 1);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
           return Instant.ofEpochMilli(rs.getLong("created_at"));
@@ -1963,7 +2032,7 @@ public class WorkflowDAO {
 
     try (var conn = ctx.getConnection()) {
       if (rowsThreshold != null) {
-        var rowsCutoff = getRowsCutoff(conn, ctx.schema(), rowsThreshold);
+        var rowsCutoff = getRowsCutoff(ctx, conn, rowsThreshold);
         if (rowsCutoff != null) {
           if (cutoff == null || rowsCutoff.isAfter(cutoff)) {
             cutoff = rowsCutoff;
@@ -1976,12 +2045,14 @@ public class WorkflowDAO {
             """
               DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
             """
-                .formatted(ctx.schema());
+                    .formatted(ctx.schema())
+                + ctx.andAppScope();
         try (var stmt = conn.prepareStatement(sql)) {
           stmt.setLong(1, cutoff.toEpochMilli());
           stmt.setString(2, WorkflowState.PENDING.name());
           stmt.setString(3, WorkflowState.ENQUEUED.name());
           stmt.setString(4, WorkflowState.DELAYED.name());
+          ctx.bindAppScope(stmt, 5);
 
           stmt.executeUpdate();
         }
@@ -2000,17 +2071,19 @@ public class WorkflowDAO {
           SELECT name, COUNT(workflow_uuid) as count
           FROM "%s".workflow_status
           WHERE created_at >= ? AND created_at < ?
-          GROUP BY name
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope()
+            + " GROUP BY name";
     final var stepSQL =
         """
           SELECT function_name, COUNT(*) as count
           FROM "%s".operation_outputs
           WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
-          GROUP BY function_name
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope()
+            + " GROUP BY function_name";
 
     try (var conn = ctx.getConnection();
         var ps1 = conn.prepareStatement(wfSQL);
@@ -2018,6 +2091,7 @@ public class WorkflowDAO {
 
       ps1.setLong(1, start);
       ps1.setLong(2, end);
+      ctx.bindAppScope(ps1, 3);
 
       try (var rs = ps1.executeQuery()) {
         while (rs.next()) {
@@ -2029,6 +2103,7 @@ public class WorkflowDAO {
 
       ps2.setLong(1, start);
       ps2.setLong(2, end);
+      ctx.bindAppScope(ps2, 3);
 
       try (var rs = ps2.executeQuery()) {
         while (rs.next()) {
@@ -2162,9 +2237,9 @@ public class WorkflowDAO {
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
           recovery_attempts, forked_from, parent_workflow_id, serialization,
-          delay_until_epoch_ms, completed_at
+          delay_until_epoch_ms, completed_at, application_name
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -2175,9 +2250,9 @@ public class WorkflowDAO {
           workflow_uuid, function_id, function_name,
           output, error, child_workflow_id,
           started_at_epoch_ms, completed_at_epoch_ms,
-          serialization
+          serialization, application_name
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -2275,6 +2350,7 @@ public class WorkflowDAO {
           wfStmt.setString(27, status.serialization());
           wfStmt.setObject(28, status.delayUntilEpochMs());
           wfStmt.setObject(29, status.completedAtEpochMs());
+          wfStmt.setString(30, status.applicationName());
           wfStmt.addBatch();
 
           for (var step : workflow.steps()) {
@@ -2293,6 +2369,9 @@ public class WorkflowDAO {
             stepStmt.setObject(7, step.startedAtEpochMs());
             stepStmt.setObject(8, step.completedAtEpochMs());
             stepStmt.setString(9, step.serialization());
+            // Steps take the imported workflow's owner: they are never owned separately, and the
+            // exported step carries no owner of its own.
+            stepStmt.setString(10, status.applicationName());
             stepStmt.addBatch();
           }
 

@@ -55,6 +55,9 @@ public class ListWorkflowsRequest extends BaseMessage {
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> schedule_name;
 
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> application_name;
+
     public Integer limit;
     public Integer offset;
     public Boolean sort_desc;
@@ -97,6 +100,7 @@ public class ListWorkflowsRequest extends BaseMessage {
         body.completed_before != null ? Instant.parse(body.completed_before) : null,
         body.dequeued_after != null ? Instant.parse(body.dequeued_after) : null,
         body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null,
-        body.schedule_name);
+        body.schedule_name,
+        body.application_name);
   }
 }

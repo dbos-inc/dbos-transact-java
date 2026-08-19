@@ -182,7 +182,7 @@ public class ConfigTest {
           assertDoesNotThrow(
               () ->
                   AppVersionComputer.computeAppVersion(
-                      DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+                      DBOS.version(), config.appName(), dbosExecutor.getRegisteredWorkflows()));
       assertFalse(version.startsWith("unknown"));
       assertEquals(version, dbosExecutor.appVersion());
     }
@@ -200,7 +200,9 @@ public class ConfigTest {
           assertDoesNotThrow(
               () ->
                   AppVersionComputer.computeAppVersion(
-                      "foo" + DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+                      "foo" + DBOS.version(),
+                      config.appName(),
+                      dbosExecutor.getRegisteredWorkflows()));
       assertFalse(version.startsWith("unknown"));
       assertNotEquals(version, dbosExecutor.appVersion());
     }

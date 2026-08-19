@@ -14,7 +14,8 @@ public record ScheduleOutput(
     String last_fired_at,
     boolean automatic_backfill,
     String cron_timezone,
-    String queue_name) {
+    String queue_name,
+    String application_name) {
 
   public static ScheduleOutput from(WorkflowSchedule s, boolean loadContext) {
     return new ScheduleOutput(
@@ -28,6 +29,7 @@ public record ScheduleOutput(
         s.lastFiredAt() != null ? s.lastFiredAt().toString() : null,
         s.automaticBackfill(),
         s.cronTimezone() != null ? s.cronTimezone().getId() : null,
-        s.queueName());
+        s.queueName(),
+        s.applicationName());
   }
 }

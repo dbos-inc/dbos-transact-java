@@ -51,7 +51,7 @@ class ListenNotifySourceTest {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
     dataSource = pgContainer.dataSource();
-    ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
+    ctx = new DbContext(dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0));
   }
 
   @Test
@@ -100,7 +100,7 @@ class ListenNotifySourceTest {
     // writing process are still woken directly -- see aLocalWaiterIsWokenWithoutARoundTrip.
     try (var listener = listenOn(SignalKey.STREAMS_CHANNEL)) {
       var config = pgContainer.dbosConfig().withUseListenNotify(false);
-      try (var sysdb = SystemDatabase.create(config)) {
+      try (var sysdb = SystemDatabase.create(config, null, config.appName())) {
         sysdb.start();
         sysdb.initWorkflowStatus(
             WorkflowStatusInternalBuilder.create("wf-no-listen-notify").build(), 5, false, false);
@@ -144,7 +144,7 @@ class ListenNotifySourceTest {
     // No LISTEN/NOTIFY at all, so nothing is pushed and nothing is received: the waiter can only be
     // woken by the writing process signalling it directly, or by its own one-second poll.
     var config = pgContainer.dbosConfig().withUseListenNotify(false);
-    try (var sysdb = SystemDatabase.create(config)) {
+    try (var sysdb = SystemDatabase.create(config, null, config.appName())) {
       sysdb.start();
       // setEvent records a step against the writing workflow, so it has to exist.
       sysdb.initWorkflowStatus(

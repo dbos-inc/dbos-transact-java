@@ -76,7 +76,7 @@ public class SystemDatabaseTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
-    sysdb = SystemDatabase.create(dbosConfig);
+    sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
   }
 
@@ -498,6 +498,7 @@ public class SystemDatabaseTest {
         null,
         false,
         null,
+        null,
         null);
   }
 
@@ -549,6 +550,7 @@ public class SystemDatabaseTest {
                 null,
                 false,
                 null,
+                null,
                 null));
   }
 
@@ -567,6 +569,7 @@ public class SystemDatabaseTest {
             "{}",
             null,
             false,
+            null,
             null,
             null));
     sysdb.pauseSchedule("beta-1");
@@ -694,7 +697,8 @@ public class SystemDatabaseTest {
             Instant.parse("2026-03-01T00:00:00Z"),
             true,
             ZoneId.of("America/New_York"),
-            "my-queue");
+            "my-queue",
+            null);
     sysdb.createSchedule(schedule);
 
     var s = sysdb.getSchedule("sched-full").get();
@@ -1048,7 +1052,8 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5, false, false);
     sysdb.recordWorkflowOutput(workflowId, null);
 
-    var ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
+    var ctx =
+        new DbContext(dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0));
     var signals = new SignalMap();
     var passes = new AtomicInteger();
 
@@ -1229,7 +1234,10 @@ public class SystemDatabaseTest {
   public void testNonPostgresDataSourceViaCreateThrows() throws SQLException {
     var ds = mockDataSource("SQLite");
     var config = DBOSConfig.defaults("test-app").withDataSource(ds);
-    var ex = assertThrows(IllegalStateException.class, () -> SystemDatabase.create(config));
+    var ex =
+        assertThrows(
+            IllegalStateException.class,
+            () -> SystemDatabase.create(config, null, config.appName()));
     assertTrue(ex.getMessage().contains("PostgreSQL"));
     assertTrue(ex.getMessage().contains("SQLite"));
   }
@@ -2694,7 +2702,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null, new PollingLimiter(0));
+    return new DbContext(ds, schema, null, () -> false, null, null, new PollingLimiter(0));
   }
 
   @Test

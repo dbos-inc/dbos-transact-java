@@ -22,7 +22,11 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107);
+
+  // From this index on, every SDK defines the same migration at the same index, so a migration
+  // added here must be added to all of them.
+  public static final int SHARED_MIGRATION_BASE = 100;
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
@@ -89,13 +93,18 @@ public class MigrationManager {
     }
 
     var versionRowExists = startMigration > 1;
+    var lastRecorded = startMigration - 1;
     for (var i = startMigration; i <= latest; i++) {
       var sql = migrations.get(i - 1).strip();
       if (i == 10) {
         // Migration 10 backfills the notifications primary key, which
         // migration 1 already creates on a fresh database.
         sb.append("-- Migration 10 skipped: not applicable on fresh databases\n");
-      } else if (!sql.isEmpty()) {
+      } else if (sql.isEmpty()) {
+        // Padding left by the renumbering onto SHARED_MIGRATION_BASE: nothing to emit, and the
+        // version write after the loop records it. Mirrors the runner.
+        continue;
+      } else {
         sb.append("-- Migration %d\n".formatted(i));
         sb.append(sql);
         if (!sql.endsWith(";")) {
@@ -105,15 +114,21 @@ public class MigrationManager {
       }
       // Per-migration version bookkeeping, mirroring the runner: an
       // interrupted apply can be resumed from the next migration number.
-      if (versionRowExists) {
-        sb.append("UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, i));
-      } else {
-        sb.append(
-            "INSERT INTO \"%s\".dbos_migrations (version) VALUES (%d);\n".formatted(schema, i));
-        versionRowExists = true;
-      }
+      sb.append(versionWrite(schema, i, versionRowExists));
+      versionRowExists = true;
+      lastRecorded = i;
+    }
+    // Empty migrations at the end still count as applied.
+    if (lastRecorded < latest) {
+      sb.append(versionWrite(schema, latest, versionRowExists));
     }
     return sb.toString();
+  }
+
+  private static String versionWrite(String schema, int version, boolean versionRowExists) {
+    return versionRowExists
+        ? "UPDATE \"%s\".dbos_migrations SET version = %d;\n".formatted(schema, version)
+        : "INSERT INTO \"%s\".dbos_migrations (version) VALUES (%d);\n".formatted(schema, version);
   }
 
   private static boolean shouldMigrate(
@@ -373,18 +388,19 @@ public class MigrationManager {
         continue;
       }
 
+      var migrationSql = migrations.get(i);
+      // No DDL: either migration 20 on CockroachDB, or padding left by the renumbering onto
+      // SHARED_MIGRATION_BASE. Skip without a round trip; the bump after the loop records them.
+      if (migrationSql.isBlank()) {
+        continue;
+      }
+
       logger.info("Applying DBOS system database schema migration {}", migrationIndex);
 
-      var migrationSql = migrations.get(i);
       var versionBefore = lastApplied;
 
       try {
-        if (migrationSql.isBlank()) {
-          // No DDL (e.g. migration 20 on CockroachDB); just record the version.
-          logger.info("Migration {} has no statements; skipping.", migrationIndex);
-          runInTransaction(
-              conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
-        } else if (migrationIndex == 10 && notificationsPrimaryKeyExists(conn, schema)) {
+        if (migrationIndex == 10 && notificationsPrimaryKeyExists(conn, schema)) {
           // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
           // (guard for installs created before the primary key was added to migration 1).
           logger.info("Migration 10 skipped, primary key already exists");
@@ -416,6 +432,17 @@ public class MigrationManager {
       }
 
       lastApplied = migrationIndex;
+    }
+
+    // Empty migrations at the end still count as applied, so record them in one write.
+    if (migrations.size() > lastApplied) {
+      var versionBefore = lastApplied;
+      try {
+        runInTransaction(
+            conn, c -> bumpMigrationVersion(c, schema, migrations.size(), versionBefore));
+      } catch (SQLException e) {
+        throw new RuntimeException("Failed to record migration %d".formatted(migrations.size()), e);
+      }
     }
   }
 
@@ -463,7 +490,7 @@ public class MigrationManager {
   public static List<String> getMigrations(
       String schema, boolean useListenNotify, boolean isCockroach) {
     Objects.requireNonNull(schema);
-    var migrations =
+    var history =
         List.of(
             migration1(useListenNotify),
             MIGRATION_2,
@@ -512,7 +539,31 @@ public class MigrationManager {
             migration45(isCockroach),
             migration46(isCockroach),
             migration47(isCockroach));
+    var migrations = new ArrayList<>(padToSharedBase(history));
+    // Versions from SHARED_MIGRATION_BASE on are defined identically by every DBOS SDK.
+    migrations.addAll(
+        List.of(
+            MIGRATION_100,
+            MIGRATION_101,
+            MIGRATION_102,
+            MIGRATION_103,
+            MIGRATION_104,
+            migration105(isCockroach),
+            MIGRATION_106,
+            migration107(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
+  }
+
+  /**
+   * Pads a language's own history out to {@code SHARED_MIGRATION_BASE - 1}. Indices below the base
+   * stay per-language; the gap is safe to skip only because the schemas converge there.
+   */
+  private static List<String> padToSharedBase(List<String> history) {
+    var padded = new ArrayList<>(history);
+    while (padded.size() < SHARED_MIGRATION_BASE - 1) {
+      padded.add("");
+    }
+    return padded;
   }
 
   static String migration1(boolean useListenNotify) {
@@ -1241,5 +1292,171 @@ public class MigrationManager {
     return "DROP INDEX "
         + concurrently(isCockroach)
         + " IF EXISTS \"%1$s\".\"idx_workflow_status_partition_dequeue\"";
+  }
+
+  // ── Shared migrations ───────────────────────────────────────────────────────────────────────
+  // Migrations from SHARED_MIGRATION_BASE on are defined identically by every DBOS SDK, so
+  // applications in different languages converge on one schema in a shared system database.
+
+  // Migration 100: application_name on workflow_status, the first of the cross-SDK shared
+  // history. NULL means unclaimed: any application may read and claim the row, which is what
+  // keeps this migration safe for databases already holding another SDK's rows. One table per
+  // migration, so a blocked table does not hold the others' locks.
+  static final String MIGRATION_100 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN IF NOT EXISTS "application_name" TEXT DEFAULT NULL;
+      """;
+
+  static final String MIGRATION_101 =
+      """
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "application_name" TEXT DEFAULT NULL;
+      """;
+
+  static final String MIGRATION_102 =
+      """
+      ALTER TABLE "%1$s"."workflow_schedules" ADD COLUMN IF NOT EXISTS "application_name" TEXT DEFAULT NULL;
+      """;
+
+  static final String MIGRATION_103 =
+      """
+      ALTER TABLE "%1$s"."application_versions" ADD COLUMN IF NOT EXISTS "application_name" TEXT DEFAULT NULL;
+      """;
+
+  static final String MIGRATION_104 =
+      """
+      ALTER TABLE "%1$s"."operation_outputs" ADD COLUMN IF NOT EXISTS "application_name" TEXT DEFAULT NULL;
+      """;
+
+  // Migration 105: replace enqueue_workflow with a signature that also accepts a trailing
+  // application_name. Every parameter is defaulted, so a caller omitting it -- an SDK predating
+  // the feature -- still resolves to this function and enqueues an unclaimed workflow. The
+  // 16-argument overload from migration 38 is dropped first so only one signature remains.
+  static String migration105(boolean isCockroach) {
+    var migration =
+        """
+        DROP FUNCTION IF EXISTS "%1$s".enqueue_workflow(
+            TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT, TEXT, TEXT, BIGINT
+        );
+
+        CREATE OR REPLACE FUNCTION "%1$s".enqueue_workflow(
+            workflow_name TEXT,
+            queue_name TEXT,
+            positional_args JSON[] DEFAULT ARRAY[]::JSON[],
+            named_args JSON DEFAULT '{}'::JSON,
+            class_name TEXT DEFAULT NULL,
+            config_name TEXT DEFAULT NULL,
+            workflow_id TEXT DEFAULT NULL,
+            app_version TEXT DEFAULT NULL,
+            timeout_ms BIGINT DEFAULT NULL,
+            deadline_epoch_ms BIGINT DEFAULT NULL,
+            deduplication_id TEXT DEFAULT NULL,
+            priority INT4 DEFAULT NULL,
+            queue_partition_key TEXT DEFAULT NULL,
+            authenticated_user TEXT DEFAULT NULL,
+            authenticated_roles TEXT DEFAULT NULL,
+            delay_until_epoch_ms BIGINT DEFAULT NULL,
+            application_name TEXT DEFAULT NULL
+        ) RETURNS TEXT AS $$
+        DECLARE
+            v_workflow_id TEXT;
+            v_serialized_inputs TEXT;
+            v_owner_xid TEXT;
+            v_now BIGINT;
+            v_recovery_attempts INT4 := 0;
+            v_priority INT4;
+            v_status TEXT;
+        BEGIN
+
+            -- Validate required parameters
+            IF workflow_name IS NULL OR workflow_name = '' THEN
+                RAISE EXCEPTION 'Workflow name cannot be null or empty';
+            END IF;
+            IF queue_name IS NULL OR queue_name = '' THEN
+                RAISE EXCEPTION 'Queue name cannot be null or empty';
+            END IF;
+            IF named_args IS NOT NULL AND jsonb_typeof(named_args::jsonb) != 'object' THEN
+                RAISE EXCEPTION 'Named args must be a JSON object';
+            END IF;
+            IF workflow_id IS NOT NULL AND workflow_id = '' THEN
+                RAISE EXCEPTION 'Workflow ID cannot be an empty string if provided.';
+            END IF;
+            IF delay_until_epoch_ms IS NOT NULL AND delay_until_epoch_ms < 0 THEN
+                RAISE EXCEPTION 'delay_until_epoch_ms must be >= 0';
+            END IF;
+
+            v_workflow_id := COALESCE(workflow_id, gen_random_uuid()::TEXT);
+            v_owner_xid := gen_random_uuid()::TEXT;
+            v_priority := COALESCE(priority, 0);
+            v_serialized_inputs := json_build_object(
+                'positionalArgs', positional_args,
+                'namedArgs', named_args
+            )::TEXT;
+            v_now := EXTRACT(epoch FROM now()) * 1000;
+            v_status := CASE WHEN delay_until_epoch_ms IS NULL THEN 'ENQUEUED' ELSE 'DELAYED' END;
+
+            INSERT INTO "%1$s".workflow_status (
+                workflow_uuid, status, inputs,
+                name, class_name, config_name,
+                queue_name, deduplication_id, priority, queue_partition_key,
+                application_version,
+                created_at, updated_at, recovery_attempts,
+                workflow_timeout_ms, workflow_deadline_epoch_ms,
+                parent_workflow_id, owner_xid, serialization,
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms, application_name
+            ) VALUES (
+                v_workflow_id, v_status, v_serialized_inputs,
+                workflow_name, class_name, config_name,
+                queue_name, deduplication_id, v_priority, queue_partition_key,
+                app_version,
+                v_now, v_now, v_recovery_attempts,
+                timeout_ms, deadline_epoch_ms,
+                NULL, v_owner_xid, 'portable_json',
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms, application_name
+            )
+            ON CONFLICT (workflow_uuid)
+            DO UPDATE SET
+                updated_at = EXCLUDED.updated_at;
+
+            RETURN v_workflow_id;
+
+        EXCEPTION
+            WHEN unique_violation THEN
+                RAISE EXCEPTION 'DBOS queue duplicated'
+                   USING DETAIL = format('Workflow %%s with queue %%s and deduplication ID %%s already exists', v_workflow_id, queue_name, deduplication_id),
+                        ERRCODE = 'unique_violation';
+        END;
+        $$ LANGUAGE plpgsql;
+        """;
+    if (!isCockroach) {
+      migration +=
+          """
+          ALTER FUNCTION "%1$s".enqueue_workflow(
+              TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT, TEXT, TEXT, BIGINT, TEXT
+          ) SET search_path = pg_catalog, pg_temp;
+          """;
+    }
+    return migration;
+  }
+
+  // Migration 106: with 107, the pair of keys replacing version_name's retiring global
+  // uniqueness, unclaimed counting as its own owner. The old unique constraint may not be
+  // dropped until every SDK reaching this database is past 107.
+  static final String MIGRATION_106 =
+      """
+      CREATE UNIQUE INDEX IF NOT EXISTS "uq_application_versions_owner_version"
+          ON "%1$s"."application_versions" ("application_name", "version_name")
+          WHERE "application_name" IS NOT NULL;
+      """;
+
+  // Migration 107: the unclaimed half of the key pair started in 106. Runs online because every
+  // pre-upgrade row is unclaimed, so the index covers them all.
+  static String migration107(boolean isCockroach) {
+    return "CREATE UNIQUE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"uq_application_versions_unclaimed_version\""
+        + " ON \"%1$s\".\"application_versions\" (\"version_name\")"
+        + " WHERE \"application_name\" IS NULL";
   }
 }

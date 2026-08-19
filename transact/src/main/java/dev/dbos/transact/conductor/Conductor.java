@@ -1416,7 +1416,10 @@ public class Conductor implements AutoCloseable {
           try {
             List<WorkflowSchedule> schedules =
                 conductor.systemDatabase.listSchedules(
-                    request.statuses(), request.workflowNames(), request.scheduleNamePrefixes());
+                    request.statuses(),
+                    request.workflowNames(),
+                    request.scheduleNamePrefixes(),
+                    request.applicationName());
             boolean loadContext = request.loadContext();
             List<ScheduleOutput> output =
                 schedules.stream().map(s -> ScheduleOutput.from(s, loadContext)).toList();
@@ -1453,7 +1456,7 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-            List<Queue> queues = conductor.systemDatabase.listQueues();
+            List<Queue> queues = conductor.systemDatabase.listQueues(request.applicationName());
             List<QueueOutput> output = queues.stream().map(QueueOutput::from).toList();
             return new ListQueuesResponse(request, output);
           } catch (Exception e) {
