@@ -2369,9 +2369,11 @@ public class WorkflowDAO {
             stepStmt.setObject(7, step.startedAtEpochMs());
             stepStmt.setObject(8, step.completedAtEpochMs());
             stepStmt.setString(9, step.serialization());
-            // Steps take the imported workflow's owner: they are never owned separately, and the
-            // exported step carries no owner of its own.
-            stepStmt.setString(10, status.applicationName());
+            // A step keeps the owner it was exported with, falling back to the workflow's for an
+            // export that predates the column.
+            stepStmt.setString(
+                10,
+                step.applicationName() != null ? step.applicationName() : status.applicationName());
             stepStmt.addBatch();
           }
 

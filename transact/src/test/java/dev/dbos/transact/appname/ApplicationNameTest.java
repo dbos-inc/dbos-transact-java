@@ -142,6 +142,28 @@ public class ApplicationNameTest {
   }
 
   @Test
+  void stepsCarryTheirOwnOwnerThroughExportAndImport() throws Exception {
+    var idA = runIn(serviceA, "a");
+    var exported = DBOSTestAccess.getSystemDatabase(dbosA).exportWorkflow(idA, false);
+
+    assertEquals(1, exported.size());
+    assertEquals(APP_A, exported.get(0).status().applicationName());
+    assertEquals(
+        List.of(APP_A),
+        exported.get(0).steps().stream()
+            .map(dev.dbos.transact.workflow.StepInfo::applicationName)
+            .distinct()
+            .toList());
+
+    // Importing through a peer restores the owners the export carried, not the importer's.
+    DBOSTestAccess.getSystemDatabase(dbosA).deleteWorkflows(List.of(idA), false);
+    DBOSTestAccess.getSystemDatabase(dbosB).importWorkflow(exported);
+
+    assertEquals(APP_A, workflowOwner(idA));
+    assertEquals(APP_A, stepOwner(idA));
+  }
+
+  @Test
   void listingsCoverOnlyTheirOwnApplication() {
     var idA = runIn(serviceA, "a");
     var idB = runIn(serviceB, "b");

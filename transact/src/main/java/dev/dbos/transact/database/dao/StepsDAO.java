@@ -186,7 +186,7 @@ public class StepsDAO {
     StringBuilder sqlBuilder =
         new StringBuilder(
             """
-              SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
+              SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization, application_name
               FROM "%s".operation_outputs
               WHERE workflow_uuid = ?
               ORDER BY function_id
@@ -252,7 +252,8 @@ public class StepsDAO {
                   childWorkflowId,
                   startedAt == null ? null : Instant.ofEpochMilli(startedAt),
                   completedAt == null ? null : Instant.ofEpochMilli(completedAt),
-                  serialization));
+                  serialization,
+                  rs.getString("application_name")));
         }
       }
     }

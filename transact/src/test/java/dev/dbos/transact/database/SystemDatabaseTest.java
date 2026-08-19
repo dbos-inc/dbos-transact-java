@@ -2087,8 +2087,8 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepA", "ok", null, null, now.minusMillis(10), now, null),
-            new StepInfo(1, "stepA", "ok", null, null, now.minusMillis(5), now, null),
+            new StepInfo(0, "stepA", "ok", null, null, now.minusMillis(10), now, null, null),
+            new StepInfo(1, "stepA", "ok", null, null, now.minusMillis(5), now, null, null),
             new StepInfo(
                 2,
                 "stepB",
@@ -2098,6 +2098,7 @@ public class SystemDatabaseTest {
                 null,
                 now.minusMillis(3),
                 now,
+                null,
                 null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-agg-wf-1", "WF", WorkflowState.ERROR, steps)));
@@ -2155,7 +2156,7 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepX", "ok", null, null, now.minusMillis(10), now, null),
+            new StepInfo(0, "stepX", "ok", null, null, now.minusMillis(10), now, null, null),
             new StepInfo(
                 1,
                 "stepY",
@@ -2165,6 +2166,7 @@ public class SystemDatabaseTest {
                 null,
                 now.minusMillis(5),
                 now,
+                null,
                 null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-filter-wf-1", "WF", WorkflowState.ERROR, steps)));
@@ -2196,7 +2198,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesIdPrefix() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "myStep", "ok", null, null, now.minusMillis(5), now, null));
+    var step =
+        List.of(new StepInfo(0, "myStep", "ok", null, null, now.minusMillis(5), now, null, null));
     sysdb.importWorkflow(
         List.of(
             buildWorkflowWithSteps("step-prefix-aaa-1", "WF", WorkflowState.SUCCESS, step),
@@ -2226,8 +2229,8 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepZ", "ok", null, null, now.minusMillis(200), now, null),
-            new StepInfo(1, "stepZ", "ok", null, null, now.minusMillis(50), now, null));
+            new StepInfo(0, "stepZ", "ok", null, null, now.minusMillis(200), now, null, null),
+            new StepInfo(1, "stepZ", "ok", null, null, now.minusMillis(50), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-dur-wf-1", "WF", WorkflowState.SUCCESS, steps)));
 
@@ -2264,7 +2267,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesTimeBucket() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "tbStep", "ok", null, null, now.minusMillis(10), now, null));
+    var step =
+        List.of(new StepInfo(0, "tbStep", "ok", null, null, now.minusMillis(10), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-tb-wf-1", "WF", WorkflowState.SUCCESS, step)));
 
@@ -2292,7 +2296,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesCompletedFilters() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "cfStep", "ok", null, null, now.minusMillis(50), now, null));
+    var step =
+        List.of(new StepInfo(0, "cfStep", "ok", null, null, now.minusMillis(50), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-cf-wf-1", "WF", WorkflowState.SUCCESS, step)));
 
@@ -2325,11 +2330,14 @@ public class SystemDatabaseTest {
     var now = Instant.now();
 
     // Real steps with timestamps
-    var quickStep = new StepInfo(0, "quickStep", "ok", null, null, now.minusMillis(20), now, null);
-    var slowStep = new StepInfo(1, "slowStep", "ok", null, null, now.minusMillis(100), now, null);
+    var quickStep =
+        new StepInfo(0, "quickStep", "ok", null, null, now.minusMillis(20), now, null, null);
+    var slowStep =
+        new StepInfo(1, "slowStep", "ok", null, null, now.minusMillis(100), now, null, null);
 
     // Bookkeeping rows (child workflow markers) have NULL timestamps
-    var childMarker = new StepInfo(2, "childWorkflow", null, null, "child-wf-id", null, null, null);
+    var childMarker =
+        new StepInfo(2, "childWorkflow", null, null, "child-wf-id", null, null, null, null);
 
     var steps = List.of(quickStep, slowStep, childMarker);
     sysdb.importWorkflow(

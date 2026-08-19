@@ -420,7 +420,8 @@ public class ConductorTest {
         stringBuilder.append(characters.charAt(random.nextInt(characters.length())));
       }
       steps.add(
-          new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
+          new StepInfo(
+              i, "function" + i, stringBuilder.toString(), null, null, null, null, null, null));
     }
     when(mockExec.listWorkflowSteps("large-wf", true, null, null)).thenReturn(steps);
 
@@ -1854,11 +1855,11 @@ public class ConductorTest {
     String workflowId = "workflow-id-1";
 
     List<StepInfo> steps = new ArrayList<>();
-    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null));
-    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null));
-    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null));
-    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
-    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
+    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId, null, null, null)).thenReturn(steps);
 
@@ -1883,7 +1884,7 @@ public class ConductorTest {
     String workflowId = "workflow-id-1";
 
     List<StepInfo> steps = new ArrayList<>();
-    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null));
+    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId, false, 10, 5)).thenReturn(steps);
 
@@ -2522,6 +2523,7 @@ public class ConductorTest {
               null,
               now.plus(Duration.ofSeconds(i)),
               now.plus(Duration.ofSeconds(i + 1)),
+              null,
               null));
     }
 
