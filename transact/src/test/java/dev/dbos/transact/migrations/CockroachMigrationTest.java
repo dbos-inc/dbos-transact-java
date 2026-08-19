@@ -59,9 +59,12 @@ class CockroachMigrationTest {
         try (Connection conn = ds.getConnection()) {
           var meta = conn.getMetaData();
           MigrationManagerTest.assertFunctionExists(meta, "notifications_function");
-          MigrationManagerTest.assertFunctionExists(meta, "workflow_events_function");
           MigrationManagerTest.assertTriggerExists(conn, "dbos_notifications_trigger");
-          MigrationManagerTest.assertTriggerExists(conn, "dbos_workflow_events_trigger");
+          // Migrations 43 and 44 retire these: the application pushes those wakeups itself.
+          MigrationManagerTest.assertFunctionAbsent(conn, "streams_function");
+          MigrationManagerTest.assertFunctionAbsent(conn, "workflow_events_function");
+          MigrationManagerTest.assertTriggerAbsent(conn, "dbos_streams_trigger");
+          MigrationManagerTest.assertTriggerAbsent(conn, "dbos_workflow_events_trigger");
         }
       }
     }

@@ -13,6 +13,10 @@ import static org.mockito.Mockito.when;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.QueuesDAO;
+import dev.dbos.transact.database.dao.StreamsDAO;
+import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalMap;
+import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -47,6 +51,8 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -1030,6 +1036,49 @@ public class SystemDatabaseTest {
     sysdb.closeStream(workflowId, 2, "key1");
 
     assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key1", 1));
+  }
+
+  @Test
+  public void testReadStreamDrainsValueCommittedBeforeProducerInactive() throws Exception {
+    // A reader must not drop a value the producer commits between the reader's stream read and its
+    // status check. Once the producer is terminal every one of its writes is committed, so the
+    // reader makes one more pass before ending the stream.
+    String workflowId = "stream-wf-drain";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    sysdb.recordWorkflowOutput(workflowId, null);
+
+    var ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
+    var signals = new SignalMap();
+    var passes = new AtomicInteger();
+
+    // readStream subscribes once per pass, so the second call is exactly the window between the
+    // first read finding nothing and the drain pass. Commit the producer's last value there, as a
+    // producer racing its own completion would.
+    Function<SignalKey, Subscription> subscribeRacingAWrite =
+        key -> {
+          if (passes.incrementAndGet() == 2) {
+            sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "late", "portable_json");
+          }
+          return signals.subscribe(key.toString());
+        };
+
+    var value =
+        StreamsDAO.readStream(
+            ctx, workflowId, "key1", 0, Duration.ofSeconds(1), subscribeRacingAWrite);
+
+    assertEquals("late", value);
+    assertEquals(2, passes.get(), "the drain pass is the second and last read");
+  }
+
+  @Test
+  public void testReadStreamEndsWhenTheDrainPassFindsNothing() throws Exception {
+    String workflowId = "stream-wf-drain-empty";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    sysdb.recordWorkflowOutput(workflowId, null);
+
+    assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key1", 0));
   }
 
   @Test
@@ -2645,7 +2694,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null);
+    return new DbContext(ds, schema, null, () -> false, null, new PollingLimiter(0));
   }
 
   @Test

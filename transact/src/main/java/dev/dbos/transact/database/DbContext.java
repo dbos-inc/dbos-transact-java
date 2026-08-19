@@ -13,10 +13,19 @@ public record DbContext(
     String schema,
     DBOSSerializer serializer,
     BooleanSupplier closed,
-    String executorId) {
+    String executorId,
+    PollingLimiter pollingLimiter) {
 
   public Connection getConnection() throws SQLException {
     return dataSource.getConnection();
+  }
+
+  /**
+   * Acquire a permit for one polling read, to be held across the connection it checks out. Only the
+   * wait loops take one; see {@link PollingLimiter}.
+   */
+  public PollingLimiter.Permit acquirePollPermit() {
+    return pollingLimiter.acquire();
   }
 
   public void checkClosed() {

@@ -262,7 +262,8 @@ public class NotificationsDAO {
     while (true) {
       ctx.checkClosed();
       try (var messageSignal = createSubscription.apply(messageKey)) {
-        try (var conn = ctx.getConnection();
+        try (var permit = ctx.acquirePollPermit();
+            var conn = ctx.getConnection();
             var stmt = conn.prepareStatement(selectSql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, topic);
@@ -527,7 +528,8 @@ public class NotificationsDAO {
     while (true) {
       ctx.checkClosed();
       try (var eventSignal = notificationRegistry.apply(eventKey)) {
-        try (var conn = ctx.getConnection()) {
+        try (var permit = ctx.acquirePollPermit();
+            var conn = ctx.getConnection()) {
 
           var optResult = getEvent(conn, ctx.schema(), workflowId, key);
           if (optResult.isPresent()) {
