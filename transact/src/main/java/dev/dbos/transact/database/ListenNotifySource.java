@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase.NotificationSource;
 import dev.dbos.transact.database.signal.SignalKey;
+import dev.dbos.transact.database.signal.SignalMap;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -18,7 +19,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import org.postgresql.PGConnection;
 import org.postgresql.PGNotification;
@@ -54,7 +54,7 @@ class ListenNotifySource implements NotificationSource {
 
   private final DbContext ctx;
   private final Duration coalesceInterval;
-  private final Consumer<String> raiseSignal;
+  private final SignalMap signals;
 
   private final Object lock = new Object();
   private final Map<String, Set<String>> pending = new HashMap<>();
@@ -62,13 +62,13 @@ class ListenNotifySource implements NotificationSource {
   private final AtomicReference<Thread> listenerThread = new AtomicReference<>(null);
   private final AtomicReference<ScheduledExecutorService> flusher = new AtomicReference<>(null);
 
-  ListenNotifySource(DbContext ctx, Duration coalesceInterval, Consumer<String> raiseSignal) {
+  ListenNotifySource(DbContext ctx, Duration coalesceInterval, SignalMap signals) {
     this.ctx = ctx;
     this.coalesceInterval =
         coalesceInterval == null
             ? DBOSConfig.DEFAULT_NOTIFICATION_COALESCE_INTERVAL
             : coalesceInterval;
-    this.raiseSignal = raiseSignal;
+    this.signals = signals;
   }
 
   @Override
@@ -210,6 +210,10 @@ class ListenNotifySource implements NotificationSource {
           stmt.execute("LISTEN " + SignalKey.STREAMS_CHANNEL);
         }
 
+        // Anything notified while this process had no connection is gone: NOTIFY is not queued
+        // for absent listeners. Make every waiter look again, so a row written during the outage
+        // is found now rather than at a re-check that may be further off than its timeout.
+        signals.raiseAll();
         logger.debug("Listening for PostgreSQL notifications");
 
         while (listenerThread.get() == Thread.currentThread()) {
@@ -227,7 +231,7 @@ class ListenNotifySource implements NotificationSource {
                 logger.error("Received notification with null channel. Payload: {}", payload);
               } else
                 try {
-                  raiseSignal.accept(SignalKey.signalFor(channel, payload));
+                  signals.raiseSignal(SignalKey.signalFor(channel, payload));
                 } catch (Exception e) {
                   logger.error(
                       "Error raising signal for channel: {}, payload: {}", channel, payload, e);

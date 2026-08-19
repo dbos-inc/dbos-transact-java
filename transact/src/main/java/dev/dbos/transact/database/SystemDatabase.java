@@ -193,7 +193,7 @@ public class SystemDatabase implements AutoCloseable {
 
     notificationSource =
         useListenNotify
-            ? new ListenNotifySource(ctx, notificationCoalesceInterval, signalMap::raiseSignal)
+            ? new ListenNotifySource(ctx, notificationCoalesceInterval, signalMap)
             : new NullNotificationSource();
   }
 
