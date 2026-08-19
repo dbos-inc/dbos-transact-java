@@ -1782,6 +1782,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     final var finalOptions = options;
+    final String notRecordedWarning =
+        "Workflow outcome was not recorded: the workflow is no longer owned by this execution."
+            + " Waiting for the recorded outcome.";
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
@@ -1789,6 +1792,9 @@ public class DBOSExecutor implements AutoCloseable {
               finalOptions.isDequeuedRequest()
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
+          // The warning to park under, set by whichever site found that this run does not
+          // own the workflow's outcome.
+          String pendingAdopt;
           try (var active = new ActiveWorkflowGuard(workflowId, bucket)) {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
@@ -1822,30 +1828,19 @@ public class DBOSExecutor implements AutoCloseable {
             }
 
             active.release();
-            if (!persistWorkflowOutput(workflowId, output, initResult.serialization())) {
-              // The row was not PENDING: this run no longer owns the workflow's outcome. It
-              // may have been cancelled, dead-lettered, completed by a concurrent execution,
-              // or handed back to the queue by a resume. Park the execution and wait for the
-              // recorded outcome to become visible. The row is known to have existed (this run
-              // just tried to write to it), so failIfMissing: a missing row means it was
-              // deleted, and the park surfaces DBOSNonExistentWorkflowException.
-              logger.warn(
-                  "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
-                  workflowId);
-              return awaitWorkflowResult(workflowId, true);
+            if (persistWorkflowOutput(workflowId, output, initResult.serialization())) {
+              return output;
             }
-
-            return output;
+            // The row was not PENDING: this run no longer owns the workflow's outcome. It
+            // may have been cancelled, dead-lettered, completed by a concurrent execution,
+            // or handed back to the queue by a resume.
+            pendingAdopt = notRecordedWarning;
           } catch (DBOSWorkflowExecutionConflictException e) {
             // Another execution owns this workflow (a concurrent run recorded a step
             // checkpoint, or the workflow is already active on this executor). Never
-            // persist the conflict: park the execution and deliver the recorded outcome
-            // through this run's own future. The row is known to have existed, so
-            // failIfMissing: a missing row means it was deleted.
-            logger.warn(
-                "Aborting duplicate execution of workflow. Waiting for the recorded outcome. workflowId {}",
-                workflowId);
-            return awaitWorkflowResult(workflowId, true);
+            // persist the conflict: park the execution instead.
+            pendingAdopt =
+                "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
           } catch (Exception e) {
             Throwable actual = e;
 
@@ -1859,45 +1854,38 @@ public class DBOSExecutor implements AutoCloseable {
               }
             }
 
-            logger.error("executeWorkflow {}", workflowId, actual);
-
-            // The run observed its own cancellation (checkWorkflow only throws this after
-            // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
-            // the row, and adopt the recorded outcome: normally the row is still CANCELLED
-            // and awaitWorkflowResult throws DBOSAwaitedWorkflowCancelledException, but a
-            // concurrent resume may have taken the workflow back, in which case the recorded
-            // outcome is the truth. The row is known to have existed (the cancellation was
-            // read from it), so failIfMissing: a missing row means it was deleted.
             if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
-              logger.warn(
-                  "Workflow was cancelled during execution. Waiting for the recorded outcome. workflowId {}",
-                  workflowId);
-              return awaitWorkflowResult(workflowId, true);
+              // The run observed its own cancellation (checkWorkflow only throws this after
+              // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
+              // the row, and adopt the recorded outcome: normally the row is still CANCELLED
+              // and the park throws DBOSAwaitedWorkflowCancelledException, but a concurrent
+              // resume may have taken the workflow back, in which case the recorded outcome
+              // is the truth.
+              pendingAdopt =
+                  "Workflow was cancelled during execution. Waiting for the recorded outcome.";
+            } else if (persistWorkflowError(workflowId, actual, initResult.serialization())) {
+              // active is already closed here: try-with-resources closes before catch runs,
+              // so the entry is released before this terminal write becomes durable.
+              logger.error("executeWorkflow {}", workflowId, actual);
+              throw e;
+            } else {
+              // The row was not PENDING: this run no longer owns the workflow's outcome, and
+              // the error it computed is not the workflow's error.
+              logger.debug("executeWorkflow {}", workflowId, actual);
+              pendingAdopt = notRecordedWarning;
             }
-
-            // The park after a refused outcome write found no workflow_status row at all (the
-            // workflow was deleted or garbage collected): deliver the error as the workflow's
-            // outcome; there is nothing left to record onto.
-            if (actual instanceof DBOSNonExistentWorkflowException nonExistent
-                && workflowId.equals(nonExistent.workflowId())) {
-              throw nonExistent;
-            }
-
-            // active is already closed here: try-with-resources closes before catch runs,
-            // so the entry is released before this terminal write becomes durable.
-            if (!persistWorkflowError(workflowId, actual, initResult.serialization())) {
-              // The row was not PENDING: this run no longer owns the workflow's outcome
-              // (see the equivalent refusal on the success path above).
-              logger.warn(
-                  "Workflow outcome was not recorded: the workflow is no longer owned by this execution. Waiting for the recorded outcome. workflowId {}",
-                  workflowId);
-              return awaitWorkflowResult(workflowId, true);
-            }
-            throw e;
           } finally {
             DBOSContextHolder.clear();
           }
+
+          // Reached only when a refusal above set pendingAdopt: this run does not own the
+          // workflow's outcome. Park the execution and deliver the recorded outcome through
+          // this run's own future. The row is known to have existed (this run inserted or
+          // read it), so failIfMissing: a missing row means it was deleted, and the park
+          // surfaces DBOSNonExistentWorkflowException instead of polling forever.
+          logger.warn("{} workflowId {}", pendingAdopt, workflowId);
+          return awaitWorkflowResult(workflowId, true);
         };
 
     if (initResult.deadline() != null && Instant.now().isAfter(initResult.deadline())) {

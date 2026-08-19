@@ -81,6 +81,18 @@ public class WorkflowOutcomeOwnershipTest {
     return handle;
   }
 
+  // Starts a run that fails on its own terms once released (it computes an error, not a
+  // result), and returns once it is blocked inside the workflow function, with its row PENDING.
+  private WorkflowHandle<String, ?> startThrowingRun(String workflowId)
+      throws InterruptedException {
+    impl.startedLatches.put(workflowId, new CountDownLatch(1));
+    impl.releaseLatches.put(workflowId, new CountDownLatch(1));
+    var handle =
+        dbos.startWorkflow(() -> proxy.throwingWorkflow(), new StartWorkflowOptions(workflowId));
+    impl.startedLatches.get(workflowId).await();
+    return handle;
+  }
+
   private void releaseRun(String workflowId) {
     impl.releaseLatches.get(workflowId).countDown();
   }
@@ -122,16 +134,16 @@ public class WorkflowOutcomeOwnershipTest {
     }
   }
 
-  private record Row(String status, String output) {}
+  private record Row(String status, String output, String error) {}
 
   private Row readRow(String workflowId) throws SQLException {
-    var sql = "SELECT status, output FROM dbos.workflow_status WHERE workflow_uuid = ?";
+    var sql = "SELECT status, output, error FROM dbos.workflow_status WHERE workflow_uuid = ?";
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         assertTrue(rs.next(), "workflow row not found: " + workflowId);
-        return new Row(rs.getString("status"), rs.getString("output"));
+        return new Row(rs.getString("status"), rs.getString("output"), rs.getString("error"));
       }
     }
   }
@@ -295,6 +307,44 @@ public class WorkflowOutcomeOwnershipTest {
   }
 
   @Test
+  public void failedRunAdoptsTheRecordedOutcomeInsteadOfItsOwnError() throws Exception {
+    // The ownership rule applies to a run that fails as much as to one that succeeds: a run
+    // whose error write is refused must deliver the recorded outcome, not the error it
+    // computed locally.
+    var workflowId = "outcome-ownership-failed-adopt-%d".formatted(System.currentTimeMillis());
+    var handle = startThrowingRun(workflowId);
+    var recorded = serializeValue("recorded-elsewhere");
+    rewriteRow(workflowId, WorkflowState.SUCCESS, recorded, null);
+    releaseRun(workflowId);
+
+    assertEquals(
+        "recorded-elsewhere",
+        handle.getResult(),
+        "the run must adopt the recorded outcome, not surface its own failure");
+
+    var row = readRow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
+    assertEquals(recorded, row.output(), "the recorded output must not be overwritten");
+    assertNull(row.error(), "the run's own failure must not be recorded");
+  }
+
+  @Test
+  public void failedRunFailsFastWhenItsRowIsDeleted() throws Exception {
+    // Same fail-fast as the success path, reached through the error path: the refused error
+    // write leaves the run parking on a row it knows existed, so a missing row must not be
+    // read as "not inserted yet" and polled forever.
+    var workflowId = "outcome-ownership-failed-deleted-%d".formatted(System.currentTimeMillis());
+    var handle = startThrowingRun(workflowId);
+    deleteRow(workflowId);
+    releaseRun(workflowId);
+
+    assertThrows(
+        DBOSNonExistentWorkflowException.class,
+        handle::getResult,
+        "a failed run whose row vanished must not report its own error or poll forever");
+  }
+
+  @Test
   public void cancelledRunStillReportsCancellationForACancelledRow() throws Exception {
     var workflowId = "outcome-ownership-cancelled-%d".formatted(System.currentTimeMillis());
     var handle = startSelfCancellingRun(workflowId);
@@ -349,6 +399,8 @@ interface OutcomeOwnershipService {
   String blockedWorkflow() throws InterruptedException;
 
   String selfCancellingWorkflow() throws InterruptedException;
+
+  String throwingWorkflow() throws InterruptedException;
 }
 
 class OutcomeOwnershipServiceImpl implements OutcomeOwnershipService {
@@ -376,5 +428,15 @@ class OutcomeOwnershipServiceImpl implements OutcomeOwnershipService {
     startedLatches.get(wfId).countDown();
     releaseLatches.get(wfId).await();
     throw new DBOSWorkflowCancelledException(wfId);
+  }
+
+  // A run that fails on its own terms: it computes an error, not a result.
+  @Override
+  @Workflow
+  public String throwingWorkflow() throws InterruptedException {
+    var wfId = DBOSContextHolder.get().getWorkflowId();
+    startedLatches.get(wfId).countDown();
+    releaseLatches.get(wfId).await();
+    throw new IllegalStateException("own failure");
   }
 }
