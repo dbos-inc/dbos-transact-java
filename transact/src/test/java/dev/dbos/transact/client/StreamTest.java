@@ -9,6 +9,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
@@ -173,7 +174,8 @@ public class StreamTest {
   @Test
   public void readStreamNonExistentTest() {
     Iterator<Object> iter = dbos.readStream("nonexistent", "mykey");
-    assertFalse(iter.hasNext());
+    var thrown = assertThrows(DBOSNonExistentWorkflowException.class, () -> iter.hasNext());
+    assertEquals("nonexistent", thrown.workflowId());
   }
 
   @Test
@@ -206,7 +208,8 @@ public class StreamTest {
   public void readStreamNonExistentFromClientTest() {
     try (var client = pgContainer.dbosClient()) {
       Iterator<Object> iter = client.readStream("nonexistent", "mykey");
-      assertFalse(iter.hasNext());
+      var thrown = assertThrows(DBOSNonExistentWorkflowException.class, () -> iter.hasNext());
+      assertEquals("nonexistent", thrown.workflowId());
     }
   }
 

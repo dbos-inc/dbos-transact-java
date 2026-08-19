@@ -1221,7 +1221,8 @@ public class WorkflowDAO {
 
     while (true) {
       ctx.checkClosed();
-      try (Connection connection = ctx.getConnection();
+      try (var permit = ctx.acquirePollPermit();
+          Connection connection = ctx.getConnection();
           PreparedStatement stmt = connection.prepareStatement(sql)) {
 
         stmt.setString(1, workflowId);

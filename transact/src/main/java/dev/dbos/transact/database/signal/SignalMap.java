@@ -49,6 +49,23 @@ public class SignalMap {
     }
   }
 
+  /**
+   * Wake every outstanding waiter, so each re-queries once.
+   *
+   * <p>For use after (re)establishing LISTEN. A NOTIFY that fires while nothing is listening is
+   * lost for good -- re-subscribing only catches later ones -- so a waiter whose row was written
+   * during the outage would otherwise learn nothing until its next re-check, which for a wait with
+   * a short timeout may never come. Waking everyone costs one query each and is bounded by the
+   * polling limiter.
+   */
+  public void raiseAll() {
+    // Weakly consistent iteration is fine: raiseSignal removes as it goes, and a key added
+    // concurrently belongs to a waiter that subscribed after the reconnect.
+    for (var key : map.keySet()) {
+      raiseSignal(key);
+    }
+  }
+
   public static void awaitAny(Duration timeout, Subscription... subscriptions) {
     try {
       CompletableFuture.anyOf(subscriptions).get(timeout.toMillis(), TimeUnit.MILLISECONDS);

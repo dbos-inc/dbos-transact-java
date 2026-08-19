@@ -58,10 +58,34 @@ public class SystemDatabase implements AutoCloseable {
 
   public static final Object END_OF_STREAM = new Object();
 
+  /**
+   * Carries wake-ups between the processes sharing this system database, in both directions: a
+   * notification seen on the wire becomes a local signal, and a local write becomes a notification
+   * for everyone else. Absent where the database has no LISTEN/NOTIFY, in which case waiters are
+   * still woken directly by a writer in their own process and otherwise re-poll.
+   */
   public interface NotificationSource {
     void start();
 
     void close();
+
+    /** Push a wake-up on {@code channel} to the other processes. Only after the write commits. */
+    void push(String channel, String payload);
+
+    /**
+     * Whether a listener has been started for this source, which selects the re-check interval the
+     * waits use.
+     *
+     * <p>This is "does this process have push delivery at all", not "could a notification arrive
+     * this instant": it stays true across a reconnect, when nothing is being delivered. Narrowing
+     * it to the live connection would not help much -- the interval is chosen once per wait, so a
+     * wait already sleeping when the connection drops sits out its interval either way, and the gap
+     * is the second or two the listener takes to notice and reconnect. Python's _listener_running
+     * is set once and left set for the same reason.
+     */
+    default boolean isRunning() {
+      return false;
+    }
   }
 
   class NullNotificationSource implements NotificationSource {
@@ -71,6 +95,9 @@ public class SystemDatabase implements AutoCloseable {
 
     @Override
     public void close() {}
+
+    @Override
+    public void push(String channel, String payload) {}
   }
 
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
@@ -87,7 +114,42 @@ public class SystemDatabase implements AutoCloseable {
   private final Function<SignalKey, Subscription> createSubscription =
       key -> signalMap.subscribe(key.toString());
   private final NotificationSource notificationSource;
-  private final Duration dbPollingInterval = Duration.ofSeconds(1);
+
+  /**
+   * How long a wait re-queries at when nothing is pushing it: awaiting a result, every stream read,
+   * and recv and getEvent with no listener running.
+   */
+  private static final Duration DB_POLLING_INTERVAL = Duration.ofSeconds(1);
+
+  /**
+   * How long recv and getEvent wait before re-querying, when a listener is running.
+   *
+   * <p>The listener signals them promptly, so the re-check is only a safety net: against a
+   * notification dropped on the wire or missed across a reconnect, and against a writer that died
+   * between committing and its notifier flushing. Without a listener the re-check is the only
+   * delivery mechanism, so {@link #DB_POLLING_INTERVAL} is used instead.
+   *
+   * <p>A stream read does not use this, and polls at {@link #DB_POLLING_INTERVAL} whatever the
+   * listener is doing: besides a value arriving, which is pushed, it is also watching for the
+   * producer to terminate, and nothing pushes that. Python and Go draw the line in the same place.
+   */
+  private static final Duration NOTIFICATION_FALLBACK_INTERVAL = Duration.ofSeconds(60);
+
+  /** Maximum pool size of a data source DBOS creates, and the assumed size of one it is handed. */
+  static final int DEFAULT_POOL_SIZE = 10;
+
+  /**
+   * Half the pool by default (at least one), leaving the rest reachable by the control plane. A
+   * configured value is taken as given, including a non-positive one, which turns the limiter off.
+   */
+  static int resolvePollingConcurrency(DataSource dataSource, @Nullable Integer configured) {
+    if (configured != null) {
+      return configured;
+    }
+    var poolSize =
+        dataSource instanceof HikariDataSource hds ? hds.getMaximumPoolSize() : DEFAULT_POOL_SIZE;
+    return Math.max(1, poolSize / 2);
+  }
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -108,14 +170,19 @@ public class SystemDatabase implements AutoCloseable {
       boolean created,
       DBOSSerializer serializer,
       boolean useListenNotify,
-      String executorId) {
+      String executorId,
+      Duration notificationCoalesceInterval,
+      Integer pollingConcurrency) {
     validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain double quotes");
     }
 
-    this.ctx = new DbContext(dataSource, schema, serializer, this.closed::get, executorId);
+    var pollingLimiter =
+        new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
+    this.ctx =
+        new DbContext(dataSource, schema, serializer, this.closed::get, executorId, pollingLimiter);
     this.created = created;
     try {
       useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
@@ -126,7 +193,7 @@ public class SystemDatabase implements AutoCloseable {
 
     notificationSource =
         useListenNotify
-            ? new NotificationListenerSource(dataSource, signalMap::raiseSignal)
+            ? new ListenNotifySource(ctx, notificationCoalesceInterval, signalMap)
             : new NullNotificationSource();
   }
 
@@ -137,19 +204,27 @@ public class SystemDatabase implements AutoCloseable {
       String schema,
       DBOSSerializer serializer,
       boolean useListenNotify) {
-    this(createDataSource(url, user, password), schema, true, serializer, useListenNotify, null);
+    this(
+        createDataSource(url, user, password),
+        schema,
+        true,
+        serializer,
+        useListenNotify,
+        null,
+        null,
+        null);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true, null);
+    this(createDataSource(url, user, password), schema, true, null, true, null, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null);
+    this(dataSource, schema, false, null, true, null, null, null);
   }
 
   public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this(dataSource, schema, false, serializer, true, null);
+    this(dataSource, schema, false, serializer, true, null, null, null);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
@@ -164,7 +239,9 @@ public class SystemDatabase implements AutoCloseable {
           true,
           config.serializer(),
           config.useListenNotify(),
-          executorId);
+          executorId,
+          config.notificationCoalesceInterval(),
+          config.databasePollingConcurrency());
     } else {
       return new SystemDatabase(
           config.dataSource(),
@@ -172,7 +249,9 @@ public class SystemDatabase implements AutoCloseable {
           false,
           config.serializer(),
           true,
-          executorId);
+          executorId,
+          config.notificationCoalesceInterval(),
+          config.databasePollingConcurrency());
     }
   }
 
@@ -198,8 +277,8 @@ public class SystemDatabase implements AutoCloseable {
     config.setConnectionTimeout(10000);
     config.setValidationTimeout(2000);
     config.setInitializationFailTimeout(-1);
-    config.setMaximumPoolSize(10);
-    config.setMinimumIdle(10);
+    config.setMaximumPoolSize(DEFAULT_POOL_SIZE);
+    config.setMinimumIdle(DEFAULT_POOL_SIZE);
 
     config.addDataSourceProperty("tcpKeepAlive", "true");
     config.addDataSourceProperty("connectTimeout", "10");
@@ -232,6 +311,11 @@ public class SystemDatabase implements AutoCloseable {
     if (created && ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
       hikariDataSource.close();
     }
+  }
+
+  /** For recv and getEvent only; see {@link #NOTIFICATION_FALLBACK_INTERVAL}. */
+  private Duration notificationRecheckInterval() {
+    return notificationSource.isRunning() ? NOTIFICATION_FALLBACK_INTERVAL : DB_POLLING_INTERVAL;
   }
 
   public void start() {
@@ -469,7 +553,9 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, dbPollingInterval, workflowId));
+    // Not a notification wait: no channel carries workflow completion, so this poll is the only
+    // delivery mechanism and stays short whether or not a listener is running.
+    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(ctx, DB_POLLING_INTERVAL, workflowId));
   }
 
   public List<String> startQueuedWorkflows(
@@ -524,7 +610,7 @@ public class SystemDatabase implements AutoCloseable {
                 timeout,
                 timeoutStepId,
                 topic,
-                dbPollingInterval,
+                notificationRecheckInterval(),
                 createSubscription));
   }
 
@@ -539,13 +625,20 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             NotificationsDAO.setEvent(
                 ctx, workflowId, functionId, key, message, asStep, serialization));
+    signal(new SignalKey.Event(workflowId, key));
   }
 
   public Object getEvent(String targetId, String key, Duration timeout, GetEventCaller caller) {
     return dbRetry(
         () ->
             NotificationsDAO.getEvent(
-                ctx, targetId, key, timeout, caller, dbPollingInterval, createSubscription));
+                ctx,
+                targetId,
+                key,
+                timeout,
+                caller,
+                notificationRecheckInterval(),
+                createSubscription));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
@@ -703,6 +796,7 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             StreamsDAO.writeStreamFromStep(
                 ctx, workflowId, functionId, key, value, serializationFormat));
+    signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void writeStreamFromWorkflow(
@@ -711,17 +805,32 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             StreamsDAO.writeStreamFromWorkflow(
                 ctx, workflowId, functionId, key, value, serializationFormat));
+    signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
     dbRetry(() -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
+    // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
+    signal(new SignalKey.Stream(workflowId, key));
+  }
+
+  /**
+   * Wake everyone waiting for a value on {@code key}: the waiters in this process directly, with no
+   * round trip, and those in other processes through the notifier's next batch.
+   *
+   * <p>Called only after the write has committed. Signalling before would let a woken waiter
+   * re-read ahead of the row becoming visible and go back to sleep until its next poll.
+   */
+  private void signal(SignalKey key) {
+    signalMap.raiseSignal(key.toString());
+    notificationSource.push(key.channel(), key.payload());
   }
 
   public Object readStream(String workflowId, String key, int offset) {
     return dbRetry(
         () ->
             StreamsDAO.readStream(
-                ctx, workflowId, key, offset, dbPollingInterval, createSubscription));
+                ctx, workflowId, key, offset, DB_POLLING_INTERVAL, createSubscription));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {

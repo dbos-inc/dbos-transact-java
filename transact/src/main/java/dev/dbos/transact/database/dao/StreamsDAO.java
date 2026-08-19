@@ -5,6 +5,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -153,10 +154,16 @@ public class StreamsDAO {
         """
             .formatted(ctx.schema());
 
+    // Set once the producer is seen inactive. The value read and the status check are separate
+    // statements, so the producer may commit its last value between them; once it is terminal all
+    // of its writes are committed, so one more pass drains that value instead of dropping it.
+    var finalRead = false;
+
     while (true) {
       ctx.checkClosed();
       try (var sub = createSubscription.apply(new SignalKey.Stream(workflowId, key))) {
-        try (var conn = ctx.getConnection();
+        try (var permit = ctx.acquirePollPermit();
+            var conn = ctx.getConnection();
             var stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, key);
@@ -172,9 +179,19 @@ public class StreamsDAO {
               return deserialized;
             }
           }
-          var state = WorkflowDAO.getWorkflowState(ctx, workflowId);
-          if (state == null || !state.isActive()) {
+          if (finalRead) {
+            // The drain pass found nothing, so the stream really has ended here.
             return SystemDatabase.END_OF_STREAM;
+          }
+          var state = WorkflowDAO.getWorkflowState(conn, ctx.schema(), workflowId);
+          if (state == null) {
+            // Python and TS read the status alongside every value and raise here; this reads it
+            // only on a miss, which reaches the same conclusion for a workflow that never existed.
+            throw new DBOSNonExistentWorkflowException(workflowId);
+          }
+          if (!state.isActive()) {
+            finalRead = true;
+            continue;
           }
         }
         SignalMap.awaitAny(dbPollingInterval, sub);
