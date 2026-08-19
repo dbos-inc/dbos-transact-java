@@ -164,6 +164,43 @@ public class ApplicationNameTest {
   }
 
   @Test
+  void stepsExportedWithoutAnOwnerImportUnclaimed() throws Exception {
+    var idA = runIn(serviceA, "a");
+    var exported = DBOSTestAccess.getSystemDatabase(dbosA).exportWorkflow(idA, false);
+    var original = exported.get(0);
+
+    // An export produced before this column existed carries no ownership for its steps. Importing
+    // one must not invent an owner from the workflow: unclaimed is the honest answer, and it is
+    // what Python and TypeScript write.
+    var ownerless =
+        new dev.dbos.transact.workflow.ExportedWorkflow(
+            original.status(),
+            original.steps().stream()
+                .map(
+                    step ->
+                        new dev.dbos.transact.workflow.StepInfo(
+                            step.functionId(),
+                            step.functionName(),
+                            step.output(),
+                            step.error(),
+                            step.childWorkflowId(),
+                            step.startedAt(),
+                            step.completedAt(),
+                            step.serialization(),
+                            null))
+                .toList(),
+            original.events(),
+            original.eventHistory(),
+            original.streams());
+
+    DBOSTestAccess.getSystemDatabase(dbosA).deleteWorkflows(List.of(idA), false);
+    DBOSTestAccess.getSystemDatabase(dbosA).importWorkflow(List.of(ownerless));
+
+    assertEquals(APP_A, workflowOwner(idA));
+    assertNull(stepOwner(idA));
+  }
+
+  @Test
   void listingsCoverOnlyTheirOwnApplication() {
     var idA = runIn(serviceA, "a");
     var idB = runIn(serviceB, "b");

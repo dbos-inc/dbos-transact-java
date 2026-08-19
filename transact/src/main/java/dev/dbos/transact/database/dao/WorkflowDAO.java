@@ -2369,11 +2369,10 @@ public class WorkflowDAO {
             stepStmt.setObject(7, step.startedAtEpochMs());
             stepStmt.setObject(8, step.completedAtEpochMs());
             stepStmt.setString(9, step.serialization());
-            // A step keeps the owner it was exported with, falling back to the workflow's for an
-            // export that predates the column.
-            stepStmt.setString(
-                10,
-                step.applicationName() != null ? step.applicationName() : status.applicationName());
+            // A step keeps exactly the owner it was exported with. An export that predates the
+            // column carries no ownership, so its steps import unclaimed rather than inheriting a
+            // guess from the workflow -- the same choice Python and TypeScript make.
+            stepStmt.setString(10, step.applicationName());
             stepStmt.addBatch();
           }
 
