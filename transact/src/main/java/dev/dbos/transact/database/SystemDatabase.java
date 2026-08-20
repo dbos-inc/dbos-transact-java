@@ -556,10 +556,6 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> StepsDAO.listWorkflowSteps(ctx, workflowId, loadOutput, limit, offset));
   }
 
-  public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return awaitWorkflowResult(workflowId, false);
-  }
-
   /**
    * Awaits a workflow's recorded outcome. A missing row normally means the workflow just hasn't
    * been inserted yet (an unchecked retrieve, or a debounced workflow whose row appears only after

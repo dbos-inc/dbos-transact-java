@@ -517,7 +517,7 @@ public class DBOS implements AutoCloseable {
    * @throws E if the workflow threw an exception
    */
   public <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
-    return ensureLaunched("getResult").<T, E>getResult(workflowId);
+    return ensureLaunched("getResult").<T, E>getResult(workflowId, false);
   }
 
   /**

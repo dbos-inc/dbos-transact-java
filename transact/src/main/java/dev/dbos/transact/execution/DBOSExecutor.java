@@ -1061,10 +1061,6 @@ public class DBOSExecutor implements AutoCloseable {
         () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
   }
 
-  public <T, E extends Exception> T getResult(String workflowId) throws E {
-    return getResult(workflowId, false);
-  }
-
   public <T, E extends Exception> T getResult(String workflowId, boolean failIfMissing) throws E {
     return this.runDbosFunctionAsStep(
         () -> awaitWorkflowResult(workflowId, failIfMissing), "DBOS.getResult", workflowId);
@@ -1077,13 +1073,13 @@ public class DBOSExecutor implements AutoCloseable {
           try {
             return futureResult.get();
           } catch (DBOSWorkflowExecutionConflictException e) {
-            return awaitWorkflowResult(workflowId);
+            return awaitWorkflowResult(workflowId, false);
           } catch (CancellationException e) {
             throw new DBOSAwaitedWorkflowCancelledException(workflowId);
           } catch (ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
               if (cause instanceof DBOSWorkflowExecutionConflictException) {
-                return awaitWorkflowResult(workflowId);
+                return awaitWorkflowResult(workflowId, false);
               }
               if (cause instanceof DBOSWorkflowCancelledException cancelled) {
                 throw new DBOSAwaitedWorkflowCancelledException(cancelled.workflowId());
@@ -1104,10 +1100,6 @@ public class DBOSExecutor implements AutoCloseable {
   // polling is correct. Callers that know the row must already exist (a run parking on an
   // outcome it just failed to write) pass failIfMissing to fail fast instead of polling
   // forever.
-  private <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    return awaitWorkflowResult(workflowId, false);
-  }
-
   private <T, E extends Exception> T awaitWorkflowResult(String workflowId, boolean failIfMissing)
       throws E {
     var result = systemDatabase.<T>awaitWorkflowResult(workflowId, failIfMissing);

@@ -62,7 +62,7 @@ public class DBOSClient implements AutoCloseable {
 
     @Override
     public T getResult() throws E {
-      var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+      var result = systemDatabase.<T>awaitWorkflowResult(workflowId, false);
       return Result.<T, E>process(result);
     }
 
