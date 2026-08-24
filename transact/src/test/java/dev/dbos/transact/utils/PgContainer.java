@@ -30,7 +30,21 @@ public class PgContainer implements AutoCloseable {
   }
 
   public static CockroachContainer getCRDB() {
-    return new CockroachContainer("cockroachdb/cockroach:latest-v26.2");
+    // An in-memory store. Nothing here outlives the container, and CockroachDB's cost in this
+    // suite is dominated by writes it has to make durable: every migration is an online schema
+    // change, and each test drives real workflow traffic through the system tables. Measured
+    // locally against the same schema, an on-disk store runs DML about 3x slower and applies the
+    // migration corpus in ~48s against ~14s.
+    //
+    // The size is a ceiling rather than a reservation. The suite's fixtures are small; the
+    // headroom is for CockroachDB's own system ranges and the MVCC garbage a run leaves behind,
+    // which is not collected within a run because TRUNCATE only makes the old data unreachable.
+    //
+    // Overriding the command is safe only while no password is set: CockroachContainer.configure()
+    // replaces the command with a bare "start-single-node" when there is one, which would drop
+    // both --insecure and this flag.
+    return new CockroachContainer("cockroachdb/cockroach:latest-v26.2")
+        .withCommand("start-single-node", "--insecure", "--store=type=mem,size=2GiB");
   }
 
   private static JdbcDatabaseContainer<?> containerSupplier() {
