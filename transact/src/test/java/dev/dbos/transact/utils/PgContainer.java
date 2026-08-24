@@ -44,8 +44,8 @@ public class PgContainer implements AutoCloseable {
     // replaces the command with a bare "start-single-node" when there is one, which would drop
     // both --insecure and this flag.
     return new CockroachContainer("cockroachdb/cockroach:latest-v26.2")
-        // .withCommand("start-single-node", "--insecure", "--store=type=mem,size=2GiB")
-        ;
+    // .withCommand("start-single-node", "--insecure", "--store=type=mem,size=2GiB")
+    ;
   }
 
   private static JdbcDatabaseContainer<?> containerSupplier() {
