@@ -222,6 +222,10 @@ public class QueuesDAO {
                 executor_id = ?,
                 started_at_epoch_ms = ?,
                 rate_limited = ?,
+                -- Claim it as it is taken, so the unclaimed backlog drains as workflows run.
+                -- Left unclaimed, the row is PENDING and still visible to every peer's
+                -- recovery and global-timeout sweeps until it starts executing here.
+                application_name = COALESCE(application_name, ?),
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
                     THEN ? + workflow_timeout_ms
@@ -230,7 +234,10 @@ public class QueuesDAO {
             WHERE workflow_uuid = ?
               AND status = ?
           """
-              .formatted(ctx.schema());
+                  .formatted(ctx.schema())
+              // Re-check ownership alongside status: the candidate SELECT scoped the row, and the
+              // claim must not widen that.
+              + ctx.andAppScope();
 
       List<String> updatedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(updateQuery)) {
@@ -248,9 +255,11 @@ public class QueuesDAO {
           ps.setString(3, executorId);
           ps.setLong(4, now);
           ps.setBoolean(5, hasRateLimit);
-          ps.setLong(6, now);
-          ps.setString(7, id);
-          ps.setString(8, WorkflowState.ENQUEUED.name());
+          ps.setString(6, ctx.appName());
+          ps.setLong(7, now);
+          ps.setString(8, id);
+          ps.setString(9, WorkflowState.ENQUEUED.name());
+          ctx.bindAppScope(ps, 10);
           if (ps.executeUpdate() > 0) {
             updatedWorkflowIds.add(id);
           }

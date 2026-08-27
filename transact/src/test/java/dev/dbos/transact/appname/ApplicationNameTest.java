@@ -383,6 +383,35 @@ public class ApplicationNameTest {
     assertEquals(WorkflowState.ENQUEUED, foreign.status());
   }
 
+  /**
+   * Dequeue claims as it takes. A row nobody owns -- written before this feature, or by a nameless
+   * client -- would otherwise sit PENDING and unclaimed, still inside every peer's recovery and
+   * global-timeout sweeps, until the executor that took it got as far as starting it. The claim
+   * belongs on the statement that flips the status, which is where Python and TypeScript put it.
+   */
+  @Test
+  void dequeuingAnUnclaimedWorkflowClaimsIt() throws Exception {
+    // A queue neither application polls, so the only dequeue is the one this test drives.
+    var queueName = "unpolled-queue";
+    String unclaimedId;
+    try (var client = pgContainer.dbosClient()) {
+      unclaimedId =
+          client
+              .enqueuePortableWorkflow(
+                  new DBOSClient.EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
+              .workflowId();
+    }
+    assertNull(workflowOwner(unclaimedId));
+
+    var appVersion = DBOSTestAccess.getDbosExecutor(dbosA).appVersion();
+    var dequeued =
+        DBOSTestAccess.getSystemDatabase(dbosA)
+            .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0);
+
+    assertEquals(List.of(unclaimedId), dequeued);
+    assertEquals(APP_A, workflowOwner(unclaimedId));
+  }
+
   @Test
   void aNamelessClientOwnsNothingAndSeesEveryApplication() throws Exception {
     var idA = runIn(serviceA, "a");
