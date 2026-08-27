@@ -7,11 +7,13 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -1395,6 +1397,41 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull VersionInfo getLatestApplicationVersion() {
     return systemDatabase.getLatestApplicationVersion();
+  }
+
+  /**
+   * Re-own a system database's rows after an application is renamed, or adopt the rows no
+   * application owns.
+   *
+   * <p>Stop the application being renamed first: its dequeues claim rows, and would race this.
+   *
+   * @param oldName the application being renamed; null adopts only unclaimed rows
+   * @param newName the application that ends up owning the rows
+   * @param batchSize workflows and steps re-owned per transaction; null moves them all in one
+   *     transaction. A re-run resumes where an interrupted one stopped.
+   * @param adoptUnclaimedRows whether to also take rows no application owns
+   * @return how many rows moved, by table
+   */
+  public @NonNull ApplicationRowCounts renameApplication(
+      @Nullable String oldName,
+      @NonNull String newName,
+      @Nullable Integer batchSize,
+      boolean adoptUnclaimedRows) {
+    return systemDatabase.renameApplication(oldName, newName, batchSize, adoptUnclaimedRows);
+  }
+
+  /**
+   * Re-own a system database's rows after an application is renamed, moving workflows and steps in
+   * batches of {@link ApplicationRenameDAO#DEFAULT_RENAME_BATCH_SIZE}.
+   *
+   * @param oldName the application being renamed; null adopts only unclaimed rows
+   * @param newName the application that ends up owning the rows
+   * @return how many rows moved, by table
+   */
+  public @NonNull ApplicationRowCounts renameApplication(
+      @Nullable String oldName, @NonNull String newName) {
+    return renameApplication(
+        oldName, newName, ApplicationRenameDAO.DEFAULT_RENAME_BATCH_SIZE, false);
   }
 
   /**

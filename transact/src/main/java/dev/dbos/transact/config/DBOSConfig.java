@@ -1,6 +1,7 @@
 package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
 
@@ -96,25 +97,13 @@ public record DBOSConfig(
   /** Smallest configurable flush interval; below this the batching buys nothing. */
   public static final Duration MIN_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(1);
 
-  /**
-   * The application name is durable, cross-language identity: it is written onto every row this
-   * application owns, and a peer in another SDK reads it back. So a Java application must not be
-   * able to claim rows under a name a Python or TypeScript peer could never be configured with, and
-   * rename-application must have a rule to enforce. Python's is _is_valid_app_name
-   * (_dbos_config.py:562).
-   */
-  private static final java.util.regex.Pattern APP_NAME_PATTERN =
-      java.util.regex.Pattern.compile("^[a-z0-9-_]{3,30}$");
-
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
     }
-    if (!APP_NAME_PATTERN.matcher(appName).matches()) {
+    if (!Validation.isValidApplicationName(appName)) {
       throw new IllegalArgumentException(
-          "Invalid DBOSConfig.appName '%s'. App names must be between 3 and 30 characters long and"
-              + " contain only lowercase letters, numbers, dashes, and underscores."
-                  .formatted(appName));
+          Validation.invalidApplicationName("DBOSConfig.appName", appName));
     }
     if (conductorKey != null && conductorKey.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");

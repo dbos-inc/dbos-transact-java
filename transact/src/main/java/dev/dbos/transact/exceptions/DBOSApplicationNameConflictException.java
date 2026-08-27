@@ -18,7 +18,7 @@ public class DBOSApplicationNameConflictException extends RuntimeException {
   public DBOSApplicationNameConflictException(
       String kind, String name, String owner, String claimant, String remedy) {
     super(
-        "%s '%s' is already registered by application '%s' in this system database. %s names must be unique across applications sharing a system database. Either %s, or, if '%s' was renamed to '%s', re-own its rows first with the Python or TypeScript CLI's rename-application command."
+        "%s '%s' is already registered by application '%s' in this system database. %s names must be unique across applications sharing a system database. Either %s, or, if '%s' was renamed to '%s', re-own its rows first with the dbos rename-application command."
             .formatted(kind, name, owner, kind, remedy, owner, claimant));
     this.kind = kind;
     this.name = name;

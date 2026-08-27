@@ -663,6 +663,100 @@ public class ApplicationNameTest {
     assertEquals(APP_A, workflowOwner(childId));
   }
 
+  // ==================== Rename ====================
+
+  /**
+   * The escape hatch the conflict error names. An application that is renamed leaves its rows
+   * behind under the old name, where nothing it now runs can see them, so re-owning them is the
+   * only way back.
+   */
+  @Test
+  void renamingAnApplicationMovesEveryTableItOwns() throws Exception {
+    dbosA.registerQueue("renamed-queue", QueueOptions.empty());
+    dbosA.createSchedule(
+        new WorkflowSchedule(
+            "renamed-sched", "greet", AppNameServiceImpl.class.getName(), "0 0 * * * *"));
+    var idA = runIn(serviceA, "a");
+    var idB = runIn(serviceB, "b");
+
+    try (var client = pgContainer.dbosClient()) {
+      var moved = client.renameApplication(APP_A, "app-c", null, false);
+
+      assertEquals(1, moved.queues());
+      assertEquals(1, moved.schedules());
+      assertEquals(1, moved.workflows());
+      assertEquals(1, moved.steps());
+      // The version A registered at launch.
+      assertEquals(1, moved.versions());
+    }
+
+    assertEquals("app-c", workflowOwner(idA));
+    assertEquals("app-c", stepOwner(idA));
+    // A peer's rows are untouched.
+    assertEquals(APP_B, workflowOwner(idB));
+  }
+
+  /** Batching is a resumption strategy, not a different result: every matching row still moves. */
+  @Test
+  void renamingInBatchesMovesEveryRow() throws Exception {
+    var ids = new java.util.ArrayList<String>();
+    for (int i = 0; i < 5; i++) {
+      ids.add(runIn(serviceA, "a" + i));
+    }
+
+    try (var client = pgContainer.dbosClient()) {
+      // A batch size well below the row count, so the watermark advances several times and the
+      // final partial batch has to drop it.
+      var moved = client.renameApplication(APP_A, "app-c", 2, false);
+      assertEquals(ids.size(), moved.workflows());
+    }
+
+    for (var id : ids) {
+      assertEquals("app-c", workflowOwner(id));
+    }
+  }
+
+  /** Adopting is the upgrade path: rows written before the column belong to whoever claims them. */
+  @Test
+  void adoptingUnclaimedRowsTakesOnlyThem() throws Exception {
+    var idA = runIn(serviceA, "a");
+    var idB = runIn(serviceB, "b");
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET application_name = NULL WHERE workflow_uuid = ?")) {
+      stmt.setString(1, idB);
+      stmt.executeUpdate();
+    }
+
+    try (var client = pgContainer.dbosClient()) {
+      client.renameApplication(null, "app-c", null, true);
+    }
+
+    assertEquals("app-c", workflowOwner(idB));
+    // Named rows are not swept up: adopting is not renaming.
+    assertEquals(APP_A, workflowOwner(idA));
+  }
+
+  @Test
+  void aRenameThatWouldMoveNothingIsRejected() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      // Neither a source application nor unclaimed rows: nothing to re-own.
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.renameApplication(null, "app-c", null, false));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.renameApplication(APP_A, APP_A, null, false));
+      // The new name has to be one every SDK could hold, since the rows outlive this process.
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.renameApplication(APP_A, "App-C", null, false));
+      assertThrows(
+          IllegalArgumentException.class, () -> client.renameApplication(APP_A, "app-c", 0, false));
+    }
+  }
+
   private String timeoutMs(String workflowId) throws SQLException {
     return scalar(
         "SELECT workflow_timeout_ms FROM \"dbos\".workflow_status WHERE workflow_uuid = ?",

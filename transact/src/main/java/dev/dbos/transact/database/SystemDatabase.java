@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.database.dao.ApplicationVersionDAO;
 import dev.dbos.transact.database.dao.ExternalStateDAO;
 import dev.dbos.transact.database.dao.NotificationsDAO;
@@ -17,6 +18,7 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -725,6 +727,21 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             ApplicationVersionDAO.updateApplicationVersionTimestamp(
                 ctx, versionName, newTimestamp, applicationName));
+  }
+
+  /**
+   * Give {@code newName} ownership of the rows {@code oldName} holds, of unclaimed rows, or of
+   * both. The renamed application must be stopped, or its dequeues race this.
+   */
+  public ApplicationRowCounts renameApplication(
+      @Nullable String oldName,
+      String newName,
+      @Nullable Integer batchSize,
+      boolean adoptUnclaimedRows) {
+    return dbRetry(
+        () ->
+            ApplicationRenameDAO.renameApplication(
+                ctx, oldName, newName, batchSize, adoptUnclaimedRows));
   }
 
   public List<VersionInfo> listApplicationVersions() {
