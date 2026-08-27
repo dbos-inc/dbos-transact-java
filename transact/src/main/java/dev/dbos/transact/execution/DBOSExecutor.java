@@ -1067,6 +1067,7 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         null,
+        null, // applicationName: this executor's own
         systemDatabase,
         serializer);
   }
@@ -1642,6 +1643,7 @@ public class DBOSExecutor implements AutoCloseable {
         parent,
         executorId(),
         appId(),
+        options.applicationName(),
         systemDatabase,
         this.serializer);
 
@@ -1821,6 +1823,7 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           executorId(),
           appId(),
+          null, // applicationName: this executor's own
           systemDatabase,
           this.serializer);
       return new WorkflowHandleDBPoll<>(this, workflowId);
@@ -1866,6 +1869,7 @@ public class DBOSExecutor implements AutoCloseable {
             appId(),
             parent,
             options,
+            null, // applicationName: this executor's own
             this.serializer);
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
@@ -2025,6 +2029,7 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       String executorId,
       String appId,
+      @Nullable String applicationName,
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
 
@@ -2059,6 +2064,7 @@ public class DBOSExecutor implements AutoCloseable {
           appId,
           parent,
           options,
+          applicationName,
           serializer);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
@@ -2088,6 +2094,7 @@ public class DBOSExecutor implements AutoCloseable {
       String appId,
       WorkflowInfo parentWorkflow,
       ExecutionOptions options,
+      @Nullable String applicationName,
       DBOSSerializer serializer) {
 
     // Serialize inputs using the specified serialization format
@@ -2130,7 +2137,8 @@ public class DBOSExecutor implements AutoCloseable {
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization,
             options.attributes(),
-            options.scheduleName());
+            options.scheduleName(),
+            applicationName);
 
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
@@ -2205,6 +2213,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             serializedArgs.serialization(),
+            null,
             null,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());

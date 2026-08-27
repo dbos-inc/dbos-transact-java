@@ -34,7 +34,13 @@ public record WorkflowStatusInternal(
     /** Custom JSON-serializable key-value attributes attached to the workflow at creation. */
     Map<String, Object> attributes,
     /** Name of the schedule that triggered this workflow, if any. Set only by the scheduler. */
-    String scheduleName) {
+    String scheduleName,
+    /**
+     * The application that owns this workflow, and whose executors therefore dequeue and recover
+     * it. Null takes the writing handle's own application, which is what every path but a
+     * cross-application enqueue wants.
+     */
+    String applicationName) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {

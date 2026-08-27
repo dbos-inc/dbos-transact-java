@@ -20,6 +20,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -505,6 +506,47 @@ public class ApplicationNameTest {
     var parentTimeout = timeoutMs("wf-dl-parent");
     assertNotNull(parentTimeout);
     assertEquals(parentTimeout, timeoutMs("wf-dl-child"));
+  }
+
+  /**
+   * The one place applications deliberately interoperate. Naming a peer hands it the row: the
+   * enqueue stamps that peer as the owner rather than the enqueuer, which is what makes the row
+   * visible to the peer's dequeue predicate and invisible to this one's.
+   */
+  @Test
+  void enqueuingForAPeerLetsThatPeerRunIt() throws Exception {
+    var childId = UUID.randomUUID().toString();
+
+    WorkflowHandle<String, RuntimeException> handle =
+        dbosA.enqueueWorkflow(
+            new DBOSClient.EnqueueOptions("greet", "queue-b")
+                .withClassName(AppNameServiceImpl.class.getName())
+                .withWorkflowId(childId)
+                .withApplicationName(APP_B),
+            new Object[] {"peer"});
+
+    assertEquals("hello peer", handle.getResult());
+    // Owned by B throughout: A wrote the row but never claimed it, and B's dequeue found it
+    // because it did not.
+    assertEquals(APP_B, workflowOwner(childId));
+    assertEquals(APP_B, stepOwner(childId));
+    // A enqueued it and still does not see it in its own listing.
+    assertTrue(idsOf(dbosA.listWorkflows(new ListWorkflowsInput())).isEmpty());
+    assertEquals(List.of(childId), idsOf(dbosB.listWorkflows(new ListWorkflowsInput())));
+  }
+
+  /** Unnamed, the enqueue belongs to the enqueueing application, as every other write does. */
+  @Test
+  void enqueuingWithoutNamingAnApplicationKeepsTheEnqueuersOwn() throws Exception {
+    var childId = UUID.randomUUID().toString();
+
+    dbosA.enqueueWorkflow(
+        new DBOSClient.EnqueueOptions("greet", "queue-a")
+            .withClassName(AppNameServiceImpl.class.getName())
+            .withWorkflowId(childId),
+        new Object[] {"own"});
+
+    assertEquals(APP_A, workflowOwner(childId));
   }
 
   private String timeoutMs(String workflowId) throws SQLException {

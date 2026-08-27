@@ -272,6 +272,9 @@ public class DBOSClient implements AutoCloseable {
    * @param serialization The serialization strategy for workflow arguments. Optional.
    * @param attributes Custom JSON-serializable attributes to attach to the workflow at creation.
    *     Optional.
+   * @param applicationName The application that owns the enqueued workflow, and whose executors
+   *     therefore dequeue and run it. Optional; defaults to the enqueueing application. Set it to
+   *     enqueue work for a peer sharing this system database.
    */
   public record EnqueueOptions(
       @NonNull String workflowName,
@@ -290,7 +293,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String authenticatedUser,
       @Nullable String assumedRole,
       @Nullable List<String> authenticatedRoles,
-      @Nullable Map<String, Object> attributes) {
+      @Nullable Map<String, Object> attributes,
+      @Nullable String applicationName) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -333,6 +337,10 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("delay must be positive, non-zero duration");
       }
 
+      if (nullableIsEmpty(applicationName)) {
+        throw new IllegalArgumentException("applicationName must not be empty");
+      }
+
       authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
 
       attributes = validateAttributes(attributes);
@@ -357,6 +365,7 @@ public class DBOSClient implements AutoCloseable {
           null,
           null,
           null,
+          null,
           null);
     }
 
@@ -367,6 +376,7 @@ public class DBOSClient implements AutoCloseable {
           className,
           null,
           queueName,
+          null,
           null,
           null,
           null,
@@ -406,7 +416,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -434,7 +445,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -462,7 +474,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -490,7 +503,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -518,7 +532,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -546,7 +561,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -574,7 +590,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -601,7 +618,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -630,7 +648,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -658,7 +677,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -688,7 +708,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -715,7 +736,8 @@ public class DBOSClient implements AutoCloseable {
           authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -742,7 +764,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -769,7 +792,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -798,7 +822,8 @@ public class DBOSClient implements AutoCloseable {
           authenticatedUser,
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -827,7 +852,39 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          attributes);
+          attributes,
+          this.applicationName);
+    }
+
+    /**
+     * Specify the application that owns the enqueued workflow. Only executors running that
+     * application dequeue it, so this is how one application enqueues work for a peer sharing its
+     * system database. Left unset, the workflow belongs to the enqueueing application — or to no
+     * application at all, when the enqueuer has no name of its own.
+     *
+     * @param applicationName the owning application, or null for the enqueueing application's
+     * @return New `EnqueueOptions` with the application name set
+     */
+    public @NonNull EnqueueOptions withApplicationName(@Nullable String applicationName) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles,
+          this.attributes,
+          applicationName);
     }
   }
 
@@ -875,6 +932,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         null,
+        options.applicationName(),
         systemDatabase,
         this.serializer);
 

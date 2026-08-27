@@ -100,6 +100,15 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * The application a workflow row belongs to. A status naming one is enqueuing for that
+   * application -- the whole of the cross-application contract -- and the handle's own is the
+   * default for everything else, including a nameless handle, which owns nothing.
+   */
+  private static @Nullable String owner(DbContext ctx, WorkflowStatusInternal status) {
+    return status.applicationName() != null ? status.applicationName() : ctx.appName();
+  }
+
   public static WorkflowInitResult initWorkflowStatus(
       DbContext ctx,
       WorkflowStatusInternal initStatus,
@@ -126,7 +135,7 @@ public class WorkflowDAO {
                 initStatus,
                 ownerXid,
                 isRecoveryRequest || isDequeuedRequest,
-                ctx.appName());
+                owner(ctx, initStatus));
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -447,7 +456,7 @@ public class WorkflowDAO {
     // idempotent and the outcome update is safe to repeat.
     try (var conn = ctx.getConnection()) {
       insertWorkflowStatus(
-          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false, ctx.appName());
+          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false, owner(ctx, initStatus));
       updateWorkflowOutcome(
           conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
     }
