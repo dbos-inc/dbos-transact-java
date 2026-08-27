@@ -13,12 +13,14 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -153,19 +155,24 @@ public class ConfigTest {
 
   /**
    * The application name is durable, cross-language identity, so it has to be a name every SDK
-   * could hold. Python's rule (_dbos_config.py:562) is the one every peer already enforces.
+   * could hold: Python's rule (_dbos_config.py:562) is the one every peer already enforces.
+   *
+   * <p>Java recognizes a name outside that rule without rejecting it. Applications have been naming
+   * themselves freely for as long as Java has had an appName, and Go and TypeScript do not check at
+   * all, so failing them on upgrade would break them over something this PR did not change. The
+   * executor warns instead, and {@code dbos rename-application} still refuses to write one.
    */
   @Test
-  public void appNameMustBeAdoptableByEveryLanguage() {
-    assertDoesNotThrow(() -> DBOSConfig.defaults("abc"));
-    assertDoesNotThrow(() -> DBOSConfig.defaults("my-app_2"));
-    assertDoesNotThrow(() -> DBOSConfig.defaults("a".repeat(30)));
+  public void appNameOutsideTheSharedRuleIsRecognizedButNotRejected() {
+    for (var name : List.of("abc", "my-app_2", "a".repeat(30))) {
+      assertTrue(Validation.isValidApplicationName(name), name);
+      assertDoesNotThrow(() -> DBOSConfig.defaults(name));
+    }
 
-    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("ab"));
-    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("a".repeat(31)));
-    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("MyApp"));
-    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("my app"));
-    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("my.app"));
+    for (var name : List.of("ab", "a".repeat(31), "MyApp", "my app", "my.app")) {
+      assertFalse(Validation.isValidApplicationName(name), name);
+      assertDoesNotThrow(() -> DBOSConfig.defaults(name));
+    }
   }
 
   @Test
