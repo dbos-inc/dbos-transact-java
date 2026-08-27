@@ -456,7 +456,12 @@ public class WorkflowDAO {
     // idempotent and the outcome update is safe to repeat.
     try (var conn = ctx.getConnection()) {
       insertWorkflowStatus(
-          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), false, owner(ctx, initStatus));
+          conn,
+          ctx.schema(),
+          initStatus,
+          UUID.randomUUID().toString(),
+          false,
+          owner(ctx, initStatus));
       updateWorkflowOutcome(
           conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
     }
