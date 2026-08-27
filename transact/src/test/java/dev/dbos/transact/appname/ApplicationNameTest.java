@@ -767,13 +767,31 @@ public class ApplicationNameTest {
       assertThrows(
           IllegalArgumentException.class,
           () -> client.renameApplication(APP_A, APP_A, null, false));
-      // The new name has to be one every SDK could hold, since the rows outlive this process.
+      // A name is still required; only its shape is not.
       assertThrows(
-          IllegalArgumentException.class,
-          () -> client.renameApplication(APP_A, "App-C", null, false));
+          IllegalArgumentException.class, () -> client.renameApplication(APP_A, "", null, false));
       assertThrows(
           IllegalArgumentException.class, () -> client.renameApplication(APP_A, "app-c", 0, false));
     }
+  }
+
+  /**
+   * Conductor and Cloud accept only {@code ^[a-z0-9-_]{3,30}$} at registration, but nothing in
+   * Transact does: the column is TEXT and the value is always a bound parameter. A self-hosted
+   * application that never registers can hold any name, so a rename onto one warns rather than
+   * failing -- and the rows really move.
+   */
+  @Test
+  void renamingOntoANameConductorWouldRejectStillMovesTheRows() throws Exception {
+    var idA = runIn(serviceA, "a");
+
+    try (var client = pgContainer.dbosClient()) {
+      var moved = client.renameApplication(APP_A, "App-C", null, false);
+      assertEquals(1, moved.workflows());
+    }
+
+    assertEquals("App-C", workflowAppName(idA));
+    assertEquals("App-C", stepAppName(idA));
   }
 
   private String timeoutMs(String workflowId) throws SQLException {

@@ -195,15 +195,18 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException(msg);
     }
 
-    // The application name is durable, cross-language identity: it is written onto every row this
-    // application owns, and peers in other SDKs read it back. A name outside the shared rule still
-    // works here -- rejecting it would break applications that have been running under one for as
-    // long as Java has had an appName -- but the Python and TypeScript CLIs will not accept it, so
-    // say so once rather than letting it surface later as a rename or provisioning failure.
+    // Nothing in Transact needs the name to look like anything: it is a bound parameter and a
+    // hash input, never an identifier. Conductor does -- it addresses the application by name in
+    // its websocket URL, and neither it nor DBOS Cloud registers a name outside their rule. So an
+    // application that is about to connect cannot usefully launch, while a self-hosted one is told
+    // and left alone; rejecting that one would break applications already running under such a
+    // name for no reason Transact can point at.
     if (!Validation.isValidApplicationName(appName)) {
-      logger.warn(
-          "{} Other DBOS SDKs and the DBOS CLI will not accept this name.",
-          Validation.invalidApplicationName("application name", appName));
+      var msg = Validation.applicationNameNotAcceptedByConductor("application name", appName);
+      if (dbosCloud || config.conductorKey() != null) {
+        throw new IllegalArgumentException(msg);
+      }
+      logger.warn(msg);
     }
 
     if (!dbosCloud) {

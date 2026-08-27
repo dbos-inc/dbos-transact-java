@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Moving ownership of a system database's rows from one application name to another, for after an
@@ -20,6 +22,8 @@ import org.jspecify.annotations.Nullable;
  * <p>The renamed application must be stopped: its dequeues claim rows, and would race this.
  */
 public class ApplicationRenameDAO {
+
+  private static final Logger logger = LoggerFactory.getLogger(ApplicationRenameDAO.class);
 
   /** Workflows and steps re-owned per transaction, when the caller does not choose. */
   public static final int DEFAULT_RENAME_BATCH_SIZE = 10_000;
@@ -172,9 +176,15 @@ public class ApplicationRenameDAO {
       throw new IllegalArgumentException(
           "Nothing to re-own: name the application to rename, adopt unclaimed rows, or both.");
     }
+    if (newName.isEmpty()) {
+      throw new IllegalArgumentException("The new application name cannot be empty.");
+    }
+    // Not rejected: the rows are Transact's, and Transact holds any name. Only registering the
+    // application with Conductor or Cloud needs one of theirs, and that happens elsewhere -- so a
+    // rename onto a self-hosted name is a legitimate thing to do, and this only says what it costs.
     if (!Validation.isValidApplicationName(newName)) {
-      throw new IllegalArgumentException(
-          Validation.invalidApplicationName("application name", newName));
+      logger.warn(
+          Validation.applicationNameNotAcceptedByConductor("new application name", newName));
     }
     if (newName.equals(oldName)) {
       throw new IllegalArgumentException(

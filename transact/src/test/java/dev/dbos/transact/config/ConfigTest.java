@@ -140,6 +140,31 @@ public class ConfigTest {
     }
   }
 
+  /**
+   * Conductor addresses an application by name in its websocket URL, and neither it nor DBOS Cloud
+   * registers a name outside their rule, so an application about to connect is stopped at launch
+   * rather than left to fail against the remote.
+   */
+  @Test
+  public void cantUseConductorWithANameItWouldReject() {
+    var config = pgContainer.dbosConfig("MyApp").withConductorKey("test-conductor-key");
+    try (var dbos = new DBOS(config)) {
+      assertThrows(IllegalArgumentException.class, () -> dbos.launch());
+    }
+  }
+
+  /** Without Conductor nothing needs the name to look like anything, so launch only warns. */
+  @Test
+  public void aNameConductorWouldRejectLaunchesWithoutConductor() {
+    var dbos = new DBOS(pgContainer.dbosConfig("MyApp"));
+    try {
+      assertDoesNotThrow(() -> dbos.launch());
+      assertEquals("MyApp", DBOSTestAccess.getDbosExecutor(dbos).appName());
+    } finally {
+      dbos.shutdown();
+    }
+  }
+
   @Test
   public void cantSetExecutorIdWhenUsingConductor() throws Exception {
     var config =
@@ -154,16 +179,16 @@ public class ConfigTest {
   }
 
   /**
-   * The application name is durable, cross-language identity, so it has to be a name every SDK
-   * could hold: Python's rule (_dbos_config.py:562) is the one every peer already enforces.
+   * DBOS Conductor and DBOS Cloud accept only this shape of application name at registration (their
+   * isValidApplicationName validator, which Python mirrors in _is_valid_app_name).
    *
-   * <p>Java recognizes a name outside that rule without rejecting it. Applications have been naming
-   * themselves freely for as long as Java has had an appName, and Go and TypeScript do not check at
-   * all, so failing them on upgrade would break them over something this PR did not change. The
-   * executor warns instead, and {@code dbos rename-application} still refuses to write one.
+   * <p>Transact itself needs nothing of the sort -- the column is TEXT, the value is always a bound
+   * parameter, and the version hash digests the bytes -- so Java classifies a name without
+   * rejecting one. An application that never registers with Conductor can be called anything, and
+   * Go, TypeScript, and dbosctl do not check at all. The executor warns once at startup instead.
    */
   @Test
-  public void appNameOutsideTheSharedRuleIsRecognizedButNotRejected() {
+  public void appNameConductorWouldRejectIsRecognizedButNotRejected() {
     for (var name : List.of("abc", "my-app_2", "a".repeat(30))) {
       assertTrue(Validation.isValidApplicationName(name), name);
       assertDoesNotThrow(() -> DBOSConfig.defaults(name));
