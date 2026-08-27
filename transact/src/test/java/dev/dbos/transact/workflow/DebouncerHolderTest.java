@@ -7,6 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.json.DBOSPortableSerializer;
+
+import java.util.HashMap;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 
 /**
@@ -69,6 +74,45 @@ public class DebouncerHolderTest {
   @Test
   void keepsNullMeaningTheKeyIsUnheld() {
     assertNull(Debouncer.toDeduplicationHolder(null));
+  }
+
+  // ==================== Replay under a serializer that drops Java types ====================
+
+  /**
+   * The portable serializer, and any custom JSON one, records the holder as a plain object and
+   * hands back a map. The step still has to replay: the ids were never lost, only the type.
+   */
+  @Test
+  void adaptsAHolderRoundTrippedThroughThePortableSerializer() {
+    var serializer = DBOSPortableSerializer.INSTANCE;
+    var recorded =
+        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-7", "app-b")));
+
+    var holder = Debouncer.toDeduplicationHolder(recorded);
+
+    assertEquals("wf-7", holder.workflowId());
+    assertEquals("app-b", holder.applicationName());
+    assertTrue(holder.isForeignTo("app-a"));
+  }
+
+  @Test
+  void adaptsAnUnclaimedHolderRoundTrippedThroughThePortableSerializer() {
+    var serializer = DBOSPortableSerializer.INSTANCE;
+    var recorded =
+        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-8", null)));
+
+    var holder = Debouncer.toDeduplicationHolder(recorded);
+
+    assertEquals("wf-8", holder.workflowId());
+    assertNull(holder.applicationName());
+  }
+
+  @Test
+  void rejectsAMapThatIsNotAHolder() {
+    Map<String, Object> notAHolder = new HashMap<>();
+    notAHolder.put("something", "else");
+
+    assertThrows(IllegalStateException.class, () -> Debouncer.toDeduplicationHolder(notAHolder));
   }
 
   @Test

@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -346,6 +347,9 @@ public final class Debouncer<R> {
    *
    * <p>Such a holder predates ownership, so it is reported unclaimed. That is also how it behaved
    * when it was recorded: every application sharing the system database treated it as its own.
+   *
+   * <p>A serializer that does not carry Java type information hands back a map rather than the
+   * record it recorded, so that shape is adapted too.
    */
   static @Nullable DeduplicationHolder toDeduplicationHolder(@Nullable Object recorded) {
     if (recorded == null) {
@@ -356,6 +360,13 @@ public final class Debouncer<R> {
     }
     if (recorded instanceof String workflowId) {
       return new DeduplicationHolder(workflowId, null);
+    }
+    // A serializer that does not preserve Java types -- the portable one, or a custom JSON one --
+    // round-trips the record to a map. Everything the record held is still there; only the type
+    // was lost.
+    if (recorded instanceof Map<?, ?> map && map.get("workflowId") instanceof String workflowId) {
+      return new DeduplicationHolder(
+          workflowId, map.get("applicationName") instanceof String appName ? appName : null);
     }
     throw new IllegalStateException(
         "DBOS.lookupDebouncer recorded an unexpected %s".formatted(recorded.getClass().getName()));
