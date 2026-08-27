@@ -22,8 +22,11 @@ public record WorkflowSchedule(
     /**
      * The application that owns this schedule and runs its workflows, as recorded in the system
      * database, or null if the schedule is unclaimed and so is run by every application sharing it.
-     * Set by the database when a schedule is read back; ignored when creating one, which always
-     * records the creating application.
+     * Set by the database when a schedule is read back. When creating or applying one, this names
+     * the application to record as the owner -- null records the creating application, and a name a
+     * different application already holds raises {@link
+     * dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}. It is how a client
+     * creates a schedule that another application will run.
      */
     @Nullable String applicationName) {
 
