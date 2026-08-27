@@ -1403,11 +1403,29 @@ public class DBOSClient implements AutoCloseable {
    * @param versionName the version to promote; it must already exist
    */
   public void setLatestApplicationVersion(@NonNull String versionName) {
-    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+    setLatestApplicationVersion(versionName, null);
+  }
+
+  /**
+   * Promote an existing version to be the latest application version, on behalf of an application.
+   *
+   * @param versionName the version to promote; it must already exist
+   * @param applicationName the application to act as; null takes this client's own. Promoting a
+   *     version a different application registered throws {@link
+   *     dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}. Promotion also claims
+   *     an unclaimed version, which would otherwise read as every peer's latest.
+   */
+  public void setLatestApplicationVersion(
+      @NonNull String versionName, @Nullable String applicationName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now(), applicationName);
   }
 
   /**
    * Create a cron schedule. The scheduleId is generated if null.
+   *
+   * <p>{@link WorkflowSchedule#applicationName} names the application that owns the schedule and
+   * runs its workflows, defaulting to this client's own. Leaving both unset creates an unclaimed
+   * schedule, which every application sharing the system database will run.
    *
    * @param schedule the schedule configuration
    */
@@ -1582,12 +1600,33 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String name,
       @NonNull QueueOptions options,
       @NonNull QueueConflictResolution onConflict) {
+    registerQueue(name, options, onConflict, null);
+  }
+
+  /**
+   * Register a database-backed dynamic queue on behalf of an application.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   * @param applicationName the application that owns this queue and polls it. Null takes this
+   *     client's own application, leaving the queue unclaimed if the client has none. Registering a
+   *     queue a different application already owns throws {@link
+   *     dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}, since a queue name is
+   *     an address shared across the applications on this system database.
+   */
+  public void registerQueue(
+      @NonNull String name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict,
+      @Nullable String applicationName) {
     if (onConflict == QueueConflictResolution.UPDATE_IF_LATEST_VERSION) {
       throw new IllegalArgumentException(
           "DBOSClient.registerQueue does not support UPDATE_IF_LATEST_VERSION because clients are"
               + " not associated with an application version. Use ALWAYS_UPDATE or NEVER_UPDATE.");
     }
-    systemDatabase.upsertQueue(name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE);
+    systemDatabase.upsertQueue(
+        name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE, applicationName);
   }
 
   /**

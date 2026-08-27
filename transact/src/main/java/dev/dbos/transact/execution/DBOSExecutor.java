@@ -270,7 +270,7 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
 
-      systemDatabase.createApplicationVersion(this.appVersion);
+      systemDatabase.createApplicationVersion(this.appVersion, null);
       var latest = systemDatabase.getLatestApplicationVersion();
       if (!latest.versionName().equals(this.appVersion)) {
         logger.warn(
@@ -508,7 +508,8 @@ public class DBOSExecutor implements AutoCloseable {
           case UPDATE_IF_LATEST_VERSION ->
               appVersion.equals(systemDatabase.getLatestApplicationVersion().versionName());
         };
-    systemDatabase.upsertQueue(name, options, updateExisting);
+    // A runtime registers queues for itself: it is the process that will poll them.
+    systemDatabase.upsertQueue(name, options, updateExisting, null);
   }
 
   public void updateDynamicQueue(String name, QueueOptions options) {
@@ -850,7 +851,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void setLatestApplicationVersion(String versionName) {
-    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now(), null);
   }
 
   public void createSchedule(@NonNull WorkflowSchedule schedule) {

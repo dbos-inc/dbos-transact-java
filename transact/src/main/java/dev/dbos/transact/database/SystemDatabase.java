@@ -536,12 +536,14 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
-  public boolean upsertQueue(String name, QueueOptions options, boolean updateExisting) {
+  public boolean upsertQueue(
+      String name, QueueOptions options, boolean updateExisting, @Nullable String applicationName) {
     if (Constants.DBOS_INTERNAL_QUEUE.equals(name)) {
       throw new IllegalArgumentException(
           String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
     }
-    return dbRetry(() -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting));
+    return dbRetry(
+        () -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting, applicationName));
   }
 
   public void updateQueue(String name, QueueOptions update) {
@@ -712,15 +714,17 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
   }
 
-  public void createApplicationVersion(String versionName) {
-    dbRetry(() -> ApplicationVersionDAO.createApplicationVersion(ctx, versionName));
+  public void createApplicationVersion(String versionName, @Nullable String applicationName) {
+    dbRetry(
+        () -> ApplicationVersionDAO.createApplicationVersion(ctx, versionName, applicationName));
   }
 
-  public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
+  public void updateApplicationVersionTimestamp(
+      String versionName, Instant newTimestamp, @Nullable String applicationName) {
     dbRetry(
         () ->
             ApplicationVersionDAO.updateApplicationVersionTimestamp(
-                ctx, versionName, newTimestamp));
+                ctx, versionName, newTimestamp, applicationName));
   }
 
   public List<VersionInfo> listApplicationVersions() {

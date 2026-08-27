@@ -241,9 +241,9 @@ public class WorkflowMgmtTest {
   @Test
   public void testListApplicationVersions() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.createApplicationVersion("v3.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.createApplicationVersion("v3.0.0", null);
 
     var versions = dbos.listApplicationVersions();
     assertEquals(3, versions.size());
@@ -265,11 +265,12 @@ public class WorkflowMgmtTest {
   @Test
   public void testGetLatestApplicationVersion() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
 
     // Promote v1.0.0 to be the latest by updating its timestamp to now
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", java.time.Instant.now().plusSeconds(60));
+    sysdb.updateApplicationVersionTimestamp(
+        "v1.0.0", java.time.Instant.now().plusSeconds(60), null);
 
     var latest = dbos.getLatestApplicationVersion();
     assertEquals("v1.0.0", latest.versionName());
@@ -282,8 +283,8 @@ public class WorkflowMgmtTest {
       org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD)
   public void testSetLatestApplicationVersion() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
 
     // introduce a slight delay to ensure the v1.0.0 timestamp we're about the set is later than the
     // v2.0.0 we just created

@@ -214,8 +214,8 @@ public class ClientTest {
   @RetryingTest(3)
   public void clientListApplicationVersions() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
 
     try (var client = pgContainer.dbosClient()) {
       var versions = client.listApplicationVersions();
@@ -235,9 +235,10 @@ public class ClientTest {
   @Test
   public void clientGetLatestApplicationVersion() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", java.time.Instant.now().plusSeconds(60));
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp(
+        "v1.0.0", java.time.Instant.now().plusSeconds(60), null);
 
     try (var client = pgContainer.dbosClient()) {
       var latest = client.getLatestApplicationVersion();
@@ -250,8 +251,8 @@ public class ClientTest {
   @Test
   public void clientSetLatestApplicationVersion() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
 
     // introduce a slight delay to ensure the v1.0.0 timestamp we're about the set is later than the
     // v2.0.0 we just created
@@ -349,8 +350,8 @@ public class ClientTest {
   @Test
   public void versionCrudCrossApiConsistency() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v2.0.0", null);
 
     Thread.sleep(100);
 
@@ -517,8 +518,9 @@ public class ClientTest {
     assertEquals("v1.0.0", workerVersion);
 
     // Register a newer version so this worker is NOT running the latest registered version.
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", Instant.now().plus(Duration.ofHours(1)));
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp(
+        "v2.0.0", Instant.now().plus(Duration.ofHours(1)), null);
     assertEquals("v2.0.0", sysdb.getLatestApplicationVersion().versionName());
 
     // Enqueue a version-less workflow via the client (application_version stays NULL).
@@ -551,7 +553,8 @@ public class ClientTest {
     assertNull(DBUtils.getWorkflowRow(dataSource, versionlessId).applicationVersion());
 
     // Promote the worker's version to latest; the version-less workflow should now run.
-    sysdb.updateApplicationVersionTimestamp(workerVersion, Instant.now().plus(Duration.ofHours(2)));
+    sysdb.updateApplicationVersionTimestamp(
+        workerVersion, Instant.now().plus(Duration.ofHours(2)), null);
     assertEquals(workerVersion, sysdb.getLatestApplicationVersion().versionName());
 
     assertEquals("1-versionless", versionlessHandle.getResult());

@@ -18,6 +18,7 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -344,6 +345,54 @@ public class ApplicationNameTest {
                     new WorkflowSchedule(
                         "contested", "greet", AppNameServiceImpl.class.getName(), "0 0 * * * *")));
     assertEquals(APP_A, conflict.owner());
+  }
+
+  /**
+   * The write side of naming a peer. A queue is registered for the application that will poll it,
+   * so a deploy tool acting for several applications can set each one up without running as it.
+   */
+  @Test
+  void registeringAQueueForAPeerGivesThatPeerTheQueue() throws Exception {
+    try (var client = pgContainer.dbosClient(APP_A)) {
+      client.registerQueue(
+          "peer-queue", QueueOptions.empty(), QueueConflictResolution.ALWAYS_UPDATE, APP_B);
+    }
+
+    assertEquals(List.of("peer-queue"), dbosB.listQueues().stream().map(Queue::name).toList());
+    assertTrue(dbosA.listQueues().isEmpty());
+  }
+
+  /** The same for schedules, where the owner rides on the record rather than on an argument. */
+  @Test
+  void creatingAScheduleForAPeerGivesThatPeerTheSchedule() {
+    dbosA.createSchedule(
+        new WorkflowSchedule(
+                "peer-sched", "greet", AppNameServiceImpl.class.getName(), "0 0 * * * *")
+            .withApplicationName(APP_B));
+
+    var listedByB = dbosB.listSchedules(null, null, null);
+    assertEquals(1, listedByB.size());
+    assertEquals(APP_B, listedByB.get(0).applicationName());
+    assertTrue(dbosA.listSchedules(null, null, null).isEmpty());
+  }
+
+  /** Acting for a peer is naming it, not impersonating it: a third application still collides. */
+  @Test
+  void registeringAQueueForAPeerStillCollidesWithAThirdApplication() throws Exception {
+    dbosA.registerQueue("contested", QueueOptions.empty());
+
+    try (var client = pgContainer.dbosClient(APP_B)) {
+      var conflict =
+          assertThrows(
+              DBOSApplicationNameConflictException.class,
+              () ->
+                  client.registerQueue(
+                      "contested",
+                      QueueOptions.empty(),
+                      QueueConflictResolution.ALWAYS_UPDATE,
+                      APP_B));
+      assertEquals(APP_A, conflict.owner());
+    }
   }
 
   @Test

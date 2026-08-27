@@ -106,7 +106,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateApplicationVersion() throws Exception {
-    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
 
     List<VersionInfo> versions = sysdb.listApplicationVersions();
     assertEquals(1, versions.size());
@@ -118,8 +118,8 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateApplicationVersionIdempotent() throws Exception {
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v1.0.0", null);
 
     assertEquals(1, sysdb.listApplicationVersions().size());
   }
@@ -127,16 +127,16 @@ public class SystemDatabaseTest {
   @Test
   public void testListApplicationVersionsOrderedByTimestamp() throws Exception {
     Instant t1 = Instant.now();
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1, null);
 
     Instant t2 = t1.plusSeconds(1);
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", t2);
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t2, null);
 
     Instant t3 = t1.plusSeconds(2);
-    sysdb.createApplicationVersion("v3.0.0");
-    sysdb.updateApplicationVersionTimestamp("v3.0.0", t3);
+    sysdb.createApplicationVersion("v3.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v3.0.0", t3, null);
 
     List<VersionInfo> versions = sysdb.listApplicationVersions();
     assertEquals(3, versions.size());
@@ -148,11 +148,11 @@ public class SystemDatabaseTest {
   @Test
   public void testGetLatestApplicationVersion() throws Exception {
     Instant t1 = Instant.now();
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1, null);
 
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1));
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1), null);
 
     VersionInfo latest = sysdb.getLatestApplicationVersion();
     assertEquals("v2.0.0", latest.versionName());
@@ -2483,7 +2483,7 @@ public class SystemDatabaseTest {
             .andPriorityEnabled(true)
             .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
 
-    boolean inserted = sysdb.upsertQueue("q-insert", options, true);
+    boolean inserted = sysdb.upsertQueue("q-insert", options, true, null);
     assertTrue(inserted, "upsertQueue should return true when the row is new");
 
     var fetched = sysdb.findQueue("q-insert");
@@ -2500,10 +2500,11 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueOptionsExisting() {
-    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true);
+    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true, null);
 
     boolean inserted =
-        sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true);
+        sysdb.upsertQueue(
+            "q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-update").orElseThrow();
@@ -2513,9 +2514,10 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueNoUpdateExisting() {
-    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true);
+    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true, null);
 
-    boolean inserted = sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false);
+    boolean inserted =
+        sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-no-update").orElseThrow();
@@ -2531,9 +2533,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListQueuesFromDB() {
-    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true);
-    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true);
-    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true);
+    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true, null);
+    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true, null);
+    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true, null);
 
     var queues = sysdb.listQueues();
     var names = queues.stream().map(Queue::name).toList();
@@ -2544,7 +2546,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testDeleteQueue() {
-    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true);
+    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true, null);
     assertTrue(sysdb.findQueue("q-delete").isPresent());
 
     boolean deleted = sysdb.deleteQueue("q-delete");
@@ -2564,7 +2566,8 @@ public class SystemDatabaseTest {
         QueueOptions.setConcurrency(5)
             .andPriorityEnabled(true)
             .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
-        true);
+        true,
+        null);
 
     sysdb.updateQueue("q-partial", QueueOptions.setConcurrency(99));
 
@@ -2577,7 +2580,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueClearConcurrency() {
-    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true);
+    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true, null);
 
     sysdb.updateQueue("q-clear-conc", QueueOptions.setConcurrency(null));
 
@@ -2590,7 +2593,8 @@ public class SystemDatabaseTest {
     sysdb.upsertQueue(
         "q-clear-rate",
         QueueOptions.setRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
-        true);
+        true,
+        null);
 
     sysdb.updateQueue("q-clear-rate", QueueOptions.setRateLimit(null, null));
 
@@ -2600,7 +2604,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueEmpty() {
-    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true);
+    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true, null);
 
     // Empty update should be a no-op (no exception, no change)
     var emptyUpdate = QueueOptions.empty();
@@ -2620,7 +2624,8 @@ public class SystemDatabaseTest {
             .andPartitionQueue(true)
             .andRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
             .andPollingInterval(Duration.ofSeconds(5)),
-        true);
+        true,
+        null);
     var fetched = sysdb.findQueue("q-roundtrip").orElseThrow();
 
     assertEquals("q-roundtrip", fetched.name());

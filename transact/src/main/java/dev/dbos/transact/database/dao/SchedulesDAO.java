@@ -27,9 +27,18 @@ public class SchedulesDAO {
 
   private SchedulesDAO() {}
 
+  /**
+   * The application that owns a schedule and runs its workflows: the one the schedule names, else
+   * the writing handle's own. A nameless handle naming nothing creates an unclaimed schedule, which
+   * every application sharing the system database will run.
+   */
+  private static @Nullable String scheduleOwner(DbContext ctx, WorkflowSchedule schedule) {
+    return schedule.applicationName() != null ? schedule.applicationName() : ctx.appName();
+  }
+
   public static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
     try (Connection conn = ctx.getConnection()) {
-      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule, ctx.appName());
+      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule, scheduleOwner(ctx, schedule));
     }
   }
 
@@ -313,7 +322,7 @@ public class SchedulesDAO {
                   .withScheduleId(UUID.randomUUID().toString())
                   .withStatus(ScheduleStatus.ACTIVE)
                   .withLastFiredAt(null),
-              ctx.appName());
+              scheduleOwner(ctx, schedule));
         }
         conn.commit();
       } catch (SQLException | RuntimeException e) {

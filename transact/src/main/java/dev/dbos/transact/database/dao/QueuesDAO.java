@@ -330,11 +330,19 @@ public class QueuesDAO {
   /**
    * Upsert a queue row. Returns true iff a new row was inserted (i.e. the queue did not previously
    * exist). Returns false if the row already existed, regardless of whether it was updated.
+   *
+   * @param applicationName the application that owns the queue and polls it; null for this handle's
+   *     own, which is a nameless handle's way of leaving the queue unclaimed
    */
   public static boolean upsertQueue(
-      DbContext ctx, String name, QueueOptions options, boolean updateExisting)
+      DbContext ctx,
+      String name,
+      QueueOptions options,
+      boolean updateExisting,
+      @Nullable String applicationName)
       throws SQLException {
     Queue queue = queueFromOptions(name, options);
+    var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
         """
         INSERT INTO "%s".queues
@@ -366,7 +374,7 @@ public class QueuesDAO {
       // Read the current owner first: the writes below are silent about why they declined to claim.
       var owner =
           RowOwner.resolve(
-              connection, ctx.schema(), "queues", "name", queue.name(), ctx.appName(), "Queue");
+              connection, ctx.schema(), "queues", "name", queue.name(), requestedOwner, "Queue");
       boolean inserted;
       try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
         var index = bindQueueParams(ps, queue, 1);

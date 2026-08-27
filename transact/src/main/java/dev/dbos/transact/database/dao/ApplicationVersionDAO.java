@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.jspecify.annotations.Nullable;
+
 public class ApplicationVersionDAO {
 
   private ApplicationVersionDAO() {}
@@ -18,8 +20,9 @@ public class ApplicationVersionDAO {
    * this application had a name does not stay unclaimed. A peer's name is a collision, which is why
    * this raises.
    */
-  public static void createApplicationVersion(DbContext ctx, String versionName)
-      throws SQLException {
+  public static void createApplicationVersion(
+      DbContext ctx, String versionName, @Nullable String applicationName) throws SQLException {
+    var owner = applicationName != null ? applicationName : ctx.appName();
     // Claim a pre-upgrade row in place, so the version is neither recreated nor retimed.
     String claimSql =
         """
@@ -40,9 +43,9 @@ public class ApplicationVersionDAO {
 
     try (var conn = ctx.getConnection()) {
       int claimed = 0;
-      if (ctx.appName() != null) {
+      if (owner != null) {
         try (var stmt = conn.prepareStatement(claimSql)) {
-          stmt.setString(1, ctx.appName());
+          stmt.setString(1, owner);
           stmt.setString(2, versionName);
           claimed = stmt.executeUpdate();
         }
@@ -51,7 +54,7 @@ public class ApplicationVersionDAO {
         try (var stmt = conn.prepareStatement(insertSql)) {
           stmt.setString(1, UUID.randomUUID().toString());
           stmt.setString(2, versionName);
-          stmt.setString(3, ctx.appName());
+          stmt.setString(3, owner);
           stmt.executeUpdate();
         }
       }
@@ -62,7 +65,7 @@ public class ApplicationVersionDAO {
           "application_versions",
           "version_name",
           versionName,
-          ctx.appName(),
+          owner,
           "Application version");
     }
   }
@@ -72,7 +75,9 @@ public class ApplicationVersionDAO {
    * claims an unclaimed row, which would otherwise read as every peer's latest.
    */
   public static void updateApplicationVersionTimestamp(
-      DbContext ctx, String versionName, Instant newTimestamp) throws SQLException {
+      DbContext ctx, String versionName, Instant newTimestamp, @Nullable String applicationName)
+      throws SQLException {
+    var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     try (var conn = ctx.getConnection()) {
       var owner =
           RowOwner.resolve(
@@ -81,7 +86,7 @@ public class ApplicationVersionDAO {
               "application_versions",
               "version_name",
               versionName,
-              ctx.appName(),
+              requestedOwner,
               "Application version");
       // Scoped to the row this writer resolved to: once version_name is no longer globally unique,
       // a bare name match would retime every peer's version of the same name.

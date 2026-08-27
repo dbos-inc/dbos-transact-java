@@ -235,4 +235,25 @@ public record WorkflowSchedule(
         value,
         applicationName);
   }
+
+  /**
+   * The application that owns this schedule and runs its workflows. Null takes the application of
+   * the handle that creates it; a nameless handle creating an unnamed schedule leaves it unclaimed,
+   * and every application sharing the system database will run it.
+   */
+  public WorkflowSchedule withApplicationName(@Nullable String value) {
+    return new WorkflowSchedule(
+        id,
+        scheduleName,
+        workflowName,
+        className,
+        cron,
+        status,
+        context,
+        lastFiredAt,
+        automaticBackfill,
+        cronTimezone,
+        queueName,
+        value);
+  }
 }
