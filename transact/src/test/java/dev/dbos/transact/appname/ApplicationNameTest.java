@@ -102,13 +102,13 @@ public class ApplicationNameTest {
     dbosB.launch();
   }
 
-  private String workflowOwner(String workflowId) throws SQLException {
+  private String workflowAppName(String workflowId) throws SQLException {
     return scalar(
         "SELECT application_name FROM \"dbos\".workflow_status WHERE workflow_uuid = ?",
         workflowId);
   }
 
-  private String stepOwner(String workflowId) throws SQLException {
+  private String stepAppName(String workflowId) throws SQLException {
     return scalar(
         "SELECT application_name FROM \"dbos\".operation_outputs WHERE workflow_uuid = ? ORDER BY function_id",
         workflowId);
@@ -141,22 +141,41 @@ public class ApplicationNameTest {
     var idA = runIn(serviceA, "a");
     var idB = runIn(serviceB, "b");
 
-    assertEquals(APP_A, workflowOwner(idA));
-    assertEquals(APP_A, stepOwner(idA));
-    assertEquals(APP_B, workflowOwner(idB));
-    assertEquals(APP_B, stepOwner(idB));
+    assertEquals(APP_A, workflowAppName(idA));
+    assertEquals(APP_A, stepAppName(idA));
+    assertEquals(APP_B, workflowAppName(idB));
+    assertEquals(APP_B, stepAppName(idB));
   }
 
   @Test
-  void forkingClaimsTheForkForTheForkingApplication() throws Exception {
+  void forkingInheritsTheSourceApplicationsOwnership() throws Exception {
     var idB = runIn(serviceB, "b");
 
     // Forking is addressable across applications -- a workflow ID is global -- but the fork is the
-    // forking application's own work, steps included.
+    // source application's work, steps included: it is that application's own workflow re-run, and
+    // it must land where the application that implements it will pick it up.
     var forked = dbosA.forkWorkflow(idB, 1);
-    assertEquals(APP_A, workflowOwner(forked.workflowId()));
-    assertEquals(APP_A, stepOwner(forked.workflowId()));
-    assertEquals(APP_B, workflowOwner(idB));
+    assertEquals(APP_B, workflowAppName(forked.workflowId()));
+    assertEquals(APP_B, stepAppName(forked.workflowId()));
+    assertEquals(APP_B, workflowAppName(idB));
+  }
+
+  @Test
+  void forkingAnUnclaimedWorkflowClaimsItForTheForkingApplication() throws Exception {
+    var idB = runIn(serviceB, "b");
+    // A row written before this feature, or by an SDK that does not know the column.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET application_name = NULL WHERE workflow_uuid = ?")) {
+      stmt.setString(1, idB);
+      stmt.executeUpdate();
+    }
+
+    // Nothing owns the source, so the fork is the forking application's, as dequeue does.
+    var forked = dbosA.forkWorkflow(idB, 1);
+    assertEquals(APP_A, workflowAppName(forked.workflowId()));
+    assertEquals(APP_A, stepAppName(forked.workflowId()));
   }
 
   @Test
@@ -177,8 +196,8 @@ public class ApplicationNameTest {
     DBOSTestAccess.getSystemDatabase(dbosA).deleteWorkflows(List.of(idA), false);
     DBOSTestAccess.getSystemDatabase(dbosB).importWorkflow(exported);
 
-    assertEquals(APP_A, workflowOwner(idA));
-    assertEquals(APP_A, stepOwner(idA));
+    assertEquals(APP_A, workflowAppName(idA));
+    assertEquals(APP_A, stepAppName(idA));
   }
 
   @Test
@@ -214,8 +233,8 @@ public class ApplicationNameTest {
     DBOSTestAccess.getSystemDatabase(dbosA).deleteWorkflows(List.of(idA), false);
     DBOSTestAccess.getSystemDatabase(dbosA).importWorkflow(List.of(ownerless));
 
-    assertEquals(APP_A, workflowOwner(idA));
-    assertNull(stepOwner(idA));
+    assertEquals(APP_A, workflowAppName(idA));
+    assertNull(stepAppName(idA));
   }
 
   @Test
@@ -459,7 +478,7 @@ public class ApplicationNameTest {
     // Give the queue service several polling intervals to prove it never takes the peer's row.
     Thread.sleep(Duration.ofSeconds(2).toMillis());
 
-    assertEquals(APP_B, workflowOwner(foreignId));
+    assertEquals(APP_B, workflowAppName(foreignId));
     var foreign =
         dbosA.listWorkflows(new ListWorkflowsInput().withApplicationName(APP_B)).stream()
             .filter(w -> w.workflowId().equals(foreignId))
@@ -486,7 +505,7 @@ public class ApplicationNameTest {
                   new DBOSClient.EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
               .workflowId();
     }
-    assertNull(workflowOwner(unclaimedId));
+    assertNull(workflowAppName(unclaimedId));
 
     var appVersion = DBOSTestAccess.getDbosExecutor(dbosA).appVersion();
     var dequeued =
@@ -494,7 +513,7 @@ public class ApplicationNameTest {
             .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0);
 
     assertEquals(List.of(unclaimedId), dequeued);
-    assertEquals(APP_A, workflowOwner(unclaimedId));
+    assertEquals(APP_A, workflowAppName(unclaimedId));
   }
 
   @Test
@@ -509,7 +528,7 @@ public class ApplicationNameTest {
 
       var options = new DBOSClient.EnqueueOptions("greet", "queue-b");
       var handle = client.enqueuePortableWorkflow(options, new Object[] {"nameless"}, null);
-      assertNull(workflowOwner(handle.workflowId()));
+      assertNull(workflowAppName(handle.workflowId()));
     }
   }
 
@@ -642,8 +661,8 @@ public class ApplicationNameTest {
     assertEquals("hello peer", handle.getResult());
     // Owned by B throughout: A wrote the row but never claimed it, and B's dequeue found it
     // because it did not.
-    assertEquals(APP_B, workflowOwner(childId));
-    assertEquals(APP_B, stepOwner(childId));
+    assertEquals(APP_B, workflowAppName(childId));
+    assertEquals(APP_B, stepAppName(childId));
     // A enqueued it and still does not see it in its own listing.
     assertTrue(idsOf(dbosA.listWorkflows(new ListWorkflowsInput())).isEmpty());
     assertEquals(List.of(childId), idsOf(dbosB.listWorkflows(new ListWorkflowsInput())));
@@ -660,7 +679,7 @@ public class ApplicationNameTest {
             .withWorkflowId(childId),
         new Object[] {"own"});
 
-    assertEquals(APP_A, workflowOwner(childId));
+    assertEquals(APP_A, workflowAppName(childId));
   }
 
   // ==================== Rename ====================
@@ -690,10 +709,10 @@ public class ApplicationNameTest {
       assertEquals(1, moved.versions());
     }
 
-    assertEquals("app-c", workflowOwner(idA));
-    assertEquals("app-c", stepOwner(idA));
+    assertEquals("app-c", workflowAppName(idA));
+    assertEquals("app-c", stepAppName(idA));
     // A peer's rows are untouched.
-    assertEquals(APP_B, workflowOwner(idB));
+    assertEquals(APP_B, workflowAppName(idB));
   }
 
   /** Batching is a resumption strategy, not a different result: every matching row still moves. */
@@ -712,7 +731,7 @@ public class ApplicationNameTest {
     }
 
     for (var id : ids) {
-      assertEquals("app-c", workflowOwner(id));
+      assertEquals("app-c", workflowAppName(id));
     }
   }
 
@@ -733,9 +752,9 @@ public class ApplicationNameTest {
       client.renameApplication(null, "app-c", null, true);
     }
 
-    assertEquals("app-c", workflowOwner(idB));
+    assertEquals("app-c", workflowAppName(idB));
     // Named rows are not swept up: adopting is not renaming.
-    assertEquals(APP_A, workflowOwner(idA));
+    assertEquals(APP_A, workflowAppName(idA));
   }
 
   @Test

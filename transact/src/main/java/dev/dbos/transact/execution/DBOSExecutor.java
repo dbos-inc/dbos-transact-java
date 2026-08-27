@@ -24,6 +24,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
@@ -192,6 +193,17 @@ public class DBOSExecutor implements AutoCloseable {
               ? "DBOS_APP_NAME environment variable must be set when DBOS__CLOUD is true"
               : "DBOSConfig.appName field must not be empty";
       throw new IllegalArgumentException(msg);
+    }
+
+    // The application name is durable, cross-language identity: it is written onto every row this
+    // application owns, and peers in other SDKs read it back. A name outside the shared rule still
+    // works here -- rejecting it would break applications that have been running under one for as
+    // long as Java has had an appName -- but the Python and TypeScript CLIs will not accept it, so
+    // say so once rather than letting it surface later as a rename or provisioning failure.
+    if (!Validation.isValidApplicationName(appName)) {
+      logger.warn(
+          "{} Other DBOS SDKs and the DBOS CLI will not accept this name.",
+          Validation.invalidApplicationName("application name", appName));
     }
 
     if (!dbosCloud) {

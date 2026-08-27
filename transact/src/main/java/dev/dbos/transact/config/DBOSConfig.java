@@ -1,7 +1,6 @@
 package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
 
@@ -100,10 +99,6 @@ public record DBOSConfig(
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
-    }
-    if (!Validation.isValidApplicationName(appName)) {
-      throw new IllegalArgumentException(
-          Validation.invalidApplicationName("DBOSConfig.appName", appName));
     }
     if (conductorKey != null && conductorKey.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");

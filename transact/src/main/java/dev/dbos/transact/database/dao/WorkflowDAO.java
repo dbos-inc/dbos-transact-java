@@ -1735,6 +1735,13 @@ public class WorkflowDAO {
         }
         var dataList = workflowIds.stream().map(wfDataMap::get).toList();
 
+        // One app name per fork, shared by its status row and its copied steps: the source's, or
+        // this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
+        List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
+        for (var rd : dataList) {
+          forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
+        }
+
         batchInsertForkedStatuses(
             conn,
             ctx.schema(),
@@ -1745,23 +1752,25 @@ public class WorkflowDAO {
             queueName,
             queuePartitionKey,
             timeoutMs,
-            ctx.appName());
+            forkAppNames);
 
         markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
         List<String> copyOrigIds = new ArrayList<>();
         List<String> copyForkIds = new ArrayList<>();
         List<Integer> copyStartSteps = new ArrayList<>();
+        List<@Nullable String> copyAppNames = new ArrayList<>();
         for (int i = 0; i < workflowIds.size(); i++) {
           if (startSteps.get(i) > 0) {
             copyOrigIds.add(workflowIds.get(i));
             copyForkIds.add(forkIds.get(i));
             copyStartSteps.add(startSteps.get(i));
+            copyAppNames.add(forkAppNames.get(i));
           }
         }
         if (!copyOrigIds.isEmpty()) {
           batchCopyWorkflowData(
-              conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, ctx.appName());
+              conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
         }
 
         conn.commit();
@@ -1783,7 +1792,8 @@ public class WorkflowDAO {
       String assumedRole,
       String inputs,
       String serialization,
-      String attributes) {}
+      String attributes,
+      @Nullable String applicationName) {}
 
   private static Map<String, ForkWorkflowData> fetchForkWorkflowData(
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
@@ -1791,7 +1801,7 @@ public class WorkflowDAO {
         """
           SELECT workflow_uuid, name, class_name, config_name, application_version,
                  application_id, authenticated_user, authenticated_roles, assumed_role,
-                 inputs, serialization, attributes
+                 inputs, serialization, attributes, application_name
           FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?)
         """
@@ -1817,7 +1827,8 @@ public class WorkflowDAO {
                     rs.getString("assumed_role"),
                     rs.getString("inputs"),
                     rs.getString("serialization"),
-                    rs.getString("attributes")));
+                    rs.getString("attributes"),
+                    rs.getString("application_name")));
           }
         }
       } finally {
@@ -1837,7 +1848,7 @@ public class WorkflowDAO {
       String queueName,
       String queuePartitionKey,
       @Nullable Long timeoutMs,
-      @Nullable String appName)
+      List<@Nullable String> forkAppNames)
       throws SQLException {
 
     StringBuilder sql =
@@ -1883,7 +1894,7 @@ public class WorkflowDAO {
         stmt.setString(p++, origIds.get(i));
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
-        stmt.setString(p++, appName);
+        stmt.setString(p++, forkAppNames.get(i));
       }
       stmt.executeUpdate();
     }
@@ -1937,15 +1948,15 @@ public class WorkflowDAO {
       List<String> origIds,
       List<String> forkIds,
       List<Integer> startSteps,
-      @Nullable String appName)
+      List<@Nullable String> forkAppNames)
       throws SQLException {
 
     StringJoiner valueRows = new StringJoiner(", ");
     for (int i = 0; i < origIds.size(); i++) {
-      valueRows.add("(?::text, ?::text, ?::int)");
+      valueRows.add("(?::text, ?::text, ?::int, ?::text)");
     }
     String mappingCTE =
-        "WITH mapping(orig_id, fork_id, start_step) AS (VALUES " + valueRows + ")\n";
+        "WITH mapping(orig_id, fork_id, start_step, app_name) AS (VALUES " + valueRows + ")\n";
 
     String ooSql =
         mappingCTE
@@ -1956,7 +1967,7 @@ public class WorkflowDAO {
                  application_name)
               SELECT m.fork_id, oo.function_id, oo.output, oo.error, oo.function_name,
                      oo.child_workflow_id, oo.started_at_epoch_ms, oo.completed_at_epoch_ms,
-                     oo.serialization, ?
+                     oo.serialization, m.app_name
               FROM mapping m
               JOIN "%1$s".operation_outputs oo
                 ON oo.workflow_uuid = m.orig_id AND oo.function_id < m.start_step
@@ -2018,10 +2029,8 @@ public class WorkflowDAO {
           stmt.setString(p++, origIds.get(i));
           stmt.setString(p++, forkIds.get(i));
           stmt.setInt(p++, startSteps.get(i));
-        }
-        // The copied steps take the forking application, like the forked workflow row itself.
-        if (sql.equals(ooSql)) {
-          stmt.setString(p++, appName);
+          // The copied steps take the same app_name as the forked workflow row itself.
+          stmt.setString(p++, forkAppNames.get(i));
         }
         stmt.executeUpdate();
       }
@@ -2411,8 +2420,8 @@ public class WorkflowDAO {
             stepStmt.setObject(7, step.startedAtEpochMs());
             stepStmt.setObject(8, step.completedAtEpochMs());
             stepStmt.setString(9, step.serialization());
-            // A step keeps exactly the owner it was exported with. An export that predates the
-            // column carries no ownership, so its steps import unclaimed rather than inheriting a
+            // A step keeps exactly the app_name it was exported with. An export that predates the
+            // column carries no app_name, so its steps import unclaimed rather than inheriting a
             // guess from the workflow -- the same choice Python and TypeScript make.
             stepStmt.setString(10, step.applicationName());
             stepStmt.addBatch();
