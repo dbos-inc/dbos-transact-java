@@ -69,6 +69,15 @@ public record DbContext(
     return requested.isEmpty() ? null : requested;
   }
 
+  /**
+   * The applications an identity read is scoped to: exactly the ones asked for, and never defaulted
+   * to this one. A workflow ID is a global address, so a read keyed by one answers for every
+   * application until the caller narrows it. Null means unscoped -- unasked, or asked emptily.
+   */
+  public @Nullable List<String> requestedNames(@Nullable List<String> requested) {
+    return requested == null || requested.isEmpty() ? null : requested;
+  }
+
   public void checkClosed() {
     if (closed.getAsBoolean()) {
       throw new IllegalStateException("Database is closed");

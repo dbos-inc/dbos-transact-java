@@ -242,6 +242,42 @@ public class ApplicationNameTest {
             idsOf(dbosA.listWorkflows(new ListWorkflowsInput().withApplicationName(List.of())))));
   }
 
+  /**
+   * A workflow ID is a global address, so a listing that names IDs is an identity read: it answers
+   * for every application rather than quietly narrowing to this one. It is how Conductor's
+   * get-workflow reaches a peer's workflow, and how an application follows up on work it handed to
+   * one. Mirrors the {@code workflow_ids} arm of Python's list_workflows and TypeScript's {@code
+   * idKeyed}.
+   */
+  @Test
+  void listingByIdReachesAnotherApplication() {
+    var idB = runIn(serviceB, "b");
+
+    assertEquals(
+        List.of(idB),
+        idsOf(dbosA.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of(idB)))));
+  }
+
+  /**
+   * The carve-out lifts the default, not an explicit filter: naming an application still narrows.
+   */
+  @Test
+  void listingByIdStillHonoursAnExplicitFilter() {
+    var idA = runIn(serviceA, "a");
+    var idB = runIn(serviceB, "b");
+    var bothIds = List.of(idA, idB);
+
+    assertEquals(
+        List.of(idA),
+        idsOf(
+            dbosA.listWorkflows(
+                new ListWorkflowsInput().withWorkflowIds(bothIds).withApplicationName(APP_A))));
+    assertEquals(
+        java.util.Set.of(idA, idB),
+        java.util.Set.copyOf(
+            idsOf(dbosA.listWorkflows(new ListWorkflowsInput().withWorkflowIds(bothIds)))));
+  }
+
   @Test
   void unclaimedWorkflowsBelongToEveryApplication() throws Exception {
     var idB = runIn(serviceB, "b");

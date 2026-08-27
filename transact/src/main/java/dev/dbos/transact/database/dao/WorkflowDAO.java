@@ -87,13 +87,19 @@ public class WorkflowDAO {
    * Scopes a listing to the applications asked for, or to this one by default, plus unclaimed rows,
    * which belong to every application. Adds nothing when the scope is empty: an explicitly empty
    * filter, or a nameless owner, lists every application's rows.
+   *
+   * <p>{@code idKeyed} suppresses the default. A workflow ID is a global address, so a listing that
+   * names IDs is an identity read: it honours an explicit filter but is never narrowed to this
+   * application behind the caller's back, which is what lets one application look up a workflow it
+   * handed to a peer.
    */
   private static void addAppScope(
       DbContext ctx,
       StringJoiner whereConditions,
       List<Object> parameters,
-      @Nullable List<String> requested) {
-    var names = ctx.scopeNames(requested);
+      @Nullable List<String> requested,
+      boolean idKeyed) {
+    var names = idKeyed ? ctx.requestedNames(requested) : ctx.scopeNames(requested);
     if (names != null) {
       whereConditions.add("(application_name = ANY(?) OR application_name IS NULL)");
       parameters.add(names);
@@ -828,7 +834,10 @@ public class WorkflowDAO {
       whereConditions.add("attributes @> ?::jsonb");
       parameters.add(JsonUtility.toJson(input.attributes()));
     }
-    addAppScope(ctx, whereConditions, parameters, input.applicationName());
+    // Null and empty alike mean "not keyed by ID": a Conductor request carries an omitted list
+    // as JSON null.
+    var idKeyed = input.workflowIds() != null && !input.workflowIds().isEmpty();
+    addAppScope(ctx, whereConditions, parameters, input.applicationName(), idKeyed);
 
     // Only append WHERE keyword if there are actual conditions
     if (whereConditions.length() > 0) {
@@ -1007,7 +1016,7 @@ public class WorkflowDAO {
       whereConditions.add("attributes @> ?::jsonb");
       parameters.add(JsonUtility.toJson(input.attributes()));
     }
-    addAppScope(ctx, whereConditions, parameters, input.applicationName());
+    addAppScope(ctx, whereConditions, parameters, input.applicationName(), false);
 
     if (whereConditions.length() > 0) {
       sqlBuilder.append(" WHERE ").append(whereConditions);
@@ -1158,7 +1167,7 @@ public class WorkflowDAO {
       whereConditions.add("completed_at_epoch_ms <= ?");
       parameters.add(input.completedBefore().toEpochMilli());
     }
-    addAppScope(ctx, whereConditions, parameters, input.applicationName());
+    addAppScope(ctx, whereConditions, parameters, input.applicationName(), false);
 
     if (whereConditions.length() > 0) {
       sqlBuilder.append(" WHERE ").append(whereConditions);
