@@ -76,7 +76,7 @@ public class SystemDatabaseTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
-    sysdb = SystemDatabase.create(dbosConfig);
+    sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
   }
 
@@ -106,7 +106,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateApplicationVersion() throws Exception {
-    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
 
     List<VersionInfo> versions = sysdb.listApplicationVersions();
     assertEquals(1, versions.size());
@@ -118,8 +118,8 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateApplicationVersionIdempotent() throws Exception {
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.createApplicationVersion("v1.0.0", null);
 
     assertEquals(1, sysdb.listApplicationVersions().size());
   }
@@ -127,16 +127,16 @@ public class SystemDatabaseTest {
   @Test
   public void testListApplicationVersionsOrderedByTimestamp() throws Exception {
     Instant t1 = Instant.now();
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1, null);
 
     Instant t2 = t1.plusSeconds(1);
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", t2);
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t2, null);
 
     Instant t3 = t1.plusSeconds(2);
-    sysdb.createApplicationVersion("v3.0.0");
-    sysdb.updateApplicationVersionTimestamp("v3.0.0", t3);
+    sysdb.createApplicationVersion("v3.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v3.0.0", t3, null);
 
     List<VersionInfo> versions = sysdb.listApplicationVersions();
     assertEquals(3, versions.size());
@@ -148,11 +148,11 @@ public class SystemDatabaseTest {
   @Test
   public void testGetLatestApplicationVersion() throws Exception {
     Instant t1 = Instant.now();
-    sysdb.createApplicationVersion("v1.0.0");
-    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+    sysdb.createApplicationVersion("v1.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1, null);
 
-    sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1));
+    sysdb.createApplicationVersion("v2.0.0", null);
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1), null);
 
     VersionInfo latest = sysdb.getLatestApplicationVersion();
     assertEquals("v2.0.0", latest.versionName());
@@ -498,6 +498,7 @@ public class SystemDatabaseTest {
         null,
         false,
         null,
+        null,
         null);
   }
 
@@ -549,6 +550,7 @@ public class SystemDatabaseTest {
                 null,
                 false,
                 null,
+                null,
                 null));
   }
 
@@ -567,6 +569,7 @@ public class SystemDatabaseTest {
             "{}",
             null,
             false,
+            null,
             null,
             null));
     sysdb.pauseSchedule("beta-1");
@@ -694,7 +697,8 @@ public class SystemDatabaseTest {
             Instant.parse("2026-03-01T00:00:00Z"),
             true,
             ZoneId.of("America/New_York"),
-            "my-queue");
+            "my-queue",
+            null);
     sysdb.createSchedule(schedule);
 
     var s = sysdb.getSchedule("sched-full").get();
@@ -1048,7 +1052,8 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5, false, false);
     sysdb.recordWorkflowOutput(workflowId, null);
 
-    var ctx = new DbContext(dataSource, "dbos", null, () -> false, null, new PollingLimiter(0));
+    var ctx =
+        new DbContext(dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0));
     var signals = new SignalMap();
     var passes = new AtomicInteger();
 
@@ -1229,7 +1234,10 @@ public class SystemDatabaseTest {
   public void testNonPostgresDataSourceViaCreateThrows() throws SQLException {
     var ds = mockDataSource("SQLite");
     var config = DBOSConfig.defaults("test-app").withDataSource(ds);
-    var ex = assertThrows(IllegalStateException.class, () -> SystemDatabase.create(config));
+    var ex =
+        assertThrows(
+            IllegalStateException.class,
+            () -> SystemDatabase.create(config, null, config.appName()));
     assertTrue(ex.getMessage().contains("PostgreSQL"));
     assertTrue(ex.getMessage().contains("SQLite"));
   }
@@ -2079,8 +2087,8 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepA", "ok", null, null, now.minusMillis(10), now, null),
-            new StepInfo(1, "stepA", "ok", null, null, now.minusMillis(5), now, null),
+            new StepInfo(0, "stepA", "ok", null, null, now.minusMillis(10), now, null, null),
+            new StepInfo(1, "stepA", "ok", null, null, now.minusMillis(5), now, null, null),
             new StepInfo(
                 2,
                 "stepB",
@@ -2090,6 +2098,7 @@ public class SystemDatabaseTest {
                 null,
                 now.minusMillis(3),
                 now,
+                null,
                 null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-agg-wf-1", "WF", WorkflowState.ERROR, steps)));
@@ -2147,7 +2156,7 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepX", "ok", null, null, now.minusMillis(10), now, null),
+            new StepInfo(0, "stepX", "ok", null, null, now.minusMillis(10), now, null, null),
             new StepInfo(
                 1,
                 "stepY",
@@ -2157,6 +2166,7 @@ public class SystemDatabaseTest {
                 null,
                 now.minusMillis(5),
                 now,
+                null,
                 null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-filter-wf-1", "WF", WorkflowState.ERROR, steps)));
@@ -2188,7 +2198,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesIdPrefix() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "myStep", "ok", null, null, now.minusMillis(5), now, null));
+    var step =
+        List.of(new StepInfo(0, "myStep", "ok", null, null, now.minusMillis(5), now, null, null));
     sysdb.importWorkflow(
         List.of(
             buildWorkflowWithSteps("step-prefix-aaa-1", "WF", WorkflowState.SUCCESS, step),
@@ -2218,8 +2229,8 @@ public class SystemDatabaseTest {
     var now = Instant.now();
     var steps =
         List.of(
-            new StepInfo(0, "stepZ", "ok", null, null, now.minusMillis(200), now, null),
-            new StepInfo(1, "stepZ", "ok", null, null, now.minusMillis(50), now, null));
+            new StepInfo(0, "stepZ", "ok", null, null, now.minusMillis(200), now, null, null),
+            new StepInfo(1, "stepZ", "ok", null, null, now.minusMillis(50), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-dur-wf-1", "WF", WorkflowState.SUCCESS, steps)));
 
@@ -2256,7 +2267,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesTimeBucket() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "tbStep", "ok", null, null, now.minusMillis(10), now, null));
+    var step =
+        List.of(new StepInfo(0, "tbStep", "ok", null, null, now.minusMillis(10), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-tb-wf-1", "WF", WorkflowState.SUCCESS, step)));
 
@@ -2284,7 +2296,8 @@ public class SystemDatabaseTest {
   @Test
   public void testGetStepAggregatesCompletedFilters() throws Exception {
     var now = Instant.now();
-    var step = List.of(new StepInfo(0, "cfStep", "ok", null, null, now.minusMillis(50), now, null));
+    var step =
+        List.of(new StepInfo(0, "cfStep", "ok", null, null, now.minusMillis(50), now, null, null));
     sysdb.importWorkflow(
         List.of(buildWorkflowWithSteps("step-cf-wf-1", "WF", WorkflowState.SUCCESS, step)));
 
@@ -2317,11 +2330,14 @@ public class SystemDatabaseTest {
     var now = Instant.now();
 
     // Real steps with timestamps
-    var quickStep = new StepInfo(0, "quickStep", "ok", null, null, now.minusMillis(20), now, null);
-    var slowStep = new StepInfo(1, "slowStep", "ok", null, null, now.minusMillis(100), now, null);
+    var quickStep =
+        new StepInfo(0, "quickStep", "ok", null, null, now.minusMillis(20), now, null, null);
+    var slowStep =
+        new StepInfo(1, "slowStep", "ok", null, null, now.minusMillis(100), now, null, null);
 
     // Bookkeeping rows (child workflow markers) have NULL timestamps
-    var childMarker = new StepInfo(2, "childWorkflow", null, null, "child-wf-id", null, null, null);
+    var childMarker =
+        new StepInfo(2, "childWorkflow", null, null, "child-wf-id", null, null, null, null);
 
     var steps = List.of(quickStep, slowStep, childMarker);
     sysdb.importWorkflow(
@@ -2467,7 +2483,7 @@ public class SystemDatabaseTest {
             .andPriorityEnabled(true)
             .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
 
-    boolean inserted = sysdb.upsertQueue("q-insert", options, true);
+    boolean inserted = sysdb.upsertQueue("q-insert", options, true, null);
     assertTrue(inserted, "upsertQueue should return true when the row is new");
 
     var fetched = sysdb.findQueue("q-insert");
@@ -2484,10 +2500,11 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueOptionsExisting() {
-    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true);
+    sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(3), true, null);
 
     boolean inserted =
-        sysdb.upsertQueue("q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true);
+        sysdb.upsertQueue(
+            "q-update", QueueOptions.setConcurrency(7).andWorkerConcurrency(4), true, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-update").orElseThrow();
@@ -2497,9 +2514,10 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueNoUpdateExisting() {
-    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true);
+    sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(3), true, null);
 
-    boolean inserted = sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false);
+    boolean inserted =
+        sysdb.upsertQueue("q-no-update", QueueOptions.setConcurrency(99), false, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-no-update").orElseThrow();
@@ -2515,9 +2533,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListQueuesFromDB() {
-    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true);
-    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true);
-    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true);
+    sysdb.upsertQueue("q-list-a", QueueOptions.setConcurrency(1), true, null);
+    sysdb.upsertQueue("q-list-b", QueueOptions.setConcurrency(2), true, null);
+    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true, null);
 
     var queues = sysdb.listQueues();
     var names = queues.stream().map(Queue::name).toList();
@@ -2528,7 +2546,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testDeleteQueue() {
-    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true);
+    sysdb.upsertQueue("q-delete", QueueOptions.setConcurrency(1), true, null);
     assertTrue(sysdb.findQueue("q-delete").isPresent());
 
     boolean deleted = sysdb.deleteQueue("q-delete");
@@ -2548,7 +2566,8 @@ public class SystemDatabaseTest {
         QueueOptions.setConcurrency(5)
             .andPriorityEnabled(true)
             .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
-        true);
+        true,
+        null);
 
     sysdb.updateQueue("q-partial", QueueOptions.setConcurrency(99));
 
@@ -2561,7 +2580,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueClearConcurrency() {
-    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true);
+    sysdb.upsertQueue("q-clear-conc", QueueOptions.setConcurrency(5), true, null);
 
     sysdb.updateQueue("q-clear-conc", QueueOptions.setConcurrency(null));
 
@@ -2574,7 +2593,8 @@ public class SystemDatabaseTest {
     sysdb.upsertQueue(
         "q-clear-rate",
         QueueOptions.setRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
-        true);
+        true,
+        null);
 
     sysdb.updateQueue("q-clear-rate", QueueOptions.setRateLimit(null, null));
 
@@ -2584,7 +2604,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueEmpty() {
-    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true);
+    sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true, null);
 
     // Empty update should be a no-op (no exception, no change)
     var emptyUpdate = QueueOptions.empty();
@@ -2604,7 +2624,8 @@ public class SystemDatabaseTest {
             .andPartitionQueue(true)
             .andRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
             .andPollingInterval(Duration.ofSeconds(5)),
-        true);
+        true,
+        null);
     var fetched = sysdb.findQueue("q-roundtrip").orElseThrow();
 
     assertEquals("q-roundtrip", fetched.name());
@@ -2694,7 +2715,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null, new PollingLimiter(0));
+    return new DbContext(ds, schema, null, () -> false, null, null, new PollingLimiter(0));
   }
 
   @Test

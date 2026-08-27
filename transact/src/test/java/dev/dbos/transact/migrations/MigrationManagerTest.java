@@ -15,6 +15,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -539,14 +540,67 @@ class MigrationManagerTest {
   }
 
   @Test
-  void testGeneratedScriptSkipsEmptyMigrationsButRecordsThem() {
+  void testSharedMigrationsUpgradeADatabaseAtTheEndOfThisLanguagesHistory() throws Exception {
+    var dbosConfig = pgContainer.dbosConfig();
+    MigrationManager.runMigrations(dbosConfig);
+
+    var schema = Constants.DB_SCHEMA;
+    var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
+    assertEquals(107, latest, "The shared history currently ends at migration 107");
+
+    // A database last migrated by a build that predates the shared base: the runner must walk the
+    // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate("UPDATE \"%s\".dbos_migrations SET version = 47".formatted(schema));
+    }
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(latest, getVersion(conn));
+      for (var table :
+          List.of(
+              "workflow_status",
+              "queues",
+              "workflow_schedules",
+              "application_versions",
+              "operation_outputs")) {
+        assertColumnExists(conn, table, "application_name");
+      }
+      if (!PgContainer.USE_COCKROACH_DB) {
+        assertIndexExists(conn, "uq_application_versions_owner_version");
+        assertIndexExists(conn, "uq_application_versions_unclaimed_version");
+      }
+    }
+  }
+
+  @Test
+  void testGeneratedScriptSkipsEmptyMigrations() {
     var schema = Constants.DB_SCHEMA;
     var script = MigrationManager.generateMigrationScript(schema, false, 1);
 
     assertFalse(script.contains("-- Migration 39\n"), "Empty migration 39 emits no SQL");
-    assertTrue(
-        script.contains("SET version = 39;"), "Empty migration 39 still advances the version");
+    assertFalse(
+        script.contains("SET version = 39;"),
+        "Empty migration 39 gets no version write of its own; the next one covers it");
     assertTrue(script.contains("-- Migration 42\n"), "Migration 42 emits SQL");
+    assertTrue(script.contains("SET version = 42;"), "Migration 42 advances the version");
+  }
+
+  @Test
+  void testGeneratedScriptSkipsTheSharedBasePadding() {
+    var schema = Constants.DB_SCHEMA;
+    var script = MigrationManager.generateMigrationScript(schema, true, 1);
+
+    // Indices between this language's own history and SHARED_MIGRATION_BASE are padding: no SQL,
+    // and no version write each, or the script would carry ~50 pointless UPDATEs.
+    assertFalse(script.contains("-- Migration 60\n"), "Padding emits no SQL");
+    assertFalse(script.contains("SET version = 60;"), "Padding emits no version write");
+    assertTrue(script.contains("SET version = 47;"), "The last own-history migration is recorded");
+    assertTrue(
+        script.contains("-- Migration 100\n"),
+        "The shared history resumes at SHARED_MIGRATION_BASE");
+    assertTrue(script.contains("SET version = 107;"), "The last shared migration is recorded");
   }
 
   static void assertIndexExists(Connection conn, String indexName) throws Exception {

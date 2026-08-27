@@ -7,11 +7,14 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.ApplicationRowCounts;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -137,8 +140,35 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       boolean useListenNotify) {
+    this(url, user, password, schema, serializer, useListenNotify, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String applicationName) {
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(url, user, password, schema, serializer, useListenNotify);
+    systemDatabase =
+        new SystemDatabase(
+            url, user, password, schema, serializer, useListenNotify, applicationName);
   }
 
   /**
@@ -171,8 +201,35 @@ public class DBOSClient implements AutoCloseable {
       @NonNull DataSource dataSource,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
+    this(dataSource, schema, serializer, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      @Nullable String applicationName) {
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(dataSource, schema, serializer);
+    systemDatabase = new SystemDatabase(dataSource, schema, serializer, applicationName);
+  }
+
+  /**
+   * The application this client acts on behalf of, or null if it writes unclaimed rows and reads
+   * every application's.
+   */
+  public @Nullable String applicationName() {
+    return systemDatabase.applicationName();
   }
 
   /**
@@ -217,6 +274,9 @@ public class DBOSClient implements AutoCloseable {
    * @param serialization The serialization strategy for workflow arguments. Optional.
    * @param attributes Custom JSON-serializable attributes to attach to the workflow at creation.
    *     Optional.
+   * @param applicationName The application that owns the enqueued workflow, and whose executors
+   *     therefore dequeue and run it. Optional; defaults to the enqueueing application. Set it to
+   *     enqueue work for a peer sharing this system database.
    */
   public record EnqueueOptions(
       @NonNull String workflowName,
@@ -235,7 +295,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String authenticatedUser,
       @Nullable String assumedRole,
       @Nullable List<String> authenticatedRoles,
-      @Nullable Map<String, Object> attributes) {
+      @Nullable Map<String, Object> attributes,
+      @Nullable String applicationName) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -278,6 +339,10 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("delay must be positive, non-zero duration");
       }
 
+      if (nullableIsEmpty(applicationName)) {
+        throw new IllegalArgumentException("applicationName must not be empty");
+      }
+
       authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
 
       attributes = validateAttributes(attributes);
@@ -302,6 +367,7 @@ public class DBOSClient implements AutoCloseable {
           null,
           null,
           null,
+          null,
           null);
     }
 
@@ -312,6 +378,7 @@ public class DBOSClient implements AutoCloseable {
           className,
           null,
           queueName,
+          null,
           null,
           null,
           null,
@@ -351,7 +418,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -379,7 +447,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -407,7 +476,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -435,7 +505,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -463,7 +534,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -491,7 +563,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -519,7 +592,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -546,7 +620,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -575,7 +650,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -603,7 +679,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -633,7 +710,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -660,7 +738,8 @@ public class DBOSClient implements AutoCloseable {
           authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -687,7 +766,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           assumedRole,
           this.authenticatedRoles,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -714,7 +794,8 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -743,7 +824,8 @@ public class DBOSClient implements AutoCloseable {
           authenticatedUser,
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-          this.attributes);
+          this.attributes,
+          this.applicationName);
     }
 
     /**
@@ -772,7 +854,39 @@ public class DBOSClient implements AutoCloseable {
           this.authenticatedUser,
           this.assumedRole,
           this.authenticatedRoles,
-          attributes);
+          attributes,
+          this.applicationName);
+    }
+
+    /**
+     * Specify the application that owns the enqueued workflow. Only executors running that
+     * application dequeue it, so this is how one application enqueues work for a peer sharing its
+     * system database. Left unset, the workflow belongs to the enqueueing application — or to no
+     * application at all, when the enqueuer has no name of its own.
+     *
+     * @param applicationName the owning application, or null for the enqueueing application's
+     * @return New `EnqueueOptions` with the application name set
+     */
+    public @NonNull EnqueueOptions withApplicationName(@Nullable String applicationName) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles,
+          this.attributes,
+          applicationName);
     }
   }
 
@@ -820,6 +934,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         null,
+        options.applicationName(),
         systemDatabase,
         this.serializer);
 
@@ -1019,6 +1134,19 @@ public class DBOSClient implements AutoCloseable {
   public @Nullable String findWorkflowIdByDeduplicationId(
       @NonNull String queueName, @NonNull String deduplicationId) {
     return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
+  }
+
+  /**
+   * As above, with the application owning the holding workflow. The deduplication index is global
+   * across the applications sharing a system database, so the holder may be a peer's.
+   *
+   * @param queueName name of the queue to search
+   * @param deduplicationId deduplication ID to look up
+   * @return the holder, or {@code null} if no active workflow holds that deduplication ID
+   */
+  public @Nullable DeduplicationHolder findDeduplicationHolder(
+      @NonNull String queueName, @NonNull String deduplicationId) {
+    return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
   }
 
   /**
@@ -1272,16 +1400,69 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Re-own a system database's rows after an application is renamed, or adopt the rows no
+   * application owns.
+   *
+   * <p>Stop the application being renamed first: its dequeues claim rows, and would race this.
+   *
+   * @param oldName the application being renamed; null adopts only unclaimed rows
+   * @param newName the application that ends up owning the rows
+   * @param batchSize workflows and steps re-owned per transaction; null moves them all in one
+   *     transaction. A re-run resumes where an interrupted one stopped.
+   * @param adoptUnclaimedRows whether to also take rows no application owns
+   * @return how many rows moved, by table
+   */
+  public @NonNull ApplicationRowCounts renameApplication(
+      @Nullable String oldName,
+      @NonNull String newName,
+      @Nullable Integer batchSize,
+      boolean adoptUnclaimedRows) {
+    return systemDatabase.renameApplication(oldName, newName, batchSize, adoptUnclaimedRows);
+  }
+
+  /**
+   * Re-own a system database's rows after an application is renamed, moving workflows and steps in
+   * batches of {@link ApplicationRenameDAO#DEFAULT_RENAME_BATCH_SIZE}.
+   *
+   * @param oldName the application being renamed; null adopts only unclaimed rows
+   * @param newName the application that ends up owning the rows
+   * @return how many rows moved, by table
+   */
+  public @NonNull ApplicationRowCounts renameApplication(
+      @Nullable String oldName, @NonNull String newName) {
+    return renameApplication(
+        oldName, newName, ApplicationRenameDAO.DEFAULT_RENAME_BATCH_SIZE, false);
+  }
+
+  /**
    * Promote an existing version to be the latest application version by updating its timestamp.
    *
    * @param versionName the version to promote; it must already exist
    */
   public void setLatestApplicationVersion(@NonNull String versionName) {
-    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+    setLatestApplicationVersion(versionName, null);
+  }
+
+  /**
+   * Promote an existing version to be the latest application version, on behalf of an application.
+   *
+   * @param versionName the version to promote; it must already exist
+   * @param applicationName the application to act as; null takes this client's own. Promoting a
+   *     version a different application registered throws {@link
+   *     dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}. Promotion also claims
+   *     an unclaimed version, which would otherwise read as every peer's latest.
+   */
+  public void setLatestApplicationVersion(
+      @NonNull String versionName, @Nullable String applicationName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now(), applicationName);
   }
 
   /**
    * Create a cron schedule. The scheduleId is generated if null.
+   *
+   * <p>{@link WorkflowSchedule#applicationName} names the application that owns the schedule and
+   * runs its workflows, defaulting to this client's own. Leaving both unset creates an unclaimed
+   * schedule, which every application sharing the system database will run.
    *
    * @param schedule the schedule configuration
    */
@@ -1312,6 +1493,20 @@ public class DBOSClient implements AutoCloseable {
       @Nullable List<String> workflowName,
       @Nullable List<String> namePrefix) {
     return systemDatabase.listSchedules(status, workflowName, namePrefix);
+  }
+
+  /**
+   * List schedules owned by the given applications, plus unclaimed ones.
+   *
+   * @param applicationName the applications whose schedules to list. Null lists this client's own
+   *     application's; an empty list covers every application's.
+   */
+  public @NonNull List<WorkflowSchedule> listSchedules(
+      @Nullable List<ScheduleStatus> status,
+      @Nullable List<String> workflowName,
+      @Nullable List<String> namePrefix,
+      @Nullable List<String> applicationName) {
+    return systemDatabase.listSchedules(status, workflowName, namePrefix, applicationName);
   }
 
   /**
@@ -1442,12 +1637,33 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String name,
       @NonNull QueueOptions options,
       @NonNull QueueConflictResolution onConflict) {
+    registerQueue(name, options, onConflict, null);
+  }
+
+  /**
+   * Register a database-backed dynamic queue on behalf of an application.
+   *
+   * @param name Queue name
+   * @param options Configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   * @param applicationName the application that owns this queue and polls it. Null takes this
+   *     client's own application, leaving the queue unclaimed if the client has none. Registering a
+   *     queue a different application already owns throws {@link
+   *     dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}, since a queue name is
+   *     an address shared across the applications on this system database.
+   */
+  public void registerQueue(
+      @NonNull String name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict,
+      @Nullable String applicationName) {
     if (onConflict == QueueConflictResolution.UPDATE_IF_LATEST_VERSION) {
       throw new IllegalArgumentException(
           "DBOSClient.registerQueue does not support UPDATE_IF_LATEST_VERSION because clients are"
               + " not associated with an application version. Use ALWAYS_UPDATE or NEVER_UPDATE.");
     }
-    systemDatabase.upsertQueue(name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE);
+    systemDatabase.upsertQueue(
+        name, options, onConflict == QueueConflictResolution.ALWAYS_UPDATE, applicationName);
   }
 
   /**
@@ -1478,6 +1694,16 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<Queue> listQueues() {
     return systemDatabase.listQueues();
+  }
+
+  /**
+   * List database-backed queues owned by the given applications, plus unclaimed ones.
+   *
+   * @param applicationName the applications whose queues to list. Null lists this client's own
+   *     application's; an empty list covers every application's.
+   */
+  public @NonNull List<Queue> listQueues(@Nullable List<String> applicationName) {
+    return systemDatabase.listQueues(applicationName);
   }
 
   /**

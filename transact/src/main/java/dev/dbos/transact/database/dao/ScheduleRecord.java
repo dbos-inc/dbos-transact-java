@@ -27,7 +27,9 @@ public record ScheduleRecord(
     @Nullable Instant lastFiredAt,
     boolean automaticBackfill,
     @Nullable ZoneId cronTimezone,
-    @Nullable String queueName) {
+    @Nullable String queueName,
+    /** The application that owns this schedule, or null if it is unclaimed. */
+    @Nullable String applicationName) {
 
   public boolean isActive() {
     return status == ScheduleStatus.ACTIVE;
@@ -48,6 +50,7 @@ public record ScheduleRecord(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 }

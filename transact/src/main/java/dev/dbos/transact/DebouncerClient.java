@@ -301,13 +301,20 @@ public final class DebouncerClient<R> {
         return client.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
         // A debouncer for this key is already running — forward the latest args to it.
-        String existingDebouncerId =
-            client.findWorkflowIdByDeduplicationId(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
-        if (existingDebouncerId == null) {
+        var holder = client.findDeduplicationHolder(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+        if (holder == null) {
           logger.debug(
               "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);
           continue;
         }
+        // A peer's debouncer is not ours to extend: it dequeues on that application's account, so
+        // it may never run at all from here, and the retry below would spin forever waiting for an
+        // ack. Surface the collision the way a plain deduplicated enqueue would.
+        if (holder.isForeignTo(client.applicationName())) {
+          throw new DBOSQueueDuplicatedException(
+              userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+        }
+        String existingDebouncerId = holder.workflowId();
 
         DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
         client.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);

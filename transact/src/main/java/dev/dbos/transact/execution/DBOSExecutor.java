@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
@@ -23,10 +24,12 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -192,6 +195,20 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException(msg);
     }
 
+    // Nothing in Transact needs the name to look like anything: it is a bound parameter and a
+    // hash input, never an identifier. Conductor does -- it addresses the application by name in
+    // its websocket URL, and neither it nor DBOS Cloud registers a name outside their rule. So an
+    // application that is about to connect cannot usefully launch, while a self-hosted one is told
+    // and left alone; rejecting that one would break applications already running under such a
+    // name for no reason Transact can point at.
+    if (!Validation.isValidApplicationName(appName)) {
+      var msg = Validation.applicationNameNotAcceptedByConductor("application name", appName);
+      if (dbosCloud || config.conductorKey() != null) {
+        throw new IllegalArgumentException(msg);
+      }
+      logger.warn(msg);
+    }
+
     if (!dbosCloud) {
       if (config.enablePatching()) {
         appVersion = "PATCHING_ENABLED";
@@ -228,8 +245,12 @@ public class DBOSExecutor implements AutoCloseable {
       this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
+        // The resolved name, not config.appName(): on DBOS Cloud the executor takes its name
+        // from DBOS_APP_NAME, and the version hash must key on the same identity that owns the
+        // rows and that the peer-ownership checks compare against.
         this.appVersion =
-            AppVersionComputer.computeAppVersion(DBOS.version(), workflowMap.values());
+            AppVersionComputer.computeAppVersion(
+                DBOS.version(), this.appName, workflowMap.values());
       }
 
       if (config.conductorKey() != null) {
@@ -261,10 +282,10 @@ public class DBOSExecutor implements AutoCloseable {
       executorService = executorServiceSupplier.get();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
-      systemDatabase = SystemDatabase.create(config, this.executorId);
+      systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
 
-      systemDatabase.createApplicationVersion(this.appVersion);
+      systemDatabase.createApplicationVersion(this.appVersion, null);
       var latest = systemDatabase.getLatestApplicationVersion();
       if (!latest.versionName().equals(this.appVersion)) {
         logger.warn(
@@ -426,6 +447,11 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
   }
 
+  public @Nullable DeduplicationHolder findDeduplicationHolder(
+      String queueName, String deduplicationId) {
+    return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
+  }
+
   QueueService getQueueService() {
     return queueService;
   }
@@ -497,7 +523,8 @@ public class DBOSExecutor implements AutoCloseable {
           case UPDATE_IF_LATEST_VERSION ->
               appVersion.equals(systemDatabase.getLatestApplicationVersion().versionName());
         };
-    systemDatabase.upsertQueue(name, options, updateExisting);
+    // A runtime registers queues for itself: it is the process that will poll them.
+    systemDatabase.upsertQueue(name, options, updateExisting, null);
   }
 
   public void updateDynamicQueue(String name, QueueOptions options) {
@@ -514,6 +541,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<Queue> listDynamicQueues() {
     return systemDatabase.listQueues();
+  }
+
+  public List<Queue> listDynamicQueues(@Nullable List<String> applicationName) {
+    return systemDatabase.listQueues(applicationName);
   }
 
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
@@ -835,7 +866,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void setLatestApplicationVersion(String versionName) {
-    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now(), null);
   }
 
   public void createSchedule(@NonNull WorkflowSchedule schedule) {
@@ -860,8 +891,16 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
+    return listSchedules(statuses, workflowNames, namePrefixes, null);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> namePrefixes,
+      @Nullable List<String> applicationNames) {
     return this.runDbosFunctionAsStep(
-        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
+        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes, applicationNames),
         "DBOS.listSchedules",
         null);
   }
@@ -1044,6 +1083,7 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         null,
+        null, // applicationName: this executor's own
         systemDatabase,
         serializer);
   }
@@ -1539,6 +1579,93 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
+  /**
+   * Enqueue a workflow by name, without a reference to its function. The target may live in another
+   * process or another language, so nothing here consults the local workflow registry and nothing
+   * validates the queue against it.
+   *
+   * <p>Safe to call from inside a workflow: the enqueued workflow is recorded as a child, so a
+   * replay after a crash returns a handle to the original rather than enqueueing a second one.
+   *
+   * <p>Unlike {@link #startRegisteredWorkflow}, the application version is left unset unless the
+   * caller gives one. An unset version is only dequeued by an executor running the owning
+   * application's latest registered version.
+   */
+  public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
+      DBOSClient.EnqueueOptions options,
+      Object[] positionalArgs,
+      Map<String, Object> namedArgs,
+      String serializationFormat) {
+
+    Objects.requireNonNull(options, "options must not be null");
+    if (options.timeout() != null && options.deadline() != null) {
+      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
+    }
+
+    var ctx = DBOSContextHolder.get();
+    // Throws if called from a step, and takes the caller's next function ID when in a workflow.
+    var parent = getParent(ctx);
+    // In a workflow the derived ID makes a crash-replay collide with the original enqueue rather
+    // than enqueueing a second workflow.
+    var childWorkflowId =
+        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    var workflowId =
+        Objects.requireNonNullElseGet(
+            options.workflowId(),
+            () ->
+                Objects.requireNonNullElseGet(
+                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+
+    if (parent != null) {
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      if (childId.isPresent()) {
+        return retrieveWorkflow(childId.get());
+      }
+    }
+
+    // Without an explicit timeout, inherit an ambient one, else the parent's propagated deadline.
+    // Timeout.of(null) is Timeout.none(), which is an explicit "no timeout" that clears the
+    // parent's deadline; only a null Timeout falls through to what the context already carries.
+    var td =
+        ctx.resolveTimeoutAndDeadline(
+            options.timeout() != null ? Timeout.of(options.timeout()) : null, options.deadline());
+    var execOptions =
+        new ExecutionOptions(workflowId)
+            .withOptions(options)
+            .withTimeout(td.timeout())
+            .withDeadline(td.deadline())
+            .withSerialization(serializationFormat)
+            .withAuthenticatedUser(
+                options.authenticatedUser() != null
+                    ? options.authenticatedUser()
+                    : ctx.resolveNextAuthenticatedUser())
+            .withAssumedRole(
+                options.assumedRole() != null
+                    ? options.assumedRole()
+                    : ctx.resolveNextAssumedRole())
+            .withAuthenticatedRoles(
+                options.authenticatedRoles() != null
+                    ? options.authenticatedRoles()
+                    : ctx.resolveNextAuthenticatedRoles());
+
+    enqueueWorkflow(
+        options.workflowName(),
+        options.className(),
+        options.instanceName(),
+        null, // maxRetries
+        positionalArgs,
+        namedArgs,
+        execOptions,
+        parent,
+        executorId(),
+        appId(),
+        options.applicationName(),
+        systemDatabase,
+        this.serializer);
+
+    return new WorkflowHandleDBPoll<>(this, workflowId);
+  }
+
   // run an existing workflow via its workflow ID
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
       String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
@@ -1712,6 +1839,7 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           executorId(),
           appId(),
+          null, // applicationName: this executor's own
           systemDatabase,
           this.serializer);
       return new WorkflowHandleDBPoll<>(this, workflowId);
@@ -1757,6 +1885,7 @@ public class DBOSExecutor implements AutoCloseable {
             appId(),
             parent,
             options,
+            null, // applicationName: this executor's own
             this.serializer);
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
@@ -1916,6 +2045,7 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       String executorId,
       String appId,
+      @Nullable String applicationName,
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
 
@@ -1950,6 +2080,7 @@ public class DBOSExecutor implements AutoCloseable {
           appId,
           parent,
           options,
+          applicationName,
           serializer);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
@@ -1979,6 +2110,7 @@ public class DBOSExecutor implements AutoCloseable {
       String appId,
       WorkflowInfo parentWorkflow,
       ExecutionOptions options,
+      @Nullable String applicationName,
       DBOSSerializer serializer) {
 
     // Serialize inputs using the specified serialization format
@@ -2021,7 +2153,8 @@ public class DBOSExecutor implements AutoCloseable {
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization,
             options.attributes(),
-            options.scheduleName());
+            options.scheduleName(),
+            applicationName);
 
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
@@ -2096,6 +2229,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             serializedArgs.serialization(),
+            null,
             null,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());

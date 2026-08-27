@@ -18,7 +18,14 @@ public record Queue(
     boolean priorityEnabled,
     boolean partitioningEnabled,
     @Nullable RateLimit rateLimit,
-    @NonNull Duration pollingInterval) {
+    @NonNull Duration pollingInterval,
+    /**
+     * The application that owns this queue and polls it, as recorded in the system database, or
+     * null if the queue is unclaimed and so belongs to every application sharing it. Set by the
+     * database when a queue is read back; ignored when registering one, which always records the
+     * registering application.
+     */
+    @Nullable String applicationName) {
 
   public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(1);
 
@@ -40,7 +47,7 @@ public record Queue(
 
   /** Construct a queue with a given name */
   public Queue(@NonNull String name) {
-    this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL);
+    this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL, null);
   }
 
   /**
@@ -59,7 +66,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /**
@@ -74,7 +82,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /**
@@ -89,7 +98,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /** Produces a new Queue with the prioritization enabled/disabled. */
@@ -101,7 +111,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /** Produces a new Queue with the partitioned enabled/disabled. */
@@ -113,7 +124,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /**
@@ -128,7 +140,8 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 
   /**
@@ -152,6 +165,7 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval);
+        pollingInterval,
+        applicationName);
   }
 }

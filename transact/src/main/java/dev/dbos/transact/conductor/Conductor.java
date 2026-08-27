@@ -1080,7 +1080,8 @@ public class Conductor implements AutoCloseable {
           try {
             if (request.metric_class.equals("workflow_step_count")) {
               var metrics =
-                  conductor.systemDatabase.getMetrics(request.startTime(), request.endTime());
+                  conductor.systemDatabase.getMetrics(
+                      request.startTime(), request.endTime(), request.application_name);
               return new GetMetricsResponse(request, metrics);
             } else {
               logger.warn("Unexpected metric class {}", request.metric_class);
@@ -1416,7 +1417,10 @@ public class Conductor implements AutoCloseable {
           try {
             List<WorkflowSchedule> schedules =
                 conductor.systemDatabase.listSchedules(
-                    request.statuses(), request.workflowNames(), request.scheduleNamePrefixes());
+                    request.statuses(),
+                    request.workflowNames(),
+                    request.scheduleNamePrefixes(),
+                    request.applicationName());
             boolean loadContext = request.loadContext();
             List<ScheduleOutput> output =
                 schedules.stream().map(s -> ScheduleOutput.from(s, loadContext)).toList();
@@ -1453,7 +1457,7 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-            List<Queue> queues = conductor.systemDatabase.listQueues();
+            List<Queue> queues = conductor.systemDatabase.listQueues(request.applicationName());
             List<QueueOutput> output = queues.stream().map(QueueOutput::from).toList();
             return new ListQueuesResponse(request, output);
           } catch (Exception e) {

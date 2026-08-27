@@ -10,7 +10,7 @@ import picocli.CommandLine.IVersionProvider;
     name = "dbos",
     description = "DBOS CLI is a command-line interface for managing the DBOS system database",
     mixinStandardHelpOptions = true,
-    subcommands = {MigrateCommand.class, ResetCommand.class},
+    subcommands = {MigrateCommand.class, RenameApplicationCommand.class, ResetCommand.class},
     versionProvider = DBOSCommand.class)
 public class DBOSCommand implements Runnable, IVersionProvider {
 

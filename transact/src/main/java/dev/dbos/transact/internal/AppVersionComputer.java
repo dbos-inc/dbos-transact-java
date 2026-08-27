@@ -18,11 +18,16 @@ public class AppVersionComputer {
 
   private static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
 
+  /**
+   * The application name is hashed in alongside the workflow source, so two applications built from
+   * one jar and sharing a system database do not collide on a single version row.
+   */
   public static String computeAppVersion(
-      String dbosVersion, Collection<RegisteredWorkflow> workflows) {
+      String dbosVersion, String appName, Collection<RegisteredWorkflow> workflows) {
     try {
       final var hasher = MessageDigest.getInstance("SHA-256");
       hasher.update(dbosVersion.getBytes(StandardCharsets.UTF_8));
+      hasher.update(appName.getBytes(StandardCharsets.UTF_8));
 
       var workflowIterator =
           workflows.stream()
@@ -48,7 +53,9 @@ public class AppVersionComputer {
       return HexFormat.of().formatHex(hasher.digest());
     } catch (Exception e) {
       logger.warn("Failed to compute app version", e);
-      return "unknown-" + System.currentTimeMillis();
+      // Name-qualified, so peers sharing a system database that cannot read their own bytecode do
+      // not converge on one version_name, which is still globally unique.
+      return "unknown-" + appName + "-" + System.currentTimeMillis();
     }
   }
 

@@ -18,7 +18,17 @@ public record WorkflowSchedule(
     @Nullable Instant lastFiredAt,
     boolean automaticBackfill,
     @Nullable ZoneId cronTimezone,
-    @Nullable String queueName) {
+    @Nullable String queueName,
+    /**
+     * The application that owns this schedule and runs its workflows, as recorded in the system
+     * database, or null if the schedule is unclaimed and so is run by every application sharing it.
+     * Set by the database when a schedule is read back. When creating or applying one, this names
+     * the application to record as the owner -- null records the creating application, and a name a
+     * different application already holds raises {@link
+     * dev.dbos.transact.exceptions.DBOSApplicationNameConflictException}. It is how a client
+     * creates a schedule that another application will run.
+     */
+    @Nullable String applicationName) {
 
   public WorkflowSchedule {
     Objects.requireNonNull(scheduleName, "scheduleName must not be null");
@@ -45,6 +55,7 @@ public record WorkflowSchedule(
         null,
         false,
         null,
+        null,
         null);
   }
 
@@ -64,7 +75,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withScheduleName(@NonNull String value) {
@@ -79,7 +91,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withWorkflowName(@NonNull String value) {
@@ -94,7 +107,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withClassName(@NonNull String value) {
@@ -109,7 +123,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withCron(@NonNull String value) {
@@ -124,7 +139,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withStatus(ScheduleStatus value) {
@@ -139,7 +155,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withContext(@Nullable Object value) {
@@ -154,7 +171,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withLastFiredAt(Instant value) {
@@ -169,7 +187,8 @@ public record WorkflowSchedule(
         value,
         automaticBackfill,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withAutomaticBackfill(boolean value) {
@@ -184,7 +203,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         value,
         cronTimezone,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withCronTimezone(@Nullable ZoneId value) {
@@ -199,7 +219,8 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         value,
-        queueName);
+        queueName,
+        applicationName);
   }
 
   public WorkflowSchedule withQueueName(@Nullable String value) {
@@ -214,6 +235,28 @@ public record WorkflowSchedule(
         lastFiredAt,
         automaticBackfill,
         cronTimezone,
+        value,
+        applicationName);
+  }
+
+  /**
+   * The application that owns this schedule and runs its workflows. Null takes the application of
+   * the handle that creates it; a nameless handle creating an unnamed schedule leaves it unclaimed,
+   * and every application sharing the system database will run it.
+   */
+  public WorkflowSchedule withApplicationName(@Nullable String value) {
+    return new WorkflowSchedule(
+        id,
+        scheduleName,
+        workflowName,
+        className,
+        cron,
+        status,
+        context,
+        lastFiredAt,
+        automaticBackfill,
+        cronTimezone,
+        queueName,
         value);
   }
 }

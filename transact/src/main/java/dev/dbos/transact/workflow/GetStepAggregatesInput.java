@@ -28,7 +28,12 @@ public record GetStepAggregatesInput(
     List<String> functionName,
     List<String> workflowIdPrefix,
     Instant completedAfter,
-    Instant completedBefore) {
+    Instant completedBefore,
+    /**
+     * Aggregate only steps owned by these applications, plus unclaimed ones. Unset covers this
+     * application's own; explicitly empty covers every application's.
+     */
+    List<String> applicationName) {
 
   public GetStepAggregatesInput {
     if (timeBucketSize != null && (timeBucketSize.isNegative() || timeBucketSize.isZero())) {
@@ -37,7 +42,7 @@ public record GetStepAggregatesInput(
   }
 
   public GetStepAggregatesInput() {
-    this(false, false, true, false, null, null, null, null, null, null);
+    this(false, false, true, false, null, null, null, null, null, null, null);
   }
 
   public GetStepAggregatesInput withGroupByFunctionName(boolean groupByFunctionName) {
@@ -51,7 +56,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withGroupByStatus(boolean groupByStatus) {
@@ -65,7 +71,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withSelectCount(boolean selectCount) {
@@ -79,7 +86,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withSelectMaxDuration(boolean selectMaxDuration) {
@@ -93,7 +101,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withTimeBucketSize(Duration timeBucketSize) {
@@ -107,7 +116,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withStatus(List<String> status) {
@@ -121,7 +131,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withStatus(String... status) {
@@ -139,7 +150,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -153,7 +165,8 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withCompletedAfter(Instant completedAfter) {
@@ -167,7 +180,23 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
+  }
+
+  public GetStepAggregatesInput withApplicationName(List<String> applicationName) {
+    return new GetStepAggregatesInput(
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDuration,
+        timeBucketSize,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore,
+        applicationName);
   }
 
   public GetStepAggregatesInput withCompletedBefore(Instant completedBefore) {
@@ -181,6 +210,7 @@ public record GetStepAggregatesInput(
         functionName,
         workflowIdPrefix,
         completedAfter,
-        completedBefore);
+        completedBefore,
+        applicationName);
   }
 }

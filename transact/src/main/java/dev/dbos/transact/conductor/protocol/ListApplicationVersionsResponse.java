@@ -7,13 +7,18 @@ import java.util.List;
 
 public class ListApplicationVersionsResponse extends BaseResponse {
   public record AppVersionInfo(
-      String version_id, String version_name, long version_timestamp, long created_at) {
+      String version_id,
+      String version_name,
+      long version_timestamp,
+      long created_at,
+      String application_name) {
     public static AppVersionInfo fromVersionInfo(VersionInfo v) {
       return new AppVersionInfo(
           v.versionId(),
           v.versionName(),
           v.versionTimestamp().toEpochMilli(),
-          v.createdAt().toEpochMilli());
+          v.createdAt().toEpochMilli(),
+          v.applicationName());
     }
   }
 

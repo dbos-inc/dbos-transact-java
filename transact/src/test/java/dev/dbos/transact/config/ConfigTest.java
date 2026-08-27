@@ -13,12 +13,14 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -138,6 +140,31 @@ public class ConfigTest {
     }
   }
 
+  /**
+   * Conductor addresses an application by name in its websocket URL, and neither it nor DBOS Cloud
+   * registers a name outside their rule, so an application about to connect is stopped at launch
+   * rather than left to fail against the remote.
+   */
+  @Test
+  public void cantUseConductorWithANameItWouldReject() {
+    var config = pgContainer.dbosConfig("MyApp").withConductorKey("test-conductor-key");
+    try (var dbos = new DBOS(config)) {
+      assertThrows(IllegalArgumentException.class, () -> dbos.launch());
+    }
+  }
+
+  /** Without Conductor nothing needs the name to look like anything, so launch only warns. */
+  @Test
+  public void aNameConductorWouldRejectLaunchesWithoutConductor() {
+    var dbos = new DBOS(pgContainer.dbosConfig("MyApp"));
+    try {
+      assertDoesNotThrow(() -> dbos.launch());
+      assertEquals("MyApp", DBOSTestAccess.getDbosExecutor(dbos).appName());
+    } finally {
+      dbos.shutdown();
+    }
+  }
+
   @Test
   public void cantSetExecutorIdWhenUsingConductor() throws Exception {
     var config =
@@ -148,6 +175,28 @@ public class ConfigTest {
 
     try (var dbos = new DBOS(config)) {
       assertThrows(IllegalArgumentException.class, () -> dbos.launch());
+    }
+  }
+
+  /**
+   * DBOS Conductor and DBOS Cloud accept only this shape of application name at registration (their
+   * isValidApplicationName validator, which Python mirrors in _is_valid_app_name).
+   *
+   * <p>Transact itself needs nothing of the sort -- the column is TEXT, the value is always a bound
+   * parameter, and the version hash digests the bytes -- so Java classifies a name without
+   * rejecting one. An application that never registers with Conductor can be called anything, and
+   * Go, TypeScript, and dbosctl do not check at all. The executor warns once at startup instead.
+   */
+  @Test
+  public void appNameConductorWouldRejectIsRecognizedButNotRejected() {
+    for (var name : List.of("abc", "my-app_2", "a".repeat(30))) {
+      assertTrue(Validation.isValidApplicationName(name), name);
+      assertDoesNotThrow(() -> DBOSConfig.defaults(name));
+    }
+
+    for (var name : List.of("ab", "a".repeat(31), "MyApp", "my app", "my.app")) {
+      assertFalse(Validation.isValidApplicationName(name), name);
+      assertDoesNotThrow(() -> DBOSConfig.defaults(name));
     }
   }
 
@@ -182,7 +231,7 @@ public class ConfigTest {
           assertDoesNotThrow(
               () ->
                   AppVersionComputer.computeAppVersion(
-                      DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+                      DBOS.version(), config.appName(), dbosExecutor.getRegisteredWorkflows()));
       assertFalse(version.startsWith("unknown"));
       assertEquals(version, dbosExecutor.appVersion());
     }
@@ -200,7 +249,9 @@ public class ConfigTest {
           assertDoesNotThrow(
               () ->
                   AppVersionComputer.computeAppVersion(
-                      "foo" + DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+                      "foo" + DBOS.version(),
+                      config.appName(),
+                      dbosExecutor.getRegisteredWorkflows()));
       assertFalse(version.startsWith("unknown"));
       assertNotEquals(version, dbosExecutor.appVersion());
     }

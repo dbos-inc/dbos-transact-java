@@ -21,6 +21,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
     public boolean group_by_queue_name;
     public boolean group_by_executor_id;
     public boolean group_by_application_version;
+    public boolean group_by_application_name;
     // select metric flags
     public Boolean select_count;
     public Boolean select_min_created_at;
@@ -38,6 +39,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
     public String dequeued_before;
     public List<String> name;
     public List<String> app_version;
+    public List<String> application_name;
     public List<String> executor_id;
     public List<String> queue_name;
     public List<String> workflow_id_prefix;
@@ -61,6 +63,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         body.group_by_queue_name,
         body.group_by_executor_id,
         body.group_by_application_version,
+        body.group_by_application_name,
         selectCount,
         Boolean.TRUE.equals(body.select_min_created_at),
         Boolean.TRUE.equals(body.select_max_queue_wait_ms),
@@ -71,6 +74,7 @@ public class GetWorkflowAggregatesRequest extends BaseMessage {
         body.queue_name,
         body.executor_id,
         body.app_version,
+        body.application_name,
         body.workflow_id_prefix,
         body.start_time != null ? Instant.parse(body.start_time) : null,
         body.end_time != null ? Instant.parse(body.end_time) : null,

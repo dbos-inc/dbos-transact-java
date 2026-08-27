@@ -38,6 +38,7 @@ public class WorkflowsOutput {
   public String CompletedAt;
   public String Attributes;
   public String ScheduleName;
+  public String ApplicationName;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -84,5 +85,6 @@ public class WorkflowsOutput {
     // JSON rather than toString() so the wire format is parseable by Conductor
     this.Attributes = status.attributes() != null ? JsonUtility.toJson(status.attributes()) : null;
     this.ScheduleName = status.scheduleName();
+    this.ApplicationName = status.applicationName();
   }
 }

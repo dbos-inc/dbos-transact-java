@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -420,7 +421,8 @@ public class ConductorTest {
         stringBuilder.append(characters.charAt(random.nextInt(characters.length())));
       }
       steps.add(
-          new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
+          new StepInfo(
+              i, "function" + i, stringBuilder.toString(), null, null, null, null, null, null));
     }
     when(mockExec.listWorkflowSteps("large-wf", true, null, null)).thenReturn(steps);
 
@@ -1221,7 +1223,8 @@ public class ConductorTest {
     Instant t2 = Instant.ofEpochMilli(2000L);
     List<VersionInfo> versions =
         List.of(
-            new VersionInfo("id-2", "v2.0.0", t2, t1), new VersionInfo("id-1", "v1.0.0", t1, t1));
+            new VersionInfo("id-2", "v2.0.0", t2, t1, null),
+            new VersionInfo("id-1", "v1.0.0", t1, t1, null));
     when(mockDB.listApplicationVersions()).thenReturn(versions);
 
     try (Conductor conductor = builder.build()) {
@@ -1853,11 +1856,11 @@ public class ConductorTest {
     String workflowId = "workflow-id-1";
 
     List<StepInfo> steps = new ArrayList<>();
-    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null));
-    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null));
-    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null));
-    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
-    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
+    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null, null));
+    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId, null, null, null)).thenReturn(steps);
 
@@ -1882,7 +1885,7 @@ public class ConductorTest {
     String workflowId = "workflow-id-1";
 
     List<StepInfo> steps = new ArrayList<>();
-    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null));
+    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId, false, 10, 5)).thenReturn(steps);
 
@@ -2070,7 +2073,7 @@ public class ConductorTest {
     var m4 = new MetricData("step_count", "step-one", 10);
     var m5 = new MetricData("step_count", "step-two", 10);
     var m6 = new MetricData("step_count", "step-three", 10);
-    when(mockDB.getMetrics(any(), any())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
+    when(mockDB.getMetrics(any(), any(), isNull())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2087,7 +2090,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getMetrics(start, end);
+      verify(mockDB).getMetrics(start, end, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2116,7 +2119,7 @@ public class ConductorTest {
     var start = Instant.now().minusSeconds(60 * 10);
     var end = start.plusSeconds(60);
     String errorMessage = "canGetMetricsThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any());
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any(), isNull());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2133,7 +2136,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getMetrics(start, end);
+      verify(mockDB).getMetrics(start, end, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2166,7 +2169,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB, never()).getMetrics(any(), any());
+      verify(mockDB, never()).getMetrics(any(), any(), isNull());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2521,6 +2524,7 @@ public class ConductorTest {
               null,
               now.plus(Duration.ofSeconds(i)),
               now.plus(Duration.ofSeconds(i + 1)),
+              null,
               null));
     }
 
@@ -2737,6 +2741,7 @@ public class ConductorTest {
                 Instant.now(),
                 false,
                 null,
+                null,
                 null),
             new dev.dbos.transact.workflow.WorkflowSchedule(
                 "sched-2",
@@ -2749,8 +2754,9 @@ public class ConductorTest {
                 null,
                 true,
                 null,
-                "queue-1"));
-    when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
+                "queue-1",
+                null));
+    when(mockDB.listSchedules(any(), any(), any(), any())).thenReturn(schedules);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2762,7 +2768,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).listSchedules(null, null, null);
+      verify(mockDB).listSchedules(null, null, null, null);
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").stringValue());
@@ -2799,8 +2805,9 @@ public class ConductorTest {
                 Instant.now(),
                 false,
                 null,
+                null,
                 null));
-    when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
+    when(mockDB.listSchedules(any(), any(), any(), any())).thenReturn(schedules);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2821,7 +2828,8 @@ public class ConductorTest {
           .listSchedules(
               eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE)),
               eq(List.of("TestWorkflow")),
-              eq(List.of("schedule")));
+              eq(List.of("schedule")),
+              eq(null));
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").stringValue());
@@ -2835,7 +2843,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.listSchedules(any(), any(), any())).thenReturn(List.of());
+    when(mockDB.listSchedules(any(), any(), any(), any())).thenReturn(List.of());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2854,6 +2862,7 @@ public class ConductorTest {
                       dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
                       dev.dbos.transact.workflow.ScheduleStatus.PAUSED)),
               eq(null),
+              eq(null),
               eq(null));
 
       JsonNode json = mapper.readTree(listener.message);
@@ -2867,7 +2876,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.listSchedules(any(), any(), any())).thenReturn(List.of());
+    when(mockDB.listSchedules(any(), any(), any(), any())).thenReturn(List.of());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2884,7 +2893,10 @@ public class ConductorTest {
 
       verify(mockDB)
           .listSchedules(
-              eq(null), eq(List.of("WorkflowA", "WorkflowB")), eq(List.of("prefix1-", "prefix2-")));
+              eq(null),
+              eq(List.of("WorkflowA", "WorkflowB")),
+              eq(List.of("prefix1-", "prefix2-")),
+              eq(null));
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").stringValue());
@@ -2908,6 +2920,7 @@ public class ConductorTest {
             null,
             Instant.now(),
             false,
+            null,
             null,
             null);
     when(mockDB.getSchedule("schedule-1")).thenReturn(Optional.of(schedule));
@@ -3073,10 +3086,11 @@ public class ConductorTest {
             Instant.now(),
             false,
             null,
+            null,
             null);
     when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
-        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now(), null));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -3124,10 +3138,11 @@ public class ConductorTest {
             Instant.now(),
             false,
             null,
+            null,
             null);
     when(mockDB.getSchedule("hourly-sched")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
-        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now(), null));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -3206,10 +3221,11 @@ public class ConductorTest {
             Instant.now(),
             false,
             null,
+            null,
             null);
     when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
-        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now(), null));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -3697,7 +3713,7 @@ public class ConductorTest {
             .withPartitioningEnabled(true)
             .withPollingInterval(Duration.ofMillis(500));
     dev.dbos.transact.workflow.Queue q2 = new dev.dbos.transact.workflow.Queue("queue-2");
-    when(mockDB.listQueues()).thenReturn(List.of(q1, q2));
+    when(mockDB.listQueues(any())).thenReturn(List.of(q1, q2));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -3706,7 +3722,7 @@ public class ConductorTest {
       listener.send(MessageType.LIST_QUEUES, "req-list-queues", Map.of());
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).listQueues();
+      verify(mockDB).listQueues(null);
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_queues", json.get("type").stringValue());
@@ -3746,7 +3762,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canListQueuesThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).listQueues();
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).listQueues(any());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

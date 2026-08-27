@@ -40,7 +40,7 @@ public class ImportExportTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
-    sysdb = SystemDatabase.create(dbosConfig);
+    sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
   }
 
@@ -128,6 +128,7 @@ public class ImportExportTest {
                 null,
                 Instant.ofEpochMilli(1000),
                 Instant.ofEpochMilli(2000),
+                null,
                 null),
             new StepInfo(
                 1,
@@ -137,6 +138,7 @@ public class ImportExportTest {
                 null,
                 Instant.ofEpochMilli(2000),
                 Instant.ofEpochMilli(3000),
+                null,
                 null));
 
     var events =

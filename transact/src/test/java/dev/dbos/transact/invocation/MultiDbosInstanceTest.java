@@ -55,7 +55,7 @@ public class MultiDbosInstanceTest {
 
   @BeforeEach
   void beforeEachTest() throws Exception {
-    var dbosConfigA = pgContainerA.dbosConfig("MultiDbosInstanceTestA");
+    var dbosConfigA = pgContainerA.dbosConfig("multi-dbos-instance-test-a");
     dbosA = new DBOS(dbosConfigA);
     dataSourceA = pgContainerA.dataSource();
     implA = new TestServiceImpl(dbosA);
@@ -64,7 +64,7 @@ public class MultiDbosInstanceTest {
     dbosA.registerQueue(queueA);
     dbosA.launch();
 
-    var dbosConfigB = pgContainerB.dbosConfig("MultiDbosInstanceTestB");
+    var dbosConfigB = pgContainerB.dbosConfig("multi-dbos-instance-test-b");
     dbosB = new DBOS(dbosConfigB);
     dataSourceB = pgContainerB.dataSource();
     implB = new TestServiceImpl(dbosB);
