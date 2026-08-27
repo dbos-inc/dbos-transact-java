@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -2072,7 +2073,7 @@ public class ConductorTest {
     var m4 = new MetricData("step_count", "step-one", 10);
     var m5 = new MetricData("step_count", "step-two", 10);
     var m6 = new MetricData("step_count", "step-three", 10);
-    when(mockDB.getMetrics(any(), any(), null)).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
+    when(mockDB.getMetrics(any(), any(), isNull())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2118,7 +2119,7 @@ public class ConductorTest {
     var start = Instant.now().minusSeconds(60 * 10);
     var end = start.plusSeconds(60);
     String errorMessage = "canGetMetricsThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any(), null);
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any(), isNull());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2168,7 +2169,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB, never()).getMetrics(any(), any(), null);
+      verify(mockDB, never()).getMetrics(any(), any(), isNull());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
