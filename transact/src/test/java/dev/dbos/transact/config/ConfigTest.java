@@ -151,6 +151,23 @@ public class ConfigTest {
     }
   }
 
+  /**
+   * The application name is durable, cross-language identity, so it has to be a name every SDK
+   * could hold. Python's rule (_dbos_config.py:562) is the one every peer already enforces.
+   */
+  @Test
+  public void appNameMustBeAdoptableByEveryLanguage() {
+    assertDoesNotThrow(() -> DBOSConfig.defaults("abc"));
+    assertDoesNotThrow(() -> DBOSConfig.defaults("my-app_2"));
+    assertDoesNotThrow(() -> DBOSConfig.defaults("a".repeat(30)));
+
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("ab"));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("a".repeat(31)));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("MyApp"));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("my app"));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults("my.app"));
+  }
+
   @Test
   public void cantSetEmptyConfigFields() throws Exception {
     assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults(null));

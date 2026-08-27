@@ -53,7 +53,9 @@ public class AppVersionComputer {
       return HexFormat.of().formatHex(hasher.digest());
     } catch (Exception e) {
       logger.warn("Failed to compute app version", e);
-      return "unknown-" + System.currentTimeMillis();
+      // Name-qualified, so peers sharing a system database that cannot read their own bytecode do
+      // not converge on one version_name, which is still globally unique.
+      return "unknown-" + appName + "-" + System.currentTimeMillis();
     }
   }
 

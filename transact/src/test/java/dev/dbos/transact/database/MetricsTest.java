@@ -75,7 +75,7 @@ public class MetricsTest {
 
       // Query metrics
       var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-      var metrics = sysdb.getMetrics(start, end);
+      var metrics = sysdb.getMetrics(start, end, null);
       assertEquals(4, metrics.size());
 
       // Convert to map for easier assertion

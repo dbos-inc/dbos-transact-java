@@ -2072,7 +2072,7 @@ public class ConductorTest {
     var m4 = new MetricData("step_count", "step-one", 10);
     var m5 = new MetricData("step_count", "step-two", 10);
     var m6 = new MetricData("step_count", "step-three", 10);
-    when(mockDB.getMetrics(any(), any())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
+    when(mockDB.getMetrics(any(), any(), null)).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2089,7 +2089,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getMetrics(start, end);
+      verify(mockDB).getMetrics(start, end, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2118,7 +2118,7 @@ public class ConductorTest {
     var start = Instant.now().minusSeconds(60 * 10);
     var end = start.plusSeconds(60);
     String errorMessage = "canGetMetricsThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any());
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any(), null);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2135,7 +2135,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getMetrics(start, end);
+      verify(mockDB).getMetrics(start, end, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2168,7 +2168,7 @@ public class ConductorTest {
       listener.send(MessageType.GET_METRICS, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB, never()).getMetrics(any(), any());
+      verify(mockDB, never()).getMetrics(any(), any(), null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

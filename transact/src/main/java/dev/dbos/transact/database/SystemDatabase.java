@@ -814,8 +814,9 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ExternalStateDAO.upsertExternalState(ctx, state));
   }
 
-  public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
-    return dbRetry(() -> WorkflowDAO.getMetrics(ctx, startTime, endTime));
+  public List<MetricData> getMetrics(
+      Instant startTime, Instant endTime, @Nullable List<String> applicationName) {
+    return dbRetry(() -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {

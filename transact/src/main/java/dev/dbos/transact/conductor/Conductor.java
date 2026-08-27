@@ -1080,7 +1080,8 @@ public class Conductor implements AutoCloseable {
           try {
             if (request.metric_class.equals("workflow_step_count")) {
               var metrics =
-                  conductor.systemDatabase.getMetrics(request.startTime(), request.endTime());
+                  conductor.systemDatabase.getMetrics(
+                      request.startTime(), request.endTime(), request.application_name);
               return new GetMetricsResponse(request, metrics);
             } else {
               logger.warn("Unexpected metric class {}", request.metric_class);

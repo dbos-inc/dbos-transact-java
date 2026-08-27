@@ -2083,12 +2083,21 @@ public class WorkflowDAO {
     }
   }
 
-  public static List<MetricData> getMetrics(DbContext ctx, Instant startTime, Instant endTime)
+  /**
+   * @param applicationName count only workflows and steps owned by these applications, plus
+   *     unclaimed ones. Null counts this application's own; an explicitly empty list covers every
+   *     application's.
+   */
+  public static List<MetricData> getMetrics(
+      DbContext ctx, Instant startTime, Instant endTime, @Nullable List<String> applicationName)
       throws SQLException {
     final var start = Objects.requireNonNull(startTime).toEpochMilli();
     final var end = Objects.requireNonNull(endTime).toEpochMilli();
     logger.debug("getMetrics {} {}", start, end);
     List<MetricData> metrics = new ArrayList<>();
+    final var names = ctx.scopeNames(applicationName);
+    final var scope =
+        names == null ? "" : " AND (application_name = ANY(?) OR application_name IS NULL)";
     final var wfSQL =
         """
           SELECT name, COUNT(workflow_uuid) as count
@@ -2096,7 +2105,7 @@ public class WorkflowDAO {
           WHERE created_at >= ? AND created_at < ?
         """
                 .formatted(ctx.schema())
-            + ctx.andAppScope()
+            + scope
             + " GROUP BY name";
     final var stepSQL =
         """
@@ -2105,16 +2114,20 @@ public class WorkflowDAO {
           WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
         """
                 .formatted(ctx.schema())
-            + ctx.andAppScope()
+            + scope
             + " GROUP BY function_name";
 
     try (var conn = ctx.getConnection();
         var ps1 = conn.prepareStatement(wfSQL);
         var ps2 = conn.prepareStatement(stepSQL)) {
 
+      Array namesArray = names == null ? null : conn.createArrayOf("text", names.toArray());
+
       ps1.setLong(1, start);
       ps1.setLong(2, end);
-      ctx.bindAppScope(ps1, 3);
+      if (namesArray != null) {
+        ps1.setArray(3, namesArray);
+      }
 
       try (var rs = ps1.executeQuery()) {
         while (rs.next()) {
@@ -2126,13 +2139,19 @@ public class WorkflowDAO {
 
       ps2.setLong(1, start);
       ps2.setLong(2, end);
-      ctx.bindAppScope(ps2, 3);
+      if (namesArray != null) {
+        ps2.setArray(3, namesArray);
+      }
 
       try (var rs = ps2.executeQuery()) {
         while (rs.next()) {
           var name = rs.getString("function_name");
           var count = rs.getInt("count");
           metrics.add(new MetricData("step_count", name, count));
+        }
+      } finally {
+        if (namesArray != null) {
+          namesArray.free();
         }
       }
     }

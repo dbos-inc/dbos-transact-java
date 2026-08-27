@@ -1,11 +1,15 @@
 package dev.dbos.transact.conductor.protocol;
 
 import java.time.Instant;
+import java.util.List;
 
 public class GetMetricsRequest extends BaseMessage {
   public String start_time;
   public String end_time;
   public String metric_class;
+
+  /** A Conductor predating the filter sends nothing, leaving the count scoped to this app. */
+  public List<String> application_name;
 
   GetMetricsRequest() {}
 
