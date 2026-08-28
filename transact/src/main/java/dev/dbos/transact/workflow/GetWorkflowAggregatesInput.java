@@ -65,6 +65,62 @@ public record GetWorkflowAggregatesInput(
   }
 
   /** Constructs a default input with {@code selectCount=true} and no group-by or filter flags. */
+  /**
+   * Constructs an input with no application filter and no grouping by application, which covers
+   * this application's own workflows plus unclaimed ones.
+   */
+  public GetWorkflowAggregatesInput(
+      boolean groupByStatus,
+      boolean groupByName,
+      boolean groupByQueueName,
+      boolean groupByExecutorId,
+      boolean groupByApplicationVersion,
+      boolean selectCount,
+      boolean selectMinCreatedAt,
+      boolean selectMaxQueueWait,
+      boolean selectMaxTotalLatency,
+      Duration timeBucketSize,
+      List<String> workflowName,
+      List<String> status,
+      List<String> queueName,
+      List<String> executorIds,
+      List<String> applicationVersion,
+      List<String> workflowIdPrefix,
+      Instant startTime,
+      Instant endTime,
+      Instant completedAfter,
+      Instant completedBefore,
+      Instant dequeuedAfter,
+      Instant dequeuedBefore,
+      Map<String, Object> attributes) {
+    this(
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        false,
+        selectCount,
+        selectMinCreatedAt,
+        selectMaxQueueWait,
+        selectMaxTotalLatency,
+        timeBucketSize,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        null,
+        workflowIdPrefix,
+        startTime,
+        endTime,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        attributes);
+  }
+
   public GetWorkflowAggregatesInput() {
     this(
         false, false, false, false, false, false, true, false, false, false, null, null, null, null,
