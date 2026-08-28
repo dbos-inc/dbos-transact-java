@@ -1036,6 +1036,60 @@ public class PortableSerializationTest {
     throw new AssertionError("Workflow " + workflowId + " did not reach terminal state in time");
   }
 
+  /** Insert an enqueued workflow row carrying an arbitrary serialization format. */
+  private void insertEnqueuedRowWithSerialization(
+      String workflowId, String queueName, String inputsJson, String serialization)
+      throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.workflow_status(
+            workflow_uuid, name, class_name, config_name,
+            queue_name, status, inputs, created_at, serialization
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "recvWorkflow");
+        stmt.setString(3, "PortableTestService");
+        stmt.setString(4, null);
+        stmt.setString(5, queueName);
+        stmt.setString(6, "ENQUEUED");
+        stmt.setString(7, inputsJson);
+        stmt.setLong(8, System.currentTimeMillis());
+        stmt.setString(9, serialization);
+        stmt.executeUpdate();
+      }
+    }
+  }
+
+  /**
+   * A workflow whose arguments are in a format this application cannot read is marked ERROR, not
+   * left in PENDING.
+   *
+   * <p>Reading the row does not fail on such a format any more — a status read reports the
+   * arguments as null and hands back the metadata — so running the workflow has to refuse for
+   * itself, and say which format it would have taken.
+   */
+  @Test
+  public void testUnreadableSerializationMarksTheWorkflowErrored() throws Exception {
+    Queue testQueue = new Queue("testq");
+    dbos.registerQueue(testQueue);
+    dbos.registerProxy(PortableTestService.class, new PortableTestServiceImpl(dbos));
+    dbos.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+    insertEnqueuedRowWithSerialization(workflowId, "testq", "cGlja2xlZA==", "py_pickle");
+
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals(WorkflowState.ERROR.name(), row.status());
+    assertNotNull(row.error());
+    assertTrue(
+        row.error().contains("py_pickle"),
+        "The error should name the format it could not read, got: " + row.error());
+  }
+
   /**
    * Tests that completely invalid (unparseable) JSON in the inputs column results in the workflow
    * being marked as ERROR rather than being stuck in PENDING forever.

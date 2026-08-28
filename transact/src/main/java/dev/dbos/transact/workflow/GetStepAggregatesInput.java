@@ -41,6 +41,35 @@ public record GetStepAggregatesInput(
     }
   }
 
+  /**
+   * Constructs an input with no application filter, which covers this application's own steps plus
+   * unclaimed ones.
+   */
+  public GetStepAggregatesInput(
+      boolean groupByFunctionName,
+      boolean groupByStatus,
+      boolean selectCount,
+      boolean selectMaxDuration,
+      Duration timeBucketSize,
+      List<String> status,
+      List<String> functionName,
+      List<String> workflowIdPrefix,
+      Instant completedAfter,
+      Instant completedBefore) {
+    this(
+        groupByFunctionName,
+        groupByStatus,
+        selectCount,
+        selectMaxDuration,
+        timeBucketSize,
+        status,
+        functionName,
+        workflowIdPrefix,
+        completedAfter,
+        completedBefore,
+        null);
+  }
+
   public GetStepAggregatesInput() {
     this(false, false, true, false, null, null, null, null, null, null, null);
   }

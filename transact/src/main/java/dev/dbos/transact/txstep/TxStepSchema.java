@@ -1,5 +1,6 @@
 package dev.dbos.transact.txstep;
 
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -66,7 +67,7 @@ public class TxStepSchema {
             stepId,
             stepName,
             rs.getString("output"),
-            rs.getString("error"),
+            SystemDatabase.errorOrNull(rs.getString("error")),
             null,
             rs.getString("serialization")));
   }

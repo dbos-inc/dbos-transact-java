@@ -54,6 +54,71 @@ public record ListWorkflowsInput(
     attributes = validateAttributes(attributes);
   }
 
+  /**
+   * Constructs an input with no application filter, which covers this application's own workflows
+   * plus unclaimed ones.
+   */
+  public ListWorkflowsInput(
+      List<String> workflowIds,
+      List<WorkflowState> status,
+      Instant startTime,
+      Instant endTime,
+      List<String> workflowName,
+      String className,
+      String instanceName,
+      List<String> applicationVersion,
+      List<String> authenticatedUser,
+      Integer limit,
+      Integer offset,
+      Boolean sortDesc,
+      List<String> workflowIdPrefix,
+      Boolean loadInput,
+      Boolean loadOutput,
+      List<String> queueName,
+      Boolean queuesOnly,
+      List<String> executorIds,
+      List<String> forkedFrom,
+      List<String> parentWorkflowId,
+      Boolean wasForkedFrom,
+      Boolean hasParent,
+      Map<String, Object> attributes,
+      Instant completedAfter,
+      Instant completedBefore,
+      Instant dequeuedAfter,
+      Instant dequeuedBefore,
+      List<String> scheduleName) {
+    this(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        scheduleName,
+        null);
+  }
+
   public ListWorkflowsInput() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,

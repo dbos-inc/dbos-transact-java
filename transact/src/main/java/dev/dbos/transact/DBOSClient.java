@@ -371,6 +371,49 @@ public class DBOSClient implements AutoCloseable {
           null);
     }
 
+    /**
+     * Constructs options with no explicit owning application, which enqueues the workflow for the
+     * enqueueing application.
+     */
+    public EnqueueOptions(
+        @NonNull String workflowName,
+        @Nullable String className,
+        @Nullable String instanceName,
+        @NonNull String queueName,
+        @Nullable String workflowId,
+        @Nullable String appVersion,
+        @Nullable Duration timeout,
+        @Nullable Instant deadline,
+        @Nullable String deduplicationId,
+        @Nullable Integer priority,
+        @Nullable String queuePartitionKey,
+        @Nullable Duration delay,
+        @Nullable SerializationStrategy serialization,
+        @Nullable String authenticatedUser,
+        @Nullable String assumedRole,
+        @Nullable List<String> authenticatedRoles,
+        @Nullable Map<String, Object> attributes) {
+      this(
+          workflowName,
+          className,
+          instanceName,
+          queueName,
+          workflowId,
+          appVersion,
+          timeout,
+          deadline,
+          deduplicationId,
+          priority,
+          queuePartitionKey,
+          delay,
+          serialization,
+          authenticatedUser,
+          assumedRole,
+          authenticatedRoles,
+          attributes,
+          null);
+    }
+
     public EnqueueOptions(
         @NonNull String workflowName, @Nullable String className, @NonNull String queueName) {
       this(

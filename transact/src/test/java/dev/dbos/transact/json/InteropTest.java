@@ -4,15 +4,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -229,6 +234,66 @@ public class InteropTest {
     }
   }
 
+  /**
+   * Insert a completed workflow row as another SDK would leave it.
+   *
+   * <p>{@code serialization} and {@code error} are what vary between them: Go stores the error as a
+   * non-nullable string and so writes "" for a workflow that succeeded, and every SDK writes its
+   * own native format unless the workflow was declared portable.
+   */
+  private void insertPeerWorkflowRow(
+      String workflowId, String serialization, String inputs, String output, String error)
+      throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.workflow_status(
+            workflow_uuid, name, class_name, config_name,
+            status, inputs, output, error, created_at, serialization, application_name
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "echoWorkflow");
+        stmt.setString(3, "interop");
+        stmt.setString(4, null);
+        stmt.setString(5, "SUCCESS");
+        stmt.setString(6, inputs);
+        stmt.setString(7, output);
+        stmt.setString(8, error);
+        stmt.setLong(9, System.currentTimeMillis());
+        stmt.setString(10, serialization);
+        stmt.setString(11, "interop-peer");
+        stmt.executeUpdate();
+      }
+    }
+  }
+
+  /** Insert a completed step row as another SDK would leave it. */
+  private void insertPeerStepRow(
+      String workflowId, String serialization, String output, String error) throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.operation_outputs(
+            workflow_uuid, function_id, function_name, output, error, serialization, application_name
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setInt(2, 0);
+        stmt.setString(3, "echoStep");
+        stmt.setString(4, output);
+        stmt.setString(5, error);
+        stmt.setString(6, serialization);
+        stmt.setString(7, "interop-peer");
+        stmt.executeUpdate();
+      }
+    }
+  }
+
   private void insertPortableNotification(String destinationUuid, String topic, String messageJson)
       throws Exception {
     try (Connection conn = dataSource.getConnection()) {
@@ -421,5 +486,190 @@ public class InteropTest {
       assertEquals(42, ((Number) storedNamedArgs.get("count")).intValue());
       assertEquals(Arrays.asList("a", "b"), storedNamedArgs.get("tags"));
     }
+  }
+
+  // ============================================================================
+  // Test: reading a workflow another application owns
+  // ============================================================================
+
+  /**
+   * A workflow that succeeded, whose error column holds "" rather than NULL.
+   *
+   * <p>That is what the Go SDK leaves behind — it stores the error as a non-nullable string — and
+   * on a shared system database this runtime is routinely asked about such a row. An empty column
+   * has to mean the same thing as an absent one; parsing it as JSON does not.
+   */
+  @Test
+  public void testStatusReadTreatsAnEmptyErrorColumnAsNoError() throws Exception {
+    String workflowId = "peer-empty-error";
+    insertPeerWorkflowRow(
+        workflowId, "portable_json", "{\"positionalArgs\":[]}", "{\"ok\":true}", "");
+
+    dbos.launch();
+    var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
+
+    assertEquals(WorkflowState.SUCCESS, status.status());
+    assertNull(status.error(), "an empty error column is not an error");
+  }
+
+  /**
+   * A workflow another application ran, in a serialization format this runtime cannot read.
+   *
+   * <p>Workflow IDs address the whole system database, so a status read reaches a peer's rows on
+   * purpose — and what is wanted there is the metadata: who owns it, what it is, whether it
+   * finished. A payload in the peer's own format must not take that away, so the fields that cannot
+   * be deserialized come back null and the read succeeds. Python behaves the same way, in
+   * safe_deserialize.
+   */
+  @Test
+  public void testStatusReadOfAPeerRowInAnUnreadableFormat() throws Exception {
+    String workflowId = "peer-foreign-format";
+    insertPeerWorkflowRow(workflowId, "py_pickle", "gASVCgAAAA==", "gASVBAAAAA==", null);
+
+    dbos.launch();
+    var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
+
+    // The metadata is the point, and it is all there.
+    assertEquals(workflowId, status.workflowId());
+    assertEquals("echoWorkflow", status.workflowName());
+    assertEquals(WorkflowState.SUCCESS, status.status());
+    assertEquals("interop-peer", status.applicationName());
+    assertEquals("py_pickle", status.serialization());
+
+    // The payloads are not, and saying so beats failing the whole read.
+    assertNull(status.input());
+    assertNull(status.output());
+    assertNull(status.error());
+  }
+
+  /** The same row, through the listing rather than by ID. */
+  @Test
+  public void testListingAPeerRowInAnUnreadableFormat() throws Exception {
+    String workflowId = "peer-foreign-format-listed";
+    insertPeerWorkflowRow(workflowId, "py_pickle", "gASVCgAAAA==", "gASVBAAAAA==", "");
+
+    dbos.launch();
+    var listed = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(workflowId)).get(0);
+
+    assertEquals(workflowId, listed.workflowId());
+    assertEquals("interop-peer", listed.applicationName());
+    assertNull(listed.input());
+    assertNull(listed.output());
+    assertNull(listed.error());
+  }
+
+  /**
+   * A step of a peer's workflow, recorded with an empty error column.
+   *
+   * <p>Steps carry the same column with the same quirk, so they get the same reading.
+   */
+  @Test
+  public void testStepReadTreatsAnEmptyErrorColumnAsNoError() throws Exception {
+    String workflowId = "peer-step-empty-error";
+    insertPeerWorkflowRow(workflowId, "portable_json", "{\"positionalArgs\":[]}", "{}", "");
+    insertPeerStepRow(workflowId, "portable_json", "{\"ok\":true}", "");
+
+    dbos.launch();
+    var steps = dbos.listWorkflowSteps(workflowId);
+
+    assertEquals(1, steps.size());
+    assertNull(steps.get(0).error(), "an empty error column is not an error");
+  }
+
+  /**
+   * The same gap without another language in it: two Java applications on one system database, one
+   * configured with a custom serializer and one not.
+   *
+   * <p>`custom_base64` is a format this runtime has no deserializer for, exactly as `py_pickle` is,
+   * and canDeserialize says so without having to try and fail.
+   */
+  @Test
+  public void testStatusReadOfARowWrittenByACustomSerializerWeLack() throws Exception {
+    String workflowId = "peer-custom-serializer";
+    insertPeerWorkflowRow(workflowId, "custom_base64", "cG9zaXRpb25hbA==", "b3V0cHV0", null);
+
+    dbos.launch();
+    var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
+
+    assertEquals(WorkflowState.SUCCESS, status.status());
+    assertEquals("custom_base64", status.serialization());
+    assertNull(status.input());
+    assertNull(status.output());
+  }
+
+  /**
+   * Exporting a workflow this runtime cannot read is refused rather than silently emptied.
+   *
+   * <p>A status read reports an unreadable payload as null, which is right when the metadata is
+   * what was asked for. An export is imported back, so the same null would restore a workflow that
+   * never had an input.
+   */
+  @Test
+  public void testExportRefusesAWorkflowItCannotRead() throws Exception {
+    String workflowId = "peer-export";
+    insertPeerWorkflowRow(workflowId, "py_pickle", "gASVCgAAAA==", "gASVBAAAAA==", null);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    var thrown =
+        assertThrows(
+            IllegalStateException.class, () -> systemDatabase.exportWorkflow(workflowId, false));
+    assertTrue(
+        thrown.getMessage().contains("py_pickle"),
+        "The refusal should name the format it could not read, got: " + thrown.getMessage());
+  }
+
+  /**
+   * Importing one is refused too, before anything is written.
+   *
+   * <p>Export and import are a single-SDK affair, but not a single-configuration one: the source
+   * application may have had a serializer this one does not. Import re-serializes the payloads, so
+   * it needs that serializer as much as export did — and a payload the export already carried as
+   * null would otherwise be written as NULL and committed.
+   */
+  @Test
+  public void testImportRefusesAWorkflowItCannotRead() throws Exception {
+    String workflowId = "peer-import";
+    insertPeerWorkflowRow(workflowId, "portable_json", "{\"positionalArgs\":[]}", "{}", null);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // Exported readably, then given a step in a format this application has no serializer for —
+    // which is what a batch arriving from an application configured differently looks like.
+    var exported = systemDatabase.exportWorkflow(workflowId, false).get(0);
+    var foreignStep =
+        new StepInfo(
+            0, "echoStep", "cG9zaXRpb25hbA==", null, null, null, null, "custom_base64", null);
+    var batch =
+        List.of(
+            new ExportedWorkflow(
+                exported.status(),
+                List.of(foreignStep),
+                exported.events(),
+                exported.eventHistory(),
+                exported.streams()));
+
+    var thrown =
+        assertThrows(IllegalStateException.class, () -> systemDatabase.importWorkflow(batch));
+    assertTrue(
+        thrown.getMessage().contains("custom_base64"),
+        "The refusal should name the format, got: " + thrown.getMessage());
+  }
+
+  /**
+   * Replaying a step whose result this application cannot read fails; it does not replay as null.
+   *
+   * <p>The tolerant reads are the ones that assemble a record. A recorded step result is consumed
+   * to continue a workflow — a step that "returned null" because its output could not be read would
+   * corrupt the run it is replaying, silently and durably.
+   */
+  @Test
+  public void testStepResultRefusesToReplayWhatItCannotRead() {
+    var recorded =
+        new StepResult("wf", 0, "echoStep", "cG9zaXRpb25hbA==", null, null, "custom_base64");
+
+    assertThrows(IllegalArgumentException.class, () -> recorded.toResult(null));
   }
 }

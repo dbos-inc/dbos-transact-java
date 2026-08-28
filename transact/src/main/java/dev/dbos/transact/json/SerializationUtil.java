@@ -26,6 +26,19 @@ public final class SerializationUtil {
 
   private SerializationUtil() {}
 
+  /**
+   * Whether this runtime can read the given serialization format.
+   *
+   * <p>The two built-in formats always, and a custom serializer only for the format it names. A
+   * null format is the native one, written before the column existed.
+   */
+  public static boolean canDeserialize(String serialization, DBOSSerializer customSerializer) {
+    if (serialization == null || PORTABLE.equals(serialization) || NATIVE.equals(serialization)) {
+      return true;
+    }
+    return customSerializer != null && customSerializer.name().equals(serialization);
+  }
+
   // ============ Value Serialization ============
 
   /**
