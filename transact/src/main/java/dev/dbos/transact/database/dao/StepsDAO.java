@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -144,7 +145,7 @@ public class StepsDAO {
       try (ResultSet rs = pstmt.executeQuery()) {
         if (rs.next()) { // Check if any operation output row exists
           String output = rs.getString("output");
-          String error = rs.getString("error");
+          String error = SystemDatabase.errorOrNull(rs.getString("error"));
           String _stepName = rs.getString("function_name");
           String serialization = rs.getString("serialization");
           result =
@@ -222,7 +223,7 @@ public class StepsDAO {
           int functionId = rs.getInt("function_id");
           String functionName = rs.getString("function_name");
           String outputData = rs.getString("output");
-          String errorData = rs.getString("error");
+          String errorData = SystemDatabase.errorOrNull(rs.getString("error"));
           String childWorkflowId = rs.getString("child_workflow_id");
           Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
           Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);

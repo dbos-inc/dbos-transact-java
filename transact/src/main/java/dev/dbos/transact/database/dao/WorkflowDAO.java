@@ -1233,7 +1233,7 @@ public class WorkflowDAO {
     String attributesJson = rs.getString("attributes");
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
-    String serializedError = loadOutput ? rs.getString("error") : null;
+    String serializedError = loadOutput ? SystemDatabase.errorOrNull(rs.getString("error")) : null;
     String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
     WorkflowStatus info =
         new WorkflowStatus(
@@ -1327,7 +1327,7 @@ public class WorkflowDAO {
               }
 
               case ERROR -> {
-                String error = rs.getString("error");
+                String error = SystemDatabase.errorOrNull(rs.getString("error"));
                 Throwable t = SerializationUtil.deserializeError(error, serialization, serializer);
                 return Result.failure(t);
               }

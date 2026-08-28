@@ -229,6 +229,66 @@ public class InteropTest {
     }
   }
 
+  /**
+   * Insert a completed workflow row as another SDK would leave it.
+   *
+   * <p>{@code serialization} and {@code error} are what vary between them: Go stores the error as a
+   * non-nullable string and so writes "" for a workflow that succeeded, and every SDK writes its
+   * own native format unless the workflow was declared portable.
+   */
+  private void insertPeerWorkflowRow(
+      String workflowId, String serialization, String inputs, String output, String error)
+      throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.workflow_status(
+            workflow_uuid, name, class_name, config_name,
+            status, inputs, output, error, created_at, serialization, application_name
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "echoWorkflow");
+        stmt.setString(3, "interop");
+        stmt.setString(4, null);
+        stmt.setString(5, "SUCCESS");
+        stmt.setString(6, inputs);
+        stmt.setString(7, output);
+        stmt.setString(8, error);
+        stmt.setLong(9, System.currentTimeMillis());
+        stmt.setString(10, serialization);
+        stmt.setString(11, "interop-peer");
+        stmt.executeUpdate();
+      }
+    }
+  }
+
+  /** Insert a completed step row as another SDK would leave it. */
+  private void insertPeerStepRow(
+      String workflowId, String serialization, String output, String error) throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.operation_outputs(
+            workflow_uuid, function_id, function_name, output, error, serialization, application_name
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setInt(2, 0);
+        stmt.setString(3, "echoStep");
+        stmt.setString(4, output);
+        stmt.setString(5, error);
+        stmt.setString(6, serialization);
+        stmt.setString(7, "interop-peer");
+        stmt.executeUpdate();
+      }
+    }
+  }
+
   private void insertPortableNotification(String destinationUuid, String topic, String messageJson)
       throws Exception {
     try (Connection conn = dataSource.getConnection()) {
@@ -421,5 +481,47 @@ public class InteropTest {
       assertEquals(42, ((Number) storedNamedArgs.get("count")).intValue());
       assertEquals(Arrays.asList("a", "b"), storedNamedArgs.get("tags"));
     }
+  }
+
+  // ============================================================================
+  // Test: reading a workflow another application owns
+  // ============================================================================
+
+  /**
+   * A workflow that succeeded, whose error column holds "" rather than NULL.
+   *
+   * <p>That is what the Go SDK leaves behind — it stores the error as a non-nullable string — and
+   * on a shared system database this runtime is routinely asked about such a row. An empty column
+   * has to mean the same thing as an absent one; parsing it as JSON does not.
+   */
+  @Test
+  public void testStatusReadTreatsAnEmptyErrorColumnAsNoError() throws Exception {
+    String workflowId = "peer-empty-error";
+    insertPeerWorkflowRow(
+        workflowId, "portable_json", "{\"positionalArgs\":[]}", "{\"ok\":true}", "");
+
+    dbos.launch();
+    var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
+
+    assertEquals(WorkflowState.SUCCESS, status.status());
+    assertNull(status.error(), "an empty error column is not an error");
+  }
+
+  /**
+   * A step of a peer's workflow, recorded with an empty error column.
+   *
+   * <p>Steps carry the same column with the same quirk, so they get the same reading.
+   */
+  @Test
+  public void testStepReadTreatsAnEmptyErrorColumnAsNoError() throws Exception {
+    String workflowId = "peer-step-empty-error";
+    insertPeerWorkflowRow(workflowId, "portable_json", "{\"positionalArgs\":[]}", "{}", "");
+    insertPeerStepRow(workflowId, "portable_json", "{\"ok\":true}", "");
+
+    dbos.launch();
+    var steps = dbos.listWorkflowSteps(workflowId);
+
+    assertEquals(1, steps.size());
+    assertNull(steps.get(0).error(), "an empty error column is not an error");
   }
 }

@@ -438,6 +438,16 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
+   * The error column of a workflow or a step, or null when it records no error.
+   *
+   * <p>The Go SDK stores the error as a non-nullable string, so a workflow that succeeded leaves ""
+   * behind where this one writes NULL. Empty only: no SDK writes a blank non-empty value.
+   */
+  public static String errorOrNull(String error) {
+    return error != null && error.isEmpty() ? null : error;
+  }
+
+  /**
    * Initializes the status of a workflow.
    *
    * @param initStatus The initial workflow status details.
