@@ -45,6 +45,29 @@ public record Queue(
       throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
   }
 
+  /**
+   * Constructs a queue with no explicit owning application, which records the registering
+   * application as the owner.
+   */
+  public Queue(
+      @NonNull String name,
+      @Nullable Integer concurrency,
+      @Nullable Integer workerConcurrency,
+      boolean priorityEnabled,
+      boolean partitioningEnabled,
+      @Nullable RateLimit rateLimit,
+      @NonNull Duration pollingInterval) {
+    this(
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval,
+        null);
+  }
+
   /** Construct a queue with a given name */
   public Queue(@NonNull String name) {
     this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL, null);

@@ -39,6 +39,37 @@ public record WorkflowSchedule(
     Objects.requireNonNull(status, "status must not be null");
   }
 
+  /**
+   * Constructs a schedule with no explicit owning application, which records the creating
+   * application as the owner.
+   */
+  public WorkflowSchedule(
+      @Nullable String id,
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @Nullable String className,
+      @NonNull String cron,
+      @NonNull ScheduleStatus status,
+      @Nullable Object context,
+      @Nullable Instant lastFiredAt,
+      boolean automaticBackfill,
+      @Nullable ZoneId cronTimezone,
+      @Nullable String queueName) {
+    this(
+        id,
+        scheduleName,
+        workflowName,
+        className,
+        cron,
+        status,
+        context,
+        lastFiredAt,
+        automaticBackfill,
+        cronTimezone,
+        queueName,
+        null);
+  }
+
   public WorkflowSchedule(
       @NonNull String scheduleName,
       @NonNull String workflowName,
