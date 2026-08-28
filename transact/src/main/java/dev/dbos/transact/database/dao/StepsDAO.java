@@ -232,7 +232,10 @@ public class StepsDAO {
           Object outputVal = null;
           ErrorResult stepError = null;
 
-          if (Objects.requireNonNullElse(loadOutput, true)) {
+          // As for a workflow's status: the steps are what is wanted, the payloads one field of
+          // each. See SerializationUtil.canDeserialize.
+          if (Objects.requireNonNullElse(loadOutput, true)
+              && SerializationUtil.canDeserialize(serialization, serializer)) {
             if (outputData != null) {
               try {
                 outputVal =

@@ -1696,6 +1696,22 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
+    // Reading the row reports an unreadable payload as null, so running the workflow refuses for
+    // itself: a workflow invoked with arguments it never had is worse than one marked ERROR.
+    if (!SerializationUtil.canDeserialize(status.serialization(), serializer)) {
+      var e =
+          new IllegalStateException(
+              "Cannot run workflow %s: its arguments are serialized as %s, which this application has no deserializer for"
+                  .formatted(workflowId, status.serialization()));
+      logger.error("Unreadable serialization for workflow {}", workflowId, e);
+      // Recorded in this runtime's own format, not the row's: a format we cannot read is one
+      // we cannot write either, and serializing the error into it would throw and leave the
+      // workflow PENDING forever — the hang this refusal exists to prevent. The status is the
+      // part that has to land.
+      persistWorkflowError(workflowId, e, null);
+      throw e;
+    }
+
     Object[] inputs = status.input();
     var wfName =
         RegisteredWorkflow.fullyQualifiedName(

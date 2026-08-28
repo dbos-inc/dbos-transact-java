@@ -25,6 +25,7 @@ import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepAggregateRow;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -47,6 +48,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1235,6 +1237,9 @@ public class WorkflowDAO {
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? SystemDatabase.errorOrNull(rs.getString("error")) : null;
     String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
+    // A status read reaches other applications' rows on purpose, and wants their metadata; an
+    // unreadable payload comes back null rather than failing the read.
+    boolean readable = SerializationUtil.canDeserialize(serialization, serializer);
     WorkflowStatus info =
         new WorkflowStatus(
             rs.getString("workflow_uuid"),
@@ -1247,14 +1252,16 @@ public class WorkflowDAO {
             (authenticatedRolesJson != null)
                 ? JsonUtility.fromJson(authenticatedRolesJson, new TypeReference<List<String>>() {})
                 : null,
-            loadInput
+            loadInput && readable
                 ? SerializationUtil.deserializePositionalArgs(
                     serializedInput, serialization, serializer)
                 : null,
-            loadOutput
+            loadOutput && readable
                 ? SerializationUtil.deserializeValue(serializedOutput, serialization, serializer)
                 : null,
-            loadOutput ? ErrorResult.deserialize(serializedError, serialization, serializer) : null,
+            loadOutput && readable
+                ? ErrorResult.deserialize(serializedError, serialization, serializer)
+                : null,
             rs.getString("executor_id"),
             SystemDatabase.toInstant(rs.getObject("created_at", Long.class)),
             SystemDatabase.toInstant(rs.getObject("updated_at", Long.class)),
@@ -2246,6 +2253,35 @@ public class WorkflowDAO {
     return streams;
   }
 
+  /**
+   * Refuse to move a workflow whose payloads this runtime cannot handle.
+   *
+   * <p>Export and import round-trip the payloads through this runtime's serializers, so neither can
+   * settle for the null a status read reports: a payload dropped on the way through restores a
+   * workflow that never had it.
+   */
+  private static void requireSerializerFor(
+      String action,
+      String workflowId,
+      String workflowSerialization,
+      List<StepInfo> steps,
+      DBOSSerializer serializer) {
+    var formats = new LinkedHashSet<String>();
+    if (!SerializationUtil.canDeserialize(workflowSerialization, serializer)) {
+      formats.add(workflowSerialization);
+    }
+    for (var step : steps) {
+      if (!SerializationUtil.canDeserialize(step.serialization(), serializer)) {
+        formats.add(step.serialization());
+      }
+    }
+    if (!formats.isEmpty()) {
+      throw new IllegalStateException(
+          "Cannot %s workflow %s: it is serialized as %s, which this application has no serializer for"
+              .formatted(action, workflowId, String.join(", ", formats)));
+    }
+  }
+
   public static List<ExportedWorkflow> exportWorkflow(
       DbContext ctx, String workflowId, boolean exportChildren) throws SQLException {
 
@@ -2263,6 +2299,9 @@ public class WorkflowDAO {
         var steps =
             StepsDAO.listWorkflowSteps(
                 conn, ctx.schema(), ctx.serializer(), wfid, true, null, null);
+        if (status != null) {
+          requireSerializerFor("export", wfid, status.serialization(), steps, ctx.serializer());
+        }
         var events = listWorkflowEvents(conn, ctx.schema(), wfid);
         var eventHistory = listWorkflowEventHistory(conn, ctx.schema(), wfid);
         var streams = listWorkflowStreams(conn, ctx.schema(), wfid);
@@ -2276,6 +2315,14 @@ public class WorkflowDAO {
       throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
+    // The whole batch, before anything is written: export and import are a single-SDK affair but
+    // not a single-configuration one, and a payload we cannot re-serialize imports empty.
+    for (var workflow : workflows) {
+      var s = workflow.status();
+      requireSerializerFor(
+          "import", s.workflowId(), s.serialization(), workflow.steps(), serializer);
+    }
+
     var wfSQL =
         """
         INSERT INTO "%s".workflow_status (
