@@ -776,10 +776,10 @@ public class ApplicationNameTest {
   }
 
   /**
-   * Conductor and Cloud accept only {@code ^[a-z0-9-_]{3,30}$} at registration, but nothing in
-   * Transact does: the column is TEXT and the value is always a bound parameter. A self-hosted
-   * application that never registers can hold any name, so a rename onto one warns rather than
-   * failing -- and the rows really move.
+   * Conductor accepts only {@code ^[a-z0-9-_]{3,256}$} at registration, but nothing in Transact
+   * does: the column is TEXT and the value is always a bound parameter. A self-hosted application
+   * that never registers can hold any name, so a rename onto one warns rather than failing -- and
+   * the rows really move.
    */
   @Test
   void renamingOntoANameConductorWouldRejectStillMovesTheRows() throws Exception {
