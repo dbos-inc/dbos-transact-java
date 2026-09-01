@@ -189,12 +189,12 @@ public class ConfigTest {
    */
   @Test
   public void appNameConductorWouldRejectIsRecognizedButNotRejected() {
-    for (var name : List.of("abc", "my-app_2", "a".repeat(30))) {
+    for (var name : List.of("abc", "my-app_2", "a".repeat(256))) {
       assertTrue(Validation.isValidApplicationName(name), name);
       assertDoesNotThrow(() -> DBOSConfig.defaults(name));
     }
 
-    for (var name : List.of("ab", "a".repeat(31), "MyApp", "my app", "my.app")) {
+    for (var name : List.of("ab", "a".repeat(257), "MyApp", "my app", "my.app")) {
       assertFalse(Validation.isValidApplicationName(name), name);
       assertDoesNotThrow(() -> DBOSConfig.defaults(name));
     }

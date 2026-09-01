@@ -197,10 +197,10 @@ public class DBOSExecutor implements AutoCloseable {
 
     // Nothing in Transact needs the name to look like anything: it is a bound parameter and a
     // hash input, never an identifier. Conductor does -- it addresses the application by name in
-    // its websocket URL, and neither it nor DBOS Cloud registers a name outside their rule. So an
-    // application that is about to connect cannot usefully launch, while a self-hosted one is told
-    // and left alone; rejecting that one would break applications already running under such a
-    // name for no reason Transact can point at.
+    // its websocket URL, and registers no name outside its rule. So an application that is about
+    // to connect cannot usefully launch, while a self-hosted one is told and left alone; rejecting
+    // that one would break applications already running under such a name for no reason Transact
+    // can point at.
     if (!Validation.isValidApplicationName(appName)) {
       var msg = Validation.applicationNameNotAcceptedByConductor("application name", appName);
       if (dbosCloud || config.conductorKey() != null) {
