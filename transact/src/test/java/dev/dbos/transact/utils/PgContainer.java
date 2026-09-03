@@ -124,21 +124,42 @@ public class PgContainer implements AutoCloseable {
           DriverManager.getConnection(jdbcUrl, container.getUsername(), container.getPassword())) {
         resetDbosTables(conn);
       } catch (SQLException e) {
+        // The container came out of the pool, so nothing else is holding it: dropping it here
+        // without closing it would leave it running and unreachable for the rest of the run.
+        closeQuietly(container);
         throw new RuntimeException(e);
       }
       return container;
     }
-    container = containerSupplier(true);
-    var jdbcUrl = container.getJdbcUrl().replaceFirst("/[^/]+$", "/" + POOLED_DB_NAME);
+    var fresh = containerSupplier(true);
+    var jdbcUrl = fresh.getJdbcUrl().replaceFirst("/[^/]+$", "/" + POOLED_DB_NAME);
 
-    // The image arrives migrated, so this is normally a no-op -- every SDK gates on
-    // `current < latest`. It is kept rather than deleted because it is what makes the pinned image
-    // tag a performance decision rather than a correctness one: if this build's migrations run
-    // ahead
-    // of the image, this applies the tail instead of failing.
-    MigrationManager.runMigrations(
-        jdbcUrl, container.getUsername(), container.getPassword(), "dbos", true);
-    return container;
+    try {
+      // The image arrives migrated, so this is normally a no-op -- every SDK gates on
+      // `current < latest`. It is kept rather than deleted because it is what makes the pinned
+      // image tag a performance decision rather than a correctness one: if this build's migrations
+      // run ahead of the image, this applies the tail instead of failing.
+      MigrationManager.runMigrations(
+          jdbcUrl, fresh.getUsername(), fresh.getPassword(), "dbos", true);
+    } catch (RuntimeException e) {
+      // A container that fails to prepare has been started but never handed to anyone, and the
+      // caller is about to see an exception rather than an AutoCloseable. Left alone it stays up
+      // for the rest of the run, and since the next test finds the pool empty and starts another,
+      // one broken image turns into as many orphaned containers as there are tests. That is how a
+      // wrong pg_hba.conf in a prebaked image produced 181 of them.
+      closeQuietly(fresh);
+      throw e;
+    }
+    return fresh;
+  }
+
+  private static void closeQuietly(JdbcDatabaseContainer<?> container) {
+    try {
+      container.close();
+    } catch (RuntimeException suppressed) {
+      // Reporting why the database could not be prepared matters more than reporting that its
+      // container also would not stop.
+    }
   }
 
   static void release(JdbcDatabaseContainer<?> c) {
