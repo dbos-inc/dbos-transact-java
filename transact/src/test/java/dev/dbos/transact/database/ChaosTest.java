@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -38,6 +39,8 @@ interface ChaosService {
 }
 
 class ChaosServiceImpl implements ChaosService {
+
+  private static final Logger logger = LoggerFactory.getLogger(ChaosServiceImpl.class);
 
   private final DBOS dbos;
   private final DataSource dataSource;
@@ -95,6 +98,18 @@ class ChaosServiceImpl implements ChaosService {
     return "Part2" + v1;
   }
 
+  // pg_backend_pid() only exempts the caller's own connection, so two causeChaos() calls
+  // overlapping on the same database are each a valid target for the other: the parent
+  // workflow and the child it starts both call this. Losing the chaos connection to a peer
+  // is the disruption this test exists to cause, not a failure of it, so the SQLSTATEs that
+  // mean "this connection was terminated" are tolerated rather than reported.
+  private static final Set<String> TERMINATED_SQL_STATES =
+      Set.of(
+          "57P01", // admin_shutdown: terminating connection due to administrator command
+          "08006", // connection_failure
+          "08003", // connection_does_not_exist
+          "08001"); // sqlclient_unable_to_establish_sqlconnection
+
   static void causeChaos(DataSource ds) {
     try (var conn = ds.getConnection();
         var st = conn.createStatement()) {
@@ -107,8 +122,21 @@ class ChaosServiceImpl implements ChaosService {
               AND datname = current_database();
         """);
     } catch (SQLException e) {
-      throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
+      if (wasTerminated(e)) {
+        logger.info("causeChaos lost its own connection to a concurrent chaos call", e);
+        return;
+      }
+      throw new RuntimeException("Could not cause chaos", e);
     }
+  }
+
+  private static boolean wasTerminated(SQLException e) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof SQLException sqle && TERMINATED_SQL_STATES.contains(sqle.getSQLState())) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 

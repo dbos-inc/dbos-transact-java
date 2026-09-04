@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -372,45 +373,44 @@ public class StaticQueuesTest {
     }
 
     for (WorkflowHandle<Double, ?> h : handles) {
-      double result = h.getResult();
-      logger.info(String.valueOf(result));
-      times.add(result);
+      h.getResult();
+      Long startedAt = h.getStatus().startedAtEpochMs();
+      assertNotNull(startedAt, "workflow " + h.workflowId() + " has no start time");
+      times.add(startedAt / 1000.0);
     }
 
-    // CockroachDB's slower transaction throughput can spread tasks across a wider window
-    double waveTolerance = PgContainer.USE_COCKROACH_DB ? 3.0 : 1.0;
-    for (int wave = 0; wave < numWaves; wave++) {
-      for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
-        double diff = times.get(i + 1) - times.get(i);
-        logger.info(String.format("Wave %d, Task %d-%d: Time diff %.3f", wave, i, i + 1, diff));
-        assertTrue(
-            diff < waveTolerance,
-            String.format(
-                "Wave %d: Tasks %d and %d should start close together. Diff: %.3f",
-                wave, i, i + 1, diff));
-      }
-    }
-    logger.info("Verified intra-wave timing.");
+    double periodTolerance = 0.5;
 
-    // CockroachDB's slower transaction throughput can widen the inter-wave gap as well
-    double periodTolerance = PgContainer.USE_COCKROACH_DB ? 1.0 : 0.5;
-    for (int wave = 0; wave < numWaves - 1; wave++) {
-      double startOfNextWave = times.get(limit * (wave + 1));
-      double startOfCurrentWave = times.get(limit * wave);
-      double gap = startOfNextWave - startOfCurrentWave;
-      logger.info(String.format("Gap between Wave %d and %d: %.3f", wave, wave + 1, gap));
+    // The limiter is a sliding window: it refuses to dequeue while `limit` workflows on the queue
+    // have started within the last period. Task i and task i + limit are therefore at least a
+    // period apart, because otherwise limit + 1 starts would fit in one window. This is a lower
+    // bound, so a slow database pushes the gap away from the boundary rather than into it —
+    // unlike an upper bound on how close consecutive tasks start, which measures the per-workflow
+    // round trip rather than the limiter, and which CockroachDB was slow enough to miss.
+    for (int i = 0; i + limit < numTasks; i++) {
+      double diff = times.get(i + limit) - times.get(i);
+      logger.info(String.format("Tasks %d and %d: Time diff %.3f", i, i + limit, diff));
       assertTrue(
-          gap > periodSec - periodTolerance,
+          diff > periodSec - periodTolerance,
           String.format(
-              "Gap between wave %d and %d should be at least %.3f. Actual: %.3f",
-              wave, wave + 1, periodSec - periodTolerance, gap));
-      assertTrue(
-          gap < periodSec + periodTolerance,
-          String.format(
-              "Gap between wave %d and %d should be at most %.3f. Actual: %.3f",
-              wave, wave + 1, periodSec + periodTolerance, gap));
+              "Only %d tasks may start per %.3fs, so tasks %d and %d should start at least %.3fs"
+                  + " apart. Actual: %.3f",
+              limit, periodSec, i, i + limit, periodSec - periodTolerance, diff));
     }
+    logger.info("Verified rate limit spacing.");
 
+    // ... and the limiter must not throttle harder than it is configured to. Each wave after the
+    // first costs a period, so the starts span numWaves - 1 periods, plus however long it takes
+    // to dispatch and run the tasks within a wave. Two further periods of allowance for that
+    // still catches a limiter releasing half its configured rate.
+    double maxSpan = (numWaves + 1) * periodSec;
+    double span = times.get(numTasks - 1) - times.get(0);
+    logger.info(String.format("Span of all %d starts: %.3f", numTasks, span));
+    assertTrue(
+        span < maxSpan,
+        String.format(
+            "%d tasks at %d per %.3fs should all start within %.3fs. Actual: %.3f",
+            numTasks, limit, periodSec, maxSpan, span));
     for (WorkflowHandle<Double, ?> h : handles) {
       assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
     }
