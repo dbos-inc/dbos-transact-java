@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class QueueChildWorkflowTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -30,14 +29,14 @@ public class QueueChildWorkflowTest {
   @Test
   public void multipleChildren() throws Exception {
 
-    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
-    dbos.registerQueue(childQ);
+    String childQ = "childQ";
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
+    dbos.registerQueue(childQ, QueueOptions.empty().andConcurrency(5).andWorkerConcurrency(5));
 
     var handle =
         dbos.startWorkflow(
@@ -82,14 +81,14 @@ public class QueueChildWorkflowTest {
   @Test
   public void nestedChildren() throws Exception {
 
-    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
-    dbos.registerQueue(childQ);
+    String childQ = "childQ";
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
+    dbos.registerQueue(childQ, QueueOptions.empty().andConcurrency(5).andWorkerConcurrency(5));
 
     dbos.startWorkflow(
         () -> simpleService.grandParent("123"),

@@ -17,6 +17,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -860,5 +861,28 @@ public class StaticQueuesTest {
       assertEquals("oneone", h1.getResult());
       assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
     }
+  }
+
+  @Test
+  public void testStaticAndDynamicQueueSameName() throws Exception {
+    // Static queue registered pre-launch.
+    var staticQ = new Queue("q-shared").withConcurrency(3);
+    dbos.registerQueue(staticQ);
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    // Register same name as a dynamic queue — supervisor should ignore the DB entry.
+    dbos.registerQueue("q-shared", QueueOptions.setConcurrency(99));
+
+    // Workflow still executes — static listener handles it.
+    var handle =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("shared"),
+            new StartWorkflowOptions().withQueue("q-shared"));
+    assertEquals("sharedshared", handle.getResult());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 }

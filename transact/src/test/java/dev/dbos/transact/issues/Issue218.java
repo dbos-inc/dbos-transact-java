@@ -11,7 +11,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -38,10 +38,10 @@ class Issue218ServiceImpl implements Issue218Service {
   private static final Logger logger = LoggerFactory.getLogger(Issue218ServiceImpl.class);
 
   private final DBOS dbos;
-  private final Queue queue;
+  private final String queue;
   private Issue218Service proxy;
 
-  public Issue218ServiceImpl(DBOS dbos, Queue queue) {
+  public Issue218ServiceImpl(DBOS dbos, String queue) {
     this.dbos = dbos;
     this.queue = queue;
   }
@@ -82,11 +82,10 @@ class Issue218ServiceImpl implements Issue218Service {
   }
 }
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class Issue218 {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
-  final Queue queue = new Queue("test-queue");
+  final String queue = "test-queue";
 
   DBOSConfig dbosConfig;
   @AutoClose HikariDataSource dataSource;
@@ -105,6 +104,7 @@ public class Issue218 {
 
       var proxy = register(dbos);
       dbos.launch();
+      dbos.registerQueue(queue, QueueOptions.empty());
 
       var handle = dbos.startWorkflow(() -> proxy.parentParallel());
       wfid = handle.workflowId();
@@ -126,6 +126,7 @@ public class Issue218 {
     try (var dbos = new DBOS(dbosConfig)) {
       register(dbos);
       dbos.launch();
+      dbos.registerQueue(queue, QueueOptions.empty());
 
       assertDoesNotThrow(() -> dbos.getResult(wfid));
     }
@@ -156,7 +157,6 @@ public class Issue218 {
   }
 
   private Issue218Service register(DBOS dbos) {
-    dbos.registerQueue(queue);
     var impl = new Issue218ServiceImpl(dbos, queue);
     var proxy = dbos.registerProxy(Issue218Service.class, impl);
     impl.setProxy(proxy);

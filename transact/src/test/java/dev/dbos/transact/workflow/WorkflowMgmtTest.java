@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class WorkflowMgmtTest {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
@@ -40,7 +39,7 @@ public class WorkflowMgmtTest {
 
   private MgmtService proxy;
   private MgmtServiceImpl impl;
-  private Queue myqueue;
+  private String myqueue;
 
   @BeforeEach
   void beforeEach() {
@@ -52,10 +51,10 @@ public class WorkflowMgmtTest {
     proxy = dbos.registerProxy(MgmtService.class, impl);
     impl.proxy = proxy;
 
-    myqueue = new Queue("myqueue");
-    dbos.registerQueue(myqueue);
+    myqueue = "myqueue";
 
     dbos.launch();
+    dbos.registerQueue(myqueue, QueueOptions.empty());
   }
 
   @Test

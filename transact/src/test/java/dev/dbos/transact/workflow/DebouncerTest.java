@@ -29,7 +29,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class DebouncerTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -205,17 +204,17 @@ public class DebouncerTest {
 
   @Test
   public void debouncerOnQueueRunsViaThatQueue() throws Exception {
-    Queue userQueue = new Queue("debouncer-user-queue");
-    dbos.registerQueue(userQueue);
+    String userQueue = "debouncer-user-queue";
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
+    dbos.registerQueue(userQueue, QueueOptions.empty());
 
     var debouncer = dbos.<String>debouncer().withQueue(userQueue);
     var handle = debouncer.debounce("user-q", Duration.ofMillis(500), () -> svc.process("queued"));
     assertEquals("result:queued", handle.getResult());
 
     var status = dbos.getWorkflowStatus(handle.workflowId()).orElseThrow();
-    assertEquals(userQueue.name(), status.queueName());
+    assertEquals(userQueue, status.queueName());
     assertEquals(1, serviceImpl.callCount());
   }
 
@@ -310,9 +309,9 @@ public class DebouncerTest {
   public static class OrchestratorServiceImpl implements OrchestratorService {
     private final DBOS dbos;
     private final DebouncedService svc;
-    private final Queue userQueue;
+    private final String userQueue;
 
-    public OrchestratorServiceImpl(DBOS dbos, DebouncedService svc, Queue userQueue) {
+    public OrchestratorServiceImpl(DBOS dbos, DebouncedService svc, String userQueue) {
       this.dbos = dbos;
       this.svc = svc;
       this.userQueue = userQueue;
@@ -332,24 +331,23 @@ public class DebouncerTest {
   // Verify that explicit withPriority() on Debouncer is forwarded to the user workflow.
   @Test
   public void explicitPriorityForwardedToUserWorkflow() throws Exception {
-    Queue q = new Queue("prio-queue").withPriorityEnabled(true);
-    dbos.registerQueue(q);
+    String q = "prio-queue";
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
     dbos.launch();
+    dbos.registerQueue(q, QueueOptions.empty().andPriorityEnabled(true));
 
     var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"));
     assertEquals("result:prio-val", h.getResult());
 
     var userWfStatus =
         dbos
-            .listWorkflows(
-                new ListWorkflowsInput().withQueueName(q.name()).withWorkflowName("process"))
+            .listWorkflows(new ListWorkflowsInput().withQueueName(q).withWorkflowName("process"))
             .stream()
             .findFirst()
             .orElse(null);
-    assertNotNull(userWfStatus, "user workflow 'process' not found on queue " + q.name());
+    assertNotNull(userWfStatus, "user workflow 'process' not found on queue " + q);
     assertEquals(Integer.valueOf(42), userWfStatus.priority());
   }
 
@@ -434,10 +432,10 @@ public class DebouncerTest {
   @Test
   public void deduplicationIdForwardedToQueuedUserWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
-    Queue userQueue = new Queue("dedup-user-queue");
-    dbos.registerQueue(userQueue);
+    String userQueue = "dedup-user-queue";
     serviceImpl.gate = new CountDownLatch(1);
     dbos.launch();
+    dbos.registerQueue(userQueue, QueueOptions.empty());
 
     String dedupId = "user-dedup-1";
     var handle =

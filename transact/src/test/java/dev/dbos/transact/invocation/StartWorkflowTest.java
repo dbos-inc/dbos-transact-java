@@ -10,7 +10,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
@@ -25,7 +25,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class StartWorkflowTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
@@ -40,10 +39,9 @@ public class StartWorkflowTest {
     proxy = dbos.registerProxy(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    dbos.registerQueues(
-        new Queue("queue"), new Queue("partitioned-queue").withPartitioningEnabled(true));
-
     dbos.launch();
+    dbos.registerQueue("queue", QueueOptions.empty());
+    dbos.registerQueue("partitioned-queue", QueueOptions.empty().andPartitionQueue(true));
   }
 
   @Test

@@ -42,7 +42,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class DynamicQueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(DynamicQueuesTest.class);
@@ -254,29 +253,6 @@ public class DynamicQueuesTest {
             () -> serviceQ.simpleQWorkflow("second"),
             new StartWorkflowOptions("lc-wf2").withQueue("q-lifecycle"));
     assertEquals("secondsecond", h2.getResult());
-  }
-
-  @Test
-  public void testStaticAndDynamicQueueSameName() throws Exception {
-    // Static queue registered pre-launch.
-    var staticQ = new Queue("q-shared").withConcurrency(3);
-    dbos.registerQueue(staticQ);
-    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
-    dbos.launch();
-
-    var qs = DBOSTestAccess.getQueueService(dbos);
-    qs.setSpeedupForTest();
-
-    // Register same name as a dynamic queue — supervisor should ignore the DB entry.
-    dbos.registerQueue("q-shared", QueueOptions.setConcurrency(99));
-
-    // Workflow still executes — static listener handles it.
-    var handle =
-        dbos.startWorkflow(
-            () -> serviceQ.simpleQWorkflow("shared"),
-            new StartWorkflowOptions().withQueue("q-shared"));
-    assertEquals("sharedshared", handle.getResult());
-    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test

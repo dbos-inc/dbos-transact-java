@@ -14,7 +14,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class UnifiedProxyTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -33,10 +32,10 @@ public class UnifiedProxyTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
-    Queue q = new Queue("simpleQ");
-    dbos.registerQueue(q);
+    String q = "simpleQ";
 
     dbos.launch();
+    dbos.registerQueue(q, QueueOptions.empty());
 
     // synchronous
     String wfid1 = "wf-123";
@@ -84,9 +83,9 @@ public class UnifiedProxyTest {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
 
-    dbos.registerQueue(new Queue("childQ"));
     impl.setSelf(simpleService);
     dbos.launch();
+    dbos.registerQueue("childQ", QueueOptions.empty());
 
     String wfid1 = "wf-123";
     WorkflowOptions options = new WorkflowOptions(wfid1);

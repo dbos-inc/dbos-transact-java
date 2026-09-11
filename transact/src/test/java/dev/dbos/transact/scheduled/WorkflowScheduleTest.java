@@ -23,7 +23,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 class WorkflowScheduleTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -81,9 +80,10 @@ class WorkflowScheduleTest {
   @Test
   public void createScheduleWithAllFields() {
     dbos = new DBOS(dbosConfig);
-    dbos.registerQueue(new dev.dbos.transact.workflow.Queue("sched-q").withConcurrency(1));
     dbos.registerProxy(ScheduledWorkflowService.class, new ScheduledWorkflowImpl());
     dbos.launch();
+    dbos.registerQueue(
+        "sched-q", dev.dbos.transact.workflow.QueueOptions.empty().andConcurrency(1));
 
     dbos.createSchedule(
         new WorkflowSchedule("full-sched", workflowName(), className(), "0 0 * * * *")

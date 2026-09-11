@@ -16,7 +16,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -29,7 +29,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.junitpioneer.jupiter.RetryingTest;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class ClientTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -45,12 +44,12 @@ public class ClientTest {
     dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
-    dbos.registerQueue(new Queue("testQueue"));
     var impl = new ClientServiceImpl(dbos);
     service = dbos.registerProxy(ClientService.class, impl);
     impl.setProxy(service);
 
     dbos.launch();
+    dbos.registerQueue("testQueue", QueueOptions.empty());
   }
 
   @Test

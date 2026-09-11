@@ -54,7 +54,6 @@ interface SimpleService {
 }
 
 @WorkflowClassName("TheImplFormerlyNamedSimpleServiceImpl")
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 class SimpleServiceImpl implements SimpleService {
 
   private static final Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
@@ -171,12 +170,11 @@ class SimpleServiceImpl implements SimpleService {
   public String syncWithQueued() {
 
     logger.info("In syncWithQueued {}", DBOS.workflowId());
-    var childQ = dbos.getQueue("childQ").get();
 
     for (int i = 0; i < 3; i++) {
 
       String wid = "child" + i;
-      var options = new StartWorkflowOptions(wid).withQueue(childQ);
+      var options = new StartWorkflowOptions(wid).withQueue("childQ");
       dbos.startWorkflow(() -> self.childWorkflow(wid), options);
     }
 

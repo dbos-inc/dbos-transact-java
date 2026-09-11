@@ -11,7 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.StepInfo;
 
 import java.util.ArrayList;
@@ -23,7 +23,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Assumptions;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class StreamTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -39,10 +38,10 @@ public class StreamTest {
     dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
-    dbos.registerQueue(new Queue("testQueue"));
     proxy = dbos.registerProxy(StreamTestService.class, new StreamTestServiceImpl(dbos));
 
     dbos.launch();
+    dbos.registerQueue("testQueue", QueueOptions.empty());
   }
 
   @Test

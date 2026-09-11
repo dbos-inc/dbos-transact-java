@@ -10,7 +10,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 class RecoveryServiceTest {
 
   private static final Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
@@ -37,7 +36,7 @@ class RecoveryServiceTest {
   DBOSConfig dbosConfig;
   @AutoClose HikariDataSource dataSource;
 
-  private Queue testQueue;
+  private String testQueue;
 
   @BeforeEach
   void setUp() {
@@ -50,14 +49,14 @@ class RecoveryServiceTest {
             .withExecutorId("recovery-test-executor")
             .withAppVersion("recovery-test-version");
     dataSource = pgContainer.dataSource();
-    testQueue = new Queue("q1");
+    testQueue = "q1";
   }
 
   private ExecutingService register(DBOS dbos) {
     var impl = new ExecutingServiceImpl(dbos);
     var service = dbos.registerProxy(ExecutingService.class, impl);
     impl.setSelf(service);
-    dbos.registerQueue(testQueue);
+
     return service;
   }
 
@@ -66,6 +65,7 @@ class RecoveryServiceTest {
     try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
+      dbos.registerQueue(testQueue, QueueOptions.empty());
 
       var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -120,6 +120,7 @@ class RecoveryServiceTest {
     try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
+      dbos.registerQueue(testQueue, QueueOptions.empty());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 

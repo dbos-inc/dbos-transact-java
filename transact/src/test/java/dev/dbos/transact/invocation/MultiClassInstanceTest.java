@@ -8,7 +8,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Instant;
@@ -21,7 +21,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class MultiClassInstanceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
@@ -43,8 +42,6 @@ public class MultiClassInstanceTest {
     himpl = new HawkServiceImpl(dbos);
     bimpla = new BearServiceImpl(dbos);
     bimpl1 = new BearServiceImpl(dbos);
-    dbos.registerQueue(new Queue("testQueue"));
-
     hproxy = dbos.registerProxy(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
@@ -55,6 +52,7 @@ public class MultiClassInstanceTest {
     bimpl1.setProxy(bproxy1);
 
     dbos.launch();
+    dbos.registerQueue("testQueue", QueueOptions.empty());
   }
 
   @Test

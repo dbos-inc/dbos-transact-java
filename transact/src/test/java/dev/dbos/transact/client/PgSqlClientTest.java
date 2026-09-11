@@ -12,7 +12,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.ResultSet;
@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
 import tools.jackson.databind.json.JsonMapper;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class PgSqlClientTest {
 
   private static final JsonMapper MAPPER = new JsonMapper();
@@ -49,10 +48,10 @@ public class PgSqlClientTest {
     dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
-    dbos.registerQueue(new Queue("testQueue"));
     service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
+    dbos.registerQueue("testQueue", QueueOptions.empty());
   }
 
   @Test

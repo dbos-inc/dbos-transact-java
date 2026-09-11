@@ -12,7 +12,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -77,7 +77,6 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   }
 }
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class PartitionedQueuesTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -95,12 +94,12 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testResumingQueuedPartitionedWorkflows() throws Exception {
-    Queue queue = new Queue("testQueue").withConcurrency(1).withPartitioningEnabled(true);
-    dbos.registerQueue(queue);
+    String queue = "testQueue";
 
     var impl = new ResumingTestServiceImpl();
     var proxy = dbos.registerProxy(ResumingTestService.class, impl);
     dbos.launch();
+    dbos.registerQueue(queue, QueueOptions.empty().andConcurrency(1).andPartitionQueue(true));
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("key");
     var wfid = UUID.randomUUID().toString();
@@ -133,13 +132,14 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testQueuePartitions() throws Exception {
-    Queue queue = new Queue("testQueue").withWorkerConcurrency(1).withPartitioningEnabled(true);
-    Queue partitionlessQueue = new Queue("partitionless-queue");
-    dbos.registerQueues(queue, partitionlessQueue);
+    String queue = "testQueue";
+    String partitionlessQueue = "partitionless-queue";
 
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
+    dbos.registerQueue(partitionlessQueue, QueueOptions.empty());
+    dbos.registerQueue(queue, QueueOptions.empty().andWorkerConcurrency(1).andPartitionQueue(true));
 
     var blockedPartitionKey = "blocked";
     var normalPartitionKey = "normal";
@@ -173,7 +173,7 @@ public class PartitionedQueuesTest {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =
-          new DBOSClient.EnqueueOptions(wfName, className, queue.name())
+          new DBOSClient.EnqueueOptions(wfName, className, queue)
               .withQueuePartitionKey(blockedPartitionKey);
       var clientHandle = client.enqueueWorkflow(nqOptions, null);
       assertEquals(clientHandle.workflowId(), clientHandle.getResult());
@@ -208,12 +208,11 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testPartitionKeyOnNonPartitionedQueue() throws Exception {
-    var queue = new Queue("non-partitioned-queue");
-    dbos.registerQueue(queue);
+    String queue = "non-partitioned-queue";
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-
+    dbos.registerQueue(queue, QueueOptions.empty());
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
     assertThrows(
         IllegalArgumentException.class,
@@ -222,12 +221,11 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testPartitionedQueueWithoutPartitionKey() throws Exception {
-    var queue = new Queue("partitioned-queue").withPartitioningEnabled(true);
-    dbos.registerQueue(queue);
+    String queue = "partitioned-queue";
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-
+    dbos.registerQueue(queue, QueueOptions.empty().andPartitionQueue(true));
     var options = new StartWorkflowOptions().withQueue(queue);
     assertThrows(
         IllegalArgumentException.class,
@@ -236,11 +234,11 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testPartitionKeyWithDeduplicationID() throws Exception {
-    var queue = new Queue("partitioned-queue").withPartitioningEnabled(true);
-    dbos.registerQueue(queue);
+    String queue = "partitioned-queue";
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
+    dbos.registerQueue(queue, QueueOptions.empty().andPartitionQueue(true));
 
     var options =
         new StartWorkflowOptions()

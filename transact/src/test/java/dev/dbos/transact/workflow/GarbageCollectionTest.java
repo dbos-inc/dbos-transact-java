@@ -17,7 +17,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class GarbageCollectionTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -27,7 +26,7 @@ public class GarbageCollectionTest {
 
   private GCTestServiceImpl impl;
   private GCTestService proxy;
-  private Queue gcQueue;
+  private String gcQueue;
 
   @BeforeEach
   void beforeEach() {
@@ -37,10 +36,10 @@ public class GarbageCollectionTest {
     impl = new GCTestServiceImpl(dbos);
     proxy = dbos.registerProxy(GCTestService.class, impl);
 
-    gcQueue = new Queue("gcqueue");
-    dbos.registerQueue(gcQueue);
+    gcQueue = "gcqueue";
 
     dbos.launch();
+    dbos.registerQueue(gcQueue, QueueOptions.empty());
   }
 
   @Test

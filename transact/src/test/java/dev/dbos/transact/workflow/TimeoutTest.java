@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class TimeoutTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -120,10 +119,10 @@ public class TimeoutTest {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
-    Queue simpleQ = new Queue("simpleQ");
-    dbos.registerQueue(simpleQ);
+    String simpleQ = "simpleQ";
 
     dbos.launch();
+    dbos.registerQueue(simpleQ, QueueOptions.empty());
 
     // queued
 
@@ -147,10 +146,10 @@ public class TimeoutTest {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
-    Queue simpleQ = new Queue("simpleQ");
-    dbos.registerQueue(simpleQ);
+    String simpleQ = "simpleQ";
 
     dbos.launch();
+    dbos.registerQueue(simpleQ, QueueOptions.empty());
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout
