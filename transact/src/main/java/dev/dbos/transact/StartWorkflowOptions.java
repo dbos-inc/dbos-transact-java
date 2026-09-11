@@ -132,8 +132,7 @@ public record StartWorkflowOptions(
    * Construct with a specified queue.
    *
    * @param queue the queue to assign the workflow to
-   * @deprecated Only {@link Queue#name()} is read here; the rest of the {@code Queue} is discarded,
-   *     so configuration set on it has no effect. Use {@link #StartWorkflowOptions(QueueName)}.
+   * @deprecated Use {@link #StartWorkflowOptions(QueueName)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public StartWorkflowOptions(@NonNull Queue queue) {
@@ -277,8 +276,7 @@ public record StartWorkflowOptions(
    *
    * @param queue the queue to assign
    * @return a new StartWorkflowOptions with the updated queue name
-   * @deprecated Only {@link Queue#name()} is read here; the rest of the {@code Queue} is discarded,
-   *     so configuration set on it has no effect. Use {@link #withQueue(QueueName)}.
+   * @deprecated Use {@link #withQueue(QueueName)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull StartWorkflowOptions withQueue(@NonNull Queue queue) {

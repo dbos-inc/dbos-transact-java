@@ -164,18 +164,8 @@ public class DBOS implements AutoCloseable {
    * the queue options available.
    *
    * @param queue `Queue` to register
-   * @deprecated Pre-launch queue registration keeps the queue in this process only: it is never
-   *     written to the {@code queues} table, so no peer can see it. Conductor cannot list it,
-   *     another executor of this application cannot poll it, and neither can a Python, TypeScript,
-   *     Go or Rust process sharing the system database, because all of them build their dequeue set
-   *     from that table. Workflows enqueued to such a queue are ordinary {@code workflow_status}
-   *     rows naming a queue nobody else can resolve, so they wait until this process picks them up
-   *     — and if it is gone, forever. A statically registered queue also silently overrides a
-   *     database-backed queue of the same name, on this executor only.
-   *     <p>Use {@link #registerQueue(String, QueueOptions)} after launch instead, which records the
-   *     queue in the database where every peer can find it. {@link QueueOptions} expresses
-   *     everything {@link Queue} does. Python and TypeScript removed the equivalent in-memory
-   *     queues in their 3.0 and 5.0 releases.
+   * @deprecated In-memory queues have been replaced by database-backed queues. Use {@link
+   *     #registerQueue(QueueName, QueueOptions)} after launch.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueue(@NonNull Queue queue) {
@@ -191,8 +181,7 @@ public class DBOS implements AutoCloseable {
    * has the queue options available.
    *
    * @param queues collection of `Queue` instances to register
-   * @deprecated For the reasons given on {@link #registerQueue(Queue)}. Use {@link
-   *     #registerQueue(String, QueueOptions)} after launch instead.
+   * @deprecated Use {@link #registerQueue(QueueName, QueueOptions)} after launch, once per queue.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueues(@NonNull Queue... queues) {
@@ -483,9 +472,7 @@ public class DBOS implements AutoCloseable {
    *
    * @param queueName Name of the queue
    * @return Optional containing the queue definition for given `queueName`, or empty if not found
-   * @deprecated This reads the pre-launch registry only, so it finds exactly the queues {@link
-   *     #registerQueue(Queue)} creates and never a database-backed one. Use {@link
-   *     #findQueue(String)}, which reads the {@code queues} table.
+   * @deprecated Reads the pre-launch registry only. Use {@link #findQueue(QueueName)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
