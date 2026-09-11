@@ -83,6 +83,28 @@ public class WorkflowDAO {
         application_name
       """;
 
+  // Migration 109 created the tables that input and output payloads move into. The Java SDK
+  // currently still writes the legacy workflow_status columns, but a later release will write to
+  // the new tables. So every read prefers the new table but falls back to the old column. We are
+  // splitting the read and write changes into separate releases to enable rolling upgrades.
+  // Correlated on the primary key, so each is an index lookup.
+  private static String inputsColumn(String schema) {
+    return ("COALESCE((SELECT wi.inputs FROM \"%s\".workflow_input wi"
+            + " WHERE wi.workflow_uuid = workflow_status.workflow_uuid),"
+            + " workflow_status.inputs) AS inputs")
+        .formatted(schema);
+  }
+
+  private static String outputColumns(String schema) {
+    return ("COALESCE((SELECT wo.output FROM \"%1$s\".workflow_output wo"
+            + " WHERE wo.workflow_uuid = workflow_status.workflow_uuid),"
+            + " workflow_status.output) AS output,"
+            + " COALESCE((SELECT wo.error FROM \"%1$s\".workflow_output wo"
+            + " WHERE wo.workflow_uuid = workflow_status.workflow_uuid),"
+            + " workflow_status.error) AS error")
+        .formatted(schema);
+  }
+
   private WorkflowDAO() {}
 
   /**
@@ -508,7 +530,13 @@ public class WorkflowDAO {
     }
 
     var sql =
-        ("SELECT " + WORKFLOW_STATUS_COLUMNS + ", inputs, output, error, serialization")
+        ("SELECT "
+                + WORKFLOW_STATUS_COLUMNS
+                + ", "
+                + inputsColumn(schema)
+                + ", "
+                + outputColumns(schema)
+                + ", serialization")
             + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
@@ -713,10 +741,10 @@ public class WorkflowDAO {
     var loadInput = input.loadInput() == null || input.loadInput();
     var loadOutput = input.loadOutput() == null || input.loadOutput();
     if (loadInput) {
-      sqlBuilder.append(", inputs");
+      sqlBuilder.append(", ").append(inputsColumn(ctx.schema()));
     }
     if (loadOutput) {
-      sqlBuilder.append(", output, error");
+      sqlBuilder.append(", ").append(outputColumns(ctx.schema()));
     }
     if (loadInput || loadOutput) {
       sqlBuilder.append(", serialization");
@@ -1306,11 +1334,11 @@ public class WorkflowDAO {
     DBOSSerializer serializer = ctx.serializer();
     final String sql =
         """
-          SELECT status, output, error, serialization, recovery_attempts
+          SELECT status, %s, serialization, recovery_attempts
           FROM "%s".workflow_status
           WHERE workflow_uuid = ?
         """
-            .formatted(ctx.schema());
+            .formatted(outputColumns(ctx.schema()), ctx.schema());
 
     while (true) {
       ctx.checkClosed();
@@ -1536,15 +1564,22 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
 
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      var array = conn.createArrayOf("text", wfIdSet.toArray(String[]::new));
-      try {
-        stmt.setArray(1, array);
-        stmt.executeUpdate();
-      } finally {
-        array.free();
-      }
+    var ids = wfIdSet.toArray(String[]::new);
+    try (var conn = ctx.getConnection()) {
+      runInTransaction(
+          conn,
+          c -> {
+            try (var stmt = c.prepareStatement(sql)) {
+              var array = c.createArrayOf("text", ids);
+              try {
+                stmt.setArray(1, array);
+                stmt.executeUpdate();
+              } finally {
+                array.free();
+              }
+            }
+            deleteWorkflowChildRows(c, ctx.schema(), ids);
+          });
     }
   }
 
@@ -1808,11 +1843,11 @@ public class WorkflowDAO {
         """
           SELECT workflow_uuid, name, class_name, config_name, application_version,
                  application_id, authenticated_user, authenticated_roles, assumed_role,
-                 inputs, serialization, attributes, application_name
+                 %s, serialization, attributes, application_name
           FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?)
         """
-            .formatted(schema);
+            .formatted(inputsColumn(schema), schema);
 
     Map<String, ForkWorkflowData> result = new HashMap<>();
     try (var stmt = conn.prepareStatement(sql)) {
@@ -2044,6 +2079,48 @@ public class WorkflowDAO {
     }
   }
 
+  @FunctionalInterface
+  private interface SqlAction {
+    void run(Connection conn) throws SQLException;
+  }
+
+  private static void runInTransaction(Connection conn, SqlAction action) throws SQLException {
+    conn.setAutoCommit(false);
+    try {
+      action.run(conn);
+      conn.commit();
+    } catch (SQLException e) {
+      conn.rollback();
+      throw e;
+    } finally {
+      conn.setAutoCommit(true);
+    }
+  }
+
+  // Deleting a status row cannot be relied on to cascade its steps away: shared migration 112
+  // drops the operation_outputs -> workflow_status foreign key, and any SDK sharing this system
+  // database may already have applied it even though this ladder stops at 111. workflow_input and
+  // workflow_output (migration 109) never had a foreign key at all. Every delete path clears all
+  // three by ID instead.
+  private static void deleteWorkflowChildRows(Connection conn, String schema, String[] workflowIds)
+      throws SQLException {
+    if (workflowIds.length == 0) {
+      return;
+    }
+    for (var table : List.of("operation_outputs", "workflow_input", "workflow_output")) {
+      var sql = "DELETE FROM \"%s\".%s WHERE workflow_uuid = ANY(?)".formatted(schema, table);
+      try (var stmt = conn.prepareStatement(sql)) {
+        var array = conn.createArrayOf("text", workflowIds);
+        try {
+          stmt.setArray(1, array);
+          stmt.executeUpdate();
+        } finally {
+          array.free();
+        }
+      }
+    }
+  }
+
   private static Instant getRowsCutoff(DbContext ctx, Connection conn, long rowsThreshold)
       throws SQLException {
     String sql =
@@ -2085,16 +2162,28 @@ public class WorkflowDAO {
               DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
             """
                     .formatted(ctx.schema())
-                + ctx.andAppScope();
-        try (var stmt = conn.prepareStatement(sql)) {
-          stmt.setLong(1, cutoff.toEpochMilli());
-          stmt.setString(2, WorkflowState.PENDING.name());
-          stmt.setString(3, WorkflowState.ENQUEUED.name());
-          stmt.setString(4, WorkflowState.DELAYED.name());
-          ctx.bindAppScope(stmt, 5);
+                + ctx.andAppScope()
+                + " RETURNING workflow_uuid";
+        var deadline = cutoff.toEpochMilli();
+        runInTransaction(
+            conn,
+            c -> {
+              List<String> deleted = new ArrayList<>();
+              try (var stmt = c.prepareStatement(sql)) {
+                stmt.setLong(1, deadline);
+                stmt.setString(2, WorkflowState.PENDING.name());
+                stmt.setString(3, WorkflowState.ENQUEUED.name());
+                stmt.setString(4, WorkflowState.DELAYED.name());
+                ctx.bindAppScope(stmt, 5);
 
-          stmt.executeUpdate();
-        }
+                try (var rs = stmt.executeQuery()) {
+                  while (rs.next()) {
+                    deleted.add(rs.getString(1));
+                  }
+                }
+              }
+              deleteWorkflowChildRows(c, ctx.schema(), deleted.toArray(String[]::new));
+            });
       }
     }
   }

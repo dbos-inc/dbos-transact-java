@@ -22,7 +22,7 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -477,7 +477,11 @@ public class MigrationManager {
             MIGRATION_104,
             migration105(isCockroach),
             MIGRATION_106,
-            migration107(isCockroach)));
+            migration107(isCockroach),
+            MIGRATION_108,
+            MIGRATION_109,
+            MIGRATION_110,
+            migration111(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1385,5 +1389,58 @@ public class MigrationManager {
         + " IF NOT EXISTS \"uq_application_versions_unclaimed_version\""
         + " ON \"%1$s\".\"application_versions\" (\"version_name\")"
         + " WHERE \"application_name\" IS NULL";
+  }
+
+  // Migration 108: per-partition limits on queues. Any of these being set partitions the queue;
+  // each applies per partition. ADD COLUMN with a constant default is catalog-only, so no
+  // CONCURRENTLY is needed.
+  static final String MIGRATION_108 =
+      """
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_concurrency" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_worker_concurrency" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_rate_limit_max" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_rate_limit_period_sec" DOUBLE PRECISION DEFAULT NULL;
+      """;
+
+  // Migration 109: the tables that payloads move into, so a status update no longer rewrites a
+  // large input. Creating them is all this release does: the reads below COALESCE over both
+  // shapes, but every write here still fills the legacy workflow_status columns. Migrations 112
+  // and 113, which stop the shared enqueue_workflow function writing them, come with the writes
+  // in a later release, once every executor can read both shapes.
+  static final String MIGRATION_109 =
+      """
+      CREATE TABLE IF NOT EXISTS "%1$s"."workflow_input" (
+          workflow_uuid TEXT NOT NULL PRIMARY KEY,
+          inputs TEXT,
+          retention_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+
+      CREATE TABLE IF NOT EXISTS "%1$s"."workflow_output" (
+          workflow_uuid TEXT NOT NULL PRIMARY KEY,
+          output TEXT,
+          error TEXT,
+          retention_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+
+      CREATE INDEX IF NOT EXISTS "idx_workflow_input_retention"
+          ON "%1$s"."workflow_input" ("retention_timestamp");
+
+      CREATE INDEX IF NOT EXISTS "idx_workflow_output_retention"
+          ON "%1$s"."workflow_output" ("retention_timestamp");
+      """;
+
+  // Migration 110: sweep order only. The payload sweep deletes by absence of a status row, so
+  // this bounds a round rather than deciding what it may delete.
+  static final String MIGRATION_110 =
+      """
+      ALTER TABLE "%1$s"."operation_outputs"
+          ADD COLUMN IF NOT EXISTS "retention_timestamp" BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint;
+      """;
+
+  static String migration111(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_operation_outputs_retention\""
+        + " ON \"%1$s\".\"operation_outputs\" (\"retention_timestamp\")";
   }
 }
