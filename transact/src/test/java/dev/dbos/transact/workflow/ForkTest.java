@@ -303,14 +303,15 @@ public class ForkTest {
     assertEquals(Constants.DBOS_INTERNAL_QUEUE, handle1.getStatus().queueName());
     assertNull(handle1.getStatus().queuePartitionKey());
 
-    // Explicit queueName: should use the specified queue with no partition key
+    // Explicit queue name: should use the specified queue with no partition key
     var handle2 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue));
     assertNotEquals(workflowId, handle2.workflowId());
     assertEquals(testQueue, handle2.getStatus().queueName());
     assertNull(handle2.getStatus().queuePartitionKey());
 
-    // Explicit queueName: should use the specified queue by name with no partition key
-    var handle3 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue));
+    // Explicit QueueName: should use the specified queue with no partition key
+    var handle3 =
+        dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(QueueName.of(testQueue)));
     assertNotEquals(workflowId, handle3.workflowId());
     assertEquals(testQueue, handle3.getStatus().queueName());
     assertNull(handle3.getStatus().queuePartitionKey());

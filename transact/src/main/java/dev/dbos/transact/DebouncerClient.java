@@ -142,7 +142,6 @@ public final class DebouncerClient<R> {
         attributes);
   }
 
-  /** See {@link #withQueue(String)}. */
   /**
    * Returns a copy of this debouncer that enqueues the debounced workflow on {@code queue}.
    *

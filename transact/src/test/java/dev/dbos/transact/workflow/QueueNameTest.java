@@ -73,6 +73,21 @@ class QueueNameTest {
   }
 
   @Test
+  void forkFromFailureOptionsWithQueueMatchesTheStringForm() {
+    assertEquals(
+        new ForkFromFailureOptions.FromLastFailure().withQueue("orders"),
+        new ForkFromFailureOptions.FromLastFailure().withQueue(QueueName.of("orders")));
+  }
+
+  @Test
+  void dbosConfigWithListenQueuesIgnoresNullQueueNames() {
+    var base = DBOSConfig.defaults("queue-name-test");
+    assertEquals(
+        base.withListenQueue("orders"),
+        base.withListenQueues(new QueueName[] {null, QueueName.of("orders")}));
+  }
+
+  @Test
   void dbosConfigWithListenQueueMatchesTheStringForm() {
     var base = DBOSConfig.defaults("queue-name-test");
     assertEquals(base.withListenQueue("orders"), base.withListenQueue(QueueName.of("orders")));

@@ -653,9 +653,10 @@ public record DBOSConfig(
   }
 
   /**
-   * Returns a copy of this config that polls only {@code queue}.
+   * Returns a copy of this config with {@code queue} added to the set of listened queues. Removes
+   * the listen-on-all-queues default if this is the first queue specified.
    *
-   * @param queue name of the queue to poll
+   * @param queue name of the queue to add
    * @return a copy listening to that queue
    */
   public @NonNull DBOSConfig withListenQueue(@NonNull QueueName queue) {
@@ -685,17 +686,19 @@ public record DBOSConfig(
   }
 
   /**
-   * Returns a copy of this config that polls only the given queues.
+   * Returns a copy of this config with each queue in {@code queues} added to the listened set.
+   * Removes the listen-on-all-queues default if this is the first queue specified.
    *
-   * @param queues names of the queues to poll
+   * @param queues names of the queues to add; {@code null} entries are ignored
    * @return a copy listening to those queues
    */
   public @NonNull DBOSConfig withListenQueues(@Nullable QueueName... queues) {
-    if (queues == null) {
-      return withListenQueues((String[]) null);
-    }
-    return withListenQueues(
-        java.util.Arrays.stream(queues).map(QueueName::value).toArray(String[]::new));
+    var names =
+        Arrays.stream(Objects.requireNonNullElseGet(queues, () -> new QueueName[0]))
+            .filter(Objects::nonNull)
+            .map(QueueName::value)
+            .toArray(String[]::new);
+    return withListenQueues(names);
   }
 
   /**

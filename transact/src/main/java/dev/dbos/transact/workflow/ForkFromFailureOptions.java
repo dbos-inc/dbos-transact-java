@@ -31,7 +31,23 @@ public sealed interface ForkFromFailureOptions
 
   ForkFromFailureOptions withApplicationVersion(@Nullable String applicationVersion);
 
-  /** Shorthand for {@link #withQueue(String)}. */
+  /**
+   * Returns a copy of these options with the given queue.
+   *
+   * @param queue name of the queue to assign to the forked workflow
+   * @return a copy with the queue set
+   */
+  default ForkFromFailureOptions withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
+  }
+
+  /**
+   * Returns a copy of these options with the given queue.
+   *
+   * @param queue Queue to assign to the forked workflow
+   * @deprecated Use {@link #withQueue(QueueName)}.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   default ForkFromFailureOptions withQueue(Queue queue) {
     return withQueue(queue.name());
   }

@@ -359,10 +359,7 @@ public class DBOS implements AutoCloseable {
     return dbosExecutor.get();
   }
 
-  /**
-   * Launch DBOS, and start recovery. All workflows, queues, and other objects should be registered
-   * before launch
-   */
+  /** Launch DBOS, and start recovery. */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
 

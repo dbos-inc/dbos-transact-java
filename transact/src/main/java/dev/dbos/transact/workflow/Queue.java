@@ -76,8 +76,9 @@ public record Queue(
   /**
    * Construct a queue with a given name
    *
-   * @deprecated See {@link #Queue(String, Integer, Integer, boolean, boolean, RateLimit,
-   *     Duration)}.
+   * @deprecated A {@code Queue} is what {@link dev.dbos.transact.DBOS#findQueue(String)} returns,
+   *     not something to build. Register with {@link dev.dbos.transact.DBOS#registerQueue(String,
+   *     QueueOptions)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue(@NonNull String name) {
@@ -166,7 +167,7 @@ public record Queue(
   }
 
   /**
-   * Produces a new Queue with the partitioned enabled/disabled.
+   * Produces a new Queue with partitioning enabled/disabled.
    *
    * @deprecated Configure a queue with {@link QueueOptions} at registration.
    */

@@ -121,7 +121,6 @@ public final class Debouncer<R> {
         deduplicationId);
   }
 
-  /** See {@link #withQueue(String)}. */
   /**
    * Returns a copy of this debouncer that enqueues the debounced workflow on {@code queue}.
    *
