@@ -833,10 +833,12 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> SchedulesDAO.applySchedules(ctx, schedules));
   }
 
+  @SuppressWarnings("removal") // implements the deprecated ExternalState API
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return dbRetry(() -> ExternalStateDAO.getExternalState(ctx, service, workflowName, key));
   }
 
+  @SuppressWarnings("removal") // implements the deprecated ExternalState API
   public ExternalState upsertExternalState(ExternalState state) {
     return dbRetry(() -> ExternalStateDAO.upsertExternalState(ctx, state));
   }
