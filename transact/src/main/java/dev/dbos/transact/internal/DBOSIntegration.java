@@ -259,7 +259,14 @@ public class DBOSIntegration {
    * @return an {@link Optional} containing the value associated with the service+workflow+key
    *     combination, or empty if not found
    * @throws IllegalStateException if DBOS has not been launched
+   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is
+   *     retired. The Python and TypeScript SDKs drop it at shared migration 114, having removed the
+   *     in-memory event receivers whose dispatch bookkeeping it held, and this SDK will follow. A
+   *     system database that any of those SDKs has migrated no longer has the table, so this API
+   *     already fails there. Store integration state in your own table instead.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
+  @SuppressWarnings("removal") // the deprecated API's own implementation
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return executor("getExternalState").getExternalState(service, workflowName, key);
   }
@@ -273,7 +280,14 @@ public class DBOSIntegration {
    * @return the value associated with the service+workflow+key combination — may differ from the
    *     supplied value if the existing record already had a higher version or timestamp
    * @throws IllegalStateException if DBOS has not been launched
+   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is
+   *     retired. The Python and TypeScript SDKs drop it at shared migration 114, having removed the
+   *     in-memory event receivers whose dispatch bookkeeping it held, and this SDK will follow. A
+   *     system database that any of those SDKs has migrated no longer has the table, so this API
+   *     already fails there. Store integration state in your own table instead.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
+  @SuppressWarnings("removal") // the deprecated API's own implementation
   public ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);
   }

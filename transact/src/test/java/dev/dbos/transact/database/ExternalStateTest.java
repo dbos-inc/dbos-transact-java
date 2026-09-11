@@ -18,6 +18,8 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+// Covers the deprecated event_dispatch_kv API for as long as it ships.
+@SuppressWarnings("removal")
 public class ExternalStateTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
