@@ -63,6 +63,9 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 public class SystemDatabaseTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

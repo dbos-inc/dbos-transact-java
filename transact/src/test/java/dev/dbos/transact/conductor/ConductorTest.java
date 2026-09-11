@@ -83,6 +83,9 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 public class ConductorTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ConductorTest.class);

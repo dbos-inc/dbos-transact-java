@@ -39,6 +39,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 class AdminServerTest {
 
   int port;

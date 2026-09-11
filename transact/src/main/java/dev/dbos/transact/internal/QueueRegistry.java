@@ -10,6 +10,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// The pre-launch static registry itself, which DBOS.registerQueue(Queue) is the entry point to.
+// Both are deprecated for removal together; until then this class is the one place that still
+// builds a Queue by hand.
+@SuppressWarnings("removal")
 public class QueueRegistry {
   private final ConcurrentHashMap<String, Queue> registry = new ConcurrentHashMap<>();
   private final Queue internalQueue = new Queue(Constants.DBOS_INTERNAL_QUEUE);

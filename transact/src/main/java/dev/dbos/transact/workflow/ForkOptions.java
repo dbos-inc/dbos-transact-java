@@ -82,7 +82,12 @@ public record ForkOptions(
    * Returns a copy of this object with the given queueName.
    *
    * @param queue Queue to assign to the forked workflow
+   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
+   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
+   *     — queue configuration belongs to {@link QueueOptions} and the database-backed registration
+   *     that takes it.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public ForkOptions withQueue(Queue queue) {
     return new ForkOptions(
         this.forkedWorkflowId,

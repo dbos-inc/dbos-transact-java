@@ -142,6 +142,13 @@ public final class DebouncerClient<R> {
   }
 
   /** See {@link #withQueue(String)}. */
+  /**
+   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
+   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
+   *     — queue configuration belongs to {@link dev.dbos.transact.workflow.QueueOptions} and the
+   *     database-backed registration that takes it.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DebouncerClient<R> withQueue(@NonNull Queue queue) {
     return withQueue(queue.name());
   }

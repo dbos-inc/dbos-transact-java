@@ -73,6 +73,9 @@ class AppNameServiceImpl implements AppNameService {
  * -- belong to everyone, and the names applications register objects under are shared address
  * space, so a collision raises.
  */
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 public class ApplicationNameTest {
 
   private static final String APP_A = "app-a";

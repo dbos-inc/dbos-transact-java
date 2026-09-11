@@ -48,7 +48,18 @@ public record Queue(
   /**
    * Constructs a queue with no explicit owning application, which records the registering
    * application as the owner.
+   *
+   * @deprecated Authoring a {@code Queue} by hand only ever fed {@link
+   *     dev.dbos.transact.DBOS#registerQueue(Queue)}, which is itself deprecated for removal. Every
+   *     other API that accepts one reads {@link #name()} and discards the rest. Register a queue
+   *     with {@link dev.dbos.transact.DBOS#registerQueue(String,
+   *     dev.dbos.transact.workflow.QueueOptions)} and read one back with {@link
+   *     dev.dbos.transact.DBOS#findQueue(String)}; this type is what you receive, not what you
+   *     build. Python draws the same line and enforces it at runtime — its {@code Queue.__init__}
+   *     refuses direct construction, directing callers to {@code register_queue} and {@code
+   *     retrieve_queue}.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue(
       @NonNull String name,
       @Nullable Integer concurrency,
@@ -68,7 +79,13 @@ public record Queue(
         null);
   }
 
-  /** Construct a queue with a given name */
+  /**
+   * Construct a queue with a given name
+   *
+   * @deprecated See {@link #Queue(String, Integer, Integer, boolean, boolean, RateLimit,
+   *     Duration)}. Pass the name itself where a queue is wanted.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue(@NonNull String name) {
     this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL, null);
   }
@@ -80,7 +97,16 @@ public record Queue(
     return rateLimit != null;
   }
 
-  /** Produces a new Queue with the assigned name. */
+  /**
+   * Produces a new Queue with the assigned name.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withName(@NonNull String name) {
     return new Queue(
         name,
@@ -96,7 +122,14 @@ public record Queue(
   /**
    * Produces a new Queue with the assigned global concurrency. `null` may be specified to remove
    * the concurrency limit.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withConcurrency(@Nullable Integer concurrency) {
     return new Queue(
         name,
@@ -112,7 +145,14 @@ public record Queue(
   /**
    * Produces a new Queue with the assigned per-worker concurrency. `null` may be specified to
    * remove the concurrency limit.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withWorkerConcurrency(@Nullable Integer workerConcurrency) {
     return new Queue(
         name,
@@ -125,7 +165,16 @@ public record Queue(
         applicationName);
   }
 
-  /** Produces a new Queue with the prioritization enabled/disabled. */
+  /**
+   * Produces a new Queue with the prioritization enabled/disabled.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPriorityEnabled(boolean priorityEnabled) {
     return new Queue(
         name,
@@ -138,7 +187,16 @@ public record Queue(
         applicationName);
   }
 
-  /** Produces a new Queue with the partitioned enabled/disabled. */
+  /**
+   * Produces a new Queue with the partitioned enabled/disabled.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPartitioningEnabled(boolean partitioningEnabled) {
     return new Queue(
         name,
@@ -154,7 +212,14 @@ public record Queue(
   /**
    * Produces a new Queue with the assigned rate limit. `null` may be specified to remove the rate
    * limit.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withRateLimit(@Nullable RateLimit rateLimit) {
     return new Queue(
         name,
@@ -169,17 +234,42 @@ public record Queue(
 
   /**
    * Produces a new Queue with the assigned rate limit, expressed in workflows per period duration.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withRateLimit(int limit, Duration period) {
     return withRateLimit(new RateLimit(limit, period));
   }
 
-  /** Produces a new Queue with the assigned rate limit, expressed in workflows per period. */
+  /**
+   * Produces a new Queue with the assigned rate limit, expressed in workflows per period.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withRateLimit(int limit, long period, TimeUnit unit) {
     return withRateLimit(new RateLimit(limit, Duration.of(period, unit.toChronoUnit())));
   }
 
-  /** Produces a new Queue with the assigned polling interval. */
+  /**
+   * Produces a new Queue with the assigned polling interval.
+   *
+   * @deprecated Queue configuration belongs to {@link QueueOptions}, which is what the
+   *     database-backed registration accepts. The fields themselves stay live — the dequeue path
+   *     reads them off the {@code Queue} the DAO materializes from the {@code queues} row — but
+   *     once {@link dev.dbos.transact.DBOS#registerQueue(Queue)} is gone there is no public sink
+   *     for a {@code Queue} you configured yourself.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPollingInterval(@NonNull Duration pollingInterval) {
     return new Queue(
         name,

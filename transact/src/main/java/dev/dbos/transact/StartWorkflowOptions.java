@@ -119,7 +119,12 @@ public record StartWorkflowOptions(
    * Construct with a specified queue.
    *
    * @param queue the queue to assign the workflow to
+   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
+   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
+   *     — queue configuration belongs to {@link dev.dbos.transact.workflow.QueueOptions} and the
+   *     database-backed registration that takes it.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public StartWorkflowOptions(@NonNull Queue queue) {
     this(null, null, null, queue.name(), null, null, null, null, null, null, null, null, null);
   }
@@ -251,7 +256,12 @@ public record StartWorkflowOptions(
    *
    * @param queue the queue to assign
    * @return a new StartWorkflowOptions with the updated queue name
+   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
+   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
+   *     — queue configuration belongs to {@link dev.dbos.transact.workflow.QueueOptions} and the
+   *     database-backed registration that takes it.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull StartWorkflowOptions withQueue(@NonNull Queue queue) {
     return withQueue(queue.name());
   }
