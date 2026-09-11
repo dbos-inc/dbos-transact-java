@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -76,6 +77,16 @@ public record ForkOptions(
 
   public ForkOptions withTimeout(long value, TimeUnit unit) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
+  }
+
+  /**
+   * Returns a copy of this object with the given queue.
+   *
+   * @param queue name of the queue to assign to the forked workflow
+   * @return a copy with the queue set
+   */
+  public ForkOptions withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
   }
 
   /**

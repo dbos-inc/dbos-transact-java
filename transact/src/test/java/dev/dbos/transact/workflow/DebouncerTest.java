@@ -209,7 +209,7 @@ public class DebouncerTest {
     dbos.launch();
     dbos.registerQueue(userQueue, QueueOptions.empty());
 
-    var debouncer = dbos.<String>debouncer().withQueue(userQueue);
+    var debouncer = dbos.<String>debouncer().withQueue(QueueName.of(userQueue));
     var handle = debouncer.debounce("user-q", Duration.ofMillis(500), () -> svc.process("queued"));
     assertEquals("result:queued", handle.getResult());
 

@@ -5,6 +5,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -113,6 +114,18 @@ public record StartWorkflowOptions(
    */
   public StartWorkflowOptions(String workflowId) {
     this(workflowId, null, null, null, null, null, null, null, null, null, null, null, null);
+  }
+
+  /**
+   * Sets the queue the workflow is enqueued on.
+   *
+   * <p>The unambiguous counterpart to {@link #StartWorkflowOptions(String)}, which takes a
+   * <em>workflow id</em>.
+   *
+   * @param queue name of the queue to enqueue on
+   */
+  public StartWorkflowOptions(@NonNull QueueName queue) {
+    this(null, null, null, queue.value(), null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -249,6 +262,16 @@ public record StartWorkflowOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes);
+  }
+
+  /**
+   * Returns a copy of this object with the given queue.
+   *
+   * @param queue name of the queue to enqueue on
+   * @return a copy with the queue set
+   */
+  public @NonNull StartWorkflowOptions withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
   }
 
   /**

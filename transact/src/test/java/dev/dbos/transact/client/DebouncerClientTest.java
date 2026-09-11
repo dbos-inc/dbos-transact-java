@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DebouncerClient;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -128,7 +129,9 @@ public class DebouncerClientTest {
   @Test
   void debouncerClientWithQueue() throws Exception {
     var handle =
-        debouncer().withQueue(USER_QUEUE).debounce("key-q", Duration.ofMillis(400), "queued");
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .debounce("key-q", Duration.ofMillis(400), "queued");
 
     assertEquals("result:queued", handle.getResult());
 

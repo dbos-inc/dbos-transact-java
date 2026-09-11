@@ -3,6 +3,7 @@ package dev.dbos.transact.config;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -652,6 +653,16 @@ public record DBOSConfig(
   }
 
   /**
+   * Returns a copy of this config that polls only {@code queue}.
+   *
+   * @param queue name of the queue to poll
+   * @return a copy listening to that queue
+   */
+  public @NonNull DBOSConfig withListenQueue(@NonNull QueueName queue) {
+    return withListenQueues(new String[] {queue.value()});
+  }
+
+  /**
    * Returns a copy of this config with {@code queue} added to the set of listened queues. Removes
    * the listen-on-all-queues default if this is the first queue specified.
    *
@@ -674,6 +685,20 @@ public record DBOSConfig(
    */
   public @NonNull DBOSConfig withListenQueue(@NonNull String queueName) {
     return withListenQueues(new String[] {queueName});
+  }
+
+  /**
+   * Returns a copy of this config that polls only the given queues.
+   *
+   * @param queues names of the queues to poll
+   * @return a copy listening to those queues
+   */
+  public @NonNull DBOSConfig withListenQueues(@Nullable QueueName... queues) {
+    if (queues == null) {
+      return withListenQueues((String[]) null);
+    }
+    return withListenQueues(
+        java.util.Arrays.stream(queues).map(QueueName::value).toArray(String[]::new));
   }
 
   /**
