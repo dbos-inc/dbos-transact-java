@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class DynamicQueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(DynamicQueuesTest.class);

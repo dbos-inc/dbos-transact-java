@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /** Tests for custom workflow attributes (see py-transact PR #720). */
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class WorkflowAttributesTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

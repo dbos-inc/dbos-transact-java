@@ -38,6 +38,7 @@ class ClientTargetServiceImpl implements ClientTargetService {
   }
 }
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class DebouncerClientTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

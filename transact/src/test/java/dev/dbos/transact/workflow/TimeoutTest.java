@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class TimeoutTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

@@ -73,6 +73,7 @@ class AppNameServiceImpl implements AppNameService {
  * -- belong to everyone, and the names applications register objects under are shared address
  * space, so a collision raises.
  */
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class ApplicationNameTest {
 
   private static final String APP_A = "app-a";

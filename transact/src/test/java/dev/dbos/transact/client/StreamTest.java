@@ -23,6 +23,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Assumptions;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class StreamTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

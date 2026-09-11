@@ -38,6 +38,7 @@ import tools.jackson.databind.json.JsonMapper;
  * direct database inserts using the portable JSON format, simulating cross-language workflow
  * initiation.
  */
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class PortableSerializationTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
 import tools.jackson.databind.json.JsonMapper;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class PgSqlClientTest {
 
   private static final JsonMapper MAPPER = new JsonMapper();

@@ -54,6 +54,7 @@ interface SimpleService {
 }
 
 @WorkflowClassName("TheImplFormerlyNamedSimpleServiceImpl")
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 class SimpleServiceImpl implements SimpleService {
 
   private static final Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);

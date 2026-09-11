@@ -48,6 +48,7 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>TypeScript: dbos-transact-ts/tests/interop.test.ts
  * </ul>
  */
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class InteropTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

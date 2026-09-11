@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class QueueChildWorkflowTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

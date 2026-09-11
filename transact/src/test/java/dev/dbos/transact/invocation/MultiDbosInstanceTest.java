@@ -37,6 +37,7 @@ class TestServiceImpl implements TestService {
   }
 }
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class MultiDbosInstanceTest {
 
   @AutoClose final PgContainer pgContainerA = new PgContainer();

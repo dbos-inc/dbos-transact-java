@@ -29,6 +29,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.junitpioneer.jupiter.RetryingTest;
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class ClientTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

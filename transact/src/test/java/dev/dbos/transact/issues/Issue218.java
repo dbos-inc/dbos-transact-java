@@ -82,6 +82,7 @@ class Issue218ServiceImpl implements Issue218Service {
   }
 }
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class Issue218 {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

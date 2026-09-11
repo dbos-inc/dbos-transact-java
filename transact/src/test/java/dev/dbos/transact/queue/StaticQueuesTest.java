@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
  * {@code dbos.registerQueue(Queue)} before launch, which exercises the pre-launch static listener
  * code path. See {@link QueuesTest} for the equivalent tests using database-backed dynamic queues.
  */
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class StaticQueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(StaticQueuesTest.class);

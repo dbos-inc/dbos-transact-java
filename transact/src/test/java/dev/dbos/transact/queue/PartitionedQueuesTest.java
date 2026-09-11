@@ -77,6 +77,7 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   }
 }
 
+@SuppressWarnings("removal") // registerQueue(Queue) is deprecated for removal; this exercises it
 public class PartitionedQueuesTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
