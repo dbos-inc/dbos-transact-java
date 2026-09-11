@@ -1088,10 +1088,12 @@ public class DBOSExecutor implements AutoCloseable {
         serializer);
   }
 
+  @SuppressWarnings("removal") // implements the deprecated ExternalState API
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return systemDatabase.getExternalState(service, workflowName, key);
   }
 
+  @SuppressWarnings("removal") // implements the deprecated ExternalState API
   public ExternalState upsertExternalState(ExternalState state) {
     return systemDatabase.upsertExternalState(state);
   }
