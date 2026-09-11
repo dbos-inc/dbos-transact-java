@@ -233,6 +233,11 @@ public class DBOSExecutor implements AutoCloseable {
       List<Queue> queues,
       AlertHandler alertHandler) {
 
+    // Recovery may only adopt workflows orphaned by a previous process, never one running in
+    // this one. Read before start() does anything, and stepped back a millisecond because the
+    // filter is created_at <= endTime on a millisecond-granular column.
+    var recoveryCutoff = Instant.now().minusMillis(1);
+
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
 
@@ -312,7 +317,7 @@ public class DBOSExecutor implements AutoCloseable {
               .withStatus(WorkflowState.PENDING)
               .withExecutorIds(List.of(executorId()))
               .withApplicationVersion(appVersion)
-              .withEndTime(Instant.now());
+              .withEndTime(recoveryCutoff);
       Runnable recoveryTask =
           () -> {
             try {
@@ -1206,6 +1211,14 @@ public class DBOSExecutor implements AutoCloseable {
 
   WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    // A workflow running here is not orphaned, whatever its row says. recoverPendingWorkflows()
+    // has no time bound, so this is the only thing stopping an operator-triggered recovery from
+    // starting a second execution of a live one.
+    if (activeWorkflows.containsKey(workflowId)) {
+      logger.debug("recoverWorkflow skip active {}", workflowId);
+      return retrieveWorkflow(workflowId);
+    }
 
     if (queueName != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);

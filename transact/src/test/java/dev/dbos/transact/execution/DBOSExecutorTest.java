@@ -287,8 +287,10 @@ class DBOSExecutorTest {
 
       long duration = System.currentTimeMillis() - start;
       logger.info("Duration {}", duration);
-      assertTrue(duration >= 2000);
-      assertTrue(duration < 2400); // Relaxed a bit for CI
+      assertTrue(duration >= 2000, "the sleep must not return early");
+      // Wide enough to catch only a repeated sleep: a tighter bound measures the round trip
+      // around the sleep rather than the sleep, and reddens on whichever CI job is slowest.
+      assertTrue(duration < 4000, "the sleep must be served once, not repeated");
 
       List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
 
