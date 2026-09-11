@@ -10,7 +10,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
@@ -320,10 +320,10 @@ public class InteropTest {
 
   @Test
   public void testInteropCanonical() throws Exception {
-    Queue testQueue = new Queue("interopq");
-    dbos.registerQueue(testQueue);
+    String testQueue = "interopq";
     dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
+    dbos.registerQueue(testQueue, QueueOptions.empty());
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
@@ -397,10 +397,10 @@ public class InteropTest {
 
   @Test
   public void testInteropDirectInsert() throws Exception {
-    Queue testQueue = new Queue("interopq");
-    dbos.registerQueue(testQueue);
+    String testQueue = "interopq";
     dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
+    dbos.registerQueue(testQueue, QueueOptions.empty());
 
     String workflowId = UUID.randomUUID().toString();
 
@@ -443,10 +443,10 @@ public class InteropTest {
 
   @Test
   public void testInteropNamedArgs() throws Exception {
-    Queue testQueue = new Queue("interopq");
-    dbos.registerQueue(testQueue);
+    String testQueue = "interopq";
     dbos.registerProxy(NamedArgsService.class, new NamedArgsServiceImpl());
     dbos.launch();
+    dbos.registerQueue(testQueue, QueueOptions.empty());
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();

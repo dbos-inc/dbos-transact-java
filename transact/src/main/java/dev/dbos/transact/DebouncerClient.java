@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
@@ -141,7 +142,20 @@ public final class DebouncerClient<R> {
         attributes);
   }
 
-  /** See {@link #withQueue(String)}. */
+  /**
+   * Returns a copy of this debouncer that enqueues the debounced workflow on {@code queue}.
+   *
+   * @param queue name of the queue to enqueue on
+   * @return a copy with the queue set
+   */
+  public @NonNull DebouncerClient<R> withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
+  }
+
+  /**
+   * @deprecated Use {@link #withQueue(QueueName)}.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DebouncerClient<R> withQueue(@NonNull Queue queue) {
     return withQueue(queue.name());
   }

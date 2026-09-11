@@ -7,7 +7,8 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DebouncerClient;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -47,7 +48,7 @@ public class DebouncerClientTest {
   @AutoClose HikariDataSource dataSource;
   @AutoClose DBOSClient dbosClient;
 
-  static final Queue USER_QUEUE = new Queue("client-user-queue");
+  static final String USER_QUEUE = "client-user-queue";
 
   ClientTargetServiceImpl serviceImpl;
 
@@ -59,8 +60,8 @@ public class DebouncerClientTest {
 
     serviceImpl = new ClientTargetServiceImpl();
     dbos.registerProxy(ClientTargetService.class, serviceImpl);
-    dbos.registerQueue(USER_QUEUE);
     dbos.launch();
+    dbos.registerQueue(USER_QUEUE, QueueOptions.empty());
 
     dbosClient =
         new DBOSClient(pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
@@ -128,13 +129,15 @@ public class DebouncerClientTest {
   @Test
   void debouncerClientWithQueue() throws Exception {
     var handle =
-        debouncer().withQueue(USER_QUEUE).debounce("key-q", Duration.ofMillis(400), "queued");
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .debounce("key-q", Duration.ofMillis(400), "queued");
 
     assertEquals("result:queued", handle.getResult());
 
     var status = dbosClient.getWorkflowStatus(handle.workflowId()).orElseThrow();
     assertEquals(WorkflowState.SUCCESS, status.status());
-    assertEquals(USER_QUEUE.name(), status.queueName());
+    assertEquals(USER_QUEUE, status.queueName());
     assertEquals(1, serviceImpl.callCount.get());
   }
 

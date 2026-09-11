@@ -3,6 +3,7 @@ package dev.dbos.transact.config;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -655,8 +656,21 @@ public record DBOSConfig(
    * Returns a copy of this config with {@code queue} added to the set of listened queues. Removes
    * the listen-on-all-queues default if this is the first queue specified.
    *
-   * @param queue the queue to add; must not be null
+   * @param queue name of the queue to add
+   * @return a copy listening to that queue
    */
+  public @NonNull DBOSConfig withListenQueue(@NonNull QueueName queue) {
+    return withListenQueues(new String[] {queue.value()});
+  }
+
+  /**
+   * Returns a copy of this config with {@code queue} added to the set of listened queues. Removes
+   * the listen-on-all-queues default if this is the first queue specified.
+   *
+   * @param queue the queue to add; must not be null
+   * @deprecated Use {@link #withListenQueue(QueueName)}.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DBOSConfig withListenQueue(@NonNull Queue queue) {
     return withListenQueues(new String[] {queue.name()});
   }
@@ -675,8 +689,26 @@ public record DBOSConfig(
    * Returns a copy of this config with each queue in {@code queues} added to the listened set.
    * Removes the listen-on-all-queues default if this is the first queue specified.
    *
-   * @param queues the queues to add; {@code null} entries are ignored
+   * @param queues names of the queues to add; {@code null} entries are ignored
+   * @return a copy listening to those queues
    */
+  public @NonNull DBOSConfig withListenQueues(@Nullable QueueName... queues) {
+    var names =
+        Arrays.stream(Objects.requireNonNullElseGet(queues, () -> new QueueName[0]))
+            .filter(Objects::nonNull)
+            .map(QueueName::value)
+            .toArray(String[]::new);
+    return withListenQueues(names);
+  }
+
+  /**
+   * Returns a copy of this config with each queue in {@code queues} added to the listened set.
+   * Removes the listen-on-all-queues default if this is the first queue specified.
+   *
+   * @param queues the queues to add; {@code null} entries are ignored
+   * @deprecated Use {@link #withListenQueues(QueueName...)}.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DBOSConfig withListenQueues(@Nullable Queue... queues) {
     var names =
         Arrays.stream(Objects.requireNonNullElseGet(queues, () -> new Queue[0]))

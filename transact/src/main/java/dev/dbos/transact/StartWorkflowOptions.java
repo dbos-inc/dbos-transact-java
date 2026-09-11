@@ -5,6 +5,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -116,10 +117,24 @@ public record StartWorkflowOptions(
   }
 
   /**
+   * Sets the queue the workflow is enqueued on.
+   *
+   * <p>The unambiguous counterpart to {@link #StartWorkflowOptions(String)}, which takes a
+   * <em>workflow id</em>.
+   *
+   * @param queue name of the queue to enqueue on
+   */
+  public StartWorkflowOptions(@NonNull QueueName queue) {
+    this(null, null, null, queue.value(), null, null, null, null, null, null, null, null, null);
+  }
+
+  /**
    * Construct with a specified queue.
    *
    * @param queue the queue to assign the workflow to
+   * @deprecated Use {@link #StartWorkflowOptions(QueueName)}.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public StartWorkflowOptions(@NonNull Queue queue) {
     this(null, null, null, queue.name(), null, null, null, null, null, null, null, null, null);
   }
@@ -247,11 +262,23 @@ public record StartWorkflowOptions(
   }
 
   /**
+   * Returns a copy of this object with the given queue.
+   *
+   * @param queue name of the queue to enqueue on
+   * @return a copy with the queue set
+   */
+  public @NonNull StartWorkflowOptions withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
+  }
+
+  /**
    * Returns a new StartWorkflowOptions with the specified queue.
    *
    * @param queue the queue to assign
    * @return a new StartWorkflowOptions with the updated queue name
+   * @deprecated Use {@link #withQueue(QueueName)}.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull StartWorkflowOptions withQueue(@NonNull Queue queue) {
     return withQueue(queue.name());
   }

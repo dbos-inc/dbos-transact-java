@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -79,10 +80,22 @@ public record ForkOptions(
   }
 
   /**
+   * Returns a copy of this object with the given queue.
+   *
+   * @param queue name of the queue to assign to the forked workflow
+   * @return a copy with the queue set
+   */
+  public ForkOptions withQueue(@NonNull QueueName queue) {
+    return withQueue(queue.value());
+  }
+
+  /**
    * Returns a copy of this object with the given queueName.
    *
    * @param queue Queue to assign to the forked workflow
+   * @deprecated Use {@link #withQueue(QueueName)}.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public ForkOptions withQueue(Queue queue) {
     return new ForkOptions(
         this.forkedWorkflowId,

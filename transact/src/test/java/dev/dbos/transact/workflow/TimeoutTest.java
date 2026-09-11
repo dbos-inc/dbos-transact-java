@@ -119,10 +119,10 @@ public class TimeoutTest {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
-    Queue simpleQ = new Queue("simpleQ");
-    dbos.registerQueue(simpleQ);
+    String simpleQ = "simpleQ";
 
     dbos.launch();
+    dbos.registerQueue(simpleQ, QueueOptions.empty());
 
     // queued
 
@@ -146,10 +146,10 @@ public class TimeoutTest {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
-    Queue simpleQ = new Queue("simpleQ");
-    dbos.registerQueue(simpleQ);
+    String simpleQ = "simpleQ";
 
     dbos.launch();
+    dbos.registerQueue(simpleQ, QueueOptions.empty());
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout

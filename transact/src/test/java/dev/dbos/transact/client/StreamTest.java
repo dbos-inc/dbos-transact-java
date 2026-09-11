@@ -11,7 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.StepInfo;
 
 import java.util.ArrayList;
@@ -38,10 +38,10 @@ public class StreamTest {
     dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
-    dbos.registerQueue(new Queue("testQueue"));
     proxy = dbos.registerProxy(StreamTestService.class, new StreamTestServiceImpl(dbos));
 
     dbos.launch();
+    dbos.registerQueue("testQueue", QueueOptions.empty());
   }
 
   @Test

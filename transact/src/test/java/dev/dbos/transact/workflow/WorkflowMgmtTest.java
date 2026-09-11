@@ -39,7 +39,7 @@ public class WorkflowMgmtTest {
 
   private MgmtService proxy;
   private MgmtServiceImpl impl;
-  private Queue myqueue;
+  private String myqueue;
 
   @BeforeEach
   void beforeEach() {
@@ -51,10 +51,10 @@ public class WorkflowMgmtTest {
     proxy = dbos.registerProxy(MgmtService.class, impl);
     impl.proxy = proxy;
 
-    myqueue = new Queue("myqueue");
-    dbos.registerQueue(myqueue);
+    myqueue = "myqueue";
 
     dbos.launch();
+    dbos.registerQueue(myqueue, QueueOptions.empty());
   }
 
   @Test

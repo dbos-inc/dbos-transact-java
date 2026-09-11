@@ -17,6 +17,9 @@ import org.junit.jupiter.api.Test;
  * the canonical constructor to catch a mis-ordered delegation, which would otherwise compile
  * cleanly. Distinct values per component are what make a swapped pair visible.
  */
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 class OmittedApplicationNameTest {
 
   @Test

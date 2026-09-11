@@ -33,7 +33,7 @@ public class WorkflowAttributesTest {
   @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
 
-  static final Queue ATTR_QUEUE = new Queue("attr-queue");
+  static final String ATTR_QUEUE = "attr-queue";
 
   private AttributesService proxy;
 
@@ -47,9 +47,9 @@ public class WorkflowAttributesTest {
     proxy = dbos.registerProxy(AttributesService.class, impl);
     impl.setProxy(proxy);
     impl.setDbos(dbos);
-    dbos.registerQueue(ATTR_QUEUE);
 
     dbos.launch();
+    dbos.registerQueue(ATTR_QUEUE, QueueOptions.empty());
   }
 
   @Test
@@ -104,7 +104,8 @@ public class WorkflowAttributesTest {
     WorkflowHandle<Integer, RuntimeException> handle;
     try (var a = new WorkflowOptions().withAttributes(attributes).setContext()) {
       handle =
-          dbos.startWorkflow(() -> proxy.queuedWorkflow(5), new StartWorkflowOptions(ATTR_QUEUE));
+          dbos.startWorkflow(
+              () -> proxy.queuedWorkflow(5), new StartWorkflowOptions().withQueue(ATTR_QUEUE));
     }
     assertEquals(5, handle.getResult());
     assertEquals(attributes, handle.getStatus().attributes());
@@ -196,7 +197,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE.name())
+          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE)
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(
@@ -310,7 +311,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE.name())
+          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE)
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(

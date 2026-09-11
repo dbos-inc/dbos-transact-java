@@ -44,9 +44,8 @@ public class ForkTest {
 
   private ForkTestServiceImpl impl;
   private ForkTestService proxy;
-  private Queue testQueue = new Queue("test-queue");
-  private Queue testPartitionQueue =
-      new Queue("test-partition-queue").withPartitioningEnabled(true);
+  private String testQueue = "test-queue";
+  private String testPartitionQueue = "test-partition-queue";
 
   @BeforeEach
   void beforeEach() {
@@ -57,9 +56,10 @@ public class ForkTest {
     impl = new ForkTestServiceImpl(dbos);
     proxy = dbos.registerProxy(ForkTestService.class, impl);
     impl.setProxy(proxy);
-    dbos.registerQueues(testQueue, testPartitionQueue);
 
     dbos.launch();
+    dbos.registerQueue(testPartitionQueue, QueueOptions.empty().andPartitionQueue(true));
+    dbos.registerQueue(testQueue, QueueOptions.empty());
   }
 
   @Test
@@ -303,16 +303,17 @@ public class ForkTest {
     assertEquals(Constants.DBOS_INTERNAL_QUEUE, handle1.getStatus().queueName());
     assertNull(handle1.getStatus().queuePartitionKey());
 
-    // Explicit queueName: should use the specified queue with no partition key
+    // Explicit queue name: should use the specified queue with no partition key
     var handle2 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue));
     assertNotEquals(workflowId, handle2.workflowId());
-    assertEquals(testQueue.name(), handle2.getStatus().queueName());
+    assertEquals(testQueue, handle2.getStatus().queueName());
     assertNull(handle2.getStatus().queuePartitionKey());
 
-    // Explicit queueName: should use the specified queue by name with no partition key
-    var handle3 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue.name()));
+    // Explicit QueueName: should use the specified queue with no partition key
+    var handle3 =
+        dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(QueueName.of(testQueue)));
     assertNotEquals(workflowId, handle3.workflowId());
-    assertEquals(testQueue.name(), handle3.getStatus().queueName());
+    assertEquals(testQueue, handle3.getStatus().queueName());
     assertNull(handle3.getStatus().queuePartitionKey());
 
     DBOSTestAccess.getQueueService(dbos).unpause();
@@ -349,13 +350,11 @@ public class ForkTest {
 
     // queueName with queuePartitionKey: both should be set
     var options1 =
-        new ForkOptions()
-            .withQueue(testPartitionQueue.name())
-            .withQueuePartitionKey("partition-key");
+        new ForkOptions().withQueue(testPartitionQueue).withQueuePartitionKey("partition-key");
     var handle1 = dbos.forkWorkflow(workflowId, 0, options1);
     assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertEquals(testPartitionQueue.name(), handle1.getStatus().queueName());
+    assertEquals(testPartitionQueue, handle1.getStatus().queueName());
     assertEquals("partition-key", handle1.getStatus().queuePartitionKey());
 
     DBOSTestAccess.getQueueService(dbos).unpause();

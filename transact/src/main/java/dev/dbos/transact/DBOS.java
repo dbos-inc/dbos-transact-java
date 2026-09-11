@@ -163,7 +163,10 @@ public class DBOS implements AutoCloseable {
    * the queue options available.
    *
    * @param queue `Queue` to register
+   * @deprecated In-memory queues have been replaced by database-backed queues. Use {@link
+   *     #registerQueue(String, QueueOptions)} after launch.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueue(@NonNull Queue queue) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot build a queue after DBOS is launched");
@@ -177,7 +180,9 @@ public class DBOS implements AutoCloseable {
    * has the queue options available.
    *
    * @param queues collection of `Queue` instances to register
+   * @deprecated Use {@link #registerQueue(String, QueueOptions)} after launch, once per queue.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueues(@NonNull Queue... queues) {
     for (Queue queue : queues) {
       registerQueue(queue);
@@ -354,10 +359,7 @@ public class DBOS implements AutoCloseable {
     return dbosExecutor.get();
   }
 
-  /**
-   * Launch DBOS, and start recovery. All workflows, queues, and other objects should be registered
-   * before launch
-   */
+  /** Launch DBOS, and start recovery. */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
 
@@ -412,7 +414,9 @@ public class DBOS implements AutoCloseable {
    *
    * @param queueName Name of the queue
    * @return Optional containing the queue definition for given `queueName`, or empty if not found
+   * @deprecated Reads the pre-launch registry only. Use {@link #findQueue(String)}.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
     return ensureLaunched("getQueue").findStaticQueue(queueName);
   }

@@ -7,7 +7,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.LocalDate;
@@ -44,14 +44,14 @@ public class MultiDbosInstanceTest {
   @AutoClose HikariDataSource dataSourceA;
   private TestService proxyA;
   private TestServiceImpl implA;
-  private Queue queueA;
+  private String queueA;
 
   @AutoClose final PgContainer pgContainerB = new PgContainer();
   @AutoClose DBOS dbosB;
   @AutoClose HikariDataSource dataSourceB;
   private TestServiceImpl implB;
   private TestService proxyB;
-  private Queue queueB;
+  private String queueB;
 
   @BeforeEach
   void beforeEachTest() throws Exception {
@@ -60,18 +60,18 @@ public class MultiDbosInstanceTest {
     dataSourceA = pgContainerA.dataSource();
     implA = new TestServiceImpl(dbosA);
     proxyA = dbosA.registerProxy(TestService.class, implA);
-    queueA = new Queue("queueA");
-    dbosA.registerQueue(queueA);
+    queueA = "queueA";
     dbosA.launch();
+    dbosA.registerQueue(queueA, QueueOptions.empty());
 
     var dbosConfigB = pgContainerB.dbosConfig("multi-dbos-instance-test-b");
     dbosB = new DBOS(dbosConfigB);
     dataSourceB = pgContainerB.dataSource();
     implB = new TestServiceImpl(dbosB);
     proxyB = dbosB.registerProxy(TestService.class, implB);
-    queueB = new Queue("queueB");
-    dbosB.registerQueue(queueB);
+    queueB = "queueB";
     dbosB.launch();
+    dbosB.registerQueue(queueB, QueueOptions.empty());
   }
 
   @Test
@@ -103,9 +103,11 @@ public class MultiDbosInstanceTest {
   @Test
   public void testEnqueueMultipleInstances() throws Exception {
     var handleA =
-        dbosA.startWorkflow(() -> proxyA.testWorkflow("hawk"), new StartWorkflowOptions(queueA));
+        dbosA.startWorkflow(
+            () -> proxyA.testWorkflow("hawk"), new StartWorkflowOptions().withQueue(queueA));
     var handleB =
-        dbosB.startWorkflow(() -> proxyB.testWorkflow("bear"), new StartWorkflowOptions(queueB));
+        dbosB.startWorkflow(
+            () -> proxyB.testWorkflow("bear"), new StartWorkflowOptions().withQueue(queueB));
 
     String formattedCurrentDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
     assertEquals("Hello hawk, today is " + formattedCurrentDate, handleA.getResult());
@@ -131,6 +133,6 @@ public class MultiDbosInstanceTest {
         IllegalArgumentException.class,
         () ->
             dbosA.startWorkflow(
-                () -> proxyA.testWorkflow("hawk"), new StartWorkflowOptions(queueB)));
+                () -> proxyA.testWorkflow("hawk"), new StartWorkflowOptions().withQueue(queueB)));
   }
 }

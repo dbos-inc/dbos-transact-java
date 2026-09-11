@@ -26,7 +26,7 @@ public class GarbageCollectionTest {
 
   private GCTestServiceImpl impl;
   private GCTestService proxy;
-  private Queue gcQueue;
+  private String gcQueue;
 
   @BeforeEach
   void beforeEach() {
@@ -36,10 +36,10 @@ public class GarbageCollectionTest {
     impl = new GCTestServiceImpl(dbos);
     proxy = dbos.registerProxy(GCTestService.class, impl);
 
-    gcQueue = new Queue("gcqueue");
-    dbos.registerQueue(gcQueue);
+    gcQueue = "gcqueue";
 
     dbos.launch();
+    dbos.registerQueue(gcQueue, QueueOptions.empty());
   }
 
   @Test

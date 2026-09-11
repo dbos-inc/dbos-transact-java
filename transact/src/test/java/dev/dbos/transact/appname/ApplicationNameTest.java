@@ -73,6 +73,9 @@ class AppNameServiceImpl implements AppNameService {
  * -- belong to everyone, and the names applications register objects under are shared address
  * space, so a collision raises.
  */
+// Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
+// only authoring a Queue by hand is deprecated.
+@SuppressWarnings("removal")
 public class ApplicationNameTest {
 
   private static final String APP_A = "app-a";
@@ -93,12 +96,10 @@ public class ApplicationNameTest {
 
     dbosA = new DBOS(pgContainer.dbosConfig(APP_A));
     serviceA = dbosA.registerProxy(AppNameService.class, new AppNameServiceImpl(dbosA));
-    dbosA.registerQueue(new Queue("queue-a"));
     dbosA.launch();
 
     dbosB = new DBOS(pgContainer.dbosConfig(APP_B));
     serviceB = dbosB.registerProxy(AppNameService.class, new AppNameServiceImpl(dbosB));
-    dbosB.registerQueue(new Queue("queue-b"));
     dbosB.launch();
   }
 
@@ -452,6 +453,7 @@ public class ApplicationNameTest {
 
   @Test
   void workflowsAreNotDequeuedAcrossApplications() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
     // A peer application enqueues onto a queue this application polls. The row is addressable --
     // the queue name is shared -- but it is not this application's work to run.
     String foreignId;
@@ -518,6 +520,7 @@ public class ApplicationNameTest {
 
   @Test
   void aNamelessClientOwnsNothingAndSeesEveryApplication() throws Exception {
+    dbosB.registerQueue("queue-b", QueueOptions.empty());
     var idA = runIn(serviceA, "a");
     var idB = runIn(serviceB, "b");
 
@@ -627,6 +630,7 @@ public class ApplicationNameTest {
 
   @Test
   void enqueueByNameWithNoTimeoutInheritsTheParentsTimeout() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
     try (var o =
         new WorkflowOptions("wf-dl-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
       serviceA.enqueueGreet(
@@ -648,6 +652,7 @@ public class ApplicationNameTest {
    */
   @Test
   void enqueuingForAPeerLetsThatPeerRunIt() throws Exception {
+    dbosB.registerQueue("queue-b", QueueOptions.empty());
     var childId = UUID.randomUUID().toString();
 
     WorkflowHandle<String, RuntimeException> handle =
@@ -671,6 +676,7 @@ public class ApplicationNameTest {
   /** Unnamed, the enqueue belongs to the enqueueing application, as every other write does. */
   @Test
   void enqueuingWithoutNamingAnApplicationKeepsTheEnqueuersOwn() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
     var childId = UUID.randomUUID().toString();
 
     dbosA.enqueueWorkflow(
