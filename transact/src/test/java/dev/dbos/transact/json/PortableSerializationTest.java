@@ -11,6 +11,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusRow;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -808,6 +809,54 @@ public class PortableSerializationTest {
       dbos.setEvent("testKey", "eventValue-" + input);
       var msg = dbos.<String>recv("testTopic", Duration.ofSeconds(30)).orElseThrow();
       return "result:" + input + ":" + msg;
+    }
+  }
+
+  public interface FailingStepService {
+    String failingStep();
+
+    String failingStepWorkflow();
+  }
+
+  public static class FailingStepServiceImpl implements FailingStepService {
+    FailingStepService proxy;
+
+    @Step
+    @Override
+    public String failingStep() {
+      throw new IllegalStateException("step failed");
+    }
+
+    @Workflow
+    @Override
+    public String failingStepWorkflow() {
+      return proxy.failingStep();
+    }
+  }
+
+  /** A step error is recorded with the custom serializer's name, so it reads back and replays. */
+  @Test
+  public void testCustomSerializerStepError() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = new DBOS(dbosConfig.withSerializer(new TestBase64Serializer()))) {
+      var impl = new FailingStepServiceImpl();
+      impl.proxy = localDbos.registerProxy(FailingStepService.class, impl);
+      localDbos.launch();
+
+      var handle = localDbos.startWorkflow(() -> impl.proxy.failingStepWorkflow());
+      var e = assertThrows(IllegalStateException.class, handle::getResult);
+      assertEquals("step failed", e.getMessage());
+
+      var steps = localDbos.listWorkflowSteps(handle.workflowId());
+      assertEquals(1, steps.size());
+      assertEquals("custom_base64", steps.get(0).serialization());
+      assertEquals("step failed", steps.get(0).error().message());
+
+      // Replaying the recorded step rethrows the error via the custom serializer
+      var replayed = localDbos.<String, Exception>forkWorkflow(handle.workflowId(), 1);
+      var replayError = assertThrows(RuntimeException.class, replayed::getResult);
+      assertEquals("step failed", replayError.getMessage());
     }
   }
 
