@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
+@SuppressWarnings("removal") // implements the deprecated ExternalState API
 public class ExternalStateDAO {
 
   private ExternalStateDAO() {}
