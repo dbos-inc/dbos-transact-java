@@ -19,6 +19,7 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
@@ -1655,6 +1656,16 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Register a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   */
+  public void registerQueue(@NonNull QueueName name, @NonNull QueueOptions options) {
+    registerQueue(name.value(), options);
+  }
+
+  /**
    * Register a database-backed dynamic queue. Uses {@link QueueConflictResolution#ALWAYS_UPDATE} by
    * default.
    *
@@ -1663,6 +1674,20 @@ public class DBOSClient implements AutoCloseable {
    */
   public void registerQueue(@NonNull String name, @NonNull QueueOptions options) {
     registerQueue(name, options, QueueConflictResolution.ALWAYS_UPDATE);
+  }
+
+  /**
+   * Register a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   */
+  public void registerQueue(
+      @NonNull QueueName name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict) {
+    registerQueue(name.value(), options, onConflict);
   }
 
   /**
@@ -1681,6 +1706,22 @@ public class DBOSClient implements AutoCloseable {
       @NonNull QueueOptions options,
       @NonNull QueueConflictResolution onConflict) {
     registerQueue(name, options, onConflict, null);
+  }
+
+  /**
+   * Register a database-backed dynamic queue, owned by {@code applicationName}.
+   *
+   * @param name Queue name
+   * @param options Initial configuration options
+   * @param onConflict How to handle an existing queue with the same name
+   * @param applicationName Owning application, or null for unclaimed
+   */
+  public void registerQueue(
+      @NonNull QueueName name,
+      @NonNull QueueOptions options,
+      @NonNull QueueConflictResolution onConflict,
+      @Nullable String applicationName) {
+    registerQueue(name.value(), options, onConflict, applicationName);
   }
 
   /**
@@ -1710,6 +1751,16 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Update the configuration of a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @param options Fields to update
+   */
+  public void updateQueue(@NonNull QueueName name, @NonNull QueueOptions options) {
+    updateQueue(name.value(), options);
+  }
+
+  /**
    * Update the configuration of a database-backed dynamic queue. Only fields that are present in
    * {@code options} are written; absent fields are left unchanged.
    *
@@ -1718,6 +1769,16 @@ public class DBOSClient implements AutoCloseable {
    */
   public void updateQueue(@NonNull String name, @NonNull QueueOptions options) {
     systemDatabase.updateQueue(name, options);
+  }
+
+  /**
+   * Retrieve a database-backed dynamic queue by name.
+   *
+   * @param name Queue name
+   * @return the queue if it exists in the database, or empty
+   */
+  public @NonNull Optional<Queue> findQueue(@NonNull QueueName name) {
+    return findQueue(name.value());
   }
 
   /**
@@ -1747,6 +1808,16 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<Queue> listQueues(@Nullable List<String> applicationName) {
     return systemDatabase.listQueues(applicationName);
+  }
+
+  /**
+   * Delete a database-backed dynamic queue.
+   *
+   * @param name Queue name
+   * @return true if the queue was deleted, false if it did not exist
+   */
+  public boolean deleteQueue(@NonNull QueueName name) {
+    return deleteQueue(name.value());
   }
 
   /**

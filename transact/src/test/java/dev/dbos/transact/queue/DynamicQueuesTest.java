@@ -20,6 +20,7 @@ import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -102,6 +103,29 @@ public class DynamicQueuesTest {
       assertEquals("v" + i + "v" + i, handle.getResult());
       assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     }
+  }
+
+  @Test
+  public void queueNameAddressesTheSameQueueAsItsString() throws Exception {
+    // The QueueName overloads delegate positionally to the String ones, where a swapped argument
+    // would compile cleanly. Register through QueueName, then read back through both.
+    dbos.launch();
+
+    var name = QueueName.of("qn-queue");
+    dbos.registerQueue(name, QueueOptions.setConcurrency(3));
+
+    assertEquals(dbos.findQueue("qn-queue"), dbos.findQueue(name));
+    assertEquals(3, dbos.findQueue(name).orElseThrow().concurrency());
+
+    dbos.updateQueue(name, QueueOptions.setConcurrency(7));
+    assertEquals(7, dbos.findQueue(name).orElseThrow().concurrency());
+
+    // onConflict is forwarded, not dropped: NEVER_UPDATE leaves the stored config alone.
+    dbos.registerQueue(name, QueueOptions.setConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
+    assertEquals(7, dbos.findQueue(name).orElseThrow().concurrency());
+
+    assertTrue(dbos.deleteQueue(name));
+    assertTrue(dbos.findQueue(name).isEmpty());
   }
 
   @Test

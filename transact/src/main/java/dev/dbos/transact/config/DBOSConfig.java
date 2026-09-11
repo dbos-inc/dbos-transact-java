@@ -667,10 +667,8 @@ public record DBOSConfig(
    * the listen-on-all-queues default if this is the first queue specified.
    *
    * @param queue the queue to add; must not be null
-   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
-   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
-   *     — queue configuration belongs to {@link dev.dbos.transact.workflow.QueueOptions} and the
-   *     database-backed registration that takes it.
+   * @deprecated Only {@link Queue#name()} is read here; the rest of the {@code Queue} is discarded,
+   *     so configuration set on it has no effect. Use {@link #withListenQueue(QueueName)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DBOSConfig withListenQueue(@NonNull Queue queue) {
@@ -706,10 +704,8 @@ public record DBOSConfig(
    * Removes the listen-on-all-queues default if this is the first queue specified.
    *
    * @param queues the queues to add; {@code null} entries are ignored
-   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
-   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
-   *     — queue configuration belongs to {@link dev.dbos.transact.workflow.QueueOptions} and the
-   *     database-backed registration that takes it.
+   * @deprecated Only {@link Queue#name()} is read here; the rest of the {@code Queue} is discarded,
+   *     so configuration set on it has no effect. Use {@link #withListenQueues(QueueName...)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DBOSConfig withListenQueues(@Nullable Queue... queues) {

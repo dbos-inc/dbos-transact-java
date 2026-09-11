@@ -133,10 +133,8 @@ public final class Debouncer<R> {
   }
 
   /**
-   * @deprecated Only {@link Queue#name()} is read here; every other field of the {@code Queue} is
-   *     silently discarded, so configuration set on it has no effect. Pass the queue's name instead
-   *     — queue configuration belongs to {@link QueueOptions} and the database-backed registration
-   *     that takes it.
+   * @deprecated Only {@link Queue#name()} is read here; the rest of the {@code Queue} is discarded,
+   *     so configuration set on it has no effect. Use {@link #withQueue(QueueName)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Debouncer<R> withQueue(@NonNull Queue queue) {
