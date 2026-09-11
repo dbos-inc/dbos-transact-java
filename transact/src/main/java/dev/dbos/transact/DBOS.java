@@ -20,7 +20,6 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
-import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
@@ -165,7 +164,7 @@ public class DBOS implements AutoCloseable {
    *
    * @param queue `Queue` to register
    * @deprecated In-memory queues have been replaced by database-backed queues. Use {@link
-   *     #registerQueue(QueueName, QueueOptions)} after launch.
+   *     #registerQueue(String, QueueOptions)} after launch.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueue(@NonNull Queue queue) {
@@ -181,23 +180,13 @@ public class DBOS implements AutoCloseable {
    * has the queue options available.
    *
    * @param queues collection of `Queue` instances to register
-   * @deprecated Use {@link #registerQueue(QueueName, QueueOptions)} after launch, once per queue.
+   * @deprecated Use {@link #registerQueue(String, QueueOptions)} after launch, once per queue.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public void registerQueues(@NonNull Queue... queues) {
     for (Queue queue : queues) {
       registerQueue(queue);
     }
-  }
-
-  /**
-   * Register a database-backed dynamic queue. Must be called after launch.
-   *
-   * @param name Queue name
-   * @param options Initial configuration options
-   */
-  public void registerQueue(@NonNull QueueName name, @NonNull QueueOptions options) {
-    registerQueue(name.value(), options);
   }
 
   /**
@@ -216,20 +205,6 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Register a database-backed dynamic queue. Must be called after launch.
-   *
-   * @param name Queue name
-   * @param options Initial configuration options
-   * @param onConflict How to handle an existing queue with the same name
-   */
-  public void registerQueue(
-      @NonNull QueueName name,
-      @NonNull QueueOptions options,
-      @NonNull QueueConflictResolution onConflict) {
-    registerQueue(name.value(), options, onConflict);
-  }
-
-  /**
    * Register a database-backed dynamic queue. Must be called after launch. Queue configuration can
    * be updated at runtime via {@link #updateQueue(String, QueueOptions)}.
    *
@@ -242,16 +217,6 @@ public class DBOS implements AutoCloseable {
       @NonNull QueueOptions options,
       @NonNull QueueConflictResolution onConflict) {
     ensureLaunched("registerQueue").registerDynamicQueue(name, options, onConflict);
-  }
-
-  /**
-   * Update the configuration of a database-backed dynamic queue. Must be called after launch.
-   *
-   * @param name Queue name
-   * @param options Fields to update
-   */
-  public void updateQueue(@NonNull QueueName name, @NonNull QueueOptions options) {
-    updateQueue(name.value(), options);
   }
 
   /**
@@ -271,28 +236,8 @@ public class DBOS implements AutoCloseable {
    * @param name Queue name
    * @return the queue if it exists in the database, or empty
    */
-  public @NonNull Optional<Queue> findQueue(@NonNull QueueName name) {
-    return findQueue(name.value());
-  }
-
-  /**
-   * Retrieve a database-backed dynamic queue by name. Must be called after launch.
-   *
-   * @param name Queue name
-   * @return the queue if it exists in the database, or empty
-   */
   public @NonNull Optional<Queue> findQueue(@NonNull String name) {
     return ensureLaunched("findQueue").findDynamicQueue(name);
-  }
-
-  /**
-   * Delete a database-backed dynamic queue. Must be called after launch.
-   *
-   * @param name Queue name
-   * @return true if the queue was deleted, false if it did not exist
-   */
-  public boolean deleteQueue(@NonNull QueueName name) {
-    return deleteQueue(name.value());
   }
 
   /**
@@ -472,7 +417,7 @@ public class DBOS implements AutoCloseable {
    *
    * @param queueName Name of the queue
    * @return Optional containing the queue definition for given `queueName`, or empty if not found
-   * @deprecated Reads the pre-launch registry only. Use {@link #findQueue(QueueName)}.
+   * @deprecated Reads the pre-launch registry only. Use {@link #findQueue(String)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {

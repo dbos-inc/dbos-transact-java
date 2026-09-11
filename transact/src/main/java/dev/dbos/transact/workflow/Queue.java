@@ -49,9 +49,9 @@ public record Queue(
    * Constructs a queue with no explicit owning application, which records the registering
    * application as the owner.
    *
-   * @deprecated A {@code Queue} is what {@link dev.dbos.transact.DBOS#findQueue(QueueName)}
-   *     returns, not something to build. Register with {@link
-   *     dev.dbos.transact.DBOS#registerQueue(QueueName, QueueOptions)}.
+   * @deprecated A {@code Queue} is what {@link dev.dbos.transact.DBOS#findQueue(String)} returns,
+   *     not something to build. Register with {@link dev.dbos.transact.DBOS#registerQueue(String,
+   *     QueueOptions)}.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue(
