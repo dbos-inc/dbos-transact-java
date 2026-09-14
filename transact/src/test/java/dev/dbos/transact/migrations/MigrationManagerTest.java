@@ -641,6 +641,62 @@ class MigrationManagerTest {
     }
   }
 
+  @Test
+  void testValidateSysDbVersion_RejectsUnversionedSchema() {
+    // The database exists but nothing has been migrated into it, so dbos_migrations is absent.
+    pgContainer.createDatabase();
+
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
+    assertTrue(
+        e.getMessage().contains("dbos_migrations"),
+        "Expected the message to name the missing table, got: " + e.getMessage());
+  }
+
+  @Test
+  void testValidateSysDbVersion_RejectsTooOldSchema() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    var schema = Constants.DB_SCHEMA;
+    var tooOld = MigrationManager.MINIMUM_SYSDB_VERSION - 1;
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, tooOld));
+    }
+
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.validateSysDbVersion(dataSource, schema));
+    assertTrue(
+        e.getMessage().contains(Integer.toString(tooOld))
+            && e.getMessage().contains(Integer.toString(MigrationManager.MINIMUM_SYSDB_VERSION)),
+        "Expected the message to report both versions, got: " + e.getMessage());
+  }
+
+  @Test
+  void testValidateSysDbVersion_AcceptsMigratedSchema() {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    assertDoesNotThrow(
+        () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA),
+        "A fully migrated schema must satisfy the minimum version check");
+  }
+
+  @Test
+  void testValidateSysDbVersion_MinimumIsWithinTheLadder() {
+    var latest =
+        MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB)
+            .size();
+    assertTrue(
+        MigrationManager.MINIMUM_SYSDB_VERSION > 0
+            && MigrationManager.MINIMUM_SYSDB_VERSION <= latest,
+        "MINIMUM_SYSDB_VERSION must name a migration this SDK can actually apply");
+  }
+
   static int getVersion(Connection conn) throws Exception {
     return getVersion(conn, Constants.DB_SCHEMA);
   }

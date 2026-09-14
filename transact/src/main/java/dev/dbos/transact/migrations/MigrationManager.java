@@ -29,6 +29,17 @@ public class MigrationManager {
   // added here must be added to all of them.
   public static final int SHARED_MIGRATION_BASE = 100;
 
+  /**
+   * The oldest system database schema version this SDK can run against. Migration 109 created the
+   * workflow_input and workflow_output tables, which every workflow status read now consults, so a
+   * schema older than this fails those reads outright.
+   *
+   * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
+   * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
+   * unconditionally on a later migration.
+   */
+  public static final int MINIMUM_SYSDB_VERSION = 109;
+
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
 
@@ -59,6 +70,80 @@ public class MigrationManager {
     }
   }
 
+  private static boolean migrationTableExists(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT 1 FROM information_schema.tables"
+            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * <p>Used when {@link DBOSConfig#migrate()} is false and the deployment owns schema management.
+   * Without this check the SDK never reads dbos_migrations at all, and a schema older than {@link
+   * #MINIMUM_SYSDB_VERSION} surfaces much later as a raw "relation does not exist" on the first
+   * workflow status read.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(DBOSConfig config) {
+    Objects.requireNonNull(config, "DBOS Config must not be null");
+
+    if (config.dataSource() != null) {
+      validateSysDbVersion(config.dataSource(), config.databaseSchema());
+    } else {
+      try (var ds =
+          SystemDatabase.createDataSource(
+              config.databaseUrl(), config.dbUser(), config.dbPassword())) {
+        validateSysDbVersion(ds, config.databaseSchema());
+      }
+    }
+  }
+
+  static void validateSysDbVersion(DataSource ds, String schema) {
+    Objects.requireNonNull(ds, "Data Source must not be null");
+    schema = SystemDatabase.sanitizeSchema(schema);
+
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
+
+    int version;
+    try (var conn = ds.getConnection()) {
+      if (!migrationTableExists(conn, schema)) {
+        throw new IllegalStateException(
+            ("Database migrations are disabled, but schema \"%s\" has no dbos_migrations table,"
+                    + " so its version cannot be determined. DBOS requires system database schema"
+                    + " version %d or later. Either enable migrations or apply the DBOS schema to"
+                    + " this database first.")
+                .formatted(schema, MINIMUM_SYSDB_VERSION));
+      }
+      version = getCurrentSysDbVersion(conn, schema);
+    } catch (SQLException e) {
+      throw new RuntimeException("Failed to read the system database schema version", e);
+    }
+
+    if (version < MINIMUM_SYSDB_VERSION) {
+      throw new IllegalStateException(
+          ("Database migrations are disabled and schema \"%s\" is at system database version %d,"
+                  + " but this version of DBOS requires %d or later. Either enable migrations or"
+                  + " bring the schema up to date before launching.")
+              .formatted(schema, version, MINIMUM_SYSDB_VERSION));
+    }
+
+    logger.debug(
+        "Migrations disabled; schema {} is at system database version {} (minimum {})",
+        schema,
+        version,
+        MINIMUM_SYSDB_VERSION);
+  }
+
   private static boolean shouldMigrate(
       Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
       throws SQLException {
@@ -69,15 +154,7 @@ public class MigrationManager {
         if (!rs.next()) return true;
       }
     }
-    var tableSql =
-        "SELECT 1 FROM information_schema.tables"
-            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
-    try (var stmt = conn.prepareStatement(tableSql)) {
-      stmt.setString(1, schema);
-      try (var rs = stmt.executeQuery()) {
-        if (!rs.next()) return true;
-      }
-    }
+    if (!migrationTableExists(conn, schema)) return true;
     var currentVersion = getCurrentSysDbVersion(conn, schema);
     var latestVersion = getMigrations(schema, useListenNotify, isCockroach).size();
     return currentVersion < latestVersion;
