@@ -10,6 +10,7 @@ import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 import java.time.Instant;
+import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -41,41 +42,54 @@ class RetentionSweepTest {
 
   /** A status row plus the three child rows a completed workflow leaves behind. */
   private void seedWorkflow(String id, String status, long createdAt) throws Exception {
+    seedWorkflow(id, status, createdAt, createdAt);
+  }
+
+  /**
+   * As above, but with the completion stamped apart from the creation. A terminal row carries a
+   * completed_at, which is what the status sweep collects on; an in-flight one holds NULL.
+   */
+  private void seedWorkflow(String id, String status, long createdAt, long completedAt)
+      throws Exception {
+    var terminal = List.of("SUCCESS", "ERROR", "CANCELLED").contains(status);
     try (var conn = dataSource.getConnection()) {
       exec(
           conn,
           """
-          INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
-          VALUES (?, 'wf', 'C', '', ?, ?)
+          INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at, completed_at)
+          VALUES (?, 'wf', 'C', '', ?, ?, ?)
           """,
           id,
           status,
-          createdAt);
+          createdAt,
+          terminal ? completedAt : null);
       exec(
           conn,
           "INSERT INTO dbos.workflow_input(workflow_uuid, inputs, retention_timestamp)"
               + " VALUES (?, '[]', ?)",
           id,
-          createdAt);
+          completedAt);
       exec(
           conn,
           "INSERT INTO dbos.workflow_output(workflow_uuid, output, retention_timestamp)"
               + " VALUES (?, 'null', ?)",
           id,
-          createdAt);
+          completedAt);
       exec(
           conn,
           "INSERT INTO dbos.operation_outputs(workflow_uuid, function_id, function_name,"
               + " retention_timestamp) VALUES (?, 1, 'step', ?)",
           id,
-          createdAt);
+          completedAt);
     }
   }
 
   private void exec(Connection conn, String sql, Object... args) throws Exception {
     try (var stmt = conn.prepareStatement(sql)) {
       for (int i = 0; i < args.length; i++) {
-        if (args[i] instanceof Long l) {
+        if (args[i] == null) {
+          stmt.setNull(i + 1, java.sql.Types.BIGINT);
+        } else if (args[i] instanceof Long l) {
           stmt.setLong(i + 1, l);
         } else {
           stmt.setString(i + 1, (String) args[i]);
@@ -126,7 +140,7 @@ class RetentionSweepTest {
 
   @Test
   void tiedTimestampsDoNotStallTheSweep() throws Exception {
-    // Every row shares a created_at, so no watermark can separate them: the batch bound has to
+    // Every row shares a completed_at, so no watermark can separate them: the batch bound has to
     // take the whole tie rather than loop forever on it.
     var same = System.currentTimeMillis() - 100_000;
     for (int i = 0; i < 6; i++) {
@@ -142,8 +156,8 @@ class RetentionSweepTest {
   @Test
   void payloadSweepSparesLiveWorkflows() throws Exception {
     var old = System.currentTimeMillis() - 100_000;
-    // PENDING, so the status sweep must skip it -- and the payload sweep must then see it as
-    // still present and leave its payload rows alone.
+    // PENDING, so it holds no completed_at and the status sweep must skip it -- and the payload
+    // sweep must then see it as still present and leave its payload rows alone.
     seedWorkflow("live", "PENDING", old);
     seedWorkflow("done", "SUCCESS", old);
 
@@ -192,6 +206,41 @@ class RetentionSweepTest {
 
     assertEquals(1, count("workflow_status"), "a workflow above the cutoff must survive");
     assertEquals(1, count("workflow_input"), "and keep its payload rows");
+  }
+
+  @Test
+  void longRunningWorkflowsAreCollectedByCompletion() throws Exception {
+    // Created well before the cutoff but completed after it: sweeping on created_at would drop the
+    // status row and then strand its payloads, which the payload sweep's lower bound never
+    // revisits.
+    var created = System.currentTimeMillis() - 100_000;
+    seedWorkflow("slow", "SUCCESS", created, System.currentTimeMillis() + 100_000);
+
+    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+
+    assertEquals(1, count("workflow_status"), "a workflow completed above the cutoff must survive");
+    assertEquals(1, count("workflow_input"), "and keep its inputs");
+    assertEquals(1, count("workflow_output"), "and keep its output");
+    assertEquals(1, count("operation_outputs"), "and keep its steps");
+  }
+
+  @Test
+  void theRoundIsSystemWide() throws Exception {
+    // Retention applies to the whole system database, even where several applications share it.
+    var old = System.currentTimeMillis() - 100_000;
+    seedWorkflow("mine", "SUCCESS", old);
+    seedWorkflow("theirs", "SUCCESS", old);
+    try (var conn = dataSource.getConnection()) {
+      exec(
+          conn,
+          "UPDATE dbos.workflow_status SET application_name = 'other-app'"
+              + " WHERE workflow_uuid = 'theirs'");
+    }
+
+    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+
+    assertEquals(0, count("workflow_status"), "another application's rows are collected too");
+    assertEquals(0, count("workflow_input"));
   }
 
   @Test

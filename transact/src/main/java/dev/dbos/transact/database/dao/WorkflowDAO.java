@@ -2105,17 +2105,16 @@ public class WorkflowDAO {
       throws SQLException {
     String sql =
         """
-          SELECT created_at FROM "%s".workflow_status
+          SELECT completed_at FROM "%s".workflow_status
+          WHERE completed_at IS NOT NULL
+          ORDER BY completed_at DESC OFFSET ? LIMIT 1
         """
-                .formatted(ctx.schema())
-            + ctx.whereAppScope()
-            + " ORDER BY created_at DESC OFFSET ? LIMIT 1";
+            .formatted(ctx.schema());
     try (var stmt = conn.prepareStatement(sql)) {
-      var index = ctx.bindAppScope(stmt, 1);
-      stmt.setLong(index, rowsThreshold - 1);
+      stmt.setLong(1, rowsThreshold - 1);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return Instant.ofEpochMilli(rs.getLong("created_at"));
+          return Instant.ofEpochMilli(rs.getLong("completed_at"));
         }
       }
     }
@@ -2130,25 +2129,26 @@ public class WorkflowDAO {
   private static final List<String> PAYLOAD_TABLES =
       List.of("workflow_input", "workflow_output", "operation_outputs");
 
-  /** The status rows a retention round is allowed to take, minus its watermark bounds. */
-  private static String statusGcFilter(DbContext ctx) {
-    return "created_at < ? AND status NOT IN (?, ?, ?)" + ctx.andAppScope();
-  }
+  /**
+   * The status rows a retention round is allowed to take, minus its watermark bounds.
+   *
+   * <p>completed_at is set on every terminal transition and cleared on resume, so one predicate
+   * covers eligibility: in-flight rows hold NULL and never compare true. The round is system-wide,
+   * not scoped to this application: retention policies apply to the whole system database even when
+   * several applications share it.
+   */
+  private static final String STATUS_GC_FILTER = "completed_at < ?";
 
-  /** Binds {@link #statusGcFilter}'s parameters from index 1, returning the next free index. */
-  private static int bindStatusGcFilter(DbContext ctx, PreparedStatement stmt, long deadline)
-      throws SQLException {
+  /** Binds {@link #STATUS_GC_FILTER}'s parameters from index 1, returning the next free index. */
+  private static int bindStatusGcFilter(PreparedStatement stmt, long deadline) throws SQLException {
     stmt.setLong(1, deadline);
-    stmt.setString(2, WorkflowState.PENDING.name());
-    stmt.setString(3, WorkflowState.ENQUEUED.name());
-    stmt.setString(4, WorkflowState.DELAYED.name());
-    return ctx.bindAppScope(stmt, 5);
+    return 2;
   }
 
   /**
    * Deletes old terminal workflows and the payload rows they leave behind.
    *
-   * <p>Two sweeps, matching Python. The status sweep advances a {@code created_at} watermark,
+   * <p>Two sweeps, matching Python. The status sweep advances a {@code completed_at} watermark,
    * committing one batch per transaction; it never materializes workflow ids, so its memory cost is
    * flat however much it collects. The payload sweep then reclaims the rows that sweep orphaned, by
    * their own {@code retention_timestamp} rather than by id.
@@ -2184,14 +2184,13 @@ public class WorkflowDAO {
   /** Deletes eligible status rows in batches, seeded from the oldest one in range. */
   private static void sweepWorkflowStatus(
       DbContext ctx, Connection conn, long deadline, int batchSize) throws SQLException {
-    var filter = statusGcFilter(ctx);
     var seedSql =
-        "SELECT created_at FROM \"%s\".workflow_status WHERE %s ORDER BY created_at LIMIT 1"
-            .formatted(ctx.schema(), filter);
+        "SELECT completed_at FROM \"%s\".workflow_status WHERE %s ORDER BY completed_at LIMIT 1"
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
 
     Long oldest;
     try (var stmt = conn.prepareStatement(seedSql)) {
-      bindStatusGcFilter(ctx, stmt, deadline);
+      bindStatusGcFilter(stmt, deadline);
       try (var rs = stmt.executeQuery()) {
         oldest = rs.next() ? rs.getLong(1) : null;
       }
@@ -2202,7 +2201,7 @@ public class WorkflowDAO {
 
     var watermark = oldest - 1;
     while (true) {
-      var next = deleteStatusBatch(ctx, conn, deadline, watermark, batchSize, filter);
+      var next = deleteStatusBatch(ctx, conn, deadline, watermark, batchSize);
       if (next == null) {
         return;
       }
@@ -2216,25 +2215,25 @@ public class WorkflowDAO {
    * @return the watermark to resume from, or null when the sweep is done
    */
   private static @Nullable Long deleteStatusBatch(
-      DbContext ctx, Connection conn, long deadline, long watermark, int batchSize, String filter)
+      DbContext ctx, Connection conn, long deadline, long watermark, int batchSize)
       throws SQLException {
     var stepSql =
-        ("SELECT created_at FROM \"%s\".workflow_status WHERE %s AND created_at > ?"
-                + " ORDER BY created_at LIMIT 1 OFFSET ?")
-            .formatted(ctx.schema(), filter);
+        ("SELECT completed_at FROM \"%s\".workflow_status WHERE %s AND completed_at > ?"
+                + " ORDER BY completed_at LIMIT 1 OFFSET ?")
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
     var boundedSql =
-        "DELETE FROM \"%s\".workflow_status WHERE %s AND created_at > ? AND created_at <= ?"
-            .formatted(ctx.schema(), filter);
+        "DELETE FROM \"%s\".workflow_status WHERE %s AND completed_at > ? AND completed_at <= ?"
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
     var remainderSql =
-        "DELETE FROM \"%s\".workflow_status WHERE %s".formatted(ctx.schema(), filter);
+        "DELETE FROM \"%s\".workflow_status WHERE %s".formatted(ctx.schema(), STATUS_GC_FILTER);
 
     return SqlTransaction.call(
         conn,
         c -> {
-          // The created_at of the batchSize-th oldest eligible row above the watermark.
+          // The completed_at of the batchSize-th oldest eligible row above the watermark.
           Long step = null;
           try (var stmt = c.prepareStatement(stepSql)) {
-            var next = bindStatusGcFilter(ctx, stmt, deadline);
+            var next = bindStatusGcFilter(stmt, deadline);
             stmt.setLong(next, watermark);
             stmt.setInt(next + 1, batchSize - 1);
             try (var rs = stmt.executeQuery()) {
@@ -2245,19 +2244,19 @@ public class WorkflowDAO {
           }
 
           if (step == null) {
-            // Unbounded, and deliberately not limited to rows above the watermark: an insert can
-            // land a created_at below it mid-pass.
+            // Unbounded, and deliberately not limited to rows above the watermark: an import can
+            // land a completed_at below it mid-pass.
             try (var stmt = c.prepareStatement(remainderSql)) {
-              bindStatusGcFilter(ctx, stmt, deadline);
+              bindStatusGcFilter(stmt, deadline);
               stmt.executeUpdate();
             }
             return null;
           }
 
           try (var stmt = c.prepareStatement(boundedSql)) {
-            var next = bindStatusGcFilter(ctx, stmt, deadline);
+            var next = bindStatusGcFilter(stmt, deadline);
             stmt.setLong(next, watermark);
-            // created_at ties may push the batch slightly over batchSize.
+            // completed_at ties may push the batch slightly over batchSize.
             stmt.setLong(next + 1, step);
             stmt.executeUpdate();
           }
