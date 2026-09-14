@@ -1212,20 +1212,25 @@ public class DBOSExecutor implements AutoCloseable {
   WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
 
-    // A workflow running here is not orphaned, whatever its row says. recoverPendingWorkflows()
-    // has no time bound, so this is the only thing stopping an operator-triggered recovery from
-    // starting a second execution of a live one.
-    if (activeWorkflows.containsKey(workflowId)) {
-      logger.debug("recoverWorkflow skip active {}", workflowId);
-      return retrieveWorkflow(workflowId);
-    }
-
+    // A queued workflow goes back on its queue whether or not it is running here: releasing the
+    // assignment is what frees the concurrency slot this execution holds, and recovery of a live
+    // one still has to do it.
     if (queueName != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
       if (cleared) {
         logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
         return retrieveWorkflow(workflowId);
       }
+    }
+
+    // A workflow running here is not orphaned, whatever its row says. recoverPendingWorkflows()
+    // has no time bound, so this is the only thing stopping an operator-triggered recovery from
+    // starting a second execution of a live one. An active entry means this executor inserted
+    // the row, so failIfMissing: a row deleted since surfaces DBOSNonExistentWorkflowException
+    // instead of polling for one recovery deliberately did not put back.
+    if (activeWorkflows.containsKey(workflowId)) {
+      logger.debug("recoverWorkflow skip active {}", workflowId);
+      return new WorkflowHandleDBPoll<>(this, workflowId, true);
     }
 
     logger.debug("recoverWorkflow execute {}", workflowId);

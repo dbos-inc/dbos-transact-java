@@ -237,9 +237,11 @@ class RecoveryServiceTest {
   @Test
   void recoveryLeavesAWorkflowThisExecutorIsRunningAlone() throws Exception {
     // Recovering a workflow that is live on this executor starts a second execution of it
-    // (#477, #488, #491). The re-insert on the way in is what makes that visible here: it puts
-    // back the row this test deleted, so the live run's error write matches instead of failing
-    // fast. Driven directly because the millisecond collision that caused it is not schedulable.
+    // (#477, #488, #491). Deleting the row first is what makes the adoption observable: with the
+    // guard, recovery leaves the workflow alone and the row stays gone, so the live run fails
+    // fast on it; without the guard, recovery reaches executeWorkflowById and the deleted row
+    // takes it down a path this workflow should never have been on at all. Driven directly
+    // because the millisecond collision that caused these reports is not schedulable.
     var impl = new BlockingRecoveryServiceImpl();
     try (var dbos = new DBOS(dbosConfig)) {
       var proxy = dbos.registerProxy(BlockingRecoveryService.class, impl);
