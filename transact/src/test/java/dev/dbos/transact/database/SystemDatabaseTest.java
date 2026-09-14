@@ -59,6 +59,7 @@ import java.util.stream.Collectors;
 import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,6 +82,29 @@ public class SystemDatabaseTest {
     MigrationManager.runMigrations(dbosConfig);
     sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
+  }
+
+  @Test
+  public void listenNotifyDisabledOnBothConstructionPaths() {
+    // The data source path used to hardcode the listener on, so a config that turned
+    // LISTEN/NOTIFY off was honoured only when DBOS created the pool from a URL.
+    try (var fromUrl = SystemDatabase.create(dbosConfig.withUseListenNotify(false), null, null);
+        var fromDataSource =
+            SystemDatabase.create(
+                dbosConfig.withDataSource(dataSource).withUseListenNotify(false), null, null)) {
+      assertFalse(fromUrl.hasNotificationListener());
+      assertFalse(fromDataSource.hasNotificationListener());
+    }
+  }
+
+  @Test
+  public void listenNotifyEnabledOnTheDataSourcePath() {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "LISTEN/NOTIFY is PostgreSQL-only");
+    try (var sysdb =
+        SystemDatabase.create(
+            dbosConfig.withDataSource(dataSource).withUseListenNotify(true), null, null)) {
+      assertTrue(sysdb.hasNotificationListener());
+    }
   }
 
   @Test
