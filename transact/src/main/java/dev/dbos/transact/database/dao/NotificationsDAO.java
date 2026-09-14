@@ -5,6 +5,7 @@ import static java.util.stream.Collectors.joining;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
@@ -123,99 +124,90 @@ public class NotificationsDAO {
               msg, SerializationUtil.serializeValue(msg.message(), serialization, serializer)));
     }
 
-    try (Connection conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        // Check for replay if inside a workflow
-        if (workflowId != null) {
-          StepResult recorded =
-              StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
-          if (recorded != null) {
-            logger.debug("Replaying sendBulk, workflowId: {}, stepId: {}", workflowId, stepId);
-            conn.commit();
-            return;
-          }
-        }
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            // Check for replay if inside a workflow
+            if (workflowId != null) {
+              StepResult recorded =
+                  StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
+              if (recorded != null) {
+                logger.debug("Replaying sendBulk, workflowId: {}, stepId: {}", workflowId, stepId);
+                return;
+              }
+            }
 
-        // Collect all destination IDs for fork resolution
-        Map<String, Set<String>> forkDescendants = Map.of();
-        if (sendToForks) {
-          List<String> destIds =
-              pairs.stream().map(p -> p.msg().destinationId()).distinct().toList();
-          forkDescendants = findForkDescendantsTxn(conn, ctx.schema(), destIds);
-        }
+            // Collect all destination IDs for fork resolution
+            Map<String, Set<String>> forkDescendants = Map.of();
+            if (sendToForks) {
+              List<String> destIds =
+                  pairs.stream().map(p -> p.msg().destinationId()).distinct().toList();
+              forkDescendants = findForkDescendantsTxn(conn, ctx.schema(), destIds);
+            }
 
-        // Build insert rows: base dest + sorted descendants
-        record InsertRow(
-            String destId,
-            SerializationUtil.SerializedResult serialized,
-            String topic,
-            String messageUuid) {}
-        List<InsertRow> rows = new ArrayList<>();
-        for (var pair : pairs) {
-          var msg = pair.msg();
-          String baseDest = msg.destinationId();
-          String finalTopic = (msg.topic() != null) ? msg.topic() : Constants.DBOS_NULL_TOPIC;
+            // Build insert rows: base dest + sorted descendants
+            record InsertRow(
+                String destId,
+                SerializationUtil.SerializedResult serialized,
+                String topic,
+                String messageUuid) {}
+            List<InsertRow> rows = new ArrayList<>();
+            for (var pair : pairs) {
+              var msg = pair.msg();
+              String baseDest = msg.destinationId();
+              String finalTopic = (msg.topic() != null) ? msg.topic() : Constants.DBOS_NULL_TOPIC;
 
-          List<String> destinations = new ArrayList<>();
-          destinations.add(baseDest);
-          if (sendToForks) {
-            var desc = forkDescendants.getOrDefault(baseDest, Set.of());
-            desc.stream().sorted().forEach(destinations::add);
-          }
+              List<String> destinations = new ArrayList<>();
+              destinations.add(baseDest);
+              if (sendToForks) {
+                var desc = forkDescendants.getOrDefault(baseDest, Set.of());
+                desc.stream().sorted().forEach(destinations::add);
+              }
 
-          for (String dest : destinations) {
-            var wfid =
-                msg.idempotencyKey() != null
-                    ? msg.idempotencyKey() + "::" + dest
-                    : UUID.randomUUID().toString();
-            rows.add(new InsertRow(dest, pair.serialized(), finalTopic, wfid));
-          }
-        }
+              for (String dest : destinations) {
+                var wfid =
+                    msg.idempotencyKey() != null
+                        ? msg.idempotencyKey() + "::" + dest
+                        : UUID.randomUUID().toString();
+                rows.add(new InsertRow(dest, pair.serialized(), finalTopic, wfid));
+              }
+            }
 
-        // Batch-insert all rows
-        final String sql =
-            """
+            // Batch-insert all rows
+            final String sql =
+                """
               INSERT INTO "%s".notifications
                 (destination_uuid, topic, message, serialization, message_uuid)
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT (message_uuid) DO NOTHING
             """
-                .formatted(ctx.schema());
+                    .formatted(ctx.schema());
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          for (var row : rows) {
-            stmt.setString(1, row.destId());
-            stmt.setString(2, row.topic());
-            stmt.setString(3, row.serialized().serializedValue());
-            stmt.setString(4, row.serialized().serialization());
-            stmt.setString(5, row.messageUuid());
-            stmt.addBatch();
-          }
-          stmt.executeBatch();
-        } catch (SQLException e) {
-          if ("23503".equals(e.getSQLState())) {
-            var distinctDests = rows.stream().map(InsertRow::destId).distinct().toList();
-            throw new DBOSNonExistentWorkflowException(
-                distinctDests.size() == 1 ? distinctDests.get(0) : null);
-          }
-          throw e;
-        }
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+              for (var row : rows) {
+                stmt.setString(1, row.destId());
+                stmt.setString(2, row.topic());
+                stmt.setString(3, row.serialized().serializedValue());
+                stmt.setString(4, row.serialized().serialization());
+                stmt.setString(5, row.messageUuid());
+                stmt.addBatch();
+              }
+              stmt.executeBatch();
+            } catch (SQLException e) {
+              if ("23503".equals(e.getSQLState())) {
+                var distinctDests = rows.stream().map(InsertRow::destId).distinct().toList();
+                throw new DBOSNonExistentWorkflowException(
+                    distinctDests.size() == 1 ? distinctDests.get(0) : null);
+              }
+              throw e;
+            }
 
-        if (workflowId != null) {
-          var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-          StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
-        }
-
-        conn.commit();
-      } catch (Exception e) {
-        try {
-          conn.rollback();
-        } catch (SQLException rollbackEx) {
-          e.addSuppressed(rollbackEx);
-        }
-        throw e;
-      }
+            if (workflowId != null) {
+              var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
+              StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
+            }
+          });
     }
   }
 
@@ -236,21 +228,22 @@ public class NotificationsDAO {
     Objects.requireNonNull(dbPollingInterval);
 
     var stepName = "DBOS.recv";
-    topic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
+    final var recvTopic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
     var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
     if (result != null) {
       logger.debug(
-          "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
+          "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
       if (result.output() != null) {
         return result.toResult(ctx.serializer());
       }
     }
 
-    logger.debug("Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, topic);
+    logger.debug(
+        "Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
 
     var startTime = System.currentTimeMillis();
-    var messageKey = new SignalKey.Message(workflowId, topic);
+    var messageKey = new SignalKey.Message(workflowId, recvTopic);
     var selectSql =
         """
           SELECT topic FROM "%s".notifications
@@ -266,7 +259,7 @@ public class NotificationsDAO {
             var conn = ctx.getConnection();
             var stmt = conn.prepareStatement(selectSql)) {
           stmt.setString(1, workflowId);
-          stmt.setString(2, topic);
+          stmt.setString(2, recvTopic);
           try (var rs = stmt.executeQuery()) {
             if (rs.next()) {
               // query for results
@@ -313,42 +306,42 @@ public class NotificationsDAO {
         """
             .formatted(ctx.schema());
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        String serializedMessage = null;
-        String serialization = null;
-        try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
-          stmt.setString(1, workflowId);
-          stmt.setString(2, topic);
-          stmt.setString(3, workflowId);
-          stmt.setString(4, topic);
+    try (var txConn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          txConn,
+          conn -> {
+            String serializedMessage = null;
+            String serialization = null;
+            try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+              stmt.setString(1, workflowId);
+              stmt.setString(2, recvTopic);
+              stmt.setString(3, workflowId);
+              stmt.setString(4, recvTopic);
 
-          // Note, if there are two executors running the same workflow waiting on the same recv,
-          // only the first one will return a row here. The second one get a null message but then
-          // throw a WorkflowExecutionConflictException when it records the step result.
-          try (ResultSet rs = stmt.executeQuery()) {
-            if (rs.next()) {
-              serializedMessage = rs.getString("message");
-              serialization = rs.getString("serialization");
+              // Note, if there are two executors running the same workflow waiting on the same
+              // recv,
+              // only the first one will return a row here. The second one get a null message but
+              // then
+              // throw a WorkflowExecutionConflictException when it records the step result.
+              try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                  serializedMessage = rs.getString("message");
+                  serialization = rs.getString("serialization");
+                }
+              }
             }
-          }
-        }
 
-        var deserializedMessage =
-            SerializationUtil.deserializeValue(serializedMessage, serialization, ctx.serializer());
+            var deserializedMessage =
+                SerializationUtil.deserializeValue(
+                    serializedMessage, serialization, ctx.serializer());
 
-        var output =
-            new StepResult(
-                workflowId, stepId, stepName, serializedMessage, null, null, serialization);
-        StepsDAO.recordStepResult(ctx, conn, output, startTime);
+            var output =
+                new StepResult(
+                    workflowId, stepId, stepName, serializedMessage, null, null, serialization);
+            StepsDAO.recordStepResult(ctx, conn, output, startTime);
 
-        conn.commit();
-        return deserializedMessage;
-      } catch (Exception e) {
-        conn.rollback();
-        throw e;
-      }
+            return deserializedMessage;
+          });
     }
   }
 
@@ -414,43 +407,50 @@ public class NotificationsDAO {
     SerializationUtil.SerializedResult serializedResult =
         SerializationUtil.serializeValue(message, serialization, serializer);
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
+    try (var txConn = ctx.getConnection()) {
       try {
-        if (asStep) {
-          var recordedOutput =
-              StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
-          if (recordedOutput != null) {
-            logger.debug(
-                "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
-            conn.commit();
-            return;
-          } else {
-            logger.debug(
-                "Running setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
-          }
-        }
+        SqlTransaction.run(
+            txConn,
+            conn -> {
+              if (asStep) {
+                var recordedOutput =
+                    StepsDAO.checkStepResult(
+                        conn, ctx.schema(), workflowId, functionId, functionName);
+                if (recordedOutput != null) {
+                  logger.debug(
+                      "Replaying setEvent, workflow: {}, step: {}, key: {}",
+                      workflowId,
+                      functionId,
+                      key);
+                  return;
+                } else {
+                  logger.debug(
+                      "Running setEvent, workflow: {}, step: {}, key: {}",
+                      workflowId,
+                      functionId,
+                      key);
+                }
+              }
 
-        setEvent(
-            conn,
-            ctx.schema(),
-            workflowId,
-            functionId,
-            key,
-            serializedResult.serializedValue(),
-            serializedResult.serialization());
+              setEvent(
+                  conn,
+                  ctx.schema(),
+                  workflowId,
+                  functionId,
+                  key,
+                  serializedResult.serializedValue(),
+                  serializedResult.serialization());
 
-        if (asStep) {
-          StepResult output =
-              new StepResult(workflowId, functionId, functionName, null, null, null, null);
-          StepsDAO.recordStepResult(ctx, conn, output, startTime);
-        }
-
-        conn.commit();
+              if (asStep) {
+                StepResult output =
+                    new StepResult(workflowId, functionId, functionName, null, null, null, null);
+                StepsDAO.recordStepResult(ctx, conn, output, startTime);
+              }
+            });
       } catch (Exception e) {
+        // The helper has already rolled back; this only records which call lost its work.
         logger.error(
             "setEvent rollback, workflow: {} id: {}, key: {}", workflowId, functionId, key, e);
-        conn.rollback();
         throw e;
       }
     }

@@ -1765,62 +1765,59 @@ public class WorkflowDAO {
     }
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
-    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
+    final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
-        for (String id : workflowIds) {
-          if (!wfDataMap.containsKey(id)) {
-            throw new DBOSNonExistentWorkflowException(id);
-          }
-        }
-        var dataList = workflowIds.stream().map(wfDataMap::get).toList();
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
+            for (String id : workflowIds) {
+              if (!wfDataMap.containsKey(id)) {
+                throw new DBOSNonExistentWorkflowException(id);
+              }
+            }
+            var dataList = workflowIds.stream().map(wfDataMap::get).toList();
 
-        // One app name per fork, shared by its status row and its copied steps: the source's, or
-        // this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
-        List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
-        for (var rd : dataList) {
-          forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
-        }
+            // One app name per fork, shared by its status row and its copied steps: the source's,
+            // or
+            // this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
+            List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
+            for (var rd : dataList) {
+              forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
+            }
 
-        batchInsertForkedStatuses(
-            conn,
-            ctx.schema(),
-            workflowIds,
-            forkIds,
-            dataList,
-            applicationVersion,
-            queueName,
-            queuePartitionKey,
-            timeoutMs,
-            forkAppNames);
+            batchInsertForkedStatuses(
+                conn,
+                ctx.schema(),
+                workflowIds,
+                forkIds,
+                dataList,
+                applicationVersion,
+                forkQueueName,
+                queuePartitionKey,
+                timeoutMs,
+                forkAppNames);
 
-        markWasForkedFrom(conn, ctx.schema(), workflowIds);
+            markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
-        List<String> copyOrigIds = new ArrayList<>();
-        List<String> copyForkIds = new ArrayList<>();
-        List<Integer> copyStartSteps = new ArrayList<>();
-        List<@Nullable String> copyAppNames = new ArrayList<>();
-        for (int i = 0; i < workflowIds.size(); i++) {
-          if (startSteps.get(i) > 0) {
-            copyOrigIds.add(workflowIds.get(i));
-            copyForkIds.add(forkIds.get(i));
-            copyStartSteps.add(startSteps.get(i));
-            copyAppNames.add(forkAppNames.get(i));
-          }
-        }
-        if (!copyOrigIds.isEmpty()) {
-          batchCopyWorkflowData(
-              conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
-        }
-
-        conn.commit();
-      } catch (SQLException e) {
-        conn.rollback();
-        throw e;
-      }
+            List<String> copyOrigIds = new ArrayList<>();
+            List<String> copyForkIds = new ArrayList<>();
+            List<Integer> copyStartSteps = new ArrayList<>();
+            List<@Nullable String> copyAppNames = new ArrayList<>();
+            for (int i = 0; i < workflowIds.size(); i++) {
+              if (startSteps.get(i) > 0) {
+                copyOrigIds.add(workflowIds.get(i));
+                copyForkIds.add(forkIds.get(i));
+                copyStartSteps.add(startSteps.get(i));
+                copyAppNames.add(forkAppNames.get(i));
+              }
+            }
+            if (!copyOrigIds.isEmpty()) {
+              batchCopyWorkflowData(
+                  conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
+            }
+          });
     }
   }
 
@@ -2642,134 +2639,134 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            try (var wfStmt = conn.prepareStatement(wfSQL);
+                var stepStmt = conn.prepareStatement(stepSQL);
+                var eventStmt = conn.prepareStatement(eventSQL);
+                var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
+                var streamsStmt = conn.prepareStatement(streamsSQL)) {
 
-      try (var wfStmt = conn.prepareStatement(wfSQL);
-          var stepStmt = conn.prepareStatement(stepSQL);
-          var eventStmt = conn.prepareStatement(eventSQL);
-          var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
-          var streamsStmt = conn.prepareStatement(streamsSQL)) {
+              for (var workflow : workflows) {
+                var status = workflow.status();
 
-        for (var workflow : workflows) {
-          var status = workflow.status();
+                wfStmt.setString(1, status.workflowId());
+                wfStmt.setString(2, status.status().name());
+                wfStmt.setString(3, status.workflowName());
+                wfStmt.setString(4, status.className());
+                wfStmt.setString(5, status.instanceName());
+                wfStmt.setString(6, status.authenticatedUser());
+                wfStmt.setString(7, status.assumedRole());
+                wfStmt.setString(
+                    8,
+                    status.authenticatedRoles() == null
+                        ? null
+                        : JsonUtility.toJson(status.authenticatedRoles()));
+                wfStmt.setString(
+                    9,
+                    status.output() == null
+                        ? null
+                        : SerializationUtil.serializeValue(
+                                status.output(), status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    10,
+                    status.error() == null
+                        ? null
+                        : SerializationUtil.serializeError(
+                                status.error().throwable(), status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    11,
+                    status.input() == null
+                        ? null
+                        : SerializationUtil.serializeArgs(
+                                status.input(), null, status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(12, status.executorId());
+                wfStmt.setString(13, status.appVersion());
+                wfStmt.setString(14, status.appId());
+                wfStmt.setObject(15, status.createdAtEpochMs());
+                wfStmt.setObject(16, status.updatedAtEpochMs());
+                wfStmt.setObject(17, status.startedAtEpochMs());
+                wfStmt.setString(18, status.queueName());
+                wfStmt.setString(19, status.deduplicationId());
+                wfStmt.setObject(20, status.priority());
+                wfStmt.setString(21, status.queuePartitionKey());
+                wfStmt.setObject(22, status.timeoutMs());
+                wfStmt.setObject(23, status.deadlineEpochMs());
+                wfStmt.setObject(24, status.recoveryAttempts());
+                wfStmt.setString(25, status.forkedFrom());
+                wfStmt.setString(26, status.parentWorkflowId());
+                wfStmt.setString(27, status.serialization());
+                wfStmt.setObject(28, status.delayUntilEpochMs());
+                wfStmt.setObject(29, status.completedAtEpochMs());
+                wfStmt.setString(30, status.applicationName());
+                wfStmt.addBatch();
 
-          wfStmt.setString(1, status.workflowId());
-          wfStmt.setString(2, status.status().name());
-          wfStmt.setString(3, status.workflowName());
-          wfStmt.setString(4, status.className());
-          wfStmt.setString(5, status.instanceName());
-          wfStmt.setString(6, status.authenticatedUser());
-          wfStmt.setString(7, status.assumedRole());
-          wfStmt.setString(
-              8,
-              status.authenticatedRoles() == null
-                  ? null
-                  : JsonUtility.toJson(status.authenticatedRoles()));
-          wfStmt.setString(
-              9,
-              status.output() == null
-                  ? null
-                  : SerializationUtil.serializeValue(
-                          status.output(), status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(
-              10,
-              status.error() == null
-                  ? null
-                  : SerializationUtil.serializeError(
-                          status.error().throwable(), status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(
-              11,
-              status.input() == null
-                  ? null
-                  : SerializationUtil.serializeArgs(
-                          status.input(), null, status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(12, status.executorId());
-          wfStmt.setString(13, status.appVersion());
-          wfStmt.setString(14, status.appId());
-          wfStmt.setObject(15, status.createdAtEpochMs());
-          wfStmt.setObject(16, status.updatedAtEpochMs());
-          wfStmt.setObject(17, status.startedAtEpochMs());
-          wfStmt.setString(18, status.queueName());
-          wfStmt.setString(19, status.deduplicationId());
-          wfStmt.setObject(20, status.priority());
-          wfStmt.setString(21, status.queuePartitionKey());
-          wfStmt.setObject(22, status.timeoutMs());
-          wfStmt.setObject(23, status.deadlineEpochMs());
-          wfStmt.setObject(24, status.recoveryAttempts());
-          wfStmt.setString(25, status.forkedFrom());
-          wfStmt.setString(26, status.parentWorkflowId());
-          wfStmt.setString(27, status.serialization());
-          wfStmt.setObject(28, status.delayUntilEpochMs());
-          wfStmt.setObject(29, status.completedAtEpochMs());
-          wfStmt.setString(30, status.applicationName());
-          wfStmt.addBatch();
+                for (var step : workflow.steps()) {
+                  stepStmt.setString(1, status.workflowId());
+                  stepStmt.setInt(2, step.functionId());
+                  stepStmt.setString(3, step.functionName());
+                  stepStmt.setString(
+                      4,
+                      step.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  step.output(), step.serialization(), serializer)
+                              .serializedValue());
+                  stepStmt.setString(
+                      5, step.error() == null ? null : step.error().serializedError());
+                  stepStmt.setString(6, step.childWorkflowId());
+                  stepStmt.setObject(7, step.startedAtEpochMs());
+                  stepStmt.setObject(8, step.completedAtEpochMs());
+                  stepStmt.setString(9, step.serialization());
+                  // A step keeps exactly the app_name it was exported with. An export that predates
+                  // the
+                  // column carries no app_name, so its steps import unclaimed rather than
+                  // inheriting a
+                  // guess from the workflow -- the same choice Python and TypeScript make.
+                  stepStmt.setString(10, step.applicationName());
+                  stepStmt.addBatch();
+                }
 
-          for (var step : workflow.steps()) {
-            stepStmt.setString(1, status.workflowId());
-            stepStmt.setInt(2, step.functionId());
-            stepStmt.setString(3, step.functionName());
-            stepStmt.setString(
-                4,
-                step.output() == null
-                    ? null
-                    : SerializationUtil.serializeValue(
-                            step.output(), step.serialization(), serializer)
-                        .serializedValue());
-            stepStmt.setString(5, step.error() == null ? null : step.error().serializedError());
-            stepStmt.setString(6, step.childWorkflowId());
-            stepStmt.setObject(7, step.startedAtEpochMs());
-            stepStmt.setObject(8, step.completedAtEpochMs());
-            stepStmt.setString(9, step.serialization());
-            // A step keeps exactly the app_name it was exported with. An export that predates the
-            // column carries no app_name, so its steps import unclaimed rather than inheriting a
-            // guess from the workflow -- the same choice Python and TypeScript make.
-            stepStmt.setString(10, step.applicationName());
-            stepStmt.addBatch();
-          }
+                for (var event : workflow.events()) {
+                  eventStmt.setString(1, status.workflowId());
+                  eventStmt.setString(2, event.key());
+                  eventStmt.setString(3, event.value());
+                  eventStmt.setString(4, event.serialization());
+                  eventStmt.addBatch();
+                }
 
-          for (var event : workflow.events()) {
-            eventStmt.setString(1, status.workflowId());
-            eventStmt.setString(2, event.key());
-            eventStmt.setString(3, event.value());
-            eventStmt.setString(4, event.serialization());
-            eventStmt.addBatch();
-          }
+                for (var history : workflow.eventHistory()) {
+                  eventHistoryStmt.setString(1, status.workflowId());
+                  eventHistoryStmt.setString(2, history.key());
+                  eventHistoryStmt.setString(3, history.value());
+                  eventHistoryStmt.setInt(4, history.stepId());
+                  eventHistoryStmt.setString(5, history.serialization());
+                  eventHistoryStmt.addBatch();
+                }
 
-          for (var history : workflow.eventHistory()) {
-            eventHistoryStmt.setString(1, status.workflowId());
-            eventHistoryStmt.setString(2, history.key());
-            eventHistoryStmt.setString(3, history.value());
-            eventHistoryStmt.setInt(4, history.stepId());
-            eventHistoryStmt.setString(5, history.serialization());
-            eventHistoryStmt.addBatch();
-          }
+                for (var stream : workflow.streams()) {
+                  streamsStmt.setString(1, status.workflowId());
+                  streamsStmt.setString(2, stream.key());
+                  streamsStmt.setString(3, stream.value());
+                  streamsStmt.setInt(4, stream.stepId());
+                  streamsStmt.setInt(5, stream.offset());
+                  streamsStmt.setString(6, stream.serialization());
+                  streamsStmt.addBatch();
+                }
+              }
 
-          for (var stream : workflow.streams()) {
-            streamsStmt.setString(1, status.workflowId());
-            streamsStmt.setString(2, stream.key());
-            streamsStmt.setString(3, stream.value());
-            streamsStmt.setInt(4, stream.stepId());
-            streamsStmt.setInt(5, stream.offset());
-            streamsStmt.setString(6, stream.serialization());
-            streamsStmt.addBatch();
-          }
-        }
-
-        wfStmt.executeBatch();
-        stepStmt.executeBatch();
-        eventStmt.executeBatch();
-        eventHistoryStmt.executeBatch();
-        streamsStmt.executeBatch();
-
-        conn.commit();
-      } catch (SQLException e) {
-        conn.rollback();
-        throw e;
-      }
+              wfStmt.executeBatch();
+              stepStmt.executeBatch();
+              eventStmt.executeBatch();
+              eventHistoryStmt.executeBatch();
+              streamsStmt.executeBatch();
+            }
+          });
     }
   }
 
