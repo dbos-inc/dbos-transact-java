@@ -7,16 +7,21 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -229,6 +234,65 @@ class RecoveryServiceTest {
     }
   }
 
+  @Test
+  void recoveryLeavesAWorkflowThisExecutorIsRunningAlone() throws Exception {
+    // Recovering a workflow that is live on this executor starts a second execution of it
+    // (#477, #488, #491). Deleting the row first is what makes the adoption observable: with the
+    // guard, recovery leaves the workflow alone and the row stays gone, so the live run fails
+    // fast on it; without the guard, recovery reaches executeWorkflowById and the deleted row
+    // takes it down a path this workflow should never have been on at all. Driven directly
+    // because the millisecond collision that caused these reports is not schedulable.
+    var impl = new BlockingRecoveryServiceImpl();
+    try (var dbos = new DBOS(dbosConfig)) {
+      var proxy = dbos.registerProxy(BlockingRecoveryService.class, impl);
+      dbos.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      var wfid = "recovery-leaves-active-alone";
+      var handle =
+          dbos.startWorkflow(() -> proxy.blockingWorkflow(), new StartWorkflowOptions(wfid));
+      assertTrue(impl.entered.await(15, TimeUnit.SECONDS), "the workflow never started");
+
+      deleteWorkflowRow(dataSource, wfid);
+
+      dbosExecutor.recoverWorkflow(wfid, null);
+      assertEquals(
+          0,
+          countWorkflowRows(dataSource, wfid),
+          "recovery must not re-insert a row for a workflow already running on this executor");
+
+      impl.release.countDown();
+
+      assertThrows(
+          DBOSNonExistentWorkflowException.class,
+          handle::getResult,
+          "the run must fail fast on its deleted row, not adopt one recovery put back");
+      assertEquals(1, impl.runs.get(), "recovery must not start a second execution");
+    }
+  }
+
+  private static void deleteWorkflowRow(DataSource ds, String workflowId) throws SQLException {
+    try (var conn = ds.getConnection();
+        var stmt =
+            conn.prepareStatement("DELETE FROM dbos.workflow_status WHERE workflow_uuid = ?")) {
+      stmt.setString(1, workflowId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
+  private static int countWorkflowRows(DataSource ds, String workflowId) throws SQLException {
+    try (var conn = ds.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "SELECT count(*) FROM dbos.workflow_status WHERE workflow_uuid = ?")) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        rs.next();
+        return rs.getInt(1);
+      }
+    }
+  }
+
   private void setWorkflowStateToPending(DataSource ds) throws SQLException {
 
     String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
@@ -244,5 +308,26 @@ class RecoveryServiceTest {
 
       logger.info("Number of workflows made pending {}", rowsAffected);
     }
+  }
+}
+
+interface BlockingRecoveryService {
+  String blockingWorkflow() throws InterruptedException;
+}
+
+class BlockingRecoveryServiceImpl implements BlockingRecoveryService {
+  final AtomicInteger runs = new AtomicInteger();
+  final CountDownLatch entered = new CountDownLatch(1);
+  final CountDownLatch release = new CountDownLatch(1);
+
+  @Override
+  @Workflow(name = "blockingWorkflow")
+  public String blockingWorkflow() throws InterruptedException {
+    runs.incrementAndGet();
+    entered.countDown();
+    if (!release.await(30, TimeUnit.SECONDS)) {
+      throw new IllegalStateException("the run was never released");
+    }
+    return "done";
   }
 }

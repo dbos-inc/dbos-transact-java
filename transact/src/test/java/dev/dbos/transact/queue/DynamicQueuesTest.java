@@ -936,10 +936,12 @@ public class DynamicQueuesTest {
     assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
     assertEquals(2, impl.counter.get());
-    // Recovery sets back to enqueued.
-    //   The enqueued run will get skipped (first run is still blocked)
-    assertEquals(WorkflowState.ENQUEUED, handle1.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED, handle2.getStatus().status());
+    // wf1 and wf2 are still running here, so recovery leaves them alone: their rows stay PENDING
+    // and keep the two concurrency slots they are actually using. Releasing those assignments
+    // would re-enqueue live workflows, admit a second runner for each, and discard the outcome of
+    // the run already in flight.
+    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
+    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
     qs.unpause();
@@ -948,6 +950,9 @@ public class DynamicQueuesTest {
     assertEquals(1, handle2.getResult());
     assertEquals(2, handle3.getResult());
     assertEquals("local", handle3.getStatus().executorId());
+    // Only noopWorkflow leaves the counter alone, so this still being 2 means neither blocked
+    // workflow was executed a second time by the recovery above.
+    assertEquals(2, impl.counter.get());
 
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }

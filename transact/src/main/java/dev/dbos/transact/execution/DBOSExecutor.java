@@ -233,6 +233,11 @@ public class DBOSExecutor implements AutoCloseable {
       List<Queue> queues,
       AlertHandler alertHandler) {
 
+    // Recovery may only adopt workflows orphaned by a previous process, never one running in
+    // this one. Read before start() does anything, and stepped back a millisecond because the
+    // filter is created_at <= endTime on a millisecond-granular column.
+    var recoveryCutoff = Instant.now().minusMillis(1);
+
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
 
@@ -312,7 +317,7 @@ public class DBOSExecutor implements AutoCloseable {
               .withStatus(WorkflowState.PENDING)
               .withExecutorIds(List.of(executorId()))
               .withApplicationVersion(appVersion)
-              .withEndTime(Instant.now());
+              .withEndTime(recoveryCutoff);
       Runnable recoveryTask =
           () -> {
             try {
@@ -1206,6 +1211,16 @@ public class DBOSExecutor implements AutoCloseable {
 
   WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    // A workflow running here is not orphaned, so recovery leaves its row alone -- queue
+    // assignment included. Releasing that hands away a slot a live execution is still using: the
+    // next dequeue admits a second runner, and the first run's outcome write then finds the row
+    // no longer PENDING and is discarded. failIfMissing because an active entry means this
+    // executor inserted the row, so a row deleted since is gone for good.
+    if (activeWorkflows.containsKey(workflowId)) {
+      logger.debug("recoverWorkflow skip active {}", workflowId);
+      return new WorkflowHandleDBPoll<>(this, workflowId, true);
+    }
 
     if (queueName != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
