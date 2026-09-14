@@ -259,11 +259,11 @@ public class DBOSIntegration {
    * @return an {@link Optional} containing the value associated with the service+workflow+key
    *     combination, or empty if not found
    * @throws IllegalStateException if DBOS has not been launched
-   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is
-   *     retired. The Python and TypeScript SDKs drop it at shared migration 114, having removed the
-   *     in-memory event receivers whose dispatch bookkeeping it held, and this SDK will follow. A
-   *     system database that any of those SDKs has migrated no longer has the table, so this API
-   *     already fails there. Store integration state in your own table instead.
+   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is going
+   *     to be retired. The table holds dispatch bookkeeping for the in-memory event receivers that
+   *     every SDK except Java either removed or never implemented. This API will be removed in DBOS
+   *     Java 2.0, and a shared migration that drops the table will be added sometime after that.
+   *     Store integration state in your own table instead.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   @SuppressWarnings("removal") // the deprecated API's own implementation
@@ -280,11 +280,11 @@ public class DBOSIntegration {
    * @return the value associated with the service+workflow+key combination — may differ from the
    *     supplied value if the existing record already had a higher version or timestamp
    * @throws IllegalStateException if DBOS has not been launched
-   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is
-   *     retired. The Python and TypeScript SDKs drop it at shared migration 114, having removed the
-   *     in-memory event receivers whose dispatch bookkeeping it held, and this SDK will follow. A
-   *     system database that any of those SDKs has migrated no longer has the table, so this API
-   *     already fails there. Store integration state in your own table instead.
+   * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is going
+   *     to be retired. The table holds dispatch bookkeeping for the in-memory event receivers that
+   *     every SDK except Java either removed or never implemented. This API will be removed in DBOS
+   *     Java 2.0, and a shared migration that drops the table will be added sometime after that.
+   *     Store integration state in your own table instead.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   @SuppressWarnings("removal") // the deprecated API's own implementation
