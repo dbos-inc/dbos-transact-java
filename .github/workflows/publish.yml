@@ -47,73 +47,8 @@ jobs:
           name: jars
           path: transact*/build/libs/*.jar
 
-  # GraalVM Native Image cannot cross-compile, so each platform's binary is
-  # built on its own native runner.
-  #
-  # windows-arm64 is intentionally absent: GraalVM ships no windows-aarch64
-  # Native Image distribution, so native-image cannot run there (even though
-  # GitHub now offers windows-11-arm runners). Windows-on-ARM runs the
-  # windows-x64 binary via the OS's built-in x64 emulation.
-  #
-  # Native images are built on every run and uploaded as build artifacts; the
-  # `release` job only attaches them to a GitHub Release for release builds.
-  build-native:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest,    platform: linux-x64,   ext: '' }
-          - { os: ubuntu-24.04-arm, platform: linux-arm64, ext: '' }
-          - { os: macos-latest,     platform: macos-arm64, ext: '' }
-          - { os: macos-15-intel,   platform: macos-x64,   ext: '' }
-          - { os: windows-latest,   platform: windows-x64, ext: '.exe' }
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # fetch-depth 0 needed for version calculation
-
-      - name: Set up GraalVM
-        uses: graalvm/setup-graalvm@v1
-        with:
-          java-version: '21'
-          distribution: 'graalvm-community'
-
-      - name: Build native image
-        # auto-download=false forces Gradle to use the GraalVM installed above
-        # rather than re-provisioning a toolchain via the foojay resolver.
-        run: ./gradlew :transact-cli:nativeCompile -Porg.gradle.java.installations.auto-download=false
-        shell: bash
-        env:
-          # Windows-only: native-image puts its scratch dir under the system
-          # temp on C:, but the workspace is on D:. The build relativizes one
-          # against the other, which throws "'other' has different root" since
-          # NIO can't relativize across drives. Pinning temp to RUNNER_TEMP
-          # (also on D:) keeps both paths on the same drive. No-op elsewhere.
-          # See https://github.com/oracle/graal/issues/11795
-          TMP: ${{ runner.temp }}
-          TEMP: ${{ runner.temp }}
-
-      - name: Package binary
-        shell: bash
-        run: |
-          mkdir -p staged
-          cd transact-cli/build/native/nativeCompile
-          if [ -n "${{ matrix.ext }}" ]; then
-            7z a "$GITHUB_WORKSPACE/staged/dbos-${{ matrix.platform }}.zip" "dbos${{ matrix.ext }}"
-          else
-            tar czf "$GITHUB_WORKSPACE/staged/dbos-${{ matrix.platform }}.tar.gz" dbos
-          fi
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: dbos-${{ matrix.platform }}
-          path: staged/*
-
   release:
-    needs: [publish, build-native]
+    needs: [publish]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/heads/release/')
     steps:
@@ -156,26 +91,11 @@ jobs:
           name: jars
           path: jars
 
-      - name: Download native binaries
-        uses: actions/download-artifact@v7
-        with:
-          path: native
-          pattern: dbos-*
-          merge-multiple: true
-
       - name: Stage release assets
         id: stage
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
           mkdir -p release-assets
-          # Include the fat CLI jar (dbos.jar) and every other module's jars,
-          # but exclude the thin transact-cli library jar (transact-cli-*.jar).
-          find jars -name '*.jar' ! -name 'transact-cli-*.jar' -exec cp {} release-assets/ \;
-          for f in native/dbos-*; do
-            base=$(basename "$f")        # e.g. dbos-linux-x64.tar.gz
-            rest=${base#dbos-}           # e.g. linux-x64.tar.gz
-            cp "$f" "release-assets/dbos-${VERSION}-${rest}"
-          done
+          find jars -name '*.jar' -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Github Release
