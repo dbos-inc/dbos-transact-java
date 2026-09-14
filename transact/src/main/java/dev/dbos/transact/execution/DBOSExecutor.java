@@ -185,7 +185,8 @@ public class DBOSExecutor implements AutoCloseable {
             ? Objects.requireNonNullElse(System.getenv("DBOS_APP_NAME"), "")
             : config.appName();
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
-    executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
+    var envExecutorId = System.getenv("DBOS__VMID");
+    executorId = envExecutorId == null || envExecutorId.isEmpty() ? null : envExecutorId;
 
     if (appName.isEmpty()) {
       var msg =
@@ -219,6 +220,12 @@ public class DBOSExecutor implements AutoCloseable {
       if (config.executorId() != null) {
         executorId = config.executorId();
       }
+      if (config.conductorKey() != null) {
+        executorId = UUID.randomUUID().toString();
+      }
+    }
+    if (executorId == null) {
+      executorId = "local";
     }
   }
 
@@ -256,10 +263,6 @@ public class DBOSExecutor implements AutoCloseable {
         this.appVersion =
             AppVersionComputer.computeAppVersion(
                 DBOS.version(), this.appName, workflowMap.values());
-      }
-
-      if (config.conductorKey() != null) {
-        this.executorId = UUID.randomUUID().toString();
       }
 
       logger.info("System Database: {}", this.config.databaseUrl());

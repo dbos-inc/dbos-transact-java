@@ -1,5 +1,6 @@
 package dev.dbos.transact.config;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -86,6 +87,62 @@ public class ConfigEnvTest {
             assertEquals("test-env-app-version", dbosExecutor.appVersion());
             assertEquals("test-env-executor-id", dbosExecutor.executorId());
             assertEquals("test-env-app-id", dbosExecutor.appId());
+          } finally {
+            dbos.shutdown();
+          }
+        });
+  }
+
+  @Test
+  public void conductorOverridesEnvExecutorId() throws Exception {
+    var envVars = new EnvironmentVariables("DBOS__VMID", "test-env-executor-id");
+
+    envVars.execute(
+        () -> {
+          var dbos = new DBOS(pgContainer.dbosConfig().withConductorKey("test-conductor-key"));
+
+          try {
+            dbos.launch();
+            var executorId = DBOSTestAccess.getDbosExecutor(dbos).executorId();
+            assertNotEquals("test-env-executor-id", executorId);
+            assertDoesNotThrow(() -> UUID.fromString(executorId));
+          } finally {
+            dbos.shutdown();
+          }
+        });
+  }
+
+  @Test
+  public void cloudKeepsEnvExecutorIdWithConductorKey() throws Exception {
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true")
+            .and("DBOS__VMID", "test-env-executor-id")
+            .and("DBOS_APP_NAME", "test-env-app-name");
+
+    envVars.execute(
+        () -> {
+          var dbos = new DBOS(pgContainer.dbosConfig().withConductorKey("test-conductor-key"));
+
+          try {
+            dbos.launch();
+            assertEquals("test-env-executor-id", DBOSTestAccess.getDbosExecutor(dbos).executorId());
+          } finally {
+            dbos.shutdown();
+          }
+        });
+  }
+
+  @Test
+  public void emptyEnvExecutorIdFallsBackToLocal() throws Exception {
+    var envVars = new EnvironmentVariables("DBOS__VMID", "");
+
+    envVars.execute(
+        () -> {
+          var dbos = new DBOS(pgContainer.dbosConfig());
+
+          try {
+            dbos.launch();
+            assertEquals("local", DBOSTestAccess.getDbosExecutor(dbos).executorId());
           } finally {
             dbos.shutdown();
           }
