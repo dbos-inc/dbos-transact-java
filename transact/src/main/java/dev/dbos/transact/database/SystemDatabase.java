@@ -781,7 +781,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    dbRetry(() -> WorkflowDAO.garbageCollect(ctx, cutoff, rowsThreshold));
+    dbRetry(
+        () ->
+            WorkflowDAO.garbageCollect(
+                ctx, cutoff, rowsThreshold, WorkflowDAO.DEFAULT_GC_BATCH_SIZE));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {

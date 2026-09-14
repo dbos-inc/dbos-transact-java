@@ -19,6 +19,12 @@ public final class SqlTransaction {
     void run(Connection conn) throws SQLException;
   }
 
+  /** A unit of work that produces a value. */
+  @FunctionalInterface
+  public interface SqlCall<T> {
+    T run(Connection conn) throws SQLException;
+  }
+
   private SqlTransaction() {}
 
   /**
@@ -29,10 +35,29 @@ public final class SqlTransaction {
    * @throws SQLException if the action or the transaction itself fails
    */
   public static void run(Connection conn, SqlAction action) throws SQLException {
+    call(
+        conn,
+        c -> {
+          action.run(c);
+          return null;
+        });
+  }
+
+  /**
+   * Runs {@code action} in a transaction and returns its result, committing on success and rolling
+   * back on any failure.
+   *
+   * @param conn a connection in autocommit mode; left in autocommit mode on return
+   * @param action the work to perform
+   * @return whatever the action returned
+   * @throws SQLException if the action or the transaction itself fails
+   */
+  public static <T> T call(Connection conn, SqlCall<T> action) throws SQLException {
     conn.setAutoCommit(false);
     try {
-      action.run(conn);
+      var result = action.run(conn);
       conn.commit();
+      return result;
     } catch (Throwable t) {
       try {
         conn.rollback();

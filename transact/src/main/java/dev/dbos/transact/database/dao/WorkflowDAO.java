@@ -2126,8 +2126,41 @@ public class WorkflowDAO {
     return null;
   }
 
-  public static void garbageCollect(DbContext ctx, Instant cutoff, Long rowsThreshold)
+  /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
+  public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
+
+  /** The child tables a retention round reclaims, in the order Python sweeps them. */
+  private static final List<String> PAYLOAD_TABLES =
+      List.of("workflow_input", "workflow_output", "operation_outputs");
+
+  /** The status rows a retention round is allowed to take, minus its watermark bounds. */
+  private static String statusGcFilter(DbContext ctx) {
+    return "created_at < ? AND status NOT IN (?, ?, ?)" + ctx.andAppScope();
+  }
+
+  /** Binds {@link #statusGcFilter}'s parameters from index 1, returning the next free index. */
+  private static int bindStatusGcFilter(DbContext ctx, PreparedStatement stmt, long deadline)
       throws SQLException {
+    stmt.setLong(1, deadline);
+    stmt.setString(2, WorkflowState.PENDING.name());
+    stmt.setString(3, WorkflowState.ENQUEUED.name());
+    stmt.setString(4, WorkflowState.DELAYED.name());
+    return ctx.bindAppScope(stmt, 5);
+  }
+
+  /**
+   * Deletes old terminal workflows and the payload rows they leave behind.
+   *
+   * <p>Two sweeps, matching Python. The status sweep advances a {@code created_at} watermark,
+   * committing one batch per transaction; it never materializes workflow ids, so its memory cost is
+   * flat however much it collects. The payload sweep then reclaims the rows that sweep orphaned, by
+   * their own {@code retention_timestamp} rather than by id.
+   */
+  public static void garbageCollect(
+      DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
+    if (batchSize < 1) {
+      throw new IllegalArgumentException("batchSize must be a positive integer, got " + batchSize);
+    }
 
     try (var conn = ctx.getConnection()) {
       if (rowsThreshold != null) {
@@ -2139,35 +2172,187 @@ public class WorkflowDAO {
         }
       }
 
-      if (cutoff != null) {
-        String sql =
-            """
-              DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
-            """
-                    .formatted(ctx.schema())
-                + ctx.andAppScope()
-                + " RETURNING workflow_uuid";
-        var deadline = cutoff.toEpochMilli();
-        SqlTransaction.run(
-            conn,
-            c -> {
-              List<String> deleted = new ArrayList<>();
-              try (var stmt = c.prepareStatement(sql)) {
-                stmt.setLong(1, deadline);
-                stmt.setString(2, WorkflowState.PENDING.name());
-                stmt.setString(3, WorkflowState.ENQUEUED.name());
-                stmt.setString(4, WorkflowState.DELAYED.name());
-                ctx.bindAppScope(stmt, 5);
+      if (cutoff == null) {
+        return;
+      }
 
-                try (var rs = stmt.executeQuery()) {
-                  while (rs.next()) {
-                    deleted.add(rs.getString(1));
+      var deadline = cutoff.toEpochMilli();
+      sweepWorkflowStatus(ctx, conn, deadline, batchSize);
+      // Strictly after the status sweep: the payload sweep only takes orphans, and this round's
+      // become orphans only once that sweep has committed.
+      sweepPayloads(ctx, conn, deadline, batchSize);
+    }
+  }
+
+  /** Deletes eligible status rows in batches, seeded from the oldest one in range. */
+  private static void sweepWorkflowStatus(
+      DbContext ctx, Connection conn, long deadline, int batchSize) throws SQLException {
+    var filter = statusGcFilter(ctx);
+    var seedSql =
+        "SELECT created_at FROM \"%s\".workflow_status WHERE %s ORDER BY created_at LIMIT 1"
+            .formatted(ctx.schema(), filter);
+
+    Long oldest;
+    try (var stmt = conn.prepareStatement(seedSql)) {
+      bindStatusGcFilter(ctx, stmt, deadline);
+      try (var rs = stmt.executeQuery()) {
+        oldest = rs.next() ? rs.getLong(1) : null;
+      }
+    }
+    if (oldest == null) {
+      return;
+    }
+
+    var watermark = oldest - 1;
+    while (true) {
+      var next = deleteStatusBatch(ctx, conn, deadline, watermark, batchSize, filter);
+      if (next == null) {
+        return;
+      }
+      watermark = next;
+    }
+  }
+
+  /**
+   * Deletes one batch of status rows in its own transaction.
+   *
+   * @return the watermark to resume from, or null when the sweep is done
+   */
+  private static @Nullable Long deleteStatusBatch(
+      DbContext ctx, Connection conn, long deadline, long watermark, int batchSize, String filter)
+      throws SQLException {
+    var stepSql =
+        ("SELECT created_at FROM \"%s\".workflow_status WHERE %s AND created_at > ?"
+                + " ORDER BY created_at LIMIT 1 OFFSET ?")
+            .formatted(ctx.schema(), filter);
+    var boundedSql =
+        "DELETE FROM \"%s\".workflow_status WHERE %s AND created_at > ? AND created_at <= ?"
+            .formatted(ctx.schema(), filter);
+    var remainderSql =
+        "DELETE FROM \"%s\".workflow_status WHERE %s".formatted(ctx.schema(), filter);
+
+    return SqlTransaction.call(
+        conn,
+        c -> {
+          // The created_at of the batchSize-th oldest eligible row above the watermark.
+          Long step = null;
+          try (var stmt = c.prepareStatement(stepSql)) {
+            var next = bindStatusGcFilter(ctx, stmt, deadline);
+            stmt.setLong(next, watermark);
+            stmt.setInt(next + 1, batchSize - 1);
+            try (var rs = stmt.executeQuery()) {
+              if (rs.next()) {
+                step = rs.getLong(1);
+              }
+            }
+          }
+
+          if (step == null) {
+            // Unbounded, and deliberately not limited to rows above the watermark: an insert can
+            // land a created_at below it mid-pass.
+            try (var stmt = c.prepareStatement(remainderSql)) {
+              bindStatusGcFilter(ctx, stmt, deadline);
+              stmt.executeUpdate();
+            }
+            return null;
+          }
+
+          try (var stmt = c.prepareStatement(boundedSql)) {
+            var next = bindStatusGcFilter(ctx, stmt, deadline);
+            stmt.setLong(next, watermark);
+            // created_at ties may push the batch slightly over batchSize.
+            stmt.setLong(next + 1, step);
+            stmt.executeUpdate();
+          }
+          return step;
+        });
+  }
+
+  /**
+   * Deletes payload and step rows below the cutoff whose workflow is gone. Runs after the status
+   * sweep, whose orphans all fall in range: every payload is stamped no later than the completion
+   * that made its workflow collectable.
+   */
+  private static void sweepPayloads(DbContext ctx, Connection conn, long deadline, int batchSize)
+      throws SQLException {
+    for (var table : PAYLOAD_TABLES) {
+      sweepPayloadTable(ctx, conn, table, deadline, batchSize);
+    }
+  }
+
+  private static void sweepPayloadTable(
+      DbContext ctx, Connection conn, String table, long deadline, int batchSize)
+      throws SQLException {
+    // A payload below the cutoff belongs to a workflow created before it, so the status side of
+    // this anti-join is the few such rows still present, not the whole table.
+    var orphaned =
+        (" AND NOT EXISTS (SELECT 1 FROM \"%s\".workflow_status ws"
+                + " WHERE ws.workflow_uuid = %s.workflow_uuid AND ws.created_at < ?)")
+            .formatted(ctx.schema(), table);
+    var seedSql =
+        ("SELECT retention_timestamp FROM \"%s\".%s WHERE retention_timestamp < ?"
+                + " ORDER BY retention_timestamp LIMIT 1")
+            .formatted(ctx.schema(), table);
+
+    Long oldest;
+    try (var stmt = conn.prepareStatement(seedSql)) {
+      stmt.setLong(1, deadline);
+      try (var rs = stmt.executeQuery()) {
+        oldest = rs.next() ? rs.getLong(1) : null;
+      }
+    }
+    if (oldest == null) {
+      return;
+    }
+
+    var stepSql =
+        ("SELECT retention_timestamp FROM \"%s\".%s"
+                + " WHERE retention_timestamp < ? AND retention_timestamp > ?"
+                + " ORDER BY retention_timestamp LIMIT 1 OFFSET ?")
+            .formatted(ctx.schema(), table);
+    var deleteSql =
+        "DELETE FROM \"%s\".%s WHERE retention_timestamp < ? AND retention_timestamp > ?"
+            .formatted(ctx.schema(), table);
+
+    var watermark = oldest - 1;
+    while (true) {
+      final long from = watermark;
+      var next =
+          SqlTransaction.<Long>call(
+              conn,
+              c -> {
+                // Batches are cut by candidate count, so rows spared by the anti-join only thin
+                // one out; they are re-checked on the next round.
+                Long step = null;
+                try (var stmt = c.prepareStatement(stepSql)) {
+                  stmt.setLong(1, deadline);
+                  stmt.setLong(2, from);
+                  stmt.setInt(3, batchSize - 1);
+                  try (var rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                      step = rs.getLong(1);
+                    }
                   }
                 }
-              }
-              deleteWorkflowChildRows(c, ctx.schema(), deleted.toArray(String[]::new));
-            });
+
+                // retention_timestamp ties may push the batch slightly over batchSize.
+                var bounded = step != null ? " AND retention_timestamp <= ?" : "";
+                try (var stmt = c.prepareStatement(deleteSql + bounded + orphaned)) {
+                  stmt.setLong(1, deadline);
+                  stmt.setLong(2, from);
+                  var index = 3;
+                  if (step != null) {
+                    stmt.setLong(index++, step);
+                  }
+                  stmt.setLong(index, deadline);
+                  stmt.executeUpdate();
+                }
+                return step;
+              });
+      if (next == null) {
+        return;
       }
+      watermark = next;
     }
   }
 

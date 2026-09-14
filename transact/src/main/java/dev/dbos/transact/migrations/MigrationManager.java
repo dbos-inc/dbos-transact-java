@@ -30,15 +30,20 @@ public class MigrationManager {
   public static final int SHARED_MIGRATION_BASE = 100;
 
   /**
-   * The oldest system database schema version this SDK can run against. Migration 109 created the
-   * workflow_input and workflow_output tables, which every workflow status read now consults, so a
-   * schema older than this fails those reads outright.
+   * The oldest system database schema version this SDK can run against.
+   *
+   * <p>Migration 109 created the workflow_input and workflow_output tables, which every workflow
+   * status read now consults, so anything older fails those reads outright. Migrations 110 and 111
+   * add operation_outputs.retention_timestamp and its index, which the payload retention sweep
+   * probes once per batch; at 110 the column exists but its index does not, and the sweep degrades
+   * to a full scan and sort of the largest payload table per batch. That presents as a retention
+   * round that never finishes rather than as an error, so 111 is the floor, not 110.
    *
    * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
    * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
    * unconditionally on a later migration.
    */
-  public static final int MINIMUM_SYSDB_VERSION = 109;
+  public static final int MINIMUM_SYSDB_VERSION = 111;
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
