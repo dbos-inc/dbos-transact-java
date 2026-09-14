@@ -60,7 +60,6 @@ mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
-slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core", version.ref = "hibernate" }
 spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-framework" }
 spring-jdbc = { module = "org.springframework:spring-jdbc", version.ref = "spring-framework" }
