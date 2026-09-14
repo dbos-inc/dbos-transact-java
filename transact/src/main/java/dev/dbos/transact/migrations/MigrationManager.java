@@ -1,6 +1,7 @@
 package dev.dbos.transact.migrations;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 
 import java.sql.Connection;
@@ -286,24 +287,6 @@ public class MigrationManager {
     }
   }
 
-  @FunctionalInterface
-  private interface SqlAction {
-    void run(Connection conn) throws SQLException;
-  }
-
-  private static void runInTransaction(Connection conn, SqlAction action) throws SQLException {
-    conn.setAutoCommit(false);
-    try {
-      action.run(conn);
-      conn.commit();
-    } catch (SQLException e) {
-      conn.rollback();
-      throw e;
-    } finally {
-      conn.setAutoCommit(true);
-    }
-  }
-
   static void runDbosMigrations(
       Connection conn, String schema, List<String> migrations, boolean isCockroach) {
     Objects.requireNonNull(schema, "schema must not be null");
@@ -331,7 +314,7 @@ public class MigrationManager {
           // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
           // (guard for installs created before the primary key was added to migration 1).
           logger.info("Migration 10 skipped, primary key already exists");
-          runInTransaction(
+          SqlTransaction.run(
               conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
         } else if (ONLINE_MIGRATIONS.contains(migrationIndex) && !isCockroach) {
           // CONCURRENTLY index DDL cannot run inside a transaction. Clean up any indexes left
@@ -341,11 +324,11 @@ public class MigrationManager {
           try (var stmt = conn.createStatement()) {
             stmt.execute(migrationSql);
           }
-          runInTransaction(
+          SqlTransaction.run(
               conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
         } else {
           // Standard migration: DDL and version bump in one transaction.
-          runInTransaction(
+          SqlTransaction.run(
               conn,
               c -> {
                 try (var stmt = c.createStatement()) {
@@ -365,7 +348,7 @@ public class MigrationManager {
     if (migrations.size() > lastApplied) {
       var versionBefore = lastApplied;
       try {
-        runInTransaction(
+        SqlTransaction.run(
             conn, c -> bumpMigrationVersion(c, schema, migrations.size(), versionBefore));
       } catch (SQLException e) {
         throw new RuntimeException("Failed to record migration %d".formatted(migrations.size()), e);

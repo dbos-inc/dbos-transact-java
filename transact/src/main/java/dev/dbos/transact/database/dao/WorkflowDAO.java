@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -1566,7 +1567,7 @@ public class WorkflowDAO {
 
     var ids = wfIdSet.toArray(String[]::new);
     try (var conn = ctx.getConnection()) {
-      runInTransaction(
+      SqlTransaction.run(
           conn,
           c -> {
             try (var stmt = c.prepareStatement(sql)) {
@@ -2079,24 +2080,6 @@ public class WorkflowDAO {
     }
   }
 
-  @FunctionalInterface
-  private interface SqlAction {
-    void run(Connection conn) throws SQLException;
-  }
-
-  private static void runInTransaction(Connection conn, SqlAction action) throws SQLException {
-    conn.setAutoCommit(false);
-    try {
-      action.run(conn);
-      conn.commit();
-    } catch (SQLException e) {
-      conn.rollback();
-      throw e;
-    } finally {
-      conn.setAutoCommit(true);
-    }
-  }
-
   // Deleting a status row cannot be relied on to cascade its steps away: shared migration 112
   // drops the operation_outputs -> workflow_status foreign key, and any SDK sharing this system
   // database may already have applied it even though this ladder stops at 111. workflow_input and
@@ -2165,7 +2148,7 @@ public class WorkflowDAO {
                 + ctx.andAppScope()
                 + " RETURNING workflow_uuid";
         var deadline = cutoff.toEpochMilli();
-        runInTransaction(
+        SqlTransaction.run(
             conn,
             c -> {
               List<String> deleted = new ArrayList<>();

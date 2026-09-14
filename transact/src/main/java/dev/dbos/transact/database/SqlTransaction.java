@@ -1,0 +1,47 @@
+package dev.dbos.transact.database;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+/**
+ * Runs a unit of work inside an explicit JDBC transaction on a connection that is otherwise in
+ * autocommit mode, restoring autocommit afterwards.
+ *
+ * <p>Rollback covers every {@link Throwable}, not just {@link SQLException}. An unchecked exception
+ * escaping the action would otherwise reach the {@code finally} block, where restoring autocommit
+ * commits the partial transaction — the opposite of what the caller intended.
+ */
+public final class SqlTransaction {
+
+  /** A unit of work to run against a connection already placed in an explicit transaction. */
+  @FunctionalInterface
+  public interface SqlAction {
+    void run(Connection conn) throws SQLException;
+  }
+
+  private SqlTransaction() {}
+
+  /**
+   * Runs {@code action} in a transaction, committing on success and rolling back on any failure.
+   *
+   * @param conn a connection in autocommit mode; left in autocommit mode on return
+   * @param action the work to perform
+   * @throws SQLException if the action or the transaction itself fails
+   */
+  public static void run(Connection conn, SqlAction action) throws SQLException {
+    conn.setAutoCommit(false);
+    try {
+      action.run(conn);
+      conn.commit();
+    } catch (Throwable t) {
+      try {
+        conn.rollback();
+      } catch (SQLException rollbackFailure) {
+        t.addSuppressed(rollbackFailure);
+      }
+      throw t;
+    } finally {
+      conn.setAutoCommit(true);
+    }
+  }
+}
