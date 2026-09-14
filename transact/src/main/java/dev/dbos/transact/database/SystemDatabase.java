@@ -243,29 +243,19 @@ public class SystemDatabase implements AutoCloseable {
    */
   public static SystemDatabase create(
       DBOSConfig config, @Nullable String executorId, @Nullable String appName) {
-    if (config.dataSource() == null) {
-      return new SystemDatabase(
-          createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword()),
-          config.databaseSchema(),
-          true,
-          config.serializer(),
-          config.useListenNotify(),
-          executorId,
-          appName,
-          config.notificationCoalesceInterval(),
-          config.databasePollingConcurrency());
-    } else {
-      return new SystemDatabase(
-          config.dataSource(),
-          config.databaseSchema(),
-          false,
-          config.serializer(),
-          true,
-          executorId,
-          appName,
-          config.notificationCoalesceInterval(),
-          config.databasePollingConcurrency());
-    }
+    var dataSource = config.dataSource();
+    return new SystemDatabase(
+        dataSource != null
+            ? dataSource
+            : createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword()),
+        config.databaseSchema(),
+        dataSource == null,
+        config.serializer(),
+        config.useListenNotify(),
+        executorId,
+        appName,
+        config.notificationCoalesceInterval(),
+        config.databasePollingConcurrency());
   }
 
   /**
@@ -333,6 +323,11 @@ public class SystemDatabase implements AutoCloseable {
     if (created && ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
       hikariDataSource.close();
     }
+  }
+
+  /** For tests: whether this handle listens for notifications, or only polls. */
+  boolean hasNotificationListener() {
+    return !(notificationSource instanceof NullNotificationSource);
   }
 
   /** For recv and getEvent only; see {@link #NOTIFICATION_FALLBACK_INTERVAL}. */
