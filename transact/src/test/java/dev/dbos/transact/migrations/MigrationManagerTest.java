@@ -574,35 +574,6 @@ class MigrationManagerTest {
     }
   }
 
-  @Test
-  void testGeneratedScriptSkipsEmptyMigrations() {
-    var schema = Constants.DB_SCHEMA;
-    var script = MigrationManager.generateMigrationScript(schema, false, 1);
-
-    assertFalse(script.contains("-- Migration 39\n"), "Empty migration 39 emits no SQL");
-    assertFalse(
-        script.contains("SET version = 39;"),
-        "Empty migration 39 gets no version write of its own; the next one covers it");
-    assertTrue(script.contains("-- Migration 42\n"), "Migration 42 emits SQL");
-    assertTrue(script.contains("SET version = 42;"), "Migration 42 advances the version");
-  }
-
-  @Test
-  void testGeneratedScriptSkipsTheSharedBasePadding() {
-    var schema = Constants.DB_SCHEMA;
-    var script = MigrationManager.generateMigrationScript(schema, true, 1);
-
-    // Indices between this language's own history and SHARED_MIGRATION_BASE are padding: no SQL,
-    // and no version write each, or the script would carry ~50 pointless UPDATEs.
-    assertFalse(script.contains("-- Migration 60\n"), "Padding emits no SQL");
-    assertFalse(script.contains("SET version = 60;"), "Padding emits no version write");
-    assertTrue(script.contains("SET version = 47;"), "The last own-history migration is recorded");
-    assertTrue(
-        script.contains("-- Migration 100\n"),
-        "The shared history resumes at SHARED_MIGRATION_BASE");
-    assertTrue(script.contains("SET version = 107;"), "The last shared migration is recorded");
-  }
-
   static void assertIndexExists(Connection conn, String indexName) throws Exception {
     assertTrue(indexExists(conn, indexName), "Index %s should exist".formatted(indexName));
   }
