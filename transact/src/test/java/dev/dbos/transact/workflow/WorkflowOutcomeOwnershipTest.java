@@ -136,8 +136,15 @@ public class WorkflowOutcomeOwnershipTest {
 
   private record Row(String status, String output, String error) {}
 
+  // Reads the outcome the way the SDK does, payload table first, so an outcome a refused run wrote
+  // to workflow_output would show up here rather than hide behind the legacy columns.
   private Row readRow(String workflowId) throws SQLException {
-    var sql = "SELECT status, output, error FROM dbos.workflow_status WHERE workflow_uuid = ?";
+    var sql =
+        "SELECT ws.status, COALESCE(wo.output, ws.output) AS output,"
+            + " COALESCE(wo.error, ws.error) AS error"
+            + " FROM dbos.workflow_status ws"
+            + " LEFT JOIN dbos.workflow_output wo ON wo.workflow_uuid = ws.workflow_uuid"
+            + " WHERE ws.workflow_uuid = ?";
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);

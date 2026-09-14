@@ -1508,8 +1508,7 @@ public class MigrationManager {
   // Migration 109: the tables that payloads move into, so a status update no longer rewrites a
   // large input. The reads COALESCE over both shapes. Migration 113 moves the shared
   // enqueue_workflow function's write; it had to wait for a release in which every executor reads
-  // both shapes, because the first node to migrate changes what every other node reads. This
-  // SDK's own writes still fill the legacy workflow_status columns until they move too.
+  // both shapes, because the first node to migrate changes what every other node reads.
   static final String MIGRATION_109 =
       """
       CREATE TABLE IF NOT EXISTS "%1$s"."workflow_input" (

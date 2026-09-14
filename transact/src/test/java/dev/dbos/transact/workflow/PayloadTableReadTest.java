@@ -17,10 +17,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Migration 109's payload tables are read by this release but written by the next one. Every read
- * of inputs, output and error prefers workflow_input / workflow_output and falls back to the legacy
- * workflow_status column, which is what lets the release that moves the writes roll out one node at
- * a time. Nothing writes the new shape yet, so these tests put rows there by hand.
+ * Every read of inputs, output and error prefers migration 109's workflow_input / workflow_output
+ * and falls back to the legacy workflow_status column. The SDK writes only the payload tables, but
+ * rows written by earlier releases, or by an executor still on one mid-upgrade, carry the legacy
+ * columns instead, so these tests rebuild those shapes by hand.
  */
 class PayloadTableReadTest {
 
@@ -44,6 +44,8 @@ class PayloadTableReadTest {
     var handle = dbos.startWorkflow(() -> proxy.echo(1));
     assertEquals(1, handle.getResult());
 
+    moveToLegacyColumns(handle.workflowId());
+
     assertEveryReadSees(handle.workflowId(), 1);
   }
 
@@ -54,6 +56,7 @@ class PayloadTableReadTest {
     var donor = dbos.startWorkflow(() -> proxy.echo(2));
     assertEquals(2, donor.getResult());
 
+    moveToLegacyColumns(target.workflowId());
     givePayloadRowsOf(donor.workflowId(), target.workflowId());
 
     // The legacy columns still hold 1, so anything reporting 2 read the payload table.
@@ -67,9 +70,9 @@ class PayloadTableReadTest {
     var donor = dbos.startWorkflow(() -> proxy.echo(2));
     assertEquals(2, donor.getResult());
 
+    moveToLegacyColumns(target.workflowId());
     givePayloadRowsOf(donor.workflowId(), target.workflowId());
-    // The shape a future release writes, and the one an older row can never have: the payload table
-    // is the only copy left.
+    // The shape the SDK writes now: the payload table is the only copy.
     clearLegacyColumns(target.workflowId());
 
     assertEveryReadSees(target.workflowId(), 2);
@@ -85,6 +88,7 @@ class PayloadTableReadTest {
     assertThrows(Exception.class, donor::getResult);
 
     var targetId = target.workflowId();
+    moveToLegacyColumns(targetId);
     assertEquals("failure 1", systemDatabase.getWorkflowStatus(targetId).error().message());
 
     givePayloadRowsOf(donor.workflowId(), targetId);
@@ -120,8 +124,8 @@ class PayloadTableReadTest {
     assertEquals(
         expected, (int) ((Result.Success<Integer>) awaited).value(), "awaitWorkflowResult output");
 
-    // The fork reads the original's inputs and writes them onto the new row, which this release
-    // still fills from the legacy column: reading the child back shows what the fork saw.
+    // The fork reads the original's inputs and copies them to the new workflow: reading the child
+    // back shows what the fork saw.
     var forkedId = systemDatabase.forkWorkflow(workflowId, 0, new ForkOptions());
     assertEquals(
         expected,
@@ -130,18 +134,38 @@ class PayloadTableReadTest {
   }
 
   /**
-   * Gives {@code to} the payload rows of {@code from}, copied straight out of its status row, so
-   * the test never has to encode a serialized value itself.
+   * Rewrites a row into the shape a release that predates the payload writes leaves: payloads in
+   * the legacy workflow_status columns, no payload-table rows.
+   */
+  private void moveToLegacyColumns(String workflowId) throws Exception {
+    exec(
+        "UPDATE dbos.workflow_status ws SET inputs = wi.inputs FROM dbos.workflow_input wi"
+            + " WHERE wi.workflow_uuid = ws.workflow_uuid AND ws.workflow_uuid = ?",
+        workflowId);
+    exec(
+        "UPDATE dbos.workflow_status ws SET output = wo.output, error = wo.error"
+            + " FROM dbos.workflow_output wo"
+            + " WHERE wo.workflow_uuid = ws.workflow_uuid AND ws.workflow_uuid = ?",
+        workflowId);
+    exec("DELETE FROM dbos.workflow_input WHERE workflow_uuid = ?", workflowId);
+    exec("DELETE FROM dbos.workflow_output WHERE workflow_uuid = ?", workflowId);
+  }
+
+  /**
+   * Gives {@code to} the payload rows of {@code from}, copied straight out of its own, so the test
+   * never has to encode a serialized value itself. {@code to} must have none of its own yet.
    */
   private void givePayloadRowsOf(String from, String to) throws Exception {
     exec(
         "INSERT INTO dbos.workflow_input(workflow_uuid, inputs, retention_timestamp)"
-            + " SELECT ?, inputs, created_at FROM dbos.workflow_status WHERE workflow_uuid = ?",
+            + " SELECT ?, inputs, retention_timestamp FROM dbos.workflow_input"
+            + " WHERE workflow_uuid = ?",
         to,
         from);
     exec(
         "INSERT INTO dbos.workflow_output(workflow_uuid, output, error, retention_timestamp)"
-            + " SELECT ?, output, error, created_at FROM dbos.workflow_status WHERE workflow_uuid = ?",
+            + " SELECT ?, output, error, retention_timestamp FROM dbos.workflow_output"
+            + " WHERE workflow_uuid = ?",
         to,
         from);
   }
