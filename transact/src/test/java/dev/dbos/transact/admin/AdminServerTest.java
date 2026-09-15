@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
@@ -264,7 +265,9 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockDB).garbageCollect(eq(Instant.ofEpochMilli(42L)), eq(37L));
+      verify(mockDB)
+          .garbageCollect(
+              eq(Instant.ofEpochMilli(42L)), eq(37L), eq(WorkflowDAO.DEFAULT_GC_BATCH_SIZE));
     }
   }
 

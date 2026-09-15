@@ -2,6 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -160,7 +161,9 @@ public class AdminServer implements AutoCloseable {
     var request = JsonUtility.fromJson(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(
-        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
+        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms),
+        (long) request.rows_threshold,
+        WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
 
     exchange.sendResponseHeaders(204, 0);
   }

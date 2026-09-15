@@ -785,11 +785,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /** Enforces retention across the entire system database. */
-  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    garbageCollect(cutoff, rowsThreshold, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
-  }
-
-  void garbageCollect(Instant cutoff, Long rowsThreshold, int batchSize) {
+  public void garbageCollect(Instant cutoff, Long rowsThreshold, int batchSize) {
     if (cutoff == null && rowsThreshold == null) {
       return;
     }
