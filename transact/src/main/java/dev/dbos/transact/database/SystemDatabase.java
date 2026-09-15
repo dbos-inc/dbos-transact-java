@@ -226,10 +226,6 @@ public class SystemDatabase implements AutoCloseable {
     this(createDataSource(url, user, password), schema, true, null, true, null, null, null, null);
   }
 
-  public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null, null, null, null);
-  }
-
   public SystemDatabase(
       DataSource dataSource,
       String schema,
