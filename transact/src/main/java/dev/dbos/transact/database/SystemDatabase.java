@@ -330,6 +330,11 @@ public class SystemDatabase implements AutoCloseable {
     return !(notificationSource instanceof NullNotificationSource);
   }
 
+  /** For tests: whether {@link #start} has actually brought the listener up. */
+  boolean isNotificationListenerRunning() {
+    return notificationSource.isRunning();
+  }
+
   /** For recv and getEvent only; see {@link #NOTIFICATION_FALLBACK_INTERVAL}. */
   private Duration notificationRecheckInterval() {
     return notificationSource.isRunning() ? NOTIFICATION_FALLBACK_INTERVAL : DB_POLLING_INTERVAL;

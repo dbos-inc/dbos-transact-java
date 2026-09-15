@@ -91,7 +91,7 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
-    this(url, user, password, null, null, true);
+    this(url, user, password, null, null, false);
   }
 
   /**
@@ -107,7 +107,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    this(url, user, password, schema, null, true);
+    this(url, user, password, schema, null, false);
   }
 
   /**
@@ -125,7 +125,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String password,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
-    this(url, user, password, schema, serializer, true);
+    this(url, user, password, schema, serializer, false);
   }
 
   /**
@@ -136,7 +136,8 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database
    */
   public DBOSClient(
       @NonNull String url,
@@ -156,7 +157,8 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database
    * @param applicationName the application this client acts on behalf of. Set this when several
    *     applications share this system database, so the workflows, schedules, and queues this
    *     client creates are owned by that application, and its listings are scoped to it. Left
@@ -176,6 +178,7 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase =
         new SystemDatabase(
             url, user, password, schema, serializer, useListenNotify, applicationName);
+    systemDatabase.start();
   }
 
   /**
@@ -184,7 +187,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    */
   public DBOSClient(@NonNull DataSource dataSource) {
-    this(dataSource, null, null, true, null);
+    this(dataSource, null, null, false, null);
   }
 
   /**
@@ -194,7 +197,7 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    */
   public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
-    this(dataSource, schema, null, true, null);
+    this(dataSource, schema, null, false, null);
   }
 
   /**
@@ -208,7 +211,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull DataSource dataSource,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
-    this(dataSource, schema, serializer, true, null);
+    this(dataSource, schema, serializer, false, null);
   }
 
   /**
@@ -227,7 +230,7 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       @Nullable String applicationName) {
-    this(dataSource, schema, serializer, true, applicationName);
+    this(dataSource, schema, serializer, false, applicationName);
   }
 
   /**
@@ -236,10 +239,12 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications.
-   *     Pass false when the system database was migrated with LISTEN/NOTIFY disabled: its
-   *     notification triggers do not exist, so a listener would connect and then never hear
-   *     anything, leaving every wait to time out and re-poll.
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database.
+   *     Defaults to false on the constructors that do not take it, because it costs a dedicated
+   *     connection and thread that only those two calls benefit from. Leave it false when the
+   *     system database was migrated with LISTEN/NOTIFY disabled: its notification triggers do not
+   *     exist, so the listener would connect and never hear anything.
    */
   public DBOSClient(
       @NonNull DataSource dataSource,
@@ -255,10 +260,12 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications.
-   *     Pass false when the system database was migrated with LISTEN/NOTIFY disabled: its
-   *     notification triggers do not exist, so a listener would connect and then never hear
-   *     anything, leaving every wait to time out and re-poll.
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database.
+   *     Defaults to false on the constructors that do not take it, because it costs a dedicated
+   *     connection and thread that only those two calls benefit from. Leave it false when the
+   *     system database was migrated with LISTEN/NOTIFY disabled: its notification triggers do not
+   *     exist, so the listener would connect and never hear anything.
    * @param applicationName the application this client acts on behalf of. Set this when several
    *     applications share this system database, so the workflows, schedules, and queues this
    *     client creates are owned by that application, and its listings are scoped to it. Left
@@ -275,6 +282,7 @@ public class DBOSClient implements AutoCloseable {
     this.serializer = serializer;
     systemDatabase =
         new SystemDatabase(dataSource, schema, serializer, useListenNotify, applicationName);
+    systemDatabase.start();
   }
 
   // package private method for test purposes

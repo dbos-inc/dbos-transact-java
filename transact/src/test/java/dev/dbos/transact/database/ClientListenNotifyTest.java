@@ -16,9 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * A client built from a data source used to start a listener whatever the caller asked for, so an
- * application that migrated with LISTEN/NOTIFY off got a listener with no triggers to hear: every
- * recv and getEvent silently fell back to the slow re-check.
+ * A client polls for getEvent and readStream unless it is asked for a listener, and when it is
+ * asked, the listener actually runs: it was once built and left unstarted, so opting in bought
+ * nothing but every wait still re-checked on the slow interval.
  */
 class ClientListenNotifyTest {
 
@@ -41,11 +41,50 @@ class ClientListenNotifyTest {
   }
 
   @Test
-  void dataSourceClientListensByDefault() {
+  void dataSourceClientPollsByDefault() {
+    try (var client = new DBOSClient(dataSource)) {
+      assertFalse(DBOSTestAccess.getSystemDatabase(client).hasNotificationListener());
+    }
+  }
+
+  @Test
+  void urlClientPollsByDefault() {
+    try (var client =
+        new DBOSClient(pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password())) {
+      assertFalse(DBOSTestAccess.getSystemDatabase(client).hasNotificationListener());
+    }
+  }
+
+  @Test
+  void dataSourceClientRunsTheListenerWhenAskedTo() {
     Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "LISTEN/NOTIFY is PostgreSQL-only");
 
-    try (var client = new DBOSClient(dataSource)) {
-      assertTrue(DBOSTestAccess.getSystemDatabase(client).hasNotificationListener());
+    try (var client = new DBOSClient(dataSource, null, null, true)) {
+      var sysdb = DBOSTestAccess.getSystemDatabase(client);
+      assertTrue(sysdb.hasNotificationListener());
+      assertTrue(
+          sysdb.isNotificationListenerRunning(),
+          "Opting in must start the listener, not just construct one");
+    }
+  }
+
+  @Test
+  void urlClientRunsTheListenerWhenAskedTo() {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "LISTEN/NOTIFY is PostgreSQL-only");
+
+    try (var client =
+        new DBOSClient(
+            pgContainer.jdbcUrl(),
+            pgContainer.username(),
+            pgContainer.password(),
+            null,
+            null,
+            true)) {
+      var sysdb = DBOSTestAccess.getSystemDatabase(client);
+      assertTrue(sysdb.hasNotificationListener());
+      assertTrue(
+          sysdb.isNotificationListenerRunning(),
+          "Opting in must start the listener, not just construct one");
     }
   }
 
