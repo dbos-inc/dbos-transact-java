@@ -2088,11 +2088,10 @@ public class WorkflowDAO {
     }
   }
 
-  // Deleting a status row cannot be relied on to cascade its steps away: shared migration 112
-  // drops the operation_outputs -> workflow_status foreign key, and any SDK sharing this system
-  // database may already have applied it even though this ladder stops at 111. workflow_input and
-  // workflow_output (migration 109) never had a foreign key at all. Every delete path clears all
-  // three by ID instead.
+  // workflow_input and workflow_output (migration 109) have no foreign key, so a status delete
+  // was never going to take them. Migration 112 then drops the operation_outputs cascade, leaving
+  // all three the same: nothing follows a status row out on its own. Every delete path clears all
+  // three by ID.
   private static void deleteWorkflowChildRows(Connection conn, String schema, String[] workflowIds)
       throws SQLException {
     if (workflowIds.length == 0) {

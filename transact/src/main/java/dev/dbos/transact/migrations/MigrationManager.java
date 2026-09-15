@@ -39,6 +39,10 @@ public class MigrationManager {
    * to a full scan and sort of the largest payload table per batch. That presents as a retention
    * round that never finishes rather than as an error, so 111 is the floor, not 110.
    *
+   * <p>Migration 112 deliberately does not raise this. It drops a constraint rather than adding
+   * anything to read, and every delete path clears the child tables by ID, so this SDK behaves
+   * identically whether or not the cascade is still there.
+   *
    * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
    * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
    * unconditionally on a later migration.
@@ -546,7 +550,8 @@ public class MigrationManager {
             MIGRATION_108,
             MIGRATION_109,
             MIGRATION_110,
-            migration111(isCockroach)));
+            migration111(isCockroach),
+            MIGRATION_112));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1469,9 +1474,9 @@ public class MigrationManager {
 
   // Migration 109: the tables that payloads move into, so a status update no longer rewrites a
   // large input. Creating them is all this release does: the reads below COALESCE over both
-  // shapes, but every write here still fills the legacy workflow_status columns. Migrations 112
-  // and 113, which stop the shared enqueue_workflow function writing them, come with the writes
-  // in a later release, once every executor can read both shapes.
+  // shapes, but every write here still fills the legacy workflow_status columns. Migration 113,
+  // which stops the shared enqueue_workflow function writing them, comes with the writes in a
+  // later release, once every executor can read both shapes.
   static final String MIGRATION_109 =
       """
       CREATE TABLE IF NOT EXISTS "%1$s"."workflow_input" (
@@ -1508,4 +1513,19 @@ public class MigrationManager {
         + " IF NOT EXISTS \"idx_operation_outputs_retention\""
         + " ON \"%1$s\".\"operation_outputs\" (\"retention_timestamp\")";
   }
+
+  // Migration 112: drop the operation_outputs -> workflow_status cascade. The cascade was the only
+  // thing deleting a workflow's steps, and it did so one parent row at a time; the retention sweep
+  // now takes all three child tables in batches instead, which is the point of the redesign. It
+  // also charges a referential check to every step write. Both names appear because the SDKs
+  // created the constraint differently: Java and Python let Postgres name it, TypeScript's Knex
+  // migration named it "_foreign".
+  static final String MIGRATION_112 =
+      """
+      ALTER TABLE "%1$s"."operation_outputs"
+          DROP CONSTRAINT IF EXISTS "operation_outputs_workflow_uuid_foreign";
+
+      ALTER TABLE "%1$s"."operation_outputs"
+          DROP CONSTRAINT IF EXISTS "operation_outputs_workflow_uuid_fkey";
+      """;
 }

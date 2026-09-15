@@ -210,10 +210,8 @@ class RetentionSweepTest {
 
   @Test
   void payloadSweepReclaimsPreexistingOrphans() throws Exception {
-    // Payload rows whose status row is already gone. workflow_input and workflow_output never had
-    // a foreign key, so they can strand at any schema version. operation_outputs cannot yet: its
-    // foreign key still cascades until migration 112 drops it, which is exactly why the sweep has
-    // to cover that table before then.
+    // Payload rows whose status row is already gone. None of the three tables has a foreign key
+    // once migration 112 lands, so any of them can strand and the sweep has to cover all three.
     var old = System.currentTimeMillis() - 100_000;
     try (var conn = dataSource.getConnection()) {
       exec(
@@ -301,10 +299,10 @@ class RetentionSweepTest {
 
     var deleted = round(Instant.now(), 2);
 
-    // Steps count zero: operation_outputs still carries a cascading foreign key until migration
-    // 112 drops it, so the status sweep has already taken those rows by the time this one runs.
-    assertArrayEquals(new long[] {3, 3, 0}, deleted, "inputs, outputs, then steps");
-    assertEquals(0, count("operation_outputs"), "cascaded away rather than swept");
+    // All three counts are non-zero: migration 112 dropped the cascade, so the status sweep no
+    // longer takes operation_outputs with it and the payload sweep is what collects those rows.
+    assertArrayEquals(new long[] {3, 3, 3}, deleted, "inputs, outputs, then steps");
+    assertEquals(0, count("operation_outputs"), "swept, not cascaded");
   }
 
   @Test
