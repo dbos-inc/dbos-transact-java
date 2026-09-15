@@ -48,7 +48,15 @@ public class QueuesDAO {
         connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
       }
 
-      int numRecentQueries = 0;
+      long maxTasks = Integer.MAX_VALUE;
+
+      // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
+      if (queue.workerConcurrency() != null) {
+        maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
+        if (maxTasks == 0) {
+          return List.of();
+        }
+      }
 
       // If there is a rate limit, compute how many functions have started in its period.
       if (queue.rateLimit() != null) {
@@ -79,23 +87,21 @@ public class QueuesDAO {
             ps.setString(index, partitionKey);
           }
 
+          int numRecentQueries = 0;
           try (ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
               numRecentQueries = rs.getInt(1);
             }
           }
+
+          // Bound the claim by the limiter's remaining slots, so a backlogged queue locks
+          // and starts only as many workflows as the rate limit still allows this period.
+          maxTasks = Math.min(maxTasks, Math.max(0, rateLimit.limit() - numRecentQueries));
         }
 
-        if (numRecentQueries >= rateLimit.limit()) {
+        if (maxTasks == 0) {
           return List.of();
         }
-      }
-
-      long maxTasks = Integer.MAX_VALUE;
-
-      // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
-      if (queue.workerConcurrency() != null) {
-        maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
       }
 
       // Global concurrency still requires a DB query — other workers may be running workflows too.
@@ -180,7 +186,11 @@ public class QueuesDAO {
 
       query += " ORDER BY priority ASC, created_at ASC";
 
-      if (queue.concurrency() == null) {
+      // Without a global budget, use SKIP LOCKED to only select rows that can be locked. With
+      // one, use NOWAIT so all processes see a consistent table: a rate limit is a global budget
+      // like concurrency, and SKIP LOCKED would hand a peer disjoint rows, letting it spend the
+      // same budget against its own pre-claim snapshot.
+      if (queue.concurrency() == null && queue.rateLimit() == null) {
         query += " FOR UPDATE SKIP LOCKED";
       } else {
         query += " FOR UPDATE NOWAIT";
@@ -242,19 +252,14 @@ public class QueuesDAO {
       List<String> updatedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(updateQuery)) {
         var now = System.currentTimeMillis();
-        var hasRateLimit = queue.rateLimit() != null;
+        // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
+        // limiter's remaining slots.
         for (var id : dequeuedWorkflowIds) {
-          if (hasRateLimit) {
-            if (updatedWorkflowIds.size() + numRecentQueries >= queue.rateLimit().limit()) {
-              break;
-            }
-          }
-
           ps.setString(1, WorkflowState.PENDING.name());
           ps.setString(2, appVersion);
           ps.setString(3, executorId);
           ps.setLong(4, now);
-          ps.setBoolean(5, hasRateLimit);
+          ps.setBoolean(5, queue.rateLimit() != null);
           ps.setString(6, ctx.appName());
           ps.setLong(7, now);
           ps.setString(8, id);

@@ -48,7 +48,9 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -2675,6 +2677,7 @@ public class SystemDatabaseTest {
   private static class IsolationRecordingDataSource implements DataSource {
     private final DataSource delegate;
     volatile int lastIsolationLevel = Connection.TRANSACTION_READ_COMMITTED; // postgres default
+    final List<String> preparedSql = Collections.synchronizedList(new ArrayList<>());
 
     IsolationRecordingDataSource(DataSource delegate) {
       this.delegate = delegate;
@@ -2690,6 +2693,9 @@ public class SystemDatabaseTest {
               (proxy, method, args) -> {
                 if ("setTransactionIsolation".equals(method.getName())) {
                   lastIsolationLevel = (int) args[0];
+                }
+                if ("prepareStatement".equals(method.getName())) {
+                  preparedSql.add((String) args[0]);
                 }
                 try {
                   return method.invoke(real, args);
@@ -2771,6 +2777,85 @@ public class SystemDatabaseTest {
         Connection.TRANSACTION_REPEATABLE_READ,
         ds.lastIsolationLevel,
         "global-concurrency queue must use REPEATABLE READ");
+  }
+
+  @Test
+  public void testRateLimitBoundsDequeueBatch() throws SQLException {
+    // A rate-limited queue must ask for only as many rows as its window still has slots for.
+    // The backlog used to be selected and locked in full, with the surplus discarded after the
+    // claim, so one sweep of a busy queue held a row lock on every enqueued workflow.
+    int limit = 3;
+    Queue queue = new Queue("rl-batch").withRateLimit(limit, Duration.ofSeconds(60));
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+
+    var candidateSelect =
+        ds.preparedSql.stream()
+            .filter(sql -> sql.contains("FOR UPDATE"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("no candidate SELECT was issued"));
+    assertTrue(
+        candidateSelect.contains("LIMIT " + limit),
+        "candidate SELECT must be bounded by the limiter's remaining slots: " + candidateSelect);
+    assertTrue(
+        candidateSelect.contains("FOR UPDATE NOWAIT"),
+        "a rate limit is a global budget, so the claim must not SKIP LOCKED: " + candidateSelect);
+  }
+
+  @Test
+  public void testRateLimitDequeueBlocksOnPeerClaim() throws Exception {
+    // A rate limit is a global budget like concurrency: under SKIP LOCKED a peer mid-claim would
+    // be skipped past, and both dequeuers would spend the same budget against their own snapshot.
+    int limit = 2;
+    Queue queue = new Queue("rl-peer").withRateLimit(limit, Duration.ofSeconds(60));
+
+    for (int i = 0; i < limit * 2; i++) {
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create("rl-peer-" + i)
+              .queueName(queue.name())
+              .appVersion("v1")
+              .build(),
+          5,
+          false,
+          false);
+    }
+
+    String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
+    try (Connection peer = dataSource.getConnection()) {
+      peer.setAutoCommit(false);
+      // A peer dequeuer holding an open claim on the whole limiter budget.
+      try (var ps =
+          peer.prepareStatement(
+              """
+                SELECT workflow_uuid FROM "%s".workflow_status
+                WHERE queue_name = ? AND status = ?
+                ORDER BY priority ASC, created_at ASC
+                LIMIT %d FOR UPDATE
+              """
+                  .formatted(schema, limit))) {
+        ps.setString(1, queue.name());
+        ps.setString(2, WorkflowState.ENQUEUED.name());
+        try (var rs = ps.executeQuery()) {
+          int locked = 0;
+          while (rs.next()) locked++;
+          assertEquals(limit, locked);
+        }
+      }
+
+      assertThrows(
+          Exception.class,
+          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0),
+          "a rate-limited dequeue must not skip past a peer's open claim");
+      peer.rollback();
+    }
+
+    // Nothing was admitted behind the peer's back.
+    for (int i = 0; i < limit * 2; i++) {
+      assertEquals(
+          WorkflowState.ENQUEUED.name(),
+          DBUtils.getWorkflowRow(dataSource, "rl-peer-" + i).status());
+    }
   }
 
   @Test
