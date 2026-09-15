@@ -2379,9 +2379,16 @@ public class WorkflowDAO {
 
   /**
    * Deletes payload and step rows below the cutoff whose workflow is gone, returning the count
-   * removed from each table in {@link #PAYLOAD_TABLES} order. Runs after the status sweep, whose
-   * orphans all fall in range: every payload is stamped no later than the completion that made its
-   * workflow collectable.
+   * removed from each table in {@link #PAYLOAD_TABLES} order. Runs after the status sweep, most of
+   * whose orphans fall in range: a payload written by this SDK is stamped no later than the
+   * completion that made its workflow collectable.
+   *
+   * <p>The exception is a step row that predates migration 110, which stamped every existing one
+   * with the migration's own clock. That can sit well above its workflow's completed_at, so the
+   * status sweep can collect the workflow in a round that leaves the step rows behind. They are
+   * deferred rather than stranded: a later round, once its cutoff passes the migration, finds no
+   * status row for them and collects them. Until migration 112 drops the cascade, the foreign key
+   * takes them with the status row anyway.
    */
   public static long[] garbageCollectPayloads(DbContext ctx, Instant cutoff, int batchSize)
       throws SQLException {
