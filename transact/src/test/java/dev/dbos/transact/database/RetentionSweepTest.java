@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,8 @@ class RetentionSweepTest {
 
   @Test
   void aLockedRoundCollectsNothing() throws Exception {
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: relies on Postgres advisory locks");
     seedWorkflow("done", "SUCCESS", System.currentTimeMillis() - 100_000);
 
     try (var otherPool = pgContainer.dataSource()) {
@@ -322,6 +325,8 @@ class RetentionSweepTest {
 
   @Test
   void aSecondRoundCannotTakeTheRetentionLock() throws Exception {
+    Assumptions.assumeFalse(
+        PgContainer.USE_COCKROACH_DB, "PG-only: relies on Postgres advisory locks");
     try (var held = WorkflowDAO.acquireRetentionLock(ctx)) {
       assertNotNull(held, "the first round takes the lock");
       // A separate pool, and so a separate session, as a second executor would be.
