@@ -1053,8 +1053,14 @@ public class Conductor implements AutoCloseable {
                 request.body.gc_cutoff_epoch_ms == null
                     ? null
                     : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+            // Older Conductor versions may not send gc_batch_size, newer ones may send null,
+            // and a cleared setting may arrive as zero: every one of those takes the default.
+            var batchSize =
+                request.body.gc_batch_size == null || request.body.gc_batch_size == 0
+                    ? SystemDatabase.DEFAULT_GC_BATCH_SIZE
+                    : Math.toIntExact(request.body.gc_batch_size);
             conductor.systemDatabase.garbageCollect(
-                cutoff, request.body.gc_rows_threshold, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+                cutoff, request.body.gc_rows_threshold, batchSize);
           } catch (Exception e) {
             logger.error("Exception encountered garbage collecting system database", e);
             return new SuccessResponse(request, e);
