@@ -41,10 +41,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -792,108 +788,7 @@ public class SystemDatabase implements AutoCloseable {
     if (cutoff == null && rowsThreshold == null) {
       return;
     }
-    dbRetry(
-        () -> {
-          try (var lock = acquireRetentionLock()) {
-            if (lock == null) {
-              logger.warn(
-                  "Skipping retention: another round is already running against this system database.");
-              return null;
-            }
-            var used = WorkflowDAO.garbageCollect(ctx, cutoff, rowsThreshold, batchSize);
-            if (used == null) {
-              return null;
-            }
-            // Strictly after the status sweep: the payload sweep only takes orphans, so this
-            // round's are only visible to it once that sweep has committed.
-            WorkflowDAO.garbageCollectPayloads(ctx, used, batchSize);
-            return null;
-          }
-        });
-  }
-
-  /**
-   * The advisory lock key guarding one schema's retention rounds. Every SDK derives it this way --
-   * the leading 8 bytes of SHA-256, big-endian signed -- so rounds in different languages against
-   * one system database contend for the same lock.
-   */
-  public static long retentionLockKey(String schema) {
-    try {
-      var digest =
-          MessageDigest.getInstance("SHA-256")
-              .digest(("dbos.retention." + schema).getBytes(StandardCharsets.UTF_8));
-      return ByteBuffer.wrap(digest, 0, Long.BYTES).getLong();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException("SHA-256 is unavailable", e);
-    }
-  }
-
-  /** A held retention lock. Closing it releases the lock and the session holding it. */
-  public final class RetentionLock implements AutoCloseable {
-    private final @Nullable Connection conn;
-
-    private RetentionLock(@Nullable Connection conn) {
-      this.conn = conn;
-    }
-
-    @Override
-    public void close() throws SQLException {
-      if (conn == null) {
-        return;
-      }
-      try (conn) {
-        // Explicit, since closing only returns the session to the pool.
-        try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
-          stmt.setLong(1, retentionLockKey(ctx.schema()));
-          try (var rs = stmt.executeQuery()) {
-            if (rs.next() && !rs.getBoolean(1)) {
-              // False means this session no longer holds it, which a transaction-pooling proxy
-              // causes by switching backends.
-              logger.warn(
-                  "Could not release the retention lock: this session no longer holds it. Retention"
-                      + " will not proceed until the lock is released, which happens when the"
-                      + " holding backend closes. A transaction-pooling proxy in front of Postgres"
-                      + " causes this; run DBOS through a session-pooled or direct connection.");
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Takes a database-wide lock for one retention round, or returns null when another round already
-   * holds it. The lock is session-scoped, so a round that crashes releases it. CockroachDB has no
-   * advisory locks and always takes it, so it collects unprotected rather than not at all.
-   */
-  public @Nullable RetentionLock acquireRetentionLock() throws SQLException {
-    // The round holds this connection until it ends: returning it would drop the lock.
-    var conn = ctx.getConnection();
-    try {
-      if (isCockroach(conn)) {
-        conn.close();
-        return new RetentionLock(null);
-      }
-      // Autocommit keeps the session clear of idle-in-transaction timeouts.
-      conn.setAutoCommit(true);
-      try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
-        stmt.setLong(1, retentionLockKey(ctx.schema()));
-        try (var rs = stmt.executeQuery()) {
-          if (!rs.next() || !rs.getBoolean(1)) {
-            conn.close();
-            return null;
-          }
-        }
-      }
-    } catch (SQLException e) {
-      try {
-        conn.close();
-      } catch (SQLException closeFailure) {
-        e.addSuppressed(closeFailure);
-      }
-      throw e;
-    }
-    return new RetentionLock(conn);
+    dbRetry(() -> WorkflowDAO.runRetentionRound(ctx, cutoff, rowsThreshold, batchSize));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {

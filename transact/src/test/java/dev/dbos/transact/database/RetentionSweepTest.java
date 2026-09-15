@@ -118,6 +118,33 @@ class RetentionSweepTest {
   }
 
   @Test
+  void theRoundTakesTheLockAndRunsBothSweeps() throws Exception {
+    seedWorkflow("done", "SUCCESS", System.currentTimeMillis() - 100_000);
+
+    WorkflowDAO.runRetentionRound(ctx, Instant.now(), null, 2);
+
+    assertEquals(0, count("workflow_status"));
+    assertEquals(0, count("workflow_input"), "the payload sweep ran too");
+  }
+
+  @Test
+  void aLockedRoundCollectsNothing() throws Exception {
+    seedWorkflow("done", "SUCCESS", System.currentTimeMillis() - 100_000);
+
+    try (var otherPool = pgContainer.dataSource()) {
+      var other =
+          new DbContext(
+              otherPool, Constants.DB_SCHEMA, null, () -> false, null, null, new PollingLimiter(0));
+      try (var held = WorkflowDAO.acquireRetentionLock(other)) {
+        assertNotNull(held);
+        WorkflowDAO.runRetentionRound(ctx, Instant.now(), null, 2);
+      }
+    }
+
+    assertEquals(1, count("workflow_status"), "the round must yield to the one holding the lock");
+  }
+
+  @Test
   void batchedSweepCollectsEverythingAcrossBatches() throws Exception {
     var base = System.currentTimeMillis() - 100_000;
     for (int i = 0; i < 7; i++) {
@@ -295,18 +322,25 @@ class RetentionSweepTest {
 
   @Test
   void aSecondRoundCannotTakeTheRetentionLock() throws Exception {
-    try (var systemDatabase = new SystemDatabase(dataSource, Constants.DB_SCHEMA)) {
-      try (var held = systemDatabase.acquireRetentionLock()) {
-        assertNotNull(held, "the first round takes the lock");
-        // A separate pool, and so a separate session, as a second executor would be.
-        try (var otherPool = pgContainer.dataSource();
-            var other = new SystemDatabase(otherPool, Constants.DB_SCHEMA)) {
-          assertNull(other.acquireRetentionLock(), "a concurrent round must be turned away");
-        }
+    try (var held = WorkflowDAO.acquireRetentionLock(ctx)) {
+      assertNotNull(held, "the first round takes the lock");
+      // A separate pool, and so a separate session, as a second executor would be.
+      try (var otherPool = pgContainer.dataSource()) {
+        var other =
+            new DbContext(
+                otherPool,
+                Constants.DB_SCHEMA,
+                null,
+                () -> false,
+                null,
+                null,
+                new PollingLimiter(0));
+        assertNull(
+            WorkflowDAO.acquireRetentionLock(other), "a concurrent round must be turned away");
       }
-      try (var afterRelease = systemDatabase.acquireRetentionLock()) {
-        assertNotNull(afterRelease, "releasing the lock lets the next round in");
-      }
+    }
+    try (var afterRelease = WorkflowDAO.acquireRetentionLock(ctx)) {
+      assertNotNull(afterRelease, "releasing the lock lets the next round in");
     }
   }
 
@@ -321,6 +355,6 @@ class RetentionSweepTest {
                         "dbos.retention.dbos".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
             .shiftRight(256 - 64)
             .longValue(),
-        SystemDatabase.retentionLockKey("dbos"));
+        WorkflowDAO.retentionLockKey("dbos"));
   }
 }
