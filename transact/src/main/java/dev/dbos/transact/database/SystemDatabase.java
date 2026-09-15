@@ -367,6 +367,29 @@ public class SystemDatabase implements AutoCloseable {
     return state != null && (state.startsWith("40") || state.startsWith("53"));
   }
 
+  /**
+   * Whether a failure means a peer was mid-dequeue rather than something being wrong: SQLSTATE
+   * 55P03 lock_not_available, raised by the {@code FOR UPDATE NOWAIT} that rate-limited queues take
+   * so every executor sees a consistent count.
+   *
+   * <p>Matched by code rather than by class, because {@link #isTransientState} works by SQLSTATE
+   * class prefix and class 55 is not class 40. That is the right call for {@link #dbRetry}, which
+   * cannot know that asking again on the next poll is exactly what the queue listener does; it just
+   * means the caller has to recognise the code itself. Serialization failures (class 40) never
+   * reach a caller, since dbRetry retries those internally.
+   *
+   * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
+   */
+  public static boolean isContentionError(Throwable t) {
+    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sqlException
+          && "55P03".equals(sqlException.getSQLState())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static void sleepWithJitter(double baseMs) {
     double jitter = 0.5 + ThreadLocalRandom.current().nextDouble(); // [0.5, 1.5)
     long sleepMs = (long) (baseMs * jitter);

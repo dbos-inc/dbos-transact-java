@@ -212,7 +212,14 @@ public class QueueService implements AutoCloseable {
 
         backoffFactor = Math.max(backoffFactor * 0.9, 1.0);
       } catch (Exception e) {
-        logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
+        // A peer holding the rows this dequeue wanted to lock is the system working, not a
+        // failure: it costs one polling interval and says nothing louder. Every other SDK
+        // classifies 55P03 the same way here.
+        if (SystemDatabase.isContentionError(e)) {
+          logger.debug("A peer is mid-dequeue on queue {}; backing off", queue.name());
+        } else {
+          logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
+        }
         double maxFactor =
             (double) MAX_POLLING_INTERVAL.toMillis() / queue.pollingInterval().toMillis();
         backoffFactor = Math.min(backoffFactor * 2.0, maxFactor);
