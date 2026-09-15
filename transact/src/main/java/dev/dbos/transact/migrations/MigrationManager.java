@@ -107,15 +107,32 @@ public class MigrationManager {
     if (config.dataSource() != null) {
       validateSysDbVersion(config.dataSource(), config.databaseSchema());
     } else {
-      try (var ds =
-          SystemDatabase.createDataSource(
-              config.databaseUrl(), config.dbUser(), config.dbPassword())) {
-        validateSysDbVersion(ds, config.databaseSchema());
-      }
+      validateSysDbVersion(
+          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
     }
   }
 
-  static void validateSysDbVersion(DataSource ds, String schema) {
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(String url, String user, String password, String schema) {
+    Objects.requireNonNull(url, "database url must not be null");
+    Objects.requireNonNull(user, "database user must not be null");
+    Objects.requireNonNull(password, "database password must not be null");
+
+    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
+      validateSysDbVersion(ds, schema);
+    }
+  }
+
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(DataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
 
@@ -127,10 +144,9 @@ public class MigrationManager {
     try (var conn = ds.getConnection()) {
       if (!migrationTableExists(conn, schema)) {
         throw new IllegalStateException(
-            ("Database migrations are disabled, but schema \"%s\" has no dbos_migrations table,"
-                    + " so its version cannot be determined. DBOS requires system database schema"
-                    + " version %d or later. Either enable migrations or apply the DBOS schema to"
-                    + " this database first.")
+            ("Schema \"%s\" has no dbos_migrations table, so its version cannot be determined."
+                    + " DBOS requires system database schema version %d or later. Apply the DBOS"
+                    + " schema to this database, or let DBOS migrate it, first.")
                 .formatted(schema, MINIMUM_SYSDB_VERSION));
       }
       version = getCurrentSysDbVersion(conn, schema);
@@ -140,14 +156,13 @@ public class MigrationManager {
 
     if (version < MINIMUM_SYSDB_VERSION) {
       throw new IllegalStateException(
-          ("Database migrations are disabled and schema \"%s\" is at system database version %d,"
-                  + " but this version of DBOS requires %d or later. Either enable migrations or"
-                  + " bring the schema up to date before launching.")
+          ("Schema \"%s\" is at system database version %d, but this version of DBOS requires %d"
+                  + " or later. Bring the schema up to date, or let DBOS migrate it, first.")
               .formatted(schema, version, MINIMUM_SYSDB_VERSION));
     }
 
     logger.debug(
-        "Migrations disabled; schema {} is at system database version {} (minimum {})",
+        "Schema {} is at system database version {} (minimum {})",
         schema,
         version,
         MINIMUM_SYSDB_VERSION);

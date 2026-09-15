@@ -13,6 +13,7 @@ import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -49,6 +50,10 @@ import org.jspecify.annotations.Nullable;
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
  * Example interactions: Start/enqueue a workflow, and get the result Get events and send messages
  * to the workflow Manage workflows - list, fork, cancel, etc.
+ *
+ * <p>A client never migrates the system database, so every constructor checks that the schema it is
+ * pointed at is already at {@link MigrationManager#MINIMUM_SYSDB_VERSION} or later, and throws if
+ * it is missing, unversioned, or too old.
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {
@@ -165,6 +170,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable DBOSSerializer serializer,
       boolean useListenNotify,
       @Nullable String applicationName) {
+    MigrationManager.validateSysDbVersion(url, user, password, schema);
+
     this.serializer = serializer;
     systemDatabase =
         new SystemDatabase(
@@ -220,6 +227,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       @Nullable String applicationName) {
+    MigrationManager.validateSysDbVersion(dataSource, schema);
+
     this.serializer = serializer;
     systemDatabase = new SystemDatabase(dataSource, schema, serializer, applicationName);
   }
