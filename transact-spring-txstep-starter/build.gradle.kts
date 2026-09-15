@@ -49,38 +49,37 @@ dependencies {
 
 testing {
   suites {
-    val springBoot4Test by
-      registering(JvmTestSuite::class) {
-        sources {
-          java { setSrcDirs(sourceSets["test"].java.srcDirs) }
-          resources { setSrcDirs(sourceSets["test"].resources.srcDirs) }
-        }
-        dependencies {
-          implementation(project())
-          implementation(project(":transact-spring-boot-starter"))
-          implementation(platform(libs.spring.boot4.dependencies))
-          implementation(platform(libs.junit.bom))
-          implementation(libs.junit.jupiter)
-          runtimeOnly(libs.junit.platform.launcher)
-          implementation(libs.spring.boot4.test)
-          implementation(libs.spring.boot4.autoconfigure)
-          implementation("org.springframework:spring-aop")
-          implementation(libs.aspectjweaver)
-          implementation("org.springframework:spring-tx")
-          implementation("org.springframework:spring-jdbc")
-          implementation("org.springframework:spring-orm")
-          implementation("org.hibernate.orm:hibernate-core")
-          implementation(libs.jdbi.core)
-          implementation(libs.jdbi.spring)
-          compileOnly(libs.jaxb.api)
-          implementation(libs.jooq)
-          implementation(libs.assertj.core)
-          implementation(libs.testcontainers.postgresql)
-          implementation(libs.postgresql)
-          implementation(libs.hikaricp)
-          runtimeOnly(libs.logback.classic)
-        }
+    register<JvmTestSuite>("springBoot4Test") {
+      sources {
+        java { setSrcDirs(sourceSets["test"].java.srcDirs) }
+        resources { setSrcDirs(sourceSets["test"].resources.srcDirs) }
       }
+      dependencies {
+        implementation(project())
+        implementation(project(":transact-spring-boot-starter"))
+        implementation(platform(libs.spring.boot4.dependencies))
+        implementation(platform(libs.junit.bom))
+        implementation(libs.junit.jupiter)
+        runtimeOnly(libs.junit.platform.launcher)
+        implementation(libs.spring.boot4.test)
+        implementation(libs.spring.boot4.autoconfigure)
+        implementation("org.springframework:spring-aop")
+        implementation(libs.aspectjweaver)
+        implementation("org.springframework:spring-tx")
+        implementation("org.springframework:spring-jdbc")
+        implementation("org.springframework:spring-orm")
+        implementation("org.hibernate.orm:hibernate-core")
+        implementation(libs.jdbi.core)
+        implementation(libs.jdbi.spring)
+        compileOnly(libs.jaxb.api)
+        implementation(libs.jooq)
+        implementation(libs.assertj.core)
+        implementation(libs.testcontainers.postgresql)
+        implementation(libs.postgresql)
+        implementation(libs.hikaricp)
+        runtimeOnly(libs.logback.classic)
+      }
+    }
   }
 }
 

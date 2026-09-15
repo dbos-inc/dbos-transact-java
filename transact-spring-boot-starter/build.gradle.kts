@@ -39,31 +39,30 @@ dependencies {
 
 testing {
   suites {
-    val springBoot4Test by
-      registering(JvmTestSuite::class) {
-        sources {
-          java { setSrcDirs(sourceSets["test"].java.srcDirs) }
-          resources { setSrcDirs(sourceSets["test"].resources.srcDirs) }
-        }
-        dependencies {
-          implementation(project())
-          implementation(platform(libs.spring.boot4.dependencies))
-          implementation(platform(libs.junit.bom))
-          implementation(libs.junit.jupiter)
-          runtimeOnly(libs.junit.platform.launcher)
-          implementation(libs.spring.boot4.test)
-          implementation(libs.assertj.core)
-          implementation(libs.spring.boot4.autoconfigure)
-          implementation("org.springframework:spring-aop")
-          implementation(libs.aspectjweaver)
-          implementation(libs.mockito.core)
-          implementation(libs.testcontainers.postgresql)
-          implementation(libs.postgresql)
-          implementation(libs.hikaricp)
-          implementation(libs.sqlite.jdbc)
-          runtimeOnly(libs.logback.classic)
-        }
+    register<JvmTestSuite>("springBoot4Test") {
+      sources {
+        java { setSrcDirs(sourceSets["test"].java.srcDirs) }
+        resources { setSrcDirs(sourceSets["test"].resources.srcDirs) }
       }
+      dependencies {
+        implementation(project())
+        implementation(platform(libs.spring.boot4.dependencies))
+        implementation(platform(libs.junit.bom))
+        implementation(libs.junit.jupiter)
+        runtimeOnly(libs.junit.platform.launcher)
+        implementation(libs.spring.boot4.test)
+        implementation(libs.assertj.core)
+        implementation(libs.spring.boot4.autoconfigure)
+        implementation("org.springframework:spring-aop")
+        implementation(libs.aspectjweaver)
+        implementation(libs.mockito.core)
+        implementation(libs.testcontainers.postgresql)
+        implementation(libs.postgresql)
+        implementation(libs.hikaricp)
+        implementation(libs.sqlite.jdbc)
+        runtimeOnly(libs.logback.classic)
+      }
+    }
   }
 }
 
