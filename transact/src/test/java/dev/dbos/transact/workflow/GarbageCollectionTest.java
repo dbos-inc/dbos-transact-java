@@ -9,6 +9,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +44,35 @@ public class GarbageCollectionTest {
     dbos.registerQueue(gcQueue, QueueOptions.empty());
   }
 
+  /**
+   * A cutoff every completion so far falls strictly before. completed_at is stamped by the database
+   * and rounded to the millisecond, while a wall-clock cutoff taken right after a workflow finishes
+   * truncates, so the two can land on the same value and spare the row. Only rows with no
+   * completed_at need to survive these cutoffs.
+   */
+  private static Instant cutoffPastAllCompletions() {
+    return Instant.now().plusMillis(1000);
+  }
+
+  /**
+   * Reads a database-stamped timestamp, so a test can derive its cutoff from the same clock the
+   * rows were written with instead of racing the JVM clock against it.
+   */
+  private Long statusTimestamp(String workflowId, String column) throws Exception {
+    var sql = "SELECT %s FROM dbos.workflow_status WHERE workflow_uuid = ?".formatted(column);
+    try (var conn =
+            DriverManager.getConnection(
+                pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next());
+        var value = rs.getLong(1);
+        return rs.wasNull() ? null : value;
+      }
+    }
+  }
+
   @Test
   void garbageCollection() throws Exception {
     int numWorkflows = 10;
@@ -65,7 +95,8 @@ public class GarbageCollectionTest {
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Garbage collect all completed workflows
-    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(
+        cutoffPastAllCompletions(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(1, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
@@ -73,7 +104,12 @@ public class GarbageCollectionTest {
     // Finish the blocked workflow, garbage collect everything
     impl.gcLatch.countDown();
     assertEquals(handle.workflowId(), handle.getResult());
-    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+    // Retention keys on completion, so the cutoff has to come from the row's own completed_at: a
+    // wall-clock instant read after getResult() can still precede the stamp the database wrote.
+    var blockedCompletedAt = statusTimestamp(handle.workflowId(), "completed_at");
+    assertNotNull(blockedCompletedAt);
+    systemDatabase.garbageCollect(
+        Instant.ofEpochMilli(blockedCompletedAt + 1), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(0, statusList.size());
 
@@ -88,14 +124,18 @@ public class GarbageCollectionTest {
 
     Thread.sleep(1000L);
 
+    // Capture the cutoff between the two batches. Taking it here rather than after the second batch
+    // with a -1s offset makes the test independent of how long that batch takes, which can exceed a
+    // second under load and would otherwise collect part of it too.
+    var betweenBatches = Instant.now();
+
     for (int i = 0; i < numWorkflows; i++) {
       int result = proxy.testWorkflow(i);
       assertEquals(i, result);
     }
 
     // GC the first half, verify only half were GC'ed
-    systemDatabase.garbageCollect(
-        Instant.now().minus(Duration.ofMillis(1000)), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(betweenBatches, null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(numWorkflows, statusList.size());
   }
@@ -126,7 +166,8 @@ public class GarbageCollectionTest {
     assertEquals(4, statusList.size());
 
     // GC all completed workflows
-    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(
+        cutoffPastAllCompletions(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
 
     // DELAYED and ENQUEUED should survive; completed ones should be gone
     statusList = systemDatabase.listWorkflows(null);
