@@ -2814,6 +2814,11 @@ public class SystemDatabaseTest {
       sysdb.initWorkflowStatus(
           WorkflowStatusInternalBuilder.create("rl-peer-" + i)
               .queueName(queue.name())
+              // Distinct priorities so that `ORDER BY priority, created_at LIMIT n` picks the same
+              // rows for the peer and for the dequeue. Left to created_at they would tie: the rows
+              // are inserted within one millisecond of each other, and the test needs the two
+              // statements to contend rather than to lock disjoint halves.
+              .priority(i + 1)
               .appVersion("v1")
               .build(),
           5,
@@ -2856,6 +2861,21 @@ public class SystemDatabaseTest {
           WorkflowState.ENQUEUED.name(),
           DBUtils.getWorkflowRow(dataSource, "rl-peer-" + i).status());
     }
+  }
+
+  @Test
+  public void testContentionErrorMatchesLockNotAvailable() {
+    // The 55P03 a NOWAIT claim raises reaches the queue listener wrapped by dbRetry, so the
+    // classifier has to walk the cause chain rather than look at the top-level exception.
+    var lockNotAvailable = new SQLException("could not obtain lock on row", "55P03");
+    assertTrue(SystemDatabase.isContentionError(lockNotAvailable));
+    assertTrue(SystemDatabase.isContentionError(new RuntimeException(lockNotAvailable)));
+
+    // Class 40 is retried inside dbRetry and never reaches a caller; anything else is a real error.
+    assertFalse(
+        SystemDatabase.isContentionError(new SQLException("serialization failure", "40001")));
+    assertFalse(SystemDatabase.isContentionError(new SQLException("no state")));
+    assertFalse(SystemDatabase.isContentionError(new RuntimeException("boom")));
   }
 
   @Test
