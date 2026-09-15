@@ -34,8 +34,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -82,10 +84,21 @@ public class Conductor implements AutoCloseable {
   private final String url;
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler =
+      Executors.newSingleThreadScheduledExecutor(
+          r -> {
+            var thread = new Thread(r, "dbos-conductor-scheduler");
+            thread.setDaemon(true);
+            return thread;
+          });
+  private final ExecutorService retentionExecutor =
+      Executors.newSingleThreadExecutor(
+          r -> {
+            var thread = new Thread(r, "dbos-conductor-retention");
+            thread.setDaemon(true);
+            return thread;
+          });
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
-
-  /** The retention round in flight on this executor, so a second request does not start another. */
   private final Object retentionLock = new Object();
 
   private @Nullable CompletableFuture<Void> retentionRound;
@@ -594,6 +607,7 @@ public class Conductor implements AutoCloseable {
       }
 
       scheduler.shutdownNow();
+      retentionExecutor.shutdownNow();
 
       CompletableFuture<WebSocket> cf = connectFuture.getAndSet(null);
       if (cf != null) {
@@ -1063,13 +1077,35 @@ public class Conductor implements AutoCloseable {
       Conductor conductor, RetentionRequest request) {
     synchronized (conductor.retentionLock) {
       var previous = conductor.retentionRound;
-      if (previous != null && !previous.isDone()) {
+      if (conductor.isShutdown.get()) {
+        logger.debug("Skipping retention: the conductor is shutting down.");
+      } else if (previous != null && !previous.isDone()) {
         logger.warn("Skipping retention: the previous round on this executor is still running.");
       } else {
-        conductor.retentionRound =
-            CompletableFuture.runAsync(() -> runRetention(conductor, request));
+        try {
+          var round =
+              CompletableFuture.runAsync(
+                  () -> runRetention(conductor, request), conductor.retentionExecutor);
+          conductor.retentionRound = round;
+          round.whenComplete(
+              (result, error) -> {
+                synchronized (conductor.retentionLock) {
+                  // Only the round that is still the current one may clear the field: a round that
+                  // finishes after the next one has started would otherwise erase its successor and
+                  // let a third request run concurrently with it.
+                  if (conductor.retentionRound == round) {
+                    conductor.retentionRound = null;
+                  }
+                }
+              });
+        } catch (RejectedExecutionException e) {
+          // stop() shut the executor down between the check above and the submit.
+          logger.debug("Skipping retention: the conductor is shutting down.");
+        }
       }
     }
+    // Unconditionally successful: every skip above is a decision, not a failure, and the round's
+    // own outcome is logged rather than answered -- the same trade Go, Python and TypeScript make.
     return CompletableFuture.completedFuture(new SuccessResponse(request, true));
   }
 
