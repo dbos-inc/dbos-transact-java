@@ -14,10 +14,12 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1939,9 +1941,9 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB)
+      verify(mockDB, timeout(5_000))
           .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
-      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3L));
+      verify(mockExec, timeout(5_000)).globalTimeout(Instant.ofEpochMilli(3L));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1971,7 +1973,7 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", Map.of("body", body));
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L, 500);
+      verify(mockDB, timeout(5_000)).garbageCollect(Instant.ofEpochMilli(1L), 2L, 500);
     }
   }
 
@@ -1994,8 +1996,52 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", Map.of("body", body));
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB)
+      verify(mockDB, timeout(5_000))
           .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
+    }
+  }
+
+  @RetryingTest(3)
+  public void skipsRetentionWhileThePreviousRoundRuns() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var started = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    doAnswer(
+            invocation -> {
+              started.countDown();
+              assertTrue(release.await(5, TimeUnit.SECONDS), "release latch timed out");
+              return null;
+            })
+        .when(mockDB)
+        .garbageCollect(any(), anyLong(), anyInt());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of("gc_cutoff_epoch_ms", 1L, "gc_rows_threshold", 2L, "timeout_cutoff_epoch_ms", 3L);
+      listener.send(MessageType.RETENTION, "12345", Map.of("body", body));
+      assertTrue(started.await(5, TimeUnit.SECONDS), "the first round should start");
+      // Answered while the round is still blocked in garbageCollect: the reply does not wait.
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+      assertEquals("12345", mapper.readTree(listener.message).get("request_id").stringValue());
+
+      // A second request while the first round holds the executor is answered and dropped.
+      listener.messageLatch = new CountDownLatch(1);
+      listener.send(MessageType.RETENTION, "67890", Map.of("body", body));
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("67890", jsonNode.get("request_id").stringValue());
+      assertTrue(jsonNode.get("success").asBoolean(), "a skipped round still answers");
+      verify(mockDB, after(500).times(1)).garbageCollect(any(), anyLong(), anyInt());
+
+      release.countDown();
+      verify(mockExec, timeout(5_000)).globalTimeout(Instant.ofEpochMilli(3L));
     }
   }
 
@@ -2020,9 +2066,9 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB)
+      verify(mockDB, timeout(5_000))
           .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
-      verify(mockExec, never()).globalTimeout(any());
+      verify(mockExec, after(500).never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -2062,16 +2108,17 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB)
+      verify(mockDB, timeout(5_000))
           .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
-      verify(mockExec, never()).globalTimeout(any());
+      verify(mockExec, after(500).never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
       assertEquals("retention", jsonNode.get("type").stringValue());
       assertEquals("12345", jsonNode.get("request_id").stringValue());
-      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
-      assertFalse(jsonNode.get("success").asBoolean());
+      // The round is answered before it runs, so its failure reaches the log, not Conductor.
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
     }
   }
 
@@ -2102,16 +2149,17 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB)
+      verify(mockDB, timeout(5_000))
           .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
-      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3));
+      verify(mockExec, timeout(5_000)).globalTimeout(Instant.ofEpochMilli(3));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
       assertEquals("retention", jsonNode.get("type").stringValue());
       assertEquals("12345", jsonNode.get("request_id").stringValue());
-      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
-      assertFalse(jsonNode.get("success").asBoolean());
+      // As above: the reply cannot carry an outcome the round has not reached yet.
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
     }
   }
 

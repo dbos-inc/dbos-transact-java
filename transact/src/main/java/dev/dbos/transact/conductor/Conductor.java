@@ -49,6 +49,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.core.JsonParser;
@@ -83,6 +84,12 @@ public class Conductor implements AutoCloseable {
   private final DBOSExecutor dbosExecutor;
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
+
+  /** The retention round in flight on this executor, so a second request does not start another. */
+  private final Object retentionLock = new Object();
+
+  private @Nullable CompletableFuture<Void> retentionRound;
+
   private final HttpClient httpClient;
   private final JsonMapper mapper;
   private final int pingPeriodMs;
@@ -1044,40 +1051,59 @@ public class Conductor implements AutoCloseable {
         });
   }
 
+  /**
+   * Starts a retention round and answers at once.
+   *
+   * <p>Off the message path, and answered without waiting for it: a round takes minutes, and
+   * replying only when it ends stops every other command and lets the dispatch time out into a
+   * second round on another executor. The answer therefore cannot carry the round's outcome, which
+   * is logged instead -- the same trade Python and TypeScript make.
+   */
   static CompletableFuture<BaseResponse> handleRetention(
       Conductor conductor, RetentionRequest request) {
-    return CompletableFuture.supplyAsync(
-        () -> {
-          try {
-            var cutoff =
-                request.body.gc_cutoff_epoch_ms == null
-                    ? null
-                    : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
-            // Older Conductor versions may not send gc_batch_size, newer ones may send null,
-            // and a cleared setting may arrive as zero: every one of those takes the default.
-            var batchSize =
-                request.body.gc_batch_size == null || request.body.gc_batch_size == 0
-                    ? SystemDatabase.DEFAULT_GC_BATCH_SIZE
-                    : Math.toIntExact(request.body.gc_batch_size);
-            conductor.systemDatabase.garbageCollect(
-                cutoff, request.body.gc_rows_threshold, batchSize);
-          } catch (Exception e) {
-            logger.error("Exception encountered garbage collecting system database", e);
-            return new SuccessResponse(request, e);
-          }
+    synchronized (conductor.retentionLock) {
+      var previous = conductor.retentionRound;
+      if (previous != null && !previous.isDone()) {
+        logger.warn("Skipping retention: the previous round on this executor is still running.");
+      } else {
+        conductor.retentionRound =
+            CompletableFuture.runAsync(() -> runRetention(conductor, request));
+      }
+    }
+    return CompletableFuture.completedFuture(new SuccessResponse(request, true));
+  }
 
-          try {
-            if (request.body.timeout_cutoff_epoch_ms != null) {
-              conductor.dbosExecutor.globalTimeout(
-                  Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
-            }
-          } catch (Exception e) {
-            logger.error("Exception encountered setting global timeout", e);
-            return new SuccessResponse(request, e);
-          }
+  private static void runRetention(Conductor conductor, RetentionRequest request) {
+    try {
+      var cutoff =
+          request.body.gc_cutoff_epoch_ms == null
+              ? null
+              : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+      // Older Conductor versions may not send gc_batch_size, newer ones may send null, and a
+      // cleared setting may arrive as zero: every one of those takes the default.
+      var batchSize =
+          request.body.gc_batch_size == null || request.body.gc_batch_size == 0
+              ? SystemDatabase.DEFAULT_GC_BATCH_SIZE
+              : Math.toIntExact(request.body.gc_batch_size);
+      conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold, batchSize);
+    } catch (Exception e) {
+      if (conductor.isShutdown.get()) {
+        // Shutdown took the system database away mid-round; the next round resumes the work.
+        logger.debug("Retention interrupted by shutdown");
+        return;
+      }
+      logger.error("Exception encountered garbage collecting system database", e);
+      return;
+    }
 
-          return new SuccessResponse(request, true);
-        });
+    try {
+      if (request.body.timeout_cutoff_epoch_ms != null) {
+        conductor.dbosExecutor.globalTimeout(
+            Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
+      }
+    } catch (Exception e) {
+      logger.error("Exception encountered setting global timeout", e);
+    }
   }
 
   static CompletableFuture<BaseResponse> handleGetMetrics(
