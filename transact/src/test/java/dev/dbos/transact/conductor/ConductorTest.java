@@ -1664,6 +1664,29 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canListQueuedWorkflowsWithScheduleNameFilter() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of("schedule_name", List.of("sched-a", "sched-b"));
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("sched-a", "sched-b"), input.scheduleName());
+      assertTrue(input.queuesOnly());
+    }
+  }
+
+  @RetryingTest(3)
   public void canListWorkflowsWithScheduleNameFilter() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);

@@ -7,6 +7,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class WorkflowStatusBuilder {
@@ -47,6 +48,7 @@ public class WorkflowStatusBuilder {
   private Instant delayUntil;
   private Instant completedAt;
   private String serialization;
+  private Map<String, Object> attributes;
   private String scheduleName;
   private String applicationName;
 
@@ -82,7 +84,7 @@ public class WorkflowStatusBuilder {
         delayUntil,
         completedAt,
         serialization,
-        null,
+        attributes,
         scheduleName,
         applicationName);
   }
@@ -243,6 +245,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder applicationName(String applicationName) {
     this.applicationName = applicationName;
+    return this;
+  }
+
+  public WorkflowStatusBuilder attributes(Map<String, Object> attributes) {
+    this.attributes = attributes;
     return this;
   }
 

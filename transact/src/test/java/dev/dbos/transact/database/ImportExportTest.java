@@ -12,16 +12,19 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -306,6 +309,42 @@ public class ImportExportTest {
     assertEquals(2, wf.events().size());
     assertEquals(2, wf.eventHistory().size());
     assertEquals(2, wf.streams().size());
+  }
+
+  @Test
+  public void testImportPreservesScheduleNameAttributesAndWasForkedFrom() throws Exception {
+    // schedule_name, attributes, and was_forked_from are persisted status, so they must survive
+    // an export/import round trip rather than being silently dropped on the way back in.
+    var wfId = "status-fields-wf-1";
+    Instant now = Instant.now();
+    Map<String, Object> attributes = Map.of("customer", "acme", "region", "us-east-1");
+
+    var status =
+        new WorkflowStatusBuilder(wfId)
+            .status(WorkflowState.SUCCESS)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .scheduleName("my-schedule")
+            .attributes(attributes)
+            .wasForkedFrom(true)
+            .build();
+    sysdb.importWorkflow(
+        List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+
+    var exported = sysdb.exportWorkflow(wfId, false);
+    assertEquals(1, exported.size());
+    var ws = exported.get(0).status();
+    assertEquals("my-schedule", ws.scheduleName());
+    assertEquals(attributes, ws.attributes());
+    assertEquals(true, ws.wasForkedFrom());
+
+    // The reimported run is still found by the schedule name filter.
+    var bySchedule = sysdb.listWorkflows(new ListWorkflowsInput().withScheduleName("my-schedule"));
+    assertEquals(List.of(wfId), bySchedule.stream().map(WorkflowStatus::workflowId).toList());
   }
 
   @Test
