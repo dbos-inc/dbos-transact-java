@@ -1792,8 +1792,7 @@ public class WorkflowDAO {
             var dataList = workflowIds.stream().map(wfDataMap::get).toList();
 
             // One app name per fork, shared by its status row and its copied steps: the source's,
-            // or
-            // this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
+            // or this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
             List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
             for (var rd : dataList) {
               forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
