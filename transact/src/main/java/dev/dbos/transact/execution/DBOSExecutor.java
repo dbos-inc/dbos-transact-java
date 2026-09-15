@@ -186,7 +186,7 @@ public class DBOSExecutor implements AutoCloseable {
             : config.appName();
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
     var envExecutorId = System.getenv("DBOS__VMID");
-    executorId = envExecutorId == null || envExecutorId.isEmpty() ? null : envExecutorId;
+    executorId = envExecutorId == null || envExecutorId.isEmpty() ? "local" : envExecutorId;
 
     if (appName.isEmpty()) {
       var msg =
@@ -223,9 +223,6 @@ public class DBOSExecutor implements AutoCloseable {
       if (config.conductorKey() != null) {
         executorId = UUID.randomUUID().toString();
       }
-    }
-    if (executorId == null) {
-      executorId = "local";
     }
   }
 
