@@ -81,7 +81,7 @@ public class WorkflowDAO {
   // conditionally. Add new columns here so both getWorkflowStatus and listWorkflows stay in sync.
   private static final String WORKFLOW_STATUS_COLUMNS =
       """
-        workflow_uuid, status,
+        workflow_status.workflow_uuid, status,
         name, class_name, config_name,
         queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
         executor_id, application_version, application_id,
@@ -96,21 +96,25 @@ public class WorkflowDAO {
   // currently still writes the legacy workflow_status columns, but a later release will write to
   // the new tables. So every read prefers the new table but falls back to the old column. We are
   // splitting the read and write changes into separate releases to enable rolling upgrades.
-  // Correlated on the primary key, so each is an index lookup.
-  private static String inputsColumn(String schema) {
-    return ("COALESCE((SELECT wi.inputs FROM \"%s\".workflow_input wi"
-            + " WHERE wi.workflow_uuid = workflow_status.workflow_uuid),"
-            + " workflow_status.inputs) AS inputs")
+  //
+  // One LEFT JOIN per payload table, as in Python and TypeScript: the join is on the payload
+  // table's primary key, so it probes once per row however many of that table's columns the
+  // COALESCE list reads. The joins make workflow_uuid ambiguous, so every query below that takes
+  // one qualifies its own references.
+  private static final String INPUTS_COLUMN =
+      "COALESCE(wi.inputs, workflow_status.inputs) AS inputs";
+
+  private static String inputsJoin(String schema) {
+    return "LEFT JOIN \"%s\".workflow_input wi ON wi.workflow_uuid = workflow_status.workflow_uuid"
         .formatted(schema);
   }
 
-  private static String outputColumns(String schema) {
-    return ("COALESCE((SELECT wo.output FROM \"%1$s\".workflow_output wo"
-            + " WHERE wo.workflow_uuid = workflow_status.workflow_uuid),"
-            + " workflow_status.output) AS output,"
-            + " COALESCE((SELECT wo.error FROM \"%1$s\".workflow_output wo"
-            + " WHERE wo.workflow_uuid = workflow_status.workflow_uuid),"
-            + " workflow_status.error) AS error")
+  private static final String OUTPUT_COLUMNS =
+      "COALESCE(wo.output, workflow_status.output) AS output,"
+          + " COALESCE(wo.error, workflow_status.error) AS error";
+
+  private static String outputJoin(String schema) {
+    return "LEFT JOIN \"%s\".workflow_output wo ON wo.workflow_uuid = workflow_status.workflow_uuid"
         .formatted(schema);
   }
 
@@ -546,11 +550,15 @@ public class WorkflowDAO {
         ("SELECT "
                 + WORKFLOW_STATUS_COLUMNS
                 + ", "
-                + inputsColumn(schema)
+                + INPUTS_COLUMN
                 + ", "
-                + outputColumns(schema)
+                + OUTPUT_COLUMNS
                 + ", serialization")
-            + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
+            + " FROM \"%s\".workflow_status ".formatted(schema)
+            + inputsJoin(schema)
+            + " "
+            + outputJoin(schema)
+            + " WHERE workflow_status.workflow_uuid = ?";
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -754,16 +762,24 @@ public class WorkflowDAO {
     var loadInput = input.loadInput() == null || input.loadInput();
     var loadOutput = input.loadOutput() == null || input.loadOutput();
     if (loadInput) {
-      sqlBuilder.append(", ").append(inputsColumn(ctx.schema()));
+      sqlBuilder.append(", ").append(INPUTS_COLUMN);
     }
     if (loadOutput) {
-      sqlBuilder.append(", ").append(outputColumns(ctx.schema()));
+      sqlBuilder.append(", ").append(OUTPUT_COLUMNS);
     }
     if (loadInput || loadOutput) {
       sqlBuilder.append(", serialization");
     }
 
     sqlBuilder.append(" FROM \"%s\".workflow_status ".formatted(ctx.schema()));
+
+    // Only join the payload table the caller actually asked for.
+    if (loadInput) {
+      sqlBuilder.append(inputsJoin(ctx.schema())).append(" ");
+    }
+    if (loadOutput) {
+      sqlBuilder.append(outputJoin(ctx.schema())).append(" ");
+    }
 
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
@@ -822,13 +838,13 @@ public class WorkflowDAO {
     if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
       StringJoiner prefixConditions = new StringJoiner(" OR ", "(", ")");
       for (String prefix : input.workflowIdPrefix()) {
-        prefixConditions.add("workflow_uuid LIKE ?");
+        prefixConditions.add("workflow_status.workflow_uuid LIKE ?");
         parameters.add(prefix + "%");
       }
       whereConditions.add(prefixConditions.toString());
     }
     if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
-      whereConditions.add("workflow_uuid = ANY(?)");
+      whereConditions.add("workflow_status.workflow_uuid = ANY(?)");
       parameters.add(input.workflowIds());
     }
     if (input.authenticatedUser() != null && !input.authenticatedUser().isEmpty()) {
@@ -1347,11 +1363,12 @@ public class WorkflowDAO {
     DBOSSerializer serializer = ctx.serializer();
     final String sql =
         """
-          SELECT status, %s, serialization, recovery_attempts
-          FROM "%s".workflow_status
-          WHERE workflow_uuid = ?
+          SELECT status, %1$s, serialization, recovery_attempts
+          FROM "%2$s".workflow_status
+          %3$s
+          WHERE workflow_status.workflow_uuid = ?
         """
-            .formatted(outputColumns(ctx.schema()), ctx.schema());
+            .formatted(OUTPUT_COLUMNS, ctx.schema(), outputJoin(ctx.schema()));
 
     while (true) {
       ctx.checkClosed();
@@ -1850,13 +1867,14 @@ public class WorkflowDAO {
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
     String sql =
         """
-          SELECT workflow_uuid, name, class_name, config_name, application_version,
-                 application_id, authenticated_user, authenticated_roles, assumed_role,
-                 %s, serialization, attributes, application_name
-          FROM "%s".workflow_status
-          WHERE workflow_uuid = ANY(?)
+          SELECT workflow_status.workflow_uuid, name, class_name, config_name,
+                 application_version, application_id, authenticated_user, authenticated_roles,
+                 assumed_role, %1$s, serialization, attributes, application_name
+          FROM "%2$s".workflow_status
+          %3$s
+          WHERE workflow_status.workflow_uuid = ANY(?)
         """
-            .formatted(inputsColumn(schema), schema);
+            .formatted(INPUTS_COLUMN, schema, inputsJoin(schema));
 
     Map<String, ForkWorkflowData> result = new HashMap<>();
     try (var stmt = conn.prepareStatement(sql)) {
