@@ -184,7 +184,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    */
   public DBOSClient(@NonNull DataSource dataSource) {
-    this(dataSource, null, null);
+    this(dataSource, null, null, true, null);
   }
 
   /**
@@ -194,7 +194,7 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    */
   public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
-    this(dataSource, schema, null);
+    this(dataSource, schema, null, true, null);
   }
 
   /**
@@ -208,7 +208,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull DataSource dataSource,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
-    this(dataSource, schema, serializer, null);
+    this(dataSource, schema, serializer, true, null);
   }
 
   /**
@@ -227,10 +227,59 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       @Nullable String applicationName) {
+    this(dataSource, schema, serializer, true, applicationName);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications.
+   *     Pass false when the system database was migrated with LISTEN/NOTIFY disabled: its
+   *     notification triggers do not exist, so a listener would connect and then never hear
+   *     anything, leaving every wait to time out and re-poll.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify) {
+    this(dataSource, schema, serializer, useListenNotify, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications.
+   *     Pass false when the system database was migrated with LISTEN/NOTIFY disabled: its
+   *     notification triggers do not exist, so a listener would connect and then never hear
+   *     anything, leaving every wait to time out and re-poll.
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String applicationName) {
     MigrationManager.validateSysDbVersion(dataSource, schema);
 
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(dataSource, schema, serializer, applicationName);
+    systemDatabase =
+        new SystemDatabase(dataSource, schema, serializer, useListenNotify, applicationName);
+  }
+
+  // package private method for test purposes
+  @NonNull SystemDatabase getSystemDatabase() {
+    return systemDatabase;
   }
 
   /**

@@ -231,8 +231,12 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public SystemDatabase(
-      DataSource dataSource, String schema, DBOSSerializer serializer, @Nullable String appName) {
-    this(dataSource, schema, false, serializer, true, null, appName, null, null);
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String appName) {
+    this(dataSource, schema, false, serializer, useListenNotify, null, appName, null, null);
   }
 
   /**
