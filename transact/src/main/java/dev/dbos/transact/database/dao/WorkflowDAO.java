@@ -210,15 +210,19 @@ public class WorkflowDAO {
           var sql =
               """
                 UPDATE "%s".workflow_status
-                SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
+                SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
+                    updated_at = ?, completed_at = ?
                 WHERE workflow_uuid = ? AND status = ?
               """
                   .formatted(ctx.schema());
 
           try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            long now = System.currentTimeMillis();
             stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
-            stmt.setString(2, initStatus.workflowId());
-            stmt.setString(3, WorkflowState.PENDING.name());
+            stmt.setLong(2, now);
+            stmt.setLong(3, now);
+            stmt.setString(4, initStatus.workflowId());
+            stmt.setString(5, WorkflowState.PENDING.name());
 
             stmt.executeUpdate();
           }

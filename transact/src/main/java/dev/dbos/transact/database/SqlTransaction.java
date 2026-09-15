@@ -54,19 +54,26 @@ public final class SqlTransaction {
    */
   public static <T> T call(Connection conn, SqlCall<T> action) throws SQLException {
     conn.setAutoCommit(false);
+    T result;
     try {
-      var result = action.run(conn);
+      result = action.run(conn);
       conn.commit();
-      return result;
     } catch (Throwable t) {
+      // Restoring autocommit can itself fail on a broken connection. Suppress both cleanup
+      // failures onto the original throwable rather than letting a finally block replace it.
       try {
         conn.rollback();
       } catch (SQLException rollbackFailure) {
         t.addSuppressed(rollbackFailure);
       }
+      try {
+        conn.setAutoCommit(true);
+      } catch (SQLException restoreFailure) {
+        t.addSuppressed(restoreFailure);
+      }
       throw t;
-    } finally {
-      conn.setAutoCommit(true);
     }
+    conn.setAutoCommit(true);
+    return result;
   }
 }
