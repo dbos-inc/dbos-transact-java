@@ -79,6 +79,24 @@ public class MigrationManager {
     }
   }
 
+  /**
+   * Reads the highest applied migration version, or 0 if dbos_migrations is empty.
+   *
+   * <p>Unlike {@link #getCurrentSysDbVersion}, this lets a {@link SQLException} propagate, so a
+   * caller can tell an unmigrated schema from one it merely cannot read. Swallowed, both arrive as
+   * version 0, and a database DBOS lacks privileges on is reported as one needing the DBOS schema
+   * applied -- sending the operator off to re-apply a schema that is already correct.
+   */
+  private static int readSysDbVersion(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
+            .formatted(schema);
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      return rs.next() ? rs.getInt("version") : 0;
+    }
+  }
+
   private static boolean migrationTableExists(Connection conn, String schema) throws SQLException {
     var sql =
         "SELECT 1 FROM information_schema.tables"
@@ -119,8 +137,6 @@ public class MigrationManager {
    */
   public static void validateSysDbVersion(String url, String user, String password, String schema) {
     Objects.requireNonNull(url, "database url must not be null");
-    Objects.requireNonNull(user, "database user must not be null");
-    Objects.requireNonNull(password, "database password must not be null");
 
     try (var ds = SystemDatabase.createDataSource(url, user, password)) {
       validateSysDbVersion(ds, schema);
@@ -142,15 +158,20 @@ public class MigrationManager {
 
     int version;
     try (var conn = ds.getConnection()) {
-      if (!migrationTableExists(conn, schema)) {
+      version = readSysDbVersion(conn, schema);
+    } catch (SQLException e) {
+      // 42P01 undefined_table, 3F000 invalid_schema_name: the schema has never been migrated.
+      // Any other failure -- notably 42501 insufficient_privilege -- says nothing about the
+      // version, so it propagates rather than being reported as a schema that needs applying.
+      var state = e.getSQLState();
+      if ("42P01".equals(state) || "3F000".equals(state)) {
         throw new IllegalStateException(
             ("Schema \"%s\" has no dbos_migrations table, so its version cannot be determined."
                     + " DBOS requires system database schema version %d or later. Apply the DBOS"
                     + " schema to this database, or let DBOS migrate it, first.")
-                .formatted(schema, MINIMUM_SYSDB_VERSION));
+                .formatted(schema, MINIMUM_SYSDB_VERSION),
+            e);
       }
-      version = getCurrentSysDbVersion(conn, schema);
-    } catch (SQLException e) {
       throw new RuntimeException("Failed to read the system database schema version", e);
     }
 
@@ -358,19 +379,12 @@ public class MigrationManager {
 
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
-    var sql =
-        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
-            .formatted(schema);
-    try (var stmt = conn.createStatement();
-        var rs = stmt.executeQuery(sql)) {
-      if (rs.next()) {
-        return rs.getInt("version");
-      }
+    try {
+      return readSysDbVersion(conn, schema);
     } catch (SQLException e) {
       logger.warn("SQLException thrown querying dbos_migrations table", e);
+      return 0;
     }
-
-    return 0;
   }
 
   private static boolean notificationsPrimaryKeyExists(Connection conn, String schema)
