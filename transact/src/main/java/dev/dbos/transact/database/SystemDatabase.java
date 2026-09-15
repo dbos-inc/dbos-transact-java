@@ -784,6 +784,9 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(ctx));
   }
 
+  /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
+  public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
+
   /** Enforces retention across the entire system database. */
   public void garbageCollect(Instant cutoff, Long rowsThreshold, int batchSize) {
     if (cutoff == null && rowsThreshold == null) {

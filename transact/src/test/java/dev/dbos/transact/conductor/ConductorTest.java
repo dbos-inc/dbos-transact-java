@@ -27,7 +27,6 @@ import dev.dbos.transact.conductor.protocol.MessageType;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -1941,7 +1940,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB)
-          .garbageCollect(Instant.ofEpochMilli(1L), 2L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+          .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
       verify(mockExec).globalTimeout(Instant.ofEpochMilli(3L));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
@@ -1975,7 +1974,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB)
-          .garbageCollect(Instant.ofEpochMilli(1L), 2L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+          .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
       verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
@@ -2017,7 +2016,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB)
-          .garbageCollect(Instant.ofEpochMilli(1L), 2L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+          .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
       verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
@@ -2057,7 +2056,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB)
-          .garbageCollect(Instant.ofEpochMilli(1L), 2L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+          .garbageCollect(Instant.ofEpochMilli(1L), 2L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
       verify(mockExec).globalTimeout(Instant.ofEpochMilli(3));
 
       JsonNode jsonNode = mapper.readTree(listener.message);

@@ -2,7 +2,6 @@ package dev.dbos.transact.conductor;
 
 import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -1055,7 +1054,7 @@ public class Conductor implements AutoCloseable {
                     ? null
                     : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
             conductor.systemDatabase.garbageCollect(
-                cutoff, request.body.gc_rows_threshold, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+                cutoff, request.body.gc_rows_threshold, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
           } catch (Exception e) {
             logger.error("Exception encountered garbage collecting system database", e);
             return new SuccessResponse(request, e);

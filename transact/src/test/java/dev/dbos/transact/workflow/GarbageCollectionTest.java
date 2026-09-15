@@ -6,7 +6,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.dao.WorkflowDAO;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.time.Duration;
@@ -59,13 +59,13 @@ public class GarbageCollectionTest {
     // Garbage collect all but one completed workflow
     List<WorkflowStatus> statusList = systemDatabase.listWorkflows(null);
     assertEquals(11, statusList.size());
-    systemDatabase.garbageCollect(null, 1L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(null, 1L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(2, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Garbage collect all completed workflows
-    systemDatabase.garbageCollect(Instant.now(), null, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(1, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
@@ -73,12 +73,12 @@ public class GarbageCollectionTest {
     // Finish the blocked workflow, garbage collect everything
     impl.gcLatch.countDown();
     assertEquals(handle.workflowId(), handle.getResult());
-    systemDatabase.garbageCollect(Instant.now(), null, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(0, statusList.size());
 
     // Verify GC runs without errors on an empty table
-    systemDatabase.garbageCollect(null, 1L, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(null, 1L, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
 
     // Run workflows, wait, run them again
     for (int i = 0; i < numWorkflows; i++) {
@@ -95,7 +95,7 @@ public class GarbageCollectionTest {
 
     // GC the first half, verify only half were GC'ed
     systemDatabase.garbageCollect(
-        Instant.now().minus(Duration.ofMillis(1000)), null, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+        Instant.now().minus(Duration.ofMillis(1000)), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(numWorkflows, statusList.size());
   }
@@ -126,7 +126,7 @@ public class GarbageCollectionTest {
     assertEquals(4, statusList.size());
 
     // GC all completed workflows
-    systemDatabase.garbageCollect(Instant.now(), null, WorkflowDAO.DEFAULT_GC_BATCH_SIZE);
+    systemDatabase.garbageCollect(Instant.now(), null, SystemDatabase.DEFAULT_GC_BATCH_SIZE);
 
     // DELAYED and ENQUEUED should survive; completed ones should be gone
     statusList = systemDatabase.listWorkflows(null);

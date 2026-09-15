@@ -2130,9 +2130,6 @@ public class WorkflowDAO {
     return null;
   }
 
-  /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
-  public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
-
   /** The child tables a retention round reclaims, in the order Python sweeps them. */
   private static final List<String> PAYLOAD_TABLES =
       List.of("workflow_input", "workflow_output", "operation_outputs");
