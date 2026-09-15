@@ -1,6 +1,9 @@
 package dev.dbos.transact.database;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.Constants;
@@ -108,6 +111,12 @@ class RetentionSweepTest {
     }
   }
 
+  /** One full retention round: the status sweep, then the payload sweep it orphaned rows for. */
+  private long[] round(Instant cutoff, int batchSize) throws Exception {
+    var used = WorkflowDAO.garbageCollect(ctx, cutoff, null, batchSize);
+    return used == null ? new long[3] : WorkflowDAO.garbageCollectPayloads(ctx, used, batchSize);
+  }
+
   @Test
   void batchedSweepCollectsEverythingAcrossBatches() throws Exception {
     var base = System.currentTimeMillis() - 100_000;
@@ -117,7 +126,7 @@ class RetentionSweepTest {
     assertEquals(7, count("workflow_status"));
 
     // batchSize 2 over 7 rows: three bounded batches plus the unbounded remainder.
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(0, count("workflow_status"), "every eligible status row should be collected");
     assertEquals(0, count("workflow_input"), "orphaned inputs should be swept");
@@ -132,7 +141,7 @@ class RetentionSweepTest {
       seedWorkflow("wf-" + i, "SUCCESS", base + i);
     }
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 1);
+    round(Instant.now(), 1);
 
     assertEquals(0, count("workflow_status"));
     assertEquals(0, count("workflow_input"));
@@ -147,7 +156,7 @@ class RetentionSweepTest {
       seedWorkflow("wf-" + i, "SUCCESS", same);
     }
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(0, count("workflow_status"));
     assertEquals(0, count("operation_outputs"));
@@ -161,7 +170,7 @@ class RetentionSweepTest {
     seedWorkflow("live", "PENDING", old);
     seedWorkflow("done", "SUCCESS", old);
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(1, count("workflow_status"), "the PENDING workflow must survive");
     assertEquals(1, count("workflow_input"), "a live workflow keeps its inputs");
@@ -191,7 +200,7 @@ class RetentionSweepTest {
     // A collectable workflow, so the round has a cutoff to work from.
     seedWorkflow("done", "SUCCESS", old);
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 10);
+    round(Instant.now(), 10);
 
     assertEquals(0, count("workflow_input"), "pre-existing orphaned inputs should be swept");
     assertEquals(0, count("workflow_output"), "pre-existing orphaned outputs should be swept");
@@ -202,7 +211,7 @@ class RetentionSweepTest {
     seedWorkflow("old", "SUCCESS", System.currentTimeMillis() - 100_000);
     seedWorkflow("new", "SUCCESS", System.currentTimeMillis() + 100_000);
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(1, count("workflow_status"), "a workflow above the cutoff must survive");
     assertEquals(1, count("workflow_input"), "and keep its payload rows");
@@ -216,7 +225,7 @@ class RetentionSweepTest {
     var created = System.currentTimeMillis() - 100_000;
     seedWorkflow("slow", "SUCCESS", created, System.currentTimeMillis() + 100_000);
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(1, count("workflow_status"), "a workflow completed above the cutoff must survive");
     assertEquals(1, count("workflow_input"), "and keep its inputs");
@@ -237,7 +246,7 @@ class RetentionSweepTest {
               + " WHERE workflow_uuid = 'theirs'");
     }
 
-    WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 2);
+    round(Instant.now(), 2);
 
     assertEquals(0, count("workflow_status"), "another application's rows are collected too");
     assertEquals(0, count("workflow_input"));
@@ -248,5 +257,70 @@ class RetentionSweepTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> WorkflowDAO.garbageCollect(ctx, Instant.now(), null, 0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkflowDAO.garbageCollectPayloads(ctx, Instant.now(), 0));
+  }
+
+  @Test
+  void thePayloadSweepReportsWhatItTook() throws Exception {
+    var old = System.currentTimeMillis() - 100_000;
+    for (int i = 0; i < 3; i++) {
+      seedWorkflow("wf-" + i, "SUCCESS", old);
+    }
+
+    var deleted = round(Instant.now(), 2);
+
+    // Steps count zero: operation_outputs still carries a cascading foreign key until migration
+    // 112 drops it, so the status sweep has already taken those rows by the time this one runs.
+    assertArrayEquals(new long[] {3, 3, 0}, deleted, "inputs, outputs, then steps");
+    assertEquals(0, count("operation_outputs"), "cascaded away rather than swept");
+  }
+
+  @Test
+  void theStatusSweepReportsTheCutoffItUsed() throws Exception {
+    var old = System.currentTimeMillis() - 100_000;
+    seedWorkflow("wf", "SUCCESS", old);
+
+    assertNull(
+        WorkflowDAO.garbageCollect(ctx, null, null, 2),
+        "no cutoff and no row threshold means nothing to collect");
+
+    var cutoff = Instant.now();
+    assertEquals(cutoff, WorkflowDAO.garbageCollect(ctx, cutoff, null, 2));
+
+    // A row threshold with nothing above it leaves the explicit cutoff alone.
+    assertEquals(cutoff, WorkflowDAO.garbageCollect(ctx, cutoff, 100L, 2));
+  }
+
+  @Test
+  void aSecondRoundCannotTakeTheRetentionLock() throws Exception {
+    try (var systemDatabase = new SystemDatabase(dataSource, Constants.DB_SCHEMA)) {
+      try (var held = systemDatabase.acquireRetentionLock()) {
+        assertNotNull(held, "the first round takes the lock");
+        // A separate pool, and so a separate session, as a second executor would be.
+        try (var otherPool = pgContainer.dataSource();
+            var other = new SystemDatabase(otherPool, Constants.DB_SCHEMA)) {
+          assertNull(other.acquireRetentionLock(), "a concurrent round must be turned away");
+        }
+      }
+      try (var afterRelease = systemDatabase.acquireRetentionLock()) {
+        assertNotNull(afterRelease, "releasing the lock lets the next round in");
+      }
+    }
+  }
+
+  @Test
+  void theRetentionLockKeyIsDerivedTheSameWayInEverySdk() throws Exception {
+    // sha256("dbos.retention.dbos")[:8], big-endian signed -- the value Python and TS compute.
+    assertEquals(
+        new java.math.BigInteger(
+                1,
+                java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(
+                        "dbos.retention.dbos".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .shiftRight(256 - 64)
+            .longValue(),
+        SystemDatabase.retentionLockKey("dbos"));
   }
 }

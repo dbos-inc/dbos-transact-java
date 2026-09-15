@@ -57,9 +57,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -2150,14 +2154,14 @@ public class WorkflowDAO {
   }
 
   /**
-   * Deletes old terminal workflows and the payload rows they leave behind.
+   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
+   * used, or null when there is nothing to collect.
    *
-   * <p>Two sweeps, matching Python. The status sweep advances a {@code completed_at} watermark,
-   * committing one batch per transaction; it never materializes workflow ids, so its memory cost is
-   * flat however much it collects. The payload sweep then reclaims the rows that sweep orphaned, by
-   * their own {@code retention_timestamp} rather than by id.
+   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
+   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
+   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
    */
-  public static void garbageCollect(
+  public static @Nullable Instant garbageCollect(
       DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
     if (batchSize < 1) {
       throw new IllegalArgumentException("batchSize must be a positive integer, got " + batchSize);
@@ -2174,14 +2178,11 @@ public class WorkflowDAO {
       }
 
       if (cutoff == null) {
-        return;
+        return null;
       }
 
-      var deadline = cutoff.toEpochMilli();
-      sweepWorkflowStatus(ctx, conn, deadline, batchSize);
-      // Strictly after the status sweep: the payload sweep only takes orphans, and this round's
-      // become orphans only once that sweep has committed.
-      sweepPayloads(ctx, conn, deadline, batchSize);
+      sweepWorkflowStatus(ctx, conn, cutoff.toEpochMilli(), batchSize);
+      return cutoff;
     }
   }
 
@@ -2269,18 +2270,129 @@ public class WorkflowDAO {
   }
 
   /**
-   * Deletes payload and step rows below the cutoff whose workflow is gone. Runs after the status
-   * sweep, whose orphans all fall in range: every payload is stamped no later than the completion
-   * that made its workflow collectable.
+   * Deletes payload and step rows below the cutoff whose workflow is gone, returning the count
+   * removed from each table in {@link #PAYLOAD_TABLES} order. Runs after the status sweep, whose
+   * orphans all fall in range: every payload is stamped no later than the completion that made its
+   * workflow collectable.
    */
-  private static void sweepPayloads(DbContext ctx, Connection conn, long deadline, int batchSize)
+  public static long[] garbageCollectPayloads(DbContext ctx, Instant cutoff, int batchSize)
       throws SQLException {
-    for (var table : PAYLOAD_TABLES) {
-      sweepPayloadTable(ctx, conn, table, deadline, batchSize);
+    if (batchSize < 1) {
+      throw new IllegalArgumentException("batchSize must be a positive integer, got " + batchSize);
+    }
+    var deadline = cutoff.toEpochMilli();
+
+    // To optimize performance, vacuum payload tables both before and after collecting them.
+    var toVacuum = new ArrayList<String>();
+    toVacuum.add("workflow_status");
+    toVacuum.addAll(PAYLOAD_TABLES);
+    vacuumTables(ctx, toVacuum);
+
+    var deleted = new long[PAYLOAD_TABLES.size()];
+    var failures = new ArrayList<SQLException>();
+    sweepPayloadsConcurrently(ctx, deadline, batchSize, deleted, failures);
+
+    // Only the first can be thrown, so the rest would otherwise be lost.
+    for (var extra : failures.subList(Math.min(1, failures.size()), failures.size())) {
+      logger.warn("Payload retention sweep also failed", extra);
+    }
+    if (!failures.isEmpty()) {
+      throw failures.get(0);
+    }
+
+    vacuumTables(ctx, PAYLOAD_TABLES);
+    logger.debug(
+        "Payload retention deleted {} inputs, {} outputs, and {} steps",
+        deleted[0],
+        deleted[1],
+        deleted[2]);
+    return deleted;
+  }
+
+  /**
+   * Sweeps the payload tables in parallel, one connection per sweep.
+   *
+   * <p>A pool too small for all three runs them sequentially rather than leaving sweeps waiting on
+   * a connection that only the round itself would free: the retention lock already holds one for
+   * the round's whole duration.
+   */
+  private static void sweepPayloadsConcurrently(
+      DbContext ctx, long deadline, int batchSize, long[] deleted, List<SQLException> failures) {
+    var poolMax =
+        ctx.dataSource() instanceof HikariDataSource hikari
+            ? hikari.getMaximumPoolSize()
+            : PAYLOAD_TABLES.size() + 1;
+    var concurrency = Math.max(1, Math.min(PAYLOAD_TABLES.size(), poolMax - 1));
+
+    var pool =
+        Executors.newFixedThreadPool(
+            concurrency,
+            runnable -> {
+              var thread = new Thread(runnable, "dbos-gc-payload");
+              thread.setDaemon(true);
+              return thread;
+            });
+    try {
+      var futures = new ArrayList<Future<Long>>(PAYLOAD_TABLES.size());
+      for (var table : PAYLOAD_TABLES) {
+        futures.add(
+            pool.submit(
+                () -> {
+                  try (var conn = ctx.getConnection()) {
+                    return sweepPayloadTable(ctx, conn, table, deadline, batchSize);
+                  }
+                }));
+      }
+      for (int i = 0; i < futures.size(); i++) {
+        try {
+          deleted[i] = futures.get(i).get();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          failures.add(new SQLException("Payload retention sweep interrupted", e));
+        } catch (ExecutionException e) {
+          var cause = e.getCause();
+          failures.add(
+              cause instanceof SQLException sqlCause
+                  ? sqlCause
+                  : new SQLException("Payload retention sweep failed", cause));
+        }
+      }
+    } finally {
+      pool.shutdownNow();
     }
   }
 
-  private static void sweepPayloadTable(
+  /**
+   * VACUUMs the tables a sweep is about to dirty, or just dirtied. No-op on CockroachDB, where
+   * there is no autovacuum to outrun.
+   */
+  private static void vacuumTables(DbContext ctx, List<String> tables) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      if (SystemDatabase.isCockroach(conn)) {
+        return;
+      }
+      // VACUUM cannot run inside a transaction block.
+      conn.setAutoCommit(true);
+      for (var table : tables) {
+        // Per table, so one refusal does not skip the rest.
+        try (var stmt = conn.createStatement()) {
+          stmt.execute(
+              "VACUUM (INDEX_CLEANUP ON, TRUNCATE OFF, ANALYZE) \"%s\".%s"
+                  .formatted(ctx.schema(), table));
+          // A refused or stalled VACUUM does not raise, it says so in a warning; a successful one
+          // is silent, so anything here is worth surfacing.
+          for (var w = stmt.getWarnings(); w != null; w = w.getNextWarning()) {
+            logger.warn("Payload retention vacuuming {}: {}", table, w.getMessage());
+          }
+        } catch (SQLException e) {
+          logger.warn("Payload retention could not vacuum {}: {}", table, e.getMessage());
+        }
+      }
+    }
+  }
+
+  /** Deletes one payload table's orphans below the cutoff, returning how many it removed. */
+  private static long sweepPayloadTable(
       DbContext ctx, Connection conn, String table, long deadline, int batchSize)
       throws SQLException {
     // A payload below the cutoff belongs to a workflow created before it, so the status side of
@@ -2302,7 +2414,7 @@ public class WorkflowDAO {
       }
     }
     if (oldest == null) {
-      return;
+      return 0;
     }
 
     var stepSql =
@@ -2314,11 +2426,12 @@ public class WorkflowDAO {
         "DELETE FROM \"%s\".%s WHERE retention_timestamp < ? AND retention_timestamp > ?"
             .formatted(ctx.schema(), table);
 
+    var deleted = 0L;
     var watermark = oldest - 1;
     while (true) {
       final long from = watermark;
-      var next =
-          SqlTransaction.<Long>call(
+      var batch =
+          SqlTransaction.<PayloadBatch>call(
               conn,
               c -> {
                 // Batches are cut by candidate count, so rows spared by the anti-join only thin
@@ -2345,16 +2458,19 @@ public class WorkflowDAO {
                     stmt.setLong(index++, step);
                   }
                   stmt.setLong(index, deadline);
-                  stmt.executeUpdate();
+                  return new PayloadBatch(step, stmt.executeUpdate());
                 }
-                return step;
               });
-      if (next == null) {
-        return;
+      deleted += batch.deleted();
+      if (batch.step() == null) {
+        return deleted;
       }
-      watermark = next;
+      watermark = batch.step();
     }
   }
+
+  /** One payload batch's outcome: the watermark to resume from, and how many rows it took. */
+  private record PayloadBatch(@Nullable Long step, int deleted) {}
 
   /**
    * @param applicationName count only workflows and steps owned by these applications, plus
