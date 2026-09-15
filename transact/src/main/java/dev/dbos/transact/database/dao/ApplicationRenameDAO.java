@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -195,45 +196,51 @@ public class ApplicationRenameDAO {
           "batchSize must be a positive integer, got %d".formatted(batchSize));
     }
 
-    long queues;
-    long schedules;
-    long versions;
-    long inFlight;
+    // Record components are evaluated left to right, so the moves keep their order.
+    record Moved(long queues, long schedules, long versions, long inFlight) {}
+
     // Never a merge: queue, schedule and version names are globally unique whatever their owner,
     // so this cannot collide.
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        queues = move(conn, ctx.schema(), "queues", oldName, newName, adoptUnclaimedRows, false);
-        schedules =
-            move(
-                conn,
-                ctx.schema(),
-                "workflow_schedules",
-                oldName,
-                newName,
-                adoptUnclaimedRows,
-                false);
-        versions =
-            move(
-                conn,
-                ctx.schema(),
-                "application_versions",
-                oldName,
-                newName,
-                adoptUnclaimedRows,
-                false);
-        inFlight =
-            move(conn, ctx.schema(), "workflow_status", oldName, newName, adoptUnclaimedRows, true);
-        conn.commit();
-      } catch (SQLException | RuntimeException e) {
-        conn.rollback();
-        throw e;
-      } finally {
-        conn.setAutoCommit(true);
-      }
+    final Moved moved;
+    try (var txConn = ctx.getConnection()) {
+      moved =
+          SqlTransaction.call(
+              txConn,
+              conn ->
+                  new Moved(
+                      move(
+                          conn,
+                          ctx.schema(),
+                          "queues",
+                          oldName,
+                          newName,
+                          adoptUnclaimedRows,
+                          false),
+                      move(
+                          conn,
+                          ctx.schema(),
+                          "workflow_schedules",
+                          oldName,
+                          newName,
+                          adoptUnclaimedRows,
+                          false),
+                      move(
+                          conn,
+                          ctx.schema(),
+                          "application_versions",
+                          oldName,
+                          newName,
+                          adoptUnclaimedRows,
+                          false),
+                      move(
+                          conn,
+                          ctx.schema(),
+                          "workflow_status",
+                          oldName,
+                          newName,
+                          adoptUnclaimedRows,
+                          true)));
     }
-
     // Only terminal rows are left to match, and they scope observability and garbage collection
     // alone, so they may lag behind the commit above.
     var terminal =
@@ -255,7 +262,8 @@ public class ApplicationRenameDAO {
             batchSize,
             adoptUnclaimedRows);
 
-    return new ApplicationRowCounts(queues, schedules, versions, inFlight + terminal, steps);
+    return new ApplicationRowCounts(
+        moved.queues(), moved.schedules(), moved.versions(), moved.inFlight() + terminal, steps);
   }
 
   private static long move(

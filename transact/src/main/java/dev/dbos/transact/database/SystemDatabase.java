@@ -780,8 +780,15 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(ctx));
   }
 
-  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    dbRetry(() -> WorkflowDAO.garbageCollect(ctx, cutoff, rowsThreshold));
+  /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
+  public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
+
+  /** Enforces retention across the entire system database. */
+  public void garbageCollect(Instant cutoff, Long rowsThreshold, int batchSize) {
+    if (cutoff == null && rowsThreshold == null) {
+      return;
+    }
+    dbRetry(() -> WorkflowDAO.runRetentionRound(ctx, cutoff, rowsThreshold, batchSize));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {

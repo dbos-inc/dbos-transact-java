@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.execution.SchedulerService;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -310,29 +311,25 @@ public class SchedulesDAO {
 
   public static void applySchedules(DbContext ctx, List<WorkflowSchedule> schedules)
       throws SQLException {
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        for (WorkflowSchedule schedule : schedules) {
-          upsertSchedule(
-              conn,
-              ctx.schema(),
-              ctx.serializer(),
-              schedule
-                  .withScheduleId(UUID.randomUUID().toString())
-                  .withStatus(ScheduleStatus.ACTIVE)
-                  .withLastFiredAt(null),
-              scheduleOwner(ctx, schedule));
-        }
-        conn.commit();
-      } catch (SQLException | RuntimeException e) {
-        // A name owned by another application throws DBOSApplicationNameConflictException, and an
-        // invalid cron throws too; both must roll back the schedules already written above.
-        conn.rollback();
-        throw e;
-      } finally {
-        conn.setAutoCommit(true);
-      }
+    // A name owned by another application throws DBOSApplicationNameConflictException, and an
+    // invalid cron throws too; both must roll back the schedules already written above, which the
+    // helper does for any Throwable.
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            for (WorkflowSchedule schedule : schedules) {
+              upsertSchedule(
+                  conn,
+                  ctx.schema(),
+                  ctx.serializer(),
+                  schedule
+                      .withScheduleId(UUID.randomUUID().toString())
+                      .withStatus(ScheduleStatus.ACTIVE)
+                      .withLastFiredAt(null),
+                  scheduleOwner(ctx, schedule));
+            }
+          });
     }
   }
 

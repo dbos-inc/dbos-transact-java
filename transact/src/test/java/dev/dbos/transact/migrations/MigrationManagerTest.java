@@ -38,6 +38,8 @@ class MigrationManagerTest {
     "streams",
     "workflow_events_history",
     "workflow_events",
+    "workflow_input",
+    "workflow_output",
     "workflow_schedules",
     "workflow_status"
   };
@@ -546,7 +548,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(107, latest, "The shared history currently ends at migration 107");
+    assertEquals(112, latest, "The shared history currently ends at migration 112");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -571,6 +573,16 @@ class MigrationManagerTest {
         assertIndexExists(conn, "uq_application_versions_owner_version");
         assertIndexExists(conn, "uq_application_versions_unclaimed_version");
       }
+      for (var column :
+          List.of(
+              "partition_concurrency",
+              "partition_worker_concurrency",
+              "partition_rate_limit_max",
+              "partition_rate_limit_period_sec")) {
+        assertColumnExists(conn, "queues", column);
+      }
+      assertColumnExists(conn, "operation_outputs", "retention_timestamp");
+      assertIndexExists(conn, "idx_operation_outputs_retention");
     }
   }
 
@@ -627,6 +639,62 @@ class MigrationManagerTest {
       assertTrue(
           rs.next(), "Function %s should exist in schema %s".formatted(functionName, schemaName));
     }
+  }
+
+  @Test
+  void testValidateSysDbVersion_RejectsUnversionedSchema() {
+    // The database exists but nothing has been migrated into it, so dbos_migrations is absent.
+    pgContainer.createDatabase();
+
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
+    assertTrue(
+        e.getMessage().contains("dbos_migrations"),
+        "Expected the message to name the missing table, got: " + e.getMessage());
+  }
+
+  @Test
+  void testValidateSysDbVersion_RejectsTooOldSchema() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    var schema = Constants.DB_SCHEMA;
+    var tooOld = MigrationManager.MINIMUM_SYSDB_VERSION - 1;
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, tooOld));
+    }
+
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.validateSysDbVersion(dataSource, schema));
+    assertTrue(
+        e.getMessage().contains(Integer.toString(tooOld))
+            && e.getMessage().contains(Integer.toString(MigrationManager.MINIMUM_SYSDB_VERSION)),
+        "Expected the message to report both versions, got: " + e.getMessage());
+  }
+
+  @Test
+  void testValidateSysDbVersion_AcceptsMigratedSchema() {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    assertDoesNotThrow(
+        () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA),
+        "A fully migrated schema must satisfy the minimum version check");
+  }
+
+  @Test
+  void testValidateSysDbVersion_MinimumIsWithinTheLadder() {
+    var latest =
+        MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB)
+            .size();
+    assertTrue(
+        MigrationManager.MINIMUM_SYSDB_VERSION > 0
+            && MigrationManager.MINIMUM_SYSDB_VERSION <= latest,
+        "MINIMUM_SYSDB_VERSION must name a migration this SDK can actually apply");
   }
 
   static int getVersion(Connection conn) throws Exception {
