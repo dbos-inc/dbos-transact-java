@@ -266,7 +266,7 @@ public class PgContainer implements AutoCloseable {
 
   /** A client acting for a named application, for tests where several share this database. */
   public DBOSClient dbosClient(String applicationName) {
-    return new DBOSClient(jdbcUrl(), username(), password(), null, null, true, applicationName);
+    return new DBOSClient(jdbcUrl(), username(), password(), null, null, false, applicationName);
   }
 
   public void createDatabase() {

@@ -1254,7 +1254,9 @@ public class SystemDatabaseTest {
   @Test
   public void testNonPostgresDataSourceThrows() throws SQLException {
     var ds = mockDataSource("MySQL");
-    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    var ex =
+        assertThrows(
+            IllegalStateException.class, () -> new SystemDatabase(ds, "dbos", null, true, null));
     assertTrue(ex.getMessage().contains("PostgreSQL"));
     assertTrue(ex.getMessage().contains("MySQL"));
   }
@@ -1275,7 +1277,9 @@ public class SystemDatabaseTest {
   public void testSqliteDataSourceThrows() {
     var ds = new org.sqlite.SQLiteDataSource();
     ds.setUrl("jdbc:sqlite::memory:");
-    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    var ex =
+        assertThrows(
+            IllegalStateException.class, () -> new SystemDatabase(ds, "dbos", null, true, null));
     assertTrue(ex.getMessage().contains("PostgreSQL"));
     assertTrue(ex.getMessage().contains("SQLite"));
   }
