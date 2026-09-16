@@ -323,7 +323,15 @@ public class DBOSExecutor implements AutoCloseable {
             try {
               var workflows = systemDatabase.listWorkflows(recoveryQuery);
               for (var wf : workflows) {
-                recoverWorkflow(wf.workflowId(), wf.queueName());
+                // Per workflow, because recovering one is allowed to fail without stranding the
+                // rest: a workflow that exhausts its recovery attempts is dead-lettered by the
+                // status transition itself, which then throws.
+                try {
+                  recoverWorkflow(wf.workflowId(), wf.queueName());
+                } catch (Exception e) {
+                  logger.error(
+                      "Exception encountered when recovering workflow {}", wf.workflowId(), e);
+                }
               }
             } catch (Throwable t) {
               logger.error("Recovery task failed", t);
@@ -1204,9 +1212,18 @@ public class DBOSExecutor implements AutoCloseable {
             .withExecutorIds(executorIds)
             .withApplicationVersion(appVersion);
     var workflows = systemDatabase.listWorkflows(input);
-    return workflows.stream()
-        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
-        .collect(Collectors.toList());
+    var handles = new ArrayList<WorkflowHandle<?, ?>>(workflows.size());
+    for (var wf : workflows) {
+      // A workflow that fails to recover -- a dead-lettered one above all, whose status
+      // transition throws after committing MAX_RECOVERY_ATTEMPTS_EXCEEDED -- is logged and
+      // skipped, so it cannot abort recovery of the workflows after it.
+      try {
+        handles.add(recoverWorkflow(wf.workflowId(), wf.queueName()));
+      } catch (Exception e) {
+        logger.error("Exception encountered when recovering workflow {}", wf.workflowId(), e);
+      }
+    }
+    return handles;
   }
 
   WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {

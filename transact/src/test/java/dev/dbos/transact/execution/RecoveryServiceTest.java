@@ -271,6 +271,60 @@ class RecoveryServiceTest {
     }
   }
 
+  @Test
+  void recoveryContinuesPastADeadLetteredWorkflow() throws Exception {
+    // A workflow that exhausts its recovery attempts is dead-lettered by the status transition
+    // itself, which then throws. That must not abandon the workflows recovery has not reached
+    // yet (#461).
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      var ids = List.of("wf-dlq-before", "wf-dlq-doomed", "wf-dlq-after");
+      for (var id : ids) {
+        try (var ctx = new WorkflowOptions(id).setContext()) {
+          executingService.workflowMethod("test-item");
+        }
+      }
+
+      setWorkflowStateToPending(dataSource);
+      // Past DEFAULT_MAX_RECOVERY_ATTEMPTS, so the next recovery attempt dead-letters it.
+      setRecoveryAttempts(dataSource, "wf-dlq-doomed", 1000);
+
+      List<WorkflowHandle<?, ?>> recovered =
+          dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+
+      assertEquals(
+          List.of("wf-dlq-before", "wf-dlq-after"),
+          recovered.stream().map(WorkflowHandle::workflowId).toList(),
+          "recovery must skip the dead-lettered workflow and recover the rest");
+
+      for (var handle : recovered) {
+        handle.getResult();
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+      }
+
+      assertEquals(
+          WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(),
+          DBUtils.getWorkflowRow(dataSource, "wf-dlq-doomed").status(),
+          "the doomed workflow must still have been dead-lettered");
+    }
+  }
+
+  private static void setRecoveryAttempts(DataSource ds, String workflowId, int attempts)
+      throws SQLException {
+    try (var conn = ds.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.workflow_status SET recovery_attempts = ? WHERE workflow_uuid = ?")) {
+      stmt.setInt(1, attempts);
+      stmt.setString(2, workflowId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
   private static void deleteWorkflowRow(DataSource ds, String workflowId) throws SQLException {
     try (var conn = ds.getConnection();
         var stmt =
