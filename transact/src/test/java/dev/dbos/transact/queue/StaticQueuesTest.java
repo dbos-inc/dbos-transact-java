@@ -369,10 +369,15 @@ public class StaticQueuesTest {
     int numTasks = numWaves * limit;
 
     // Measure what the tasks cost with no limiter in the way, on an otherwise identical queue.
-    // This runs first so that the rate-limited run below is measured under the same conditions:
-    // the same set of queue listeners is polling, and the connection pool, statement caches and
-    // (on CockroachDB) range leases are already warm. Measuring it afterwards would compare a
-    // cold baseline against a warm limited run and understate the cost.
+    // This runs first so that both phases see the same set of queue listeners polling; running it
+    // second leaves the baseline with an extra listener the rate-limited run never had.
+    //
+    // The baseline then absorbs the warmup the rate-limited run below avoids -- pool ramp,
+    // statement caches, and on CockroachDB range leases -- so taskCost is if anything overstated.
+    // The span bound is insensitive to that, because the cost term appears on both sides of the
+    // comparison it has to win and cancels. Only the regime check is sensitive, and it has a
+    // factor of a few in hand. Measuring the baseline second biases it the other way instead,
+    // understating a cost the rate-limited run had already paid.
     List<WorkflowHandle<Double, ?>> baselineHandles = new ArrayList<>();
     for (int i = 0; i < limit; i++) {
       var baselineOptions = new StartWorkflowOptions("baseline" + i).withQueue(baselineQ);
