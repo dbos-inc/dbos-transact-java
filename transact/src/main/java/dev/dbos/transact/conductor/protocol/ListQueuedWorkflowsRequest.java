@@ -54,6 +54,9 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     public List<String> executor_id;
 
     @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> schedule_name;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> application_name;
 
     public Integer limit;
@@ -99,7 +102,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         body.completed_before != null ? Instant.parse(body.completed_before) : null,
         body.dequeued_after != null ? Instant.parse(body.dequeued_after) : null,
         body.dequeued_before != null ? Instant.parse(body.dequeued_before) : null,
-        null, // scheduleName
+        body.schedule_name,
         body.application_name);
   }
 }

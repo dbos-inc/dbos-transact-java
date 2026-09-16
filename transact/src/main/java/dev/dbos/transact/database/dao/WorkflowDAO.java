@@ -2840,9 +2840,10 @@ public class WorkflowDAO {
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
           recovery_attempts, forked_from, parent_workflow_id, serialization,
-          delay_until_epoch_ms, completed_at, application_name
+          delay_until_epoch_ms, completed_at, was_forked_from, attributes, schedule_name,
+          application_name
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -2954,7 +2955,11 @@ public class WorkflowDAO {
                 wfStmt.setString(27, status.serialization());
                 wfStmt.setObject(28, status.delayUntilEpochMs());
                 wfStmt.setObject(29, status.completedAtEpochMs());
-                wfStmt.setString(30, status.applicationName());
+                // NOT NULL column: an export predating it carries no value, so fall back to false.
+                wfStmt.setBoolean(30, Boolean.TRUE.equals(status.wasForkedFrom()));
+                wfStmt.setString(31, attributesToJson(status.attributes()));
+                wfStmt.setString(32, status.scheduleName());
+                wfStmt.setString(33, status.applicationName());
                 wfStmt.addBatch();
 
                 for (var step : workflow.steps()) {
