@@ -23,6 +23,10 @@ public class DBOSTestAccess {
     return DBOSExecutorTestAccess.getSystemDatabase(exec);
   }
 
+  public static SystemDatabase getSystemDatabase(DBOSClient client) {
+    return client.getSystemDatabase();
+  }
+
   public static SchedulerService getSchedulerService(DBOS dbos) {
     var exec = getDbosExecutor(dbos);
     return DBOSExecutorTestAccess.getSchedulerService(exec);
