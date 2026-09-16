@@ -59,19 +59,16 @@ class AdminServerTest {
     mockExec = mock(DBOSExecutor.class);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void ensurePostJsonNotPost() throws IOException {
 
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    List<String> recovered = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
-      handles.add(handle);
+      recovered.add("workflow-00%d".formatted(i));
     }
 
     List<String> param = List.of("local");
-    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(recovered);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -80,19 +77,16 @@ class AdminServerTest {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void ensurePostJsonNotJson() throws IOException {
 
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    List<String> recovered = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
-      handles.add(handle);
+      recovered.add("workflow-00%d".formatted(i));
     }
 
     List<String> param = List.of("local");
-    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(recovered);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -174,19 +168,16 @@ class AdminServerTest {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void workflowRecovery() throws IOException {
 
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    List<String> recovered = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
-      handles.add(handle);
+      recovered.add("workflow-00%d".formatted(i));
     }
 
     List<String> param = List.of("local");
-    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(recovered);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();

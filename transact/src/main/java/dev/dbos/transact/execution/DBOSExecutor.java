@@ -18,6 +18,7 @@ import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
@@ -237,11 +238,6 @@ public class DBOSExecutor implements AutoCloseable {
       List<Queue> queues,
       AlertHandler alertHandler) {
 
-    // Recovery may only adopt workflows orphaned by a previous process, never one running in
-    // this one. Read before start() does anything, and stepped back a millisecond because the
-    // filter is created_at <= endTime on a millisecond-granular column.
-    var recoveryCutoff = Instant.now().minusMillis(1);
-
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
 
@@ -299,6 +295,12 @@ public class DBOSExecutor implements AutoCloseable {
             latest.versionName());
       }
 
+      // Before the queue runner starts, so recovered work is not racing a dequeue pass already in
+      // flight, and before launch returns, so a workflow the application starts the instant it
+      // does cannot be seen by the sweep -- such a row is PENDING under this executor's id too,
+      // and indistinguishable from an abandoned one.
+      recoverPendingWorkflows(List.of(executorId()));
+
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
 
@@ -311,26 +313,6 @@ public class DBOSExecutor implements AutoCloseable {
       for (var listener : listeners) {
         listener.dbosLaunched(dbos);
       }
-
-      var recoveryQuery =
-          new ListWorkflowsInput()
-              .withStatus(WorkflowState.PENDING)
-              .withExecutorIds(List.of(executorId()))
-              .withApplicationVersion(appVersion)
-              .withEndTime(recoveryCutoff);
-      Runnable recoveryTask =
-          () -> {
-            try {
-              var workflows = systemDatabase.listWorkflows(recoveryQuery);
-              for (var wf : workflows) {
-                recoverWorkflow(wf.workflowId(), wf.queueName());
-              }
-            } catch (Throwable t) {
-              logger.error("Recovery task failed", t);
-            }
-          };
-
-      executorService.submit(recoveryTask);
 
       if (dbosCloud) {
         String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
@@ -1231,43 +1213,28 @@ public class DBOSExecutor implements AutoCloseable {
 
   // AdminServer / Conductor methods
 
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+  /**
+   * Returns the given executors' abandoned workflows to their queues, and reports which moved.
+   *
+   * <p>Recovery re-enqueues rather than executing in this process, so every recovered workflow
+   * starts through the queue's atomic ENQUEUED -> PENDING claim. That handoff admits exactly one
+   * runner, which is what makes a duplicate recovery request cost nothing, and it lets the whole
+   * fleet share a backlog instead of leaving it to the one executor that found it.
+   *
+   * <p>Workflow IDs rather than handles, because this process may run none of them.
+   */
+  public List<String> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
 
-    var input =
-        new ListWorkflowsInput()
-            .withStatus(WorkflowState.PENDING)
-            .withExecutorIds(executorIds)
-            .withApplicationVersion(appVersion);
-    var workflows = systemDatabase.listWorkflows(input);
-    return workflows.stream()
-        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
-        .collect(Collectors.toList());
-  }
-
-  WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
-    Objects.requireNonNull(workflowId, "workflowId must not be null");
-
-    // A workflow running here is not orphaned, so recovery leaves its row alone -- queue
-    // assignment included. Releasing that hands away a slot a live execution is still using: the
-    // next dequeue admits a second runner, and the first run's outcome write then finds the row
-    // no longer PENDING and is discarded. failIfMissing because an active entry means this
-    // executor inserted the row, so a row deleted since is gone for good.
-    if (activeWorkflows.containsKey(workflowId)) {
-      logger.debug("recoverWorkflow skip active {}", workflowId);
-      return new WorkflowHandleDBPoll<>(this, workflowId, true);
+    var recovered =
+        systemDatabase.reenqueueForRecovery(executorIds, appVersion, Constants.DBOS_INTERNAL_QUEUE);
+    if (recovered.isEmpty()) {
+      logger.info("No workflows to recover from application version {}", appVersion);
+    } else {
+      logger.info(
+          "Recovering {} workflow(s) from application version {}", recovered.size(), appVersion);
     }
-
-    if (queueName != null) {
-      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-      if (cleared) {
-        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
-        return retrieveWorkflow(workflowId);
-      }
-    }
-
-    logger.debug("recoverWorkflow execute {}", workflowId);
-    return executeWorkflowById(workflowId, true, false);
+    return recovered;
   }
 
   public void globalTimeout(Instant endTime) {
@@ -1720,9 +1687,14 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleDBPoll<>(this, workflowId);
   }
 
-  // run an existing workflow via its workflow ID
-  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
-      String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
+  /**
+   * Runs the workflow described by an already-claimed row.
+   *
+   * <p>The claim -- the queue's ENQUEUED -> PENDING transition -- wrote this workflow's status,
+   * executor, deadline and attempt count, so the run reads them back rather than writing them
+   * again, and nothing here inserts a status row.
+   */
+  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
     logger.debug("executeWorkflowById {}", workflowId);
 
     WorkflowStatus status;
@@ -1796,13 +1768,7 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(status.authenticatedUser())
             .withAssumedRole(status.assumedRole())
             .withAuthenticatedRoles(status.authenticatedRoles());
-    if (isRecoveryRequest) {
-      options = options.asRecoveryRequest();
-    }
-    if (isDequeuedRequest) {
-      options = options.asDequeuedRequest(status.queueName(), status.queuePartitionKey());
-    }
-    return executeWorkflow(workflow, inputs, options, null);
+    return executeWorkflow(workflow, inputs, options.asClaimed(status), null);
   }
 
   // helper workflow execution methods
@@ -1891,7 +1857,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    if (options.queueName() != null && !options.isDequeuedRequest()) {
+    if (options.queueName() != null && options.claimedStatus() == null) {
       // enqueue with the current app version if it's not explicitly set
       if (options.appVersion() == null) {
         options = options.withAppVersion(appVersion());
@@ -1918,7 +1884,7 @@ public class DBOSExecutor implements AutoCloseable {
     // executing workflows always use the current app version.
     options = options.withAppVersion(appVersion());
 
-    if (!options.isDequeuedRequest()) {
+    if (options.claimedStatus() == null) {
       var badOptionList = new ArrayList<String>();
       if (options.deduplicationId() != null) {
         badOptionList.add("deduplicationId");
@@ -1942,20 +1908,40 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
-    WorkflowInitResult initResult =
-        persistWorkflow(
-            systemDatabase,
-            workflow.workflowName(),
-            workflow.className(),
-            workflow.instanceName(),
-            maxRetries,
-            args,
-            null,
-            executorId(),
-            appId(),
-            parent,
-            options,
-            null); // applicationName: this executor's own
+    var claimed = options.claimedStatus();
+    WorkflowInitResult initResult;
+    if (claimed != null) {
+      // The claim counted this dispatch; dead-letter the workflow if that exhausted its attempts.
+      // The unannotated default applies here as it did when the status upsert made this decision.
+      int attempts = Objects.requireNonNullElse(claimed.recoveryAttempts(), 0);
+      int retries = Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS);
+      if (attempts > retries + 1) {
+        systemDatabase.deadLetterWorkflows(List.of(workflowId), attempts);
+        throw new DBOSMaxRecoveryAttemptsExceededException(workflowId, retries);
+      }
+      // Deliberately no persistWorkflow: the claim already wrote the status, executor, deadline
+      // and attempt count, and this row was read back from it, so re-upserting would only rewrite
+      // what it just read. The claim is this run's title to the workflow, so it executes unless
+      // the status below says the outcome is already recorded.
+      initResult =
+          new WorkflowInitResult(
+              claimed.status(), claimed.deadline(), true, claimed.serialization());
+    } else {
+      initResult =
+          persistWorkflow(
+              systemDatabase,
+              workflow.workflowName(),
+              workflow.className(),
+              workflow.instanceName(),
+              maxRetries,
+              args,
+              null,
+              executorId(),
+              appId(),
+              parent,
+              options,
+              null); // applicationName: this executor's own
+    }
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
@@ -1979,7 +1965,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           DBOSContextHolder.clear();
           var bucket =
-              finalOptions.isDequeuedRequest()
+              finalOptions.claimedStatus() != null
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
           // The warning to park under, set by whichever site found that this run does not
@@ -2236,12 +2222,7 @@ public class DBOSExecutor implements AutoCloseable {
             applicationName);
 
     WorkflowInitResult[] initResult = {null};
-    initResult[0] =
-        systemDatabase.initWorkflowStatus(
-            workflowStatusInternal,
-            retries,
-            options.isRecoveryRequest(),
-            options.isDequeuedRequest());
+    initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(

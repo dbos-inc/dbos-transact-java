@@ -212,10 +212,11 @@ public class QueueService implements AutoCloseable {
               partitionLog,
               queue.name());
           try {
-            dbosExecutor.executeWorkflowById(workflowId, false, true);
+            dbosExecutor.executeWorkflowById(workflowId);
           } catch (Exception e) {
             // A failed dispatch must not strand the rest of the batch, and its failure is not
-            // the dequeue contention the poll loop would read it as.
+            // the dequeue contention the poll loop would read it as. A workflow out of attempts is
+            // dead-lettered here, and says so by throwing.
             logger.error(
                 "Error starting workflow {} from {} partition of queue {}",
                 workflowId,

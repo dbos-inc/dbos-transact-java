@@ -252,7 +252,7 @@ public class TimeoutTest {
 
     setWorkflowDeadlinePassed(dataSource, wfid1);
 
-    var handle = dbosExecutor.executeWorkflowById(wfid1, true, false);
+    var handle = dbosExecutor.executeWorkflowById(wfid1);
     assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
   }
 

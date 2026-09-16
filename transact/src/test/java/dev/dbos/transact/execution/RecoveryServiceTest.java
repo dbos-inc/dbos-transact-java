@@ -2,26 +2,22 @@ package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.QueueOptions;
-import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.*;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -111,9 +107,12 @@ class RecoveryServiceTest {
 
       assertEquals(5, pending.size());
 
-      for (var output : pending) {
-        WorkflowHandle<?, ?> handle =
-            dbosExecutor.recoverWorkflow(output.workflowId(), output.queueName());
+      var recovered = dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+      assertEquals(5, recovered.size());
+
+      // Recovery re-enqueued them; the queue is what runs them.
+      for (var workflowId : recovered) {
+        var handle = dbos.retrieveWorkflow(workflowId);
         handle.getResult();
         assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       }
@@ -148,11 +147,12 @@ class RecoveryServiceTest {
 
       setWorkflowStateToPending(dataSource);
 
-      List<WorkflowHandle<?, ?>> pending =
+      List<String> pending =
           dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
       assertEquals(5, pending.size());
 
-      for (var handle : pending) {
+      for (var workflowId : pending) {
+        var handle = dbos.retrieveWorkflow(workflowId);
         handle.getResult();
         assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       }
@@ -220,7 +220,7 @@ class RecoveryServiceTest {
       // Recover workflow
       // This should use checkpointed step values
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-      h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      h = dbosExecutor.executeWorkflowById(wfid);
       assertNull(h.getStatus().error());
       assertNull(h.getResult());
 
@@ -228,68 +228,127 @@ class RecoveryServiceTest {
       // This should use 1 checkpointed step value
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
-      h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      h = dbosExecutor.executeWorkflowById(wfid);
       assertNull(h.getStatus().error());
       assertNull(h.getResult());
     }
   }
 
   @Test
-  void recoveryLeavesAWorkflowThisExecutorIsRunningAlone() throws Exception {
-    // Recovering a workflow that is live on this executor starts a second execution of it
-    // (#477, #488, #491). Deleting the row first is what makes the adoption observable: with the
-    // guard, recovery leaves the workflow alone and the row stays gone, so the live run fails
-    // fast on it; without the guard, recovery reaches executeWorkflowById and the deleted row
-    // takes it down a path this workflow should never have been on at all. Driven directly
-    // because the millisecond collision that caused these reports is not schedulable.
-    var impl = new BlockingRecoveryServiceImpl();
+  void recoveryReenqueuesOntoTheInternalQueue() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy = dbos.registerProxy(BlockingRecoveryService.class, impl);
+      var executingService = register(dbos);
       dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var queueService = DBOSTestAccess.getQueueService(dbos);
+
+      var wfid = "recovery-reenqueues";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowMethod("test-item");
+      }
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+
+      // Hold the dispatch so the re-enqueued row can be inspected before anything claims it.
+      queueService.pause();
+      try {
+        var recovered = dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+        assertEquals(List.of(wfid), recovered);
+
+        // A workflow that never had a queue of its own goes onto the internal one, and gives up
+        // the start time the previous run stamped: it has not started on its new runner yet.
+        var row = DBUtils.getWorkflowRow(dataSource, wfid);
+        assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+        assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
+        assertNull(row.startedAtEpochMs());
+      } finally {
+        queueService.unpause();
+      }
+
+      var handle = dbos.retrieveWorkflow(wfid);
+      handle.getResult();
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+    }
+  }
+
+  @Test
+  void recoveryLeavesOtherExecutorsWorkflowsAlone() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
+
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-      var wfid = "recovery-leaves-active-alone";
-      var handle =
-          dbos.startWorkflow(() -> proxy.blockingWorkflow(), new StartWorkflowOptions(wfid));
-      assertTrue(impl.entered.await(15, TimeUnit.SECONDS), "the workflow never started");
+      var wfid = "recovery-names-executors";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowMethod("test-item");
+      }
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-      deleteWorkflowRow(dataSource, wfid);
+      // Naming an executor that owns nothing moves nothing. This is what makes a repeated
+      // recovery request cost nothing: once a live executor has claimed a row, a later sweep for
+      // the executor it was recovered from no longer matches it.
+      assertEquals(List.of(), dbosExecutor.recoverPendingWorkflows(List.of("some-other-executor")));
+      assertEquals(WorkflowState.PENDING.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    }
+  }
 
-      dbosExecutor.recoverWorkflow(wfid, null);
+  @Test
+  void aDeadLetteredWorkflowDoesNotStrandTheRestOfItsBatch() throws Exception {
+    // The queue's claim counts a dispatch, and a workflow that has exhausted its attempts is
+    // dead-lettered when that dispatch reaches it, which then throws. That must not abandon the
+    // workflows dispatched alongside it (#461).
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      var ids = List.of("wf-dlq-before", "wf-dlq-doomed", "wf-dlq-after");
+      for (var id : ids) {
+        try (var ctx = new WorkflowOptions(id).setContext()) {
+          executingService.workflowMethod("test-item");
+        }
+      }
+
+      setWorkflowStateToPending(dataSource);
+      // Past DEFAULT_MAX_RECOVERY_ATTEMPTS, so the dispatch that claims it dead-letters it.
+      setRecoveryAttempts(dataSource, "wf-dlq-doomed", 1000);
+
+      // Recovery itself has nothing to say about any of this: it re-enqueues all three.
+      var recovered = dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+      assertEquals(3, recovered.size());
+
+      for (var id : List.of("wf-dlq-before", "wf-dlq-after")) {
+        var handle = dbos.retrieveWorkflow(id);
+        handle.getResult();
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+      }
+
+      String doomedStatus = null;
+      for (var i = 0; i < 300; i++) {
+        doomedStatus = DBUtils.getWorkflowRow(dataSource, "wf-dlq-doomed").status();
+        if (WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name().equals(doomedStatus)) {
+          break;
+        }
+        Thread.sleep(100);
+      }
       assertEquals(
-          0,
-          countWorkflowRows(dataSource, wfid),
-          "recovery must not re-insert a row for a workflow already running on this executor");
-
-      impl.release.countDown();
-
-      assertThrows(
-          DBOSNonExistentWorkflowException.class,
-          handle::getResult,
-          "the run must fail fast on its deleted row, not adopt one recovery put back");
-      assertEquals(1, impl.runs.get(), "recovery must not start a second execution");
+          WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(),
+          doomedStatus,
+          "the doomed workflow must have been dead-lettered");
     }
   }
 
-  private static void deleteWorkflowRow(DataSource ds, String workflowId) throws SQLException {
-    try (var conn = ds.getConnection();
-        var stmt =
-            conn.prepareStatement("DELETE FROM dbos.workflow_status WHERE workflow_uuid = ?")) {
-      stmt.setString(1, workflowId);
-      assertEquals(1, stmt.executeUpdate());
-    }
-  }
-
-  private static int countWorkflowRows(DataSource ds, String workflowId) throws SQLException {
+  private static void setRecoveryAttempts(DataSource ds, String workflowId, int attempts)
+      throws SQLException {
     try (var conn = ds.getConnection();
         var stmt =
             conn.prepareStatement(
-                "SELECT count(*) FROM dbos.workflow_status WHERE workflow_uuid = ?")) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        rs.next();
-        return rs.getInt(1);
-      }
+                "UPDATE dbos.workflow_status SET recovery_attempts = ? WHERE workflow_uuid = ?")) {
+      stmt.setInt(1, attempts);
+      stmt.setString(2, workflowId);
+      assertEquals(1, stmt.executeUpdate());
     }
   }
 
@@ -308,26 +367,5 @@ class RecoveryServiceTest {
 
       logger.info("Number of workflows made pending {}", rowsAffected);
     }
-  }
-}
-
-interface BlockingRecoveryService {
-  String blockingWorkflow() throws InterruptedException;
-}
-
-class BlockingRecoveryServiceImpl implements BlockingRecoveryService {
-  final AtomicInteger runs = new AtomicInteger();
-  final CountDownLatch entered = new CountDownLatch(1);
-  final CountDownLatch release = new CountDownLatch(1);
-
-  @Override
-  @Workflow(name = "blockingWorkflow")
-  public String blockingWorkflow() throws InterruptedException {
-    runs.incrementAndGet();
-    entered.countDown();
-    if (!release.await(30, TimeUnit.SECONDS)) {
-      throw new IllegalStateException("the run was never released");
-    }
-    return "done";
   }
 }

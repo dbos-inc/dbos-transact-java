@@ -798,31 +798,28 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Initializes the status of a workflow.
    *
+   * <p>Only the first writer of a row owns its execution: a caller that finds a row someone else
+   * inserted gets {@code shouldExecuteOnThisExecutor() == false} and polls for the outcome instead.
+   * A workflow the queue has already claimed never comes through here -- the claim wrote everything
+   * this would, so the dispatch path runs from the claimed row directly.
+   *
    * @param initStatus The initial workflow status details.
-   * @param maxRetries Optional maximum number of retries.
-   * @param isRecoveryRequest True if this is a recovery request, indicating that this node is told
-   *     it owns the workflow even if the ID already exists
-   * @param isDequeuedRequest True if this is a dequeue request, indicating that this node is told
-   *     it owns the workflow (provided it is in the enqueued state)
+   * @param maxRetries The workflow's configured attempt budget, reported if it is already
+   *     dead-lettered.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
    * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
-   * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow exceeds max retries.
+   * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow has already been
+   *     dead-lettered.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus,
-      Integer maxRetries,
-      boolean isRecoveryRequest,
-      boolean isDequeuedRequest) {
+      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries) {
 
     // This ID will be used to tell if we are the first writer of the record, or if
     // there is an existing one.
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    return dbRetry(
-        () ->
-            WorkflowDAO.initWorkflowStatus(
-                ctx, initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid));
+    return dbRetry(() -> WorkflowDAO.initWorkflowStatus(ctx, initStatus, maxRetries, ownerXid));
   }
 
   /**
@@ -888,8 +885,25 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.getStepAggregates(ctx, input));
   }
 
-  public boolean clearQueueAssignment(String workflowId) {
-    return dbRetry(() -> QueuesDAO.clearQueueAssignment(ctx, workflowId));
+  /** Returns the given executors' PENDING workflows to their queues; reports which rows moved. */
+  public List<String> reenqueueForRecovery(
+      List<String> executorIds, String appVersion, String recoveryQueueName) {
+    return dbRetry(
+        () -> QueuesDAO.reenqueueForRecovery(ctx, executorIds, appVersion, recoveryQueueName));
+  }
+
+  /**
+   * Moves claimed workflows that have exhausted their attempts off the queue.
+   *
+   * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
+   * decision was read from, so a row another executor has already moved on -- or one given a fresh
+   * budget by resume -- is left alone.
+   */
+  public void deadLetterWorkflows(List<String> workflowIds, int minRecoveryAttempts) {
+    if (workflowIds.isEmpty()) {
+      return;
+    }
+    dbRetry(() -> WorkflowDAO.deadLetterWorkflows(ctx, workflowIds, minRecoveryAttempts));
   }
 
   public List<String> getQueuePartitions(String queueName) {

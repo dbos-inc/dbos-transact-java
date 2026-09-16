@@ -103,7 +103,7 @@ class ListenNotifySourceTest {
       try (var sysdb = SystemDatabase.create(config, null, config.appName())) {
         sysdb.start();
         sysdb.initWorkflowStatus(
-            WorkflowStatusInternalBuilder.create("wf-no-listen-notify").build(), 5, false, false);
+            WorkflowStatusInternalBuilder.create("wf-no-listen-notify").build(), 5);
         sysdb.writeStreamFromWorkflow("wf-no-listen-notify", 1, "key1", "v", "portable_json");
       }
 
@@ -147,8 +147,7 @@ class ListenNotifySourceTest {
     try (var sysdb = SystemDatabase.create(config, null, config.appName())) {
       sysdb.start();
       // setEvent records a step against the writing workflow, so it has to exist.
-      sysdb.initWorkflowStatus(
-          WorkflowStatusInternalBuilder.create("wf1").build(), 5, false, false);
+      sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create("wf1").build(), 5);
 
       var waiting = new CountDownLatch(1);
       var result = new CompletableFuture<Object>();
