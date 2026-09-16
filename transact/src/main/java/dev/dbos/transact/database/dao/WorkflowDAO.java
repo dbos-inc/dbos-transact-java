@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -36,6 +37,10 @@ import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -56,9 +61,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +81,7 @@ public class WorkflowDAO {
   // conditionally. Add new columns here so both getWorkflowStatus and listWorkflows stay in sync.
   private static final String WORKFLOW_STATUS_COLUMNS =
       """
-        workflow_uuid, status,
+        workflow_status.workflow_uuid, status,
         name, class_name, config_name,
         queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
         executor_id, application_version, application_id,
@@ -82,6 +91,32 @@ public class WorkflowDAO {
         forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name,
         application_name
       """;
+
+  // Migration 109 created the tables that input and output payloads move into. The Java SDK
+  // currently still writes the legacy workflow_status columns, but a later release will write to
+  // the new tables. So every read prefers the new table but falls back to the old column. We are
+  // splitting the read and write changes into separate releases to enable rolling upgrades.
+  //
+  // One LEFT JOIN per payload table, as in Python and TypeScript: the join is on the payload
+  // table's primary key, so it probes once per row however many of that table's columns the
+  // COALESCE list reads. The joins make workflow_uuid ambiguous, so every query below that takes
+  // one qualifies its own references.
+  private static final String INPUTS_COLUMN =
+      "COALESCE(wi.inputs, workflow_status.inputs) AS inputs";
+
+  private static String inputsJoin(String schema) {
+    return "LEFT JOIN \"%s\".workflow_input wi ON wi.workflow_uuid = workflow_status.workflow_uuid"
+        .formatted(schema);
+  }
+
+  private static final String OUTPUT_COLUMNS =
+      "COALESCE(wo.output, workflow_status.output) AS output,"
+          + " COALESCE(wo.error, workflow_status.error) AS error";
+
+  private static String outputJoin(String schema) {
+    return "LEFT JOIN \"%s\".workflow_output wo ON wo.workflow_uuid = workflow_status.workflow_uuid"
+        .formatted(schema);
+  }
 
   private WorkflowDAO() {}
 
@@ -187,15 +222,19 @@ public class WorkflowDAO {
           var sql =
               """
                 UPDATE "%s".workflow_status
-                SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
+                SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
+                    updated_at = ?, completed_at = ?
                 WHERE workflow_uuid = ? AND status = ?
               """
                   .formatted(ctx.schema());
 
           try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            long now = System.currentTimeMillis();
             stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
-            stmt.setString(2, initStatus.workflowId());
-            stmt.setString(3, WorkflowState.PENDING.name());
+            stmt.setLong(2, now);
+            stmt.setLong(3, now);
+            stmt.setString(4, initStatus.workflowId());
+            stmt.setString(5, WorkflowState.PENDING.name());
 
             stmt.executeUpdate();
           }
@@ -508,8 +547,18 @@ public class WorkflowDAO {
     }
 
     var sql =
-        ("SELECT " + WORKFLOW_STATUS_COLUMNS + ", inputs, output, error, serialization")
-            + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
+        ("SELECT "
+                + WORKFLOW_STATUS_COLUMNS
+                + ", "
+                + INPUTS_COLUMN
+                + ", "
+                + OUTPUT_COLUMNS
+                + ", serialization")
+            + " FROM \"%s\".workflow_status ".formatted(schema)
+            + inputsJoin(schema)
+            + " "
+            + outputJoin(schema)
+            + " WHERE workflow_status.workflow_uuid = ?";
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -713,16 +762,24 @@ public class WorkflowDAO {
     var loadInput = input.loadInput() == null || input.loadInput();
     var loadOutput = input.loadOutput() == null || input.loadOutput();
     if (loadInput) {
-      sqlBuilder.append(", inputs");
+      sqlBuilder.append(", ").append(INPUTS_COLUMN);
     }
     if (loadOutput) {
-      sqlBuilder.append(", output, error");
+      sqlBuilder.append(", ").append(OUTPUT_COLUMNS);
     }
     if (loadInput || loadOutput) {
       sqlBuilder.append(", serialization");
     }
 
     sqlBuilder.append(" FROM \"%s\".workflow_status ".formatted(ctx.schema()));
+
+    // Only join the payload table the caller actually asked for.
+    if (loadInput) {
+      sqlBuilder.append(inputsJoin(ctx.schema())).append(" ");
+    }
+    if (loadOutput) {
+      sqlBuilder.append(outputJoin(ctx.schema())).append(" ");
+    }
 
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
@@ -781,13 +838,13 @@ public class WorkflowDAO {
     if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
       StringJoiner prefixConditions = new StringJoiner(" OR ", "(", ")");
       for (String prefix : input.workflowIdPrefix()) {
-        prefixConditions.add("workflow_uuid LIKE ?");
+        prefixConditions.add("workflow_status.workflow_uuid LIKE ?");
         parameters.add(prefix + "%");
       }
       whereConditions.add(prefixConditions.toString());
     }
     if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
-      whereConditions.add("workflow_uuid = ANY(?)");
+      whereConditions.add("workflow_status.workflow_uuid = ANY(?)");
       parameters.add(input.workflowIds());
     }
     if (input.authenticatedUser() != null && !input.authenticatedUser().isEmpty()) {
@@ -1306,11 +1363,12 @@ public class WorkflowDAO {
     DBOSSerializer serializer = ctx.serializer();
     final String sql =
         """
-          SELECT status, output, error, serialization, recovery_attempts
-          FROM "%s".workflow_status
-          WHERE workflow_uuid = ?
+          SELECT status, %1$s, serialization, recovery_attempts
+          FROM "%2$s".workflow_status
+          %3$s
+          WHERE workflow_status.workflow_uuid = ?
         """
-            .formatted(ctx.schema());
+            .formatted(OUTPUT_COLUMNS, ctx.schema(), outputJoin(ctx.schema()));
 
     while (true) {
       ctx.checkClosed();
@@ -1536,15 +1594,22 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
 
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      var array = conn.createArrayOf("text", wfIdSet.toArray(String[]::new));
-      try {
-        stmt.setArray(1, array);
-        stmt.executeUpdate();
-      } finally {
-        array.free();
-      }
+    var ids = wfIdSet.toArray(String[]::new);
+    try (var conn = ctx.getConnection()) {
+      SqlTransaction.run(
+          conn,
+          c -> {
+            try (var stmt = c.prepareStatement(sql)) {
+              var array = c.createArrayOf("text", ids);
+              try {
+                stmt.setArray(1, array);
+                stmt.executeUpdate();
+              } finally {
+                array.free();
+              }
+            }
+            deleteWorkflowChildRows(c, ctx.schema(), ids);
+          });
     }
   }
 
@@ -1729,62 +1794,58 @@ public class WorkflowDAO {
     }
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
-    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
+    final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
-      try {
-        var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
-        for (String id : workflowIds) {
-          if (!wfDataMap.containsKey(id)) {
-            throw new DBOSNonExistentWorkflowException(id);
-          }
-        }
-        var dataList = workflowIds.stream().map(wfDataMap::get).toList();
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
+            for (String id : workflowIds) {
+              if (!wfDataMap.containsKey(id)) {
+                throw new DBOSNonExistentWorkflowException(id);
+              }
+            }
+            var dataList = workflowIds.stream().map(wfDataMap::get).toList();
 
-        // One app name per fork, shared by its status row and its copied steps: the source's, or
-        // this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
-        List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
-        for (var rd : dataList) {
-          forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
-        }
+            // One app name per fork, shared by its status row and its copied steps: the source's,
+            // or this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
+            List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
+            for (var rd : dataList) {
+              forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
+            }
 
-        batchInsertForkedStatuses(
-            conn,
-            ctx.schema(),
-            workflowIds,
-            forkIds,
-            dataList,
-            applicationVersion,
-            queueName,
-            queuePartitionKey,
-            timeoutMs,
-            forkAppNames);
+            batchInsertForkedStatuses(
+                conn,
+                ctx.schema(),
+                workflowIds,
+                forkIds,
+                dataList,
+                applicationVersion,
+                forkQueueName,
+                queuePartitionKey,
+                timeoutMs,
+                forkAppNames);
 
-        markWasForkedFrom(conn, ctx.schema(), workflowIds);
+            markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
-        List<String> copyOrigIds = new ArrayList<>();
-        List<String> copyForkIds = new ArrayList<>();
-        List<Integer> copyStartSteps = new ArrayList<>();
-        List<@Nullable String> copyAppNames = new ArrayList<>();
-        for (int i = 0; i < workflowIds.size(); i++) {
-          if (startSteps.get(i) > 0) {
-            copyOrigIds.add(workflowIds.get(i));
-            copyForkIds.add(forkIds.get(i));
-            copyStartSteps.add(startSteps.get(i));
-            copyAppNames.add(forkAppNames.get(i));
-          }
-        }
-        if (!copyOrigIds.isEmpty()) {
-          batchCopyWorkflowData(
-              conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
-        }
-
-        conn.commit();
-      } catch (SQLException e) {
-        conn.rollback();
-        throw e;
-      }
+            List<String> copyOrigIds = new ArrayList<>();
+            List<String> copyForkIds = new ArrayList<>();
+            List<Integer> copyStartSteps = new ArrayList<>();
+            List<@Nullable String> copyAppNames = new ArrayList<>();
+            for (int i = 0; i < workflowIds.size(); i++) {
+              if (startSteps.get(i) > 0) {
+                copyOrigIds.add(workflowIds.get(i));
+                copyForkIds.add(forkIds.get(i));
+                copyStartSteps.add(startSteps.get(i));
+                copyAppNames.add(forkAppNames.get(i));
+              }
+            }
+            if (!copyOrigIds.isEmpty()) {
+              batchCopyWorkflowData(
+                  conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
+            }
+          });
     }
   }
 
@@ -1806,13 +1867,14 @@ public class WorkflowDAO {
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
     String sql =
         """
-          SELECT workflow_uuid, name, class_name, config_name, application_version,
-                 application_id, authenticated_user, authenticated_roles, assumed_role,
-                 inputs, serialization, attributes, application_name
-          FROM "%s".workflow_status
-          WHERE workflow_uuid = ANY(?)
+          SELECT workflow_status.workflow_uuid, name, class_name, config_name,
+                 application_version, application_id, authenticated_user, authenticated_roles,
+                 assumed_role, %1$s, serialization, attributes, application_name
+          FROM "%2$s".workflow_status
+          %3$s
+          WHERE workflow_status.workflow_uuid = ANY(?)
         """
-            .formatted(schema);
+            .formatted(INPUTS_COLUMN, schema, inputsJoin(schema));
 
     Map<String, ForkWorkflowData> result = new HashMap<>();
     try (var stmt = conn.prepareStatement(sql)) {
@@ -2044,21 +2106,43 @@ public class WorkflowDAO {
     }
   }
 
+  // workflow_input and workflow_output (migration 109) have no foreign key, so a status delete
+  // was never going to take them. Migration 112 then drops the operation_outputs cascade, leaving
+  // all three the same: nothing follows a status row out on its own. Every delete path clears all
+  // three by ID.
+  private static void deleteWorkflowChildRows(Connection conn, String schema, String[] workflowIds)
+      throws SQLException {
+    if (workflowIds.length == 0) {
+      return;
+    }
+    for (var table : List.of("operation_outputs", "workflow_input", "workflow_output")) {
+      var sql = "DELETE FROM \"%s\".%s WHERE workflow_uuid = ANY(?)".formatted(schema, table);
+      try (var stmt = conn.prepareStatement(sql)) {
+        var array = conn.createArrayOf("text", workflowIds);
+        try {
+          stmt.setArray(1, array);
+          stmt.executeUpdate();
+        } finally {
+          array.free();
+        }
+      }
+    }
+  }
+
   private static Instant getRowsCutoff(DbContext ctx, Connection conn, long rowsThreshold)
       throws SQLException {
     String sql =
         """
-          SELECT created_at FROM "%s".workflow_status
+          SELECT completed_at FROM "%s".workflow_status
+          WHERE completed_at IS NOT NULL
+          ORDER BY completed_at DESC OFFSET ? LIMIT 1
         """
-                .formatted(ctx.schema())
-            + ctx.whereAppScope()
-            + " ORDER BY created_at DESC OFFSET ? LIMIT 1";
+            .formatted(ctx.schema());
     try (var stmt = conn.prepareStatement(sql)) {
-      var index = ctx.bindAppScope(stmt, 1);
-      stmt.setLong(index, rowsThreshold - 1);
+      stmt.setLong(1, rowsThreshold - 1);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return Instant.ofEpochMilli(rs.getLong("created_at"));
+          return Instant.ofEpochMilli(rs.getLong("completed_at"));
         }
       }
     }
@@ -2066,8 +2150,147 @@ public class WorkflowDAO {
     return null;
   }
 
-  public static void garbageCollect(DbContext ctx, Instant cutoff, Long rowsThreshold)
-      throws SQLException {
+  /** The child tables a retention round reclaims, in the order Python sweeps them. */
+  private static final List<String> PAYLOAD_TABLES =
+      List.of("workflow_input", "workflow_output", "operation_outputs");
+
+  /**
+   * The status rows a retention round is allowed to take, minus its watermark bounds.
+   *
+   * <p>completed_at is set on every terminal transition and cleared on resume, so one predicate
+   * covers eligibility: in-flight rows hold NULL and never compare true. The round is system-wide,
+   * not scoped to this application: retention policies apply to the whole system database even when
+   * several applications share it.
+   */
+  private static final String STATUS_GC_FILTER = "completed_at < ?";
+
+  /** Binds {@link #STATUS_GC_FILTER}'s parameters from index 1, returning the next free index. */
+  private static int bindStatusGcFilter(PreparedStatement stmt, long deadline) throws SQLException {
+    stmt.setLong(1, deadline);
+    return 2;
+  }
+
+  /**
+   * Runs one retention round: the status sweep, then the payload sweep that reclaims what it
+   * orphaned. Does nothing when another round already holds the lock.
+   */
+  public static void runRetentionRound(
+      DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
+    try (var lock = acquireRetentionLock(ctx)) {
+      if (lock == null) {
+        logger.warn(
+            "Skipping retention: another round is already running against this system database.");
+        return;
+      }
+      var used = garbageCollect(ctx, cutoff, rowsThreshold, batchSize);
+      if (used == null) {
+        return;
+      }
+      // Strictly after the status sweep: the payload sweep only takes orphans, so this round's
+      // are only visible to it once that sweep has committed.
+      garbageCollectPayloads(ctx, used, batchSize);
+    }
+  }
+
+  /**
+   * The advisory lock key guarding one schema's retention rounds. Every SDK derives it this way --
+   * the leading 8 bytes of SHA-256, big-endian signed -- so rounds in different languages against
+   * one system database contend for the same lock.
+   */
+  public static long retentionLockKey(String schema) {
+    try {
+      var digest =
+          MessageDigest.getInstance("SHA-256")
+              .digest(("dbos.retention." + schema).getBytes(StandardCharsets.UTF_8));
+      return ByteBuffer.wrap(digest, 0, Long.BYTES).getLong();
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 is unavailable", e);
+    }
+  }
+
+  /** A held retention lock. Closing it releases the lock and the session holding it. */
+  public static final class RetentionLock implements AutoCloseable {
+    private final String schema;
+    private final @Nullable Connection conn;
+
+    private RetentionLock(String schema, @Nullable Connection conn) {
+      this.schema = schema;
+      this.conn = conn;
+    }
+
+    @Override
+    public void close() throws SQLException {
+      if (conn == null) {
+        return;
+      }
+      try (conn) {
+        // Explicit, since closing only returns the session to the pool.
+        try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
+          stmt.setLong(1, retentionLockKey(schema));
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next() && !rs.getBoolean(1)) {
+              // False means this session no longer holds it, which a transaction-pooling proxy
+              // causes by switching backends.
+              logger.warn(
+                  "Could not release the retention lock: this session no longer holds it. Retention"
+                      + " will not proceed until the lock is released, which happens when the"
+                      + " holding backend closes. A transaction-pooling proxy in front of Postgres"
+                      + " causes this; run DBOS through a session-pooled or direct connection.");
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Takes a database-wide lock for one retention round, or returns null when another round already
+   * holds it. The lock is session-scoped, so a round that crashes releases it. CockroachDB has no
+   * advisory locks and always takes it, so it collects unprotected rather than not at all.
+   */
+  public static @Nullable RetentionLock acquireRetentionLock(DbContext ctx) throws SQLException {
+    // The round holds this connection until it ends: returning it would drop the lock.
+    var conn = ctx.getConnection();
+    try {
+      if (SystemDatabase.isCockroach(conn)) {
+        conn.close();
+        return new RetentionLock(ctx.schema(), null);
+      }
+      // Autocommit keeps the session clear of idle-in-transaction timeouts.
+      conn.setAutoCommit(true);
+      try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+        stmt.setLong(1, retentionLockKey(ctx.schema()));
+        try (var rs = stmt.executeQuery()) {
+          if (!rs.next() || !rs.getBoolean(1)) {
+            conn.close();
+            return null;
+          }
+        }
+      }
+    } catch (SQLException e) {
+      try {
+        conn.close();
+      } catch (SQLException closeFailure) {
+        e.addSuppressed(closeFailure);
+      }
+      throw e;
+    }
+    return new RetentionLock(ctx.schema(), conn);
+  }
+
+  /**
+   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
+   * used, or null when there is nothing to collect.
+   *
+   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
+   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
+   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
+   */
+  public static @Nullable Instant garbageCollect(
+      DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
+    if (batchSize < 1) {
+      throw new IllegalArgumentException("batchSize must be a positive integer, got " + batchSize);
+    }
 
     try (var conn = ctx.getConnection()) {
       if (rowsThreshold != null) {
@@ -2079,25 +2302,307 @@ public class WorkflowDAO {
         }
       }
 
-      if (cutoff != null) {
-        String sql =
-            """
-              DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
-            """
-                    .formatted(ctx.schema())
-                + ctx.andAppScope();
-        try (var stmt = conn.prepareStatement(sql)) {
-          stmt.setLong(1, cutoff.toEpochMilli());
-          stmt.setString(2, WorkflowState.PENDING.name());
-          stmt.setString(3, WorkflowState.ENQUEUED.name());
-          stmt.setString(4, WorkflowState.DELAYED.name());
-          ctx.bindAppScope(stmt, 5);
+      if (cutoff == null) {
+        return null;
+      }
 
-          stmt.executeUpdate();
+      sweepWorkflowStatus(ctx, conn, cutoff.toEpochMilli(), batchSize);
+      return cutoff;
+    }
+  }
+
+  /** Deletes eligible status rows in batches, seeded from the oldest one in range. */
+  private static void sweepWorkflowStatus(
+      DbContext ctx, Connection conn, long deadline, int batchSize) throws SQLException {
+    var seedSql =
+        "SELECT completed_at FROM \"%s\".workflow_status WHERE %s ORDER BY completed_at LIMIT 1"
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
+
+    Long oldest;
+    try (var stmt = conn.prepareStatement(seedSql)) {
+      bindStatusGcFilter(stmt, deadline);
+      try (var rs = stmt.executeQuery()) {
+        oldest = rs.next() ? rs.getLong(1) : null;
+      }
+    }
+    if (oldest == null) {
+      return;
+    }
+
+    var watermark = oldest - 1;
+    while (true) {
+      var next = deleteStatusBatch(ctx, conn, deadline, watermark, batchSize);
+      if (next == null) {
+        return;
+      }
+      watermark = next;
+    }
+  }
+
+  /**
+   * Deletes one batch of status rows in its own transaction.
+   *
+   * @return the watermark to resume from, or null when the sweep is done
+   */
+  private static @Nullable Long deleteStatusBatch(
+      DbContext ctx, Connection conn, long deadline, long watermark, int batchSize)
+      throws SQLException {
+    var stepSql =
+        ("SELECT completed_at FROM \"%s\".workflow_status WHERE %s AND completed_at > ?"
+                + " ORDER BY completed_at LIMIT 1 OFFSET ?")
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
+    var boundedSql =
+        "DELETE FROM \"%s\".workflow_status WHERE %s AND completed_at > ? AND completed_at <= ?"
+            .formatted(ctx.schema(), STATUS_GC_FILTER);
+    var remainderSql =
+        "DELETE FROM \"%s\".workflow_status WHERE %s".formatted(ctx.schema(), STATUS_GC_FILTER);
+
+    return SqlTransaction.call(
+        conn,
+        c -> {
+          // The completed_at of the batchSize-th oldest eligible row above the watermark.
+          Long step = null;
+          try (var stmt = c.prepareStatement(stepSql)) {
+            var next = bindStatusGcFilter(stmt, deadline);
+            stmt.setLong(next, watermark);
+            stmt.setInt(next + 1, batchSize - 1);
+            try (var rs = stmt.executeQuery()) {
+              if (rs.next()) {
+                step = rs.getLong(1);
+              }
+            }
+          }
+
+          if (step == null) {
+            // Unbounded, and deliberately not limited to rows above the watermark: an import can
+            // land a completed_at below it mid-pass.
+            try (var stmt = c.prepareStatement(remainderSql)) {
+              bindStatusGcFilter(stmt, deadline);
+              stmt.executeUpdate();
+            }
+            return null;
+          }
+
+          try (var stmt = c.prepareStatement(boundedSql)) {
+            var next = bindStatusGcFilter(stmt, deadline);
+            stmt.setLong(next, watermark);
+            // completed_at ties may push the batch slightly over batchSize.
+            stmt.setLong(next + 1, step);
+            stmt.executeUpdate();
+          }
+          return step;
+        });
+  }
+
+  /**
+   * Deletes payload and step rows below the cutoff whose workflow is gone, returning the count
+   * removed from each table in {@link #PAYLOAD_TABLES} order. Runs after the status sweep, most of
+   * whose orphans fall in range: a payload written by this SDK is stamped no later than the
+   * completion that made its workflow collectable.
+   *
+   * <p>The exception is a step row that predates migration 110, which stamped every existing one
+   * with the migration's own clock. That can sit well above its workflow's completed_at, so the
+   * status sweep can collect the workflow in a round that leaves the step rows behind. They are
+   * deferred rather than stranded: a later round, once its cutoff passes the migration, finds no
+   * status row for them and collects them. Until migration 112 drops the cascade, the foreign key
+   * takes them with the status row anyway.
+   */
+  public static long[] garbageCollectPayloads(DbContext ctx, Instant cutoff, int batchSize)
+      throws SQLException {
+    if (batchSize < 1) {
+      throw new IllegalArgumentException("batchSize must be a positive integer, got " + batchSize);
+    }
+    var deadline = cutoff.toEpochMilli();
+
+    // To optimize performance, vacuum payload tables both before and after collecting them.
+    var toVacuum = new ArrayList<String>();
+    toVacuum.add("workflow_status");
+    toVacuum.addAll(PAYLOAD_TABLES);
+    vacuumTables(ctx, toVacuum);
+
+    var deleted = new long[PAYLOAD_TABLES.size()];
+    var failures = new ArrayList<SQLException>();
+    sweepPayloadsConcurrently(ctx, deadline, batchSize, deleted, failures);
+
+    // Only the first can be thrown, so the rest would otherwise be lost.
+    for (var extra : failures.subList(Math.min(1, failures.size()), failures.size())) {
+      logger.warn("Payload retention sweep also failed", extra);
+    }
+    if (!failures.isEmpty()) {
+      throw failures.get(0);
+    }
+
+    vacuumTables(ctx, PAYLOAD_TABLES);
+    logger.debug(
+        "Payload retention deleted {} inputs, {} outputs, and {} steps",
+        deleted[0],
+        deleted[1],
+        deleted[2]);
+    return deleted;
+  }
+
+  /**
+   * Sweeps the payload tables in parallel, one connection per sweep.
+   *
+   * <p>A pool too small for all three runs them sequentially rather than leaving sweeps waiting on
+   * a connection that only the round itself would free: the retention lock already holds one for
+   * the round's whole duration.
+   */
+  private static void sweepPayloadsConcurrently(
+      DbContext ctx, long deadline, int batchSize, long[] deleted, List<SQLException> failures) {
+    var poolMax =
+        ctx.dataSource() instanceof HikariDataSource hikari
+            ? hikari.getMaximumPoolSize()
+            : PAYLOAD_TABLES.size() + 1;
+    var concurrency = Math.max(1, Math.min(PAYLOAD_TABLES.size(), poolMax - 1));
+
+    var pool =
+        Executors.newFixedThreadPool(
+            concurrency,
+            runnable -> {
+              var thread = new Thread(runnable, "dbos-gc-payload");
+              thread.setDaemon(true);
+              return thread;
+            });
+    try {
+      var futures = new ArrayList<Future<Long>>(PAYLOAD_TABLES.size());
+      for (var table : PAYLOAD_TABLES) {
+        futures.add(
+            pool.submit(
+                () -> {
+                  try (var conn = ctx.getConnection()) {
+                    return sweepPayloadTable(ctx, conn, table, deadline, batchSize);
+                  }
+                }));
+      }
+      for (int i = 0; i < futures.size(); i++) {
+        try {
+          deleted[i] = futures.get(i).get();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          failures.add(new SQLException("Payload retention sweep interrupted", e));
+        } catch (ExecutionException e) {
+          var cause = e.getCause();
+          failures.add(
+              cause instanceof SQLException sqlCause
+                  ? sqlCause
+                  : new SQLException("Payload retention sweep failed", cause));
+        }
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  /**
+   * VACUUMs the tables a sweep is about to dirty, or just dirtied. No-op on CockroachDB, where
+   * there is no autovacuum to outrun.
+   */
+  private static void vacuumTables(DbContext ctx, List<String> tables) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      if (SystemDatabase.isCockroach(conn)) {
+        return;
+      }
+      // VACUUM cannot run inside a transaction block.
+      conn.setAutoCommit(true);
+      for (var table : tables) {
+        // Per table, so one refusal does not skip the rest.
+        try (var stmt = conn.createStatement()) {
+          stmt.execute(
+              "VACUUM (INDEX_CLEANUP ON, TRUNCATE OFF, ANALYZE) \"%s\".%s"
+                  .formatted(ctx.schema(), table));
+          // A refused or stalled VACUUM does not raise, it says so in a warning; a successful one
+          // is silent, so anything here is worth surfacing.
+          for (var w = stmt.getWarnings(); w != null; w = w.getNextWarning()) {
+            logger.warn("Payload retention vacuuming {}: {}", table, w.getMessage());
+          }
+        } catch (SQLException e) {
+          logger.warn("Payload retention could not vacuum {}: {}", table, e.getMessage());
         }
       }
     }
   }
+
+  /** Deletes one payload table's orphans below the cutoff, returning how many it removed. */
+  private static long sweepPayloadTable(
+      DbContext ctx, Connection conn, String table, long deadline, int batchSize)
+      throws SQLException {
+    // A payload below the cutoff belongs to a workflow created before it, so the status side of
+    // this anti-join is the few such rows still present, not the whole table.
+    var orphaned =
+        (" AND NOT EXISTS (SELECT 1 FROM \"%s\".workflow_status ws"
+                + " WHERE ws.workflow_uuid = %s.workflow_uuid AND ws.created_at < ?)")
+            .formatted(ctx.schema(), table);
+    var seedSql =
+        ("SELECT retention_timestamp FROM \"%s\".%s WHERE retention_timestamp < ?"
+                + " ORDER BY retention_timestamp LIMIT 1")
+            .formatted(ctx.schema(), table);
+
+    Long oldest;
+    try (var stmt = conn.prepareStatement(seedSql)) {
+      stmt.setLong(1, deadline);
+      try (var rs = stmt.executeQuery()) {
+        oldest = rs.next() ? rs.getLong(1) : null;
+      }
+    }
+    if (oldest == null) {
+      return 0;
+    }
+
+    var stepSql =
+        ("SELECT retention_timestamp FROM \"%s\".%s"
+                + " WHERE retention_timestamp < ? AND retention_timestamp > ?"
+                + " ORDER BY retention_timestamp LIMIT 1 OFFSET ?")
+            .formatted(ctx.schema(), table);
+    var deleteSql =
+        "DELETE FROM \"%s\".%s WHERE retention_timestamp < ? AND retention_timestamp > ?"
+            .formatted(ctx.schema(), table);
+
+    var deleted = 0L;
+    var watermark = oldest - 1;
+    while (true) {
+      final long from = watermark;
+      var batch =
+          SqlTransaction.<PayloadBatch>call(
+              conn,
+              c -> {
+                // Batches are cut by candidate count, so rows spared by the anti-join only thin
+                // one out; they are re-checked on the next round.
+                Long step = null;
+                try (var stmt = c.prepareStatement(stepSql)) {
+                  stmt.setLong(1, deadline);
+                  stmt.setLong(2, from);
+                  stmt.setInt(3, batchSize - 1);
+                  try (var rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                      step = rs.getLong(1);
+                    }
+                  }
+                }
+
+                // retention_timestamp ties may push the batch slightly over batchSize.
+                var bounded = step != null ? " AND retention_timestamp <= ?" : "";
+                try (var stmt = c.prepareStatement(deleteSql + bounded + orphaned)) {
+                  stmt.setLong(1, deadline);
+                  stmt.setLong(2, from);
+                  var index = 3;
+                  if (step != null) {
+                    stmt.setLong(index++, step);
+                  }
+                  stmt.setLong(index, deadline);
+                  return new PayloadBatch(step, stmt.executeUpdate());
+                }
+              });
+      deleted += batch.deleted();
+      if (batch.step() == null) {
+        return deleted;
+      }
+      watermark = batch.step();
+    }
+  }
+
+  /** One payload batch's outcome: the watermark to resume from, and how many rows it took. */
+  private record PayloadBatch(@Nullable Long step, int deleted) {}
 
   /**
    * @param applicationName count only workflows and steps owned by these applications, plus
@@ -2385,134 +2890,134 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            try (var wfStmt = conn.prepareStatement(wfSQL);
+                var stepStmt = conn.prepareStatement(stepSQL);
+                var eventStmt = conn.prepareStatement(eventSQL);
+                var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
+                var streamsStmt = conn.prepareStatement(streamsSQL)) {
 
-      try (var wfStmt = conn.prepareStatement(wfSQL);
-          var stepStmt = conn.prepareStatement(stepSQL);
-          var eventStmt = conn.prepareStatement(eventSQL);
-          var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
-          var streamsStmt = conn.prepareStatement(streamsSQL)) {
+              for (var workflow : workflows) {
+                var status = workflow.status();
 
-        for (var workflow : workflows) {
-          var status = workflow.status();
+                wfStmt.setString(1, status.workflowId());
+                wfStmt.setString(2, status.status().name());
+                wfStmt.setString(3, status.workflowName());
+                wfStmt.setString(4, status.className());
+                wfStmt.setString(5, status.instanceName());
+                wfStmt.setString(6, status.authenticatedUser());
+                wfStmt.setString(7, status.assumedRole());
+                wfStmt.setString(
+                    8,
+                    status.authenticatedRoles() == null
+                        ? null
+                        : JsonUtility.toJson(status.authenticatedRoles()));
+                wfStmt.setString(
+                    9,
+                    status.output() == null
+                        ? null
+                        : SerializationUtil.serializeValue(
+                                status.output(), status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    10,
+                    status.error() == null
+                        ? null
+                        : SerializationUtil.serializeError(
+                                status.error().throwable(), status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    11,
+                    status.input() == null
+                        ? null
+                        : SerializationUtil.serializeArgs(
+                                status.input(), null, status.serialization(), serializer)
+                            .serializedValue());
+                wfStmt.setString(12, status.executorId());
+                wfStmt.setString(13, status.appVersion());
+                wfStmt.setString(14, status.appId());
+                wfStmt.setObject(15, status.createdAtEpochMs());
+                wfStmt.setObject(16, status.updatedAtEpochMs());
+                wfStmt.setObject(17, status.startedAtEpochMs());
+                wfStmt.setString(18, status.queueName());
+                wfStmt.setString(19, status.deduplicationId());
+                wfStmt.setObject(20, status.priority());
+                wfStmt.setString(21, status.queuePartitionKey());
+                wfStmt.setObject(22, status.timeoutMs());
+                wfStmt.setObject(23, status.deadlineEpochMs());
+                wfStmt.setObject(24, status.recoveryAttempts());
+                wfStmt.setString(25, status.forkedFrom());
+                wfStmt.setString(26, status.parentWorkflowId());
+                wfStmt.setString(27, status.serialization());
+                wfStmt.setObject(28, status.delayUntilEpochMs());
+                wfStmt.setObject(29, status.completedAtEpochMs());
+                wfStmt.setString(30, status.applicationName());
+                wfStmt.addBatch();
 
-          wfStmt.setString(1, status.workflowId());
-          wfStmt.setString(2, status.status().name());
-          wfStmt.setString(3, status.workflowName());
-          wfStmt.setString(4, status.className());
-          wfStmt.setString(5, status.instanceName());
-          wfStmt.setString(6, status.authenticatedUser());
-          wfStmt.setString(7, status.assumedRole());
-          wfStmt.setString(
-              8,
-              status.authenticatedRoles() == null
-                  ? null
-                  : JsonUtility.toJson(status.authenticatedRoles()));
-          wfStmt.setString(
-              9,
-              status.output() == null
-                  ? null
-                  : SerializationUtil.serializeValue(
-                          status.output(), status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(
-              10,
-              status.error() == null
-                  ? null
-                  : SerializationUtil.serializeError(
-                          status.error().throwable(), status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(
-              11,
-              status.input() == null
-                  ? null
-                  : SerializationUtil.serializeArgs(
-                          status.input(), null, status.serialization(), serializer)
-                      .serializedValue());
-          wfStmt.setString(12, status.executorId());
-          wfStmt.setString(13, status.appVersion());
-          wfStmt.setString(14, status.appId());
-          wfStmt.setObject(15, status.createdAtEpochMs());
-          wfStmt.setObject(16, status.updatedAtEpochMs());
-          wfStmt.setObject(17, status.startedAtEpochMs());
-          wfStmt.setString(18, status.queueName());
-          wfStmt.setString(19, status.deduplicationId());
-          wfStmt.setObject(20, status.priority());
-          wfStmt.setString(21, status.queuePartitionKey());
-          wfStmt.setObject(22, status.timeoutMs());
-          wfStmt.setObject(23, status.deadlineEpochMs());
-          wfStmt.setObject(24, status.recoveryAttempts());
-          wfStmt.setString(25, status.forkedFrom());
-          wfStmt.setString(26, status.parentWorkflowId());
-          wfStmt.setString(27, status.serialization());
-          wfStmt.setObject(28, status.delayUntilEpochMs());
-          wfStmt.setObject(29, status.completedAtEpochMs());
-          wfStmt.setString(30, status.applicationName());
-          wfStmt.addBatch();
+                for (var step : workflow.steps()) {
+                  stepStmt.setString(1, status.workflowId());
+                  stepStmt.setInt(2, step.functionId());
+                  stepStmt.setString(3, step.functionName());
+                  stepStmt.setString(
+                      4,
+                      step.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  step.output(), step.serialization(), serializer)
+                              .serializedValue());
+                  stepStmt.setString(
+                      5, step.error() == null ? null : step.error().serializedError());
+                  stepStmt.setString(6, step.childWorkflowId());
+                  stepStmt.setObject(7, step.startedAtEpochMs());
+                  stepStmt.setObject(8, step.completedAtEpochMs());
+                  stepStmt.setString(9, step.serialization());
+                  // A step keeps exactly the app_name it was exported with. An export that predates
+                  // the
+                  // column carries no app_name, so its steps import unclaimed rather than
+                  // inheriting a
+                  // guess from the workflow -- the same choice Python and TypeScript make.
+                  stepStmt.setString(10, step.applicationName());
+                  stepStmt.addBatch();
+                }
 
-          for (var step : workflow.steps()) {
-            stepStmt.setString(1, status.workflowId());
-            stepStmt.setInt(2, step.functionId());
-            stepStmt.setString(3, step.functionName());
-            stepStmt.setString(
-                4,
-                step.output() == null
-                    ? null
-                    : SerializationUtil.serializeValue(
-                            step.output(), step.serialization(), serializer)
-                        .serializedValue());
-            stepStmt.setString(5, step.error() == null ? null : step.error().serializedError());
-            stepStmt.setString(6, step.childWorkflowId());
-            stepStmt.setObject(7, step.startedAtEpochMs());
-            stepStmt.setObject(8, step.completedAtEpochMs());
-            stepStmt.setString(9, step.serialization());
-            // A step keeps exactly the app_name it was exported with. An export that predates the
-            // column carries no app_name, so its steps import unclaimed rather than inheriting a
-            // guess from the workflow -- the same choice Python and TypeScript make.
-            stepStmt.setString(10, step.applicationName());
-            stepStmt.addBatch();
-          }
+                for (var event : workflow.events()) {
+                  eventStmt.setString(1, status.workflowId());
+                  eventStmt.setString(2, event.key());
+                  eventStmt.setString(3, event.value());
+                  eventStmt.setString(4, event.serialization());
+                  eventStmt.addBatch();
+                }
 
-          for (var event : workflow.events()) {
-            eventStmt.setString(1, status.workflowId());
-            eventStmt.setString(2, event.key());
-            eventStmt.setString(3, event.value());
-            eventStmt.setString(4, event.serialization());
-            eventStmt.addBatch();
-          }
+                for (var history : workflow.eventHistory()) {
+                  eventHistoryStmt.setString(1, status.workflowId());
+                  eventHistoryStmt.setString(2, history.key());
+                  eventHistoryStmt.setString(3, history.value());
+                  eventHistoryStmt.setInt(4, history.stepId());
+                  eventHistoryStmt.setString(5, history.serialization());
+                  eventHistoryStmt.addBatch();
+                }
 
-          for (var history : workflow.eventHistory()) {
-            eventHistoryStmt.setString(1, status.workflowId());
-            eventHistoryStmt.setString(2, history.key());
-            eventHistoryStmt.setString(3, history.value());
-            eventHistoryStmt.setInt(4, history.stepId());
-            eventHistoryStmt.setString(5, history.serialization());
-            eventHistoryStmt.addBatch();
-          }
+                for (var stream : workflow.streams()) {
+                  streamsStmt.setString(1, status.workflowId());
+                  streamsStmt.setString(2, stream.key());
+                  streamsStmt.setString(3, stream.value());
+                  streamsStmt.setInt(4, stream.stepId());
+                  streamsStmt.setInt(5, stream.offset());
+                  streamsStmt.setString(6, stream.serialization());
+                  streamsStmt.addBatch();
+                }
+              }
 
-          for (var stream : workflow.streams()) {
-            streamsStmt.setString(1, status.workflowId());
-            streamsStmt.setString(2, stream.key());
-            streamsStmt.setString(3, stream.value());
-            streamsStmt.setInt(4, stream.stepId());
-            streamsStmt.setInt(5, stream.offset());
-            streamsStmt.setString(6, stream.serialization());
-            streamsStmt.addBatch();
-          }
-        }
-
-        wfStmt.executeBatch();
-        stepStmt.executeBatch();
-        eventStmt.executeBatch();
-        eventHistoryStmt.executeBatch();
-        streamsStmt.executeBatch();
-
-        conn.commit();
-      } catch (SQLException e) {
-        conn.rollback();
-        throw e;
-      }
+              wfStmt.executeBatch();
+              stepStmt.executeBatch();
+              eventStmt.executeBatch();
+              eventHistoryStmt.executeBatch();
+              streamsStmt.executeBatch();
+            }
+          });
     }
   }
 

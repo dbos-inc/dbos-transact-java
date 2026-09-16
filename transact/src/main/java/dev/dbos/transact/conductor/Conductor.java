@@ -34,8 +34,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +51,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.core.JsonParser;
@@ -81,8 +84,25 @@ public class Conductor implements AutoCloseable {
   private final String url;
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler =
+      Executors.newSingleThreadScheduledExecutor(
+          r -> {
+            var thread = new Thread(r, "dbos-conductor-scheduler");
+            thread.setDaemon(true);
+            return thread;
+          });
+  private final ExecutorService retentionExecutor =
+      Executors.newSingleThreadExecutor(
+          r -> {
+            var thread = new Thread(r, "dbos-conductor-retention");
+            thread.setDaemon(true);
+            return thread;
+          });
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
+  private final Object retentionLock = new Object();
+
+  private @Nullable CompletableFuture<Void> retentionRound;
+
   private final HttpClient httpClient;
   private final JsonMapper mapper;
   private final int pingPeriodMs;
@@ -587,6 +607,7 @@ public class Conductor implements AutoCloseable {
       }
 
       scheduler.shutdownNow();
+      retentionExecutor.shutdownNow();
 
       CompletableFuture<WebSocket> cf = connectFuture.getAndSet(null);
       if (cf != null) {
@@ -1044,33 +1065,81 @@ public class Conductor implements AutoCloseable {
         });
   }
 
+  /**
+   * Starts a retention round and answers at once.
+   *
+   * <p>Off the message path, and answered without waiting for it: a round takes minutes, and
+   * replying only when it ends stops every other command and lets the dispatch time out into a
+   * second round on another executor. The answer therefore cannot carry the round's outcome, which
+   * is logged instead -- the same trade Python and TypeScript make.
+   */
   static CompletableFuture<BaseResponse> handleRetention(
       Conductor conductor, RetentionRequest request) {
-    return CompletableFuture.supplyAsync(
-        () -> {
-          try {
-            var cutoff =
-                request.body.gc_cutoff_epoch_ms == null
-                    ? null
-                    : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
-            conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold);
-          } catch (Exception e) {
-            logger.error("Exception encountered garbage collecting system database", e);
-            return new SuccessResponse(request, e);
-          }
+    synchronized (conductor.retentionLock) {
+      var previous = conductor.retentionRound;
+      if (conductor.isShutdown.get()) {
+        logger.debug("Skipping retention: the conductor is shutting down.");
+      } else if (previous != null && !previous.isDone()) {
+        logger.warn("Skipping retention: the previous round on this executor is still running.");
+      } else {
+        try {
+          var round =
+              CompletableFuture.runAsync(
+                  () -> runRetention(conductor, request), conductor.retentionExecutor);
+          conductor.retentionRound = round;
+          round.whenComplete(
+              (result, error) -> {
+                synchronized (conductor.retentionLock) {
+                  // Only the round that is still the current one may clear the field: a round that
+                  // finishes after the next one has started would otherwise erase its successor and
+                  // let a third request run concurrently with it.
+                  if (conductor.retentionRound == round) {
+                    conductor.retentionRound = null;
+                  }
+                }
+              });
+        } catch (RejectedExecutionException e) {
+          // stop() shut the executor down between the check above and the submit.
+          logger.debug("Skipping retention: the conductor is shutting down.");
+        }
+      }
+    }
+    // Unconditionally successful: every skip above is a decision, not a failure, and the round's
+    // own outcome is logged rather than answered -- the same trade Go, Python and TypeScript make.
+    return CompletableFuture.completedFuture(new SuccessResponse(request, true));
+  }
 
-          try {
-            if (request.body.timeout_cutoff_epoch_ms != null) {
-              conductor.dbosExecutor.globalTimeout(
-                  Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
-            }
-          } catch (Exception e) {
-            logger.error("Exception encountered setting global timeout", e);
-            return new SuccessResponse(request, e);
-          }
+  private static void runRetention(Conductor conductor, RetentionRequest request) {
+    try {
+      var cutoff =
+          request.body.gc_cutoff_epoch_ms == null
+              ? null
+              : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+      // Older Conductor versions may not send gc_batch_size, newer ones may send null, and a
+      // cleared setting may arrive as zero: every one of those takes the default.
+      var batchSize =
+          request.body.gc_batch_size == null || request.body.gc_batch_size == 0
+              ? SystemDatabase.DEFAULT_GC_BATCH_SIZE
+              : Math.toIntExact(request.body.gc_batch_size);
+      conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold, batchSize);
+    } catch (Exception e) {
+      if (conductor.isShutdown.get()) {
+        // Shutdown took the system database away mid-round; the next round resumes the work.
+        logger.debug("Retention interrupted by shutdown");
+        return;
+      }
+      logger.error("Exception encountered garbage collecting system database", e);
+      return;
+    }
 
-          return new SuccessResponse(request, true);
-        });
+    try {
+      if (request.body.timeout_cutoff_epoch_ms != null) {
+        conductor.dbosExecutor.globalTimeout(
+            Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
+      }
+    } catch (Exception e) {
+      logger.error("Exception encountered setting global timeout", e);
+    }
   }
 
   static CompletableFuture<BaseResponse> handleGetMetrics(

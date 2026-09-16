@@ -13,6 +13,7 @@ import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -49,6 +50,10 @@ import org.jspecify.annotations.Nullable;
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
  * Example interactions: Start/enqueue a workflow, and get the result Get events and send messages
  * to the workflow Manage workflows - list, fork, cancel, etc.
+ *
+ * <p>A client never migrates the system database, so every constructor checks that the schema it is
+ * pointed at is already at {@link MigrationManager#MINIMUM_SYSDB_VERSION} or later, and throws if
+ * it is missing, unversioned, or too old.
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {
@@ -86,7 +91,7 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
-    this(url, user, password, null, null, true);
+    this(url, user, password, null, null, false);
   }
 
   /**
@@ -102,7 +107,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    this(url, user, password, schema, null, true);
+    this(url, user, password, schema, null, false);
   }
 
   /**
@@ -120,7 +125,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String password,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
-    this(url, user, password, schema, serializer, true);
+    this(url, user, password, schema, serializer, false);
   }
 
   /**
@@ -131,7 +136,8 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database
    */
   public DBOSClient(
       @NonNull String url,
@@ -151,7 +157,8 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
-   * @param useListenNotify if true, use PostgreSQL LISTEN/NOTIFY for real-time event notifications
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database
    * @param applicationName the application this client acts on behalf of. Set this when several
    *     applications share this system database, so the workflows, schedules, and queues this
    *     client creates are owned by that application, and its listings are scoped to it. Left
@@ -165,10 +172,13 @@ public class DBOSClient implements AutoCloseable {
       @Nullable DBOSSerializer serializer,
       boolean useListenNotify,
       @Nullable String applicationName) {
+    MigrationManager.validateSysDbVersion(url, user, password, schema);
+
     this.serializer = serializer;
     systemDatabase =
         new SystemDatabase(
             url, user, password, schema, serializer, useListenNotify, applicationName);
+    systemDatabase.start();
   }
 
   /**
@@ -177,7 +187,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    */
   public DBOSClient(@NonNull DataSource dataSource) {
-    this(dataSource, null, null);
+    this(dataSource, null, null, false, null);
   }
 
   /**
@@ -187,7 +197,7 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    */
   public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
-    this(dataSource, schema, null);
+    this(dataSource, schema, null, false, null);
   }
 
   /**
@@ -201,7 +211,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull DataSource dataSource,
       @Nullable String schema,
       @Nullable DBOSSerializer serializer) {
-    this(dataSource, schema, serializer, null);
+    this(dataSource, schema, serializer, false, null);
   }
 
   /**
@@ -220,8 +230,64 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String schema,
       @Nullable DBOSSerializer serializer,
       @Nullable String applicationName) {
+    this(dataSource, schema, serializer, false, applicationName);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database.
+   *     Defaults to false on the constructors that do not take it, because it costs a dedicated
+   *     connection and thread that only those two calls benefit from. Leave it false when the
+   *     system database was migrated with LISTEN/NOTIFY disabled: its notification triggers do not
+   *     exist, so the listener would connect and never hear anything.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify) {
+    this(dataSource, schema, serializer, useListenNotify, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   * @param useListenNotify if true, run a listener thread so {@link #getEvent} and {@link
+   *     #readStream} are woken by PostgreSQL notifications instead of polling the database.
+   *     Defaults to false on the constructors that do not take it, because it costs a dedicated
+   *     connection and thread that only those two calls benefit from. Leave it false when the
+   *     system database was migrated with LISTEN/NOTIFY disabled: its notification triggers do not
+   *     exist, so the listener would connect and never hear anything.
+   * @param applicationName the application this client acts on behalf of. Set this when several
+   *     applications share this system database, so the workflows, schedules, and queues this
+   *     client creates are owned by that application, and its listings are scoped to it. Left
+   *     unset, the client owns nothing and sees every application's rows.
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String applicationName) {
+    MigrationManager.validateSysDbVersion(dataSource, schema);
+
     this.serializer = serializer;
-    systemDatabase = new SystemDatabase(dataSource, schema, serializer, applicationName);
+    systemDatabase =
+        new SystemDatabase(dataSource, schema, serializer, useListenNotify, applicationName);
+    systemDatabase.start();
+  }
+
+  // package private method for test purposes
+  @NonNull SystemDatabase getSystemDatabase() {
+    return systemDatabase;
   }
 
   /**

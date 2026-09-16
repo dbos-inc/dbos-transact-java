@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
@@ -47,36 +48,27 @@ public class StreamsDAO {
         STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
     long startTime = System.currentTimeMillis();
 
-    try (var conn = ctx.getConnection()) {
-      conn.setAutoCommit(false);
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            StepResult recordedOutput =
+                StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
 
-      try {
-        StepResult recordedOutput =
-            StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
+            if (recordedOutput != null) {
+              logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
+              return;
+            } else {
+              logger.debug("Running writeStream, id: {}, key: {}", functionId, key);
+            }
 
-        if (recordedOutput != null) {
-          logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
-          conn.commit();
-          return;
-        } else {
-          logger.debug("Running writeStream, id: {}, key: {}", functionId, key);
-        }
+            insertStream(
+                conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
 
-        insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
-
-        var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
-        StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
-
-        conn.commit();
-
-      } catch (Exception e) {
-        try {
-          conn.rollback();
-        } catch (SQLException rollbackEx) {
-          e.addSuppressed(rollbackEx);
-        }
-        throw e;
-      }
+            var output =
+                new StepResult(workflowId, functionId, functionName, null, null, null, null);
+            StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
+          });
     }
   }
 

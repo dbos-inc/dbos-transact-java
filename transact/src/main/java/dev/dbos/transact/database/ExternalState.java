@@ -23,11 +23,11 @@ import java.util.Objects;
  *     or {@code null} if unused.
  * @param updateSeq A monotonic sequence number for updates, used to detect the latest version, or
  *     {@code null} if not applicable.
- * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is
- *     retired. The Python and TypeScript SDKs drop it at shared migration 114, having removed the
- *     in-memory event receivers whose dispatch bookkeeping it held, and this SDK will follow. A
- *     system database that any of those SDKs has migrated no longer has the table, so this API
- *     already fails there. Store integration state in your own table instead.
+ * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is going
+ *     to be retired. The table holds dispatch bookkeeping for the in-memory event receivers that
+ *     every SDK except Java either removed or never implemented. This API will be removed in DBOS
+ *     Java 2.0, and a shared migration that drops the table will be added sometime after that.
+ *     Store integration state in your own table instead.
  */
 @Deprecated(since = "1.1", forRemoval = true)
 public record ExternalState(

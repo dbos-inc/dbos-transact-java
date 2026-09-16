@@ -48,22 +48,26 @@ public class QueuesDAO {
         connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
       }
 
-      long maxTasks = Integer.MAX_VALUE;
+      try {
+        long maxTasks = Integer.MAX_VALUE;
 
-      // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
-      if (queue.workerConcurrency() != null) {
-        maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
-        if (maxTasks == 0) {
-          return List.of();
+        // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
+        if (queue.workerConcurrency() != null) {
+          maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
+          if (maxTasks == 0) {
+            // Nothing claimable. End the transaction here rather than leaving it open for
+            // the pool to roll back on return.
+            connection.rollback();
+            return List.of();
+          }
         }
-      }
 
-      // If there is a rate limit, compute how many functions have started in its period.
-      if (queue.rateLimit() != null) {
-        var rateLimit = queue.rateLimit();
+        // If there is a rate limit, compute how many functions have started in its period.
+        if (queue.rateLimit() != null) {
+          var rateLimit = queue.rateLimit();
 
-        var limiterQuery =
-            """
+          var limiterQuery =
+              """
               SELECT COUNT(*)
               FROM "%s".workflow_status
               WHERE queue_name = ?
@@ -71,161 +75,165 @@ public class QueuesDAO {
               AND status NOT IN (?, ?)
               AND started_at_epoch_ms > ?
             """
-                    .formatted(ctx.schema())
-                + ctx.andAppScope();
-        if (partitionKey != null) {
-          limiterQuery += " AND queue_partition_key = ?";
-        }
-
-        try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
-          ps.setString(1, queue.name());
-          ps.setString(2, WorkflowState.ENQUEUED.name());
-          ps.setString(3, WorkflowState.DELAYED.name());
-          ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
-          var index = ctx.bindAppScope(ps, 5);
+                      .formatted(ctx.schema())
+                  + ctx.andAppScope();
           if (partitionKey != null) {
-            ps.setString(index, partitionKey);
+            limiterQuery += " AND queue_partition_key = ?";
           }
 
-          int numRecentQueries = 0;
-          try (ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-              numRecentQueries = rs.getInt(1);
+          try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
+            ps.setString(1, queue.name());
+            ps.setString(2, WorkflowState.ENQUEUED.name());
+            ps.setString(3, WorkflowState.DELAYED.name());
+            ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
+            var index = ctx.bindAppScope(ps, 5);
+            if (partitionKey != null) {
+              ps.setString(index, partitionKey);
             }
+
+            int numRecentQueries = 0;
+            try (ResultSet rs = ps.executeQuery()) {
+              if (rs.next()) {
+                numRecentQueries = rs.getInt(1);
+              }
+            }
+
+            // Bound the claim by the limiter's remaining slots, so a backlogged queue locks
+            // and starts only as many workflows as the rate limit still allows this period.
+            maxTasks = Math.min(maxTasks, Math.max(0, rateLimit.limit() - numRecentQueries));
           }
 
-          // Bound the claim by the limiter's remaining slots, so a backlogged queue locks
-          // and starts only as many workflows as the rate limit still allows this period.
-          maxTasks = Math.min(maxTasks, Math.max(0, rateLimit.limit() - numRecentQueries));
+          if (maxTasks == 0) {
+            // Nothing claimable. End the transaction here rather than leaving it open for the pool
+            // to roll back, so the candidate SELECT's row locks are released at the return.
+            connection.rollback();
+            return List.of();
+          }
         }
 
-        if (maxTasks == 0) {
-          return List.of();
-        }
-      }
-
-      // Global concurrency still requires a DB query — other workers may be running workflows too.
-      if (queue.concurrency() != null) {
-        String globalPendingQuery =
-            """
+        // Global concurrency still requires a DB query — other workers may be running workflows
+        // too.
+        if (queue.concurrency() != null) {
+          String globalPendingQuery =
+              """
               SELECT COUNT(*)
               FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
-                    .formatted(ctx.schema())
-                + ctx.andAppScope();
-        if (partitionKey != null) {
-          globalPendingQuery += " AND queue_partition_key = ?";
-        }
-
-        int globalPendingWorkflows = 0;
-        try (PreparedStatement ps = connection.prepareStatement(globalPendingQuery)) {
-          ps.setString(1, queue.name());
-          ps.setString(2, WorkflowState.PENDING.name());
-          var index = ctx.bindAppScope(ps, 3);
+                      .formatted(ctx.schema())
+                  + ctx.andAppScope();
           if (partitionKey != null) {
-            ps.setString(index, partitionKey);
+            globalPendingQuery += " AND queue_partition_key = ?";
           }
 
+          int globalPendingWorkflows = 0;
+          try (PreparedStatement ps = connection.prepareStatement(globalPendingQuery)) {
+            ps.setString(1, queue.name());
+            ps.setString(2, WorkflowState.PENDING.name());
+            var index = ctx.bindAppScope(ps, 3);
+            if (partitionKey != null) {
+              ps.setString(index, partitionKey);
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+              if (rs.next()) {
+                globalPendingWorkflows = rs.getInt(1);
+              }
+            }
+          }
+
+          if (globalPendingWorkflows > queue.concurrency()) {
+            logger.warn(
+                "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
+                globalPendingWorkflows,
+                queue.name(),
+                queue.concurrency());
+          }
+
+          int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
+          maxTasks = Math.min(maxTasks, availableTasks);
+        }
+
+        // Version-less workflows (application_version IS NULL) are only dequeued
+        // when this worker is running the latest registered application version.
+        boolean isLatestVersion = true;
+        String latestVersionQuery =
+            """
+            SELECT version_name FROM "%s".application_versions
+          """
+                    .formatted(ctx.schema())
+                + ctx.whereAppScope()
+                + " ORDER BY version_timestamp DESC LIMIT 1";
+        try (var ps = connection.prepareStatement(latestVersionQuery)) {
+          ctx.bindAppScope(ps, 1);
           try (ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
-              globalPendingWorkflows = rs.getInt(1);
+              isLatestVersion = rs.getString(1).equals(appVersion);
             }
           }
         }
 
-        if (globalPendingWorkflows > queue.concurrency()) {
-          logger.warn(
-              "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
-              globalPendingWorkflows,
-              queue.name(),
-              queue.concurrency());
-        }
+        String versionClause =
+            isLatestVersion
+                ? "(application_version = ? OR application_version IS NULL)"
+                : "application_version = ?";
 
-        int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
-        maxTasks = Math.min(maxTasks, availableTasks);
-      }
-
-      // Version-less workflows (application_version IS NULL) are only dequeued
-      // when this worker is running the latest registered application version.
-      boolean isLatestVersion = true;
-      String latestVersionQuery =
-          """
-            SELECT version_name FROM "%s".application_versions
-          """
-                  .formatted(ctx.schema())
-              + ctx.whereAppScope()
-              + " ORDER BY version_timestamp DESC LIMIT 1";
-      try (var ps = connection.prepareStatement(latestVersionQuery)) {
-        ctx.bindAppScope(ps, 1);
-        try (ResultSet rs = ps.executeQuery()) {
-          if (rs.next()) {
-            isLatestVersion = rs.getString(1).equals(appVersion);
-          }
-        }
-      }
-
-      String versionClause =
-          isLatestVersion
-              ? "(application_version = ? OR application_version IS NULL)"
-              : "application_version = ?";
-
-      var query =
-          """
+        var query =
+            """
             SELECT workflow_uuid
             FROM "%s".workflow_status
             WHERE queue_name = ?
               AND status = ?
               AND %s
           """
-                  .formatted(ctx.schema(), versionClause)
-              + ctx.andAppScope();
-      if (partitionKey != null) {
-        query += " AND queue_partition_key = ?";
-      }
-
-      query += " ORDER BY priority ASC, created_at ASC";
-
-      // Without a global budget, use SKIP LOCKED to only select rows that can be locked. With
-      // one, use NOWAIT so all processes see a consistent table: a rate limit is a global budget
-      // like concurrency, and SKIP LOCKED would hand a peer disjoint rows, letting it spend the
-      // same budget against its own pre-claim snapshot.
-      if (queue.concurrency() == null && queue.rateLimit() == null) {
-        query += " FOR UPDATE SKIP LOCKED";
-      } else {
-        query += " FOR UPDATE NOWAIT";
-      }
-
-      if (maxTasks != Integer.MAX_VALUE) {
-        query += " LIMIT %d".formatted(maxTasks);
-      }
-
-      List<String> dequeuedWorkflowIds = new ArrayList<>();
-      try (var ps = connection.prepareStatement(query)) {
-        ps.setString(1, queue.name());
-        ps.setString(2, WorkflowState.ENQUEUED.name());
-        ps.setString(3, appVersion);
-        var index = ctx.bindAppScope(ps, 4);
+                    .formatted(ctx.schema(), versionClause)
+                + ctx.andAppScope();
         if (partitionKey != null) {
-          ps.setString(index, partitionKey);
+          query += " AND queue_partition_key = ?";
         }
 
-        try (ResultSet rs = ps.executeQuery()) {
-          while (rs.next()) {
-            dequeuedWorkflowIds.add(rs.getString("workflow_uuid"));
+        query += " ORDER BY priority ASC, created_at ASC";
+
+        // Without a global budget, use SKIP LOCKED to only select rows that can be locked. With
+        // one, use NOWAIT so all processes see a consistent table: a rate limit is a global budget
+        // like concurrency, and SKIP LOCKED would hand a peer disjoint rows, letting it spend the
+        // same budget against its own pre-claim snapshot.
+        if (queue.concurrency() == null && queue.rateLimit() == null) {
+          query += " FOR UPDATE SKIP LOCKED";
+        } else {
+          query += " FOR UPDATE NOWAIT";
+        }
+
+        if (maxTasks != Integer.MAX_VALUE) {
+          query += " LIMIT %d".formatted(maxTasks);
+        }
+
+        List<String> dequeuedWorkflowIds = new ArrayList<>();
+        try (var ps = connection.prepareStatement(query)) {
+          ps.setString(1, queue.name());
+          ps.setString(2, WorkflowState.ENQUEUED.name());
+          ps.setString(3, appVersion);
+          var index = ctx.bindAppScope(ps, 4);
+          if (partitionKey != null) {
+            ps.setString(index, partitionKey);
+          }
+
+          try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+              dequeuedWorkflowIds.add(rs.getString("workflow_uuid"));
+            }
           }
         }
-      }
 
-      if (!dequeuedWorkflowIds.isEmpty()) {
-        logger.debug(
-            "attempting to dequeue {} task(s) from {} queue",
-            dequeuedWorkflowIds.size(),
-            queue.name());
-      }
+        if (!dequeuedWorkflowIds.isEmpty()) {
+          logger.debug(
+              "attempting to dequeue {} task(s) from {} queue",
+              dequeuedWorkflowIds.size(),
+              queue.name());
+        }
 
-      String updateQuery =
-          """
+        String updateQuery =
+            """
             UPDATE "%s".workflow_status
             SET status = ?,
                 application_version = ?,
@@ -244,40 +252,54 @@ public class QueuesDAO {
             WHERE workflow_uuid = ?
               AND status = ?
           """
-                  .formatted(ctx.schema())
-              // Re-check ownership alongside status: the candidate SELECT scoped the row, and the
-              // claim must not widen that.
-              + ctx.andAppScope();
+                    .formatted(ctx.schema())
+                // Re-check ownership alongside status: the candidate SELECT scoped the row, and the
+                // claim must not widen that.
+                + ctx.andAppScope();
 
-      List<String> updatedWorkflowIds = new ArrayList<>();
-      try (var ps = connection.prepareStatement(updateQuery)) {
-        var now = System.currentTimeMillis();
-        // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
-        // limiter's remaining slots.
-        for (var id : dequeuedWorkflowIds) {
-          ps.setString(1, WorkflowState.PENDING.name());
-          ps.setString(2, appVersion);
-          ps.setString(3, executorId);
-          ps.setLong(4, now);
-          ps.setBoolean(5, queue.rateLimit() != null);
-          ps.setString(6, ctx.appName());
-          ps.setLong(7, now);
-          ps.setString(8, id);
-          ps.setString(9, WorkflowState.ENQUEUED.name());
-          ctx.bindAppScope(ps, 10);
-          if (ps.executeUpdate() > 0) {
-            updatedWorkflowIds.add(id);
+        List<String> updatedWorkflowIds = new ArrayList<>();
+        try (var ps = connection.prepareStatement(updateQuery)) {
+          var now = System.currentTimeMillis();
+          // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
+          // limiter's remaining slots.
+          for (var id : dequeuedWorkflowIds) {
+            ps.setString(1, WorkflowState.PENDING.name());
+            ps.setString(2, appVersion);
+            ps.setString(3, executorId);
+            ps.setLong(4, now);
+            ps.setBoolean(5, queue.rateLimit() != null);
+            ps.setString(6, ctx.appName());
+            ps.setLong(7, now);
+            ps.setString(8, id);
+            ps.setString(9, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 10);
+            if (ps.executeUpdate() > 0) {
+              updatedWorkflowIds.add(id);
+            }
           }
         }
-      }
 
-      if (!updatedWorkflowIds.isEmpty()) {
-        connection.commit();
-      } else {
-        connection.rollback();
-      }
+        // Commit only if workflows were dequeued, matching Go. The candidate SELECT takes FOR
+        // UPDATE row locks, which stamp xmax and consume an XID, so a round that claims nothing is
+        // not a free read-only transaction: rolling it back avoids the WAL bloat and XID advance a
+        // commit would cost.
+        if (!updatedWorkflowIds.isEmpty()) {
+          connection.commit();
+        } else {
+          connection.rollback();
+        }
 
-      return updatedWorkflowIds;
+        return updatedWorkflowIds;
+      } catch (Throwable t) {
+        // No path may leave the transaction open: it may hold FOR UPDATE locks on rows other
+        // executors are waiting to claim.
+        try {
+          connection.rollback();
+        } catch (SQLException rollbackFailure) {
+          t.addSuppressed(rollbackFailure);
+        }
+        throw t;
+      }
     }
   }
 

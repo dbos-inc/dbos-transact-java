@@ -264,7 +264,9 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockDB).garbageCollect(eq(Instant.ofEpochMilli(42L)), eq(37L));
+      verify(mockDB)
+          .garbageCollect(
+              eq(Instant.ofEpochMilli(42L)), eq(37L), eq(SystemDatabase.DEFAULT_GC_BATCH_SIZE));
     }
   }
 

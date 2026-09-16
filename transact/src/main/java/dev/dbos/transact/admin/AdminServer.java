@@ -160,7 +160,9 @@ public class AdminServer implements AutoCloseable {
     var request = JsonUtility.fromJson(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(
-        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
+        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms),
+        (long) request.rows_threshold,
+        SystemDatabase.DEFAULT_GC_BATCH_SIZE);
 
     exchange.sendResponseHeaders(204, 0);
   }

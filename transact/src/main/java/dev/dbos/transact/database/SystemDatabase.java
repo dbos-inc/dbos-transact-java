@@ -167,6 +167,15 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
+  /**
+   * @param created whether this handle owns {@code dataSource} and so closes it with itself. Not a
+   *     caller's choice: it follows from who built the pool, which is why the public constructors
+   *     set it themselves rather than taking it.
+   * @param appName the application the rows written through this handle belong to. Pass the
+   *     executor's resolved name rather than {@code config.appName()}: on DBOS Cloud the executor
+   *     takes its name from {@code DBOS_APP_NAME}, and row ownership must be the same identity that
+   *     the application version hashes and that the peer-ownership checks compare against.
+   */
   private SystemDatabase(
       DataSource dataSource,
       String schema,
@@ -202,6 +211,7 @@ public class SystemDatabase implements AutoCloseable {
             : new NullNotificationSource();
   }
 
+  /** Builds its own connection pool from {@code url}, and closes it when this handle closes. */
   public SystemDatabase(
       String url,
       String user,
@@ -222,17 +232,14 @@ public class SystemDatabase implements AutoCloseable {
         null);
   }
 
-  public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true, null, true, null, null, null, null);
-  }
-
-  public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false, null, true, null, null, null, null);
-  }
-
+  /** Borrows {@code dataSource}, which the caller owns and which outlives this handle. */
   public SystemDatabase(
-      DataSource dataSource, String schema, DBOSSerializer serializer, @Nullable String appName) {
-    this(dataSource, schema, false, serializer, true, null, appName, null, null);
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      boolean useListenNotify,
+      @Nullable String appName) {
+    this(dataSource, schema, false, serializer, useListenNotify, null, appName, null, null);
   }
 
   /**
@@ -328,6 +335,11 @@ public class SystemDatabase implements AutoCloseable {
   /** For tests: whether this handle listens for notifications, or only polls. */
   boolean hasNotificationListener() {
     return !(notificationSource instanceof NullNotificationSource);
+  }
+
+  /** For tests: whether {@link #start} has actually brought the listener up. */
+  boolean isNotificationListenerRunning() {
+    return notificationSource.isRunning();
   }
 
   /** For recv and getEvent only; see {@link #NOTIFICATION_FALLBACK_INTERVAL}. */
@@ -780,8 +792,15 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(ctx));
   }
 
-  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    dbRetry(() -> WorkflowDAO.garbageCollect(ctx, cutoff, rowsThreshold));
+  /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
+  public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
+
+  /** Enforces retention across the entire system database. */
+  public void garbageCollect(Instant cutoff, Long rowsThreshold, int batchSize) {
+    if (cutoff == null && rowsThreshold == null) {
+      return;
+    }
+    dbRetry(() -> WorkflowDAO.runRetentionRound(ctx, cutoff, rowsThreshold, batchSize));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {

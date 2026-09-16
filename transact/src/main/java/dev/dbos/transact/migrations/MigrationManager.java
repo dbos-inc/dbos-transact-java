@@ -1,6 +1,7 @@
 package dev.dbos.transact.migrations;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 
 import java.sql.Connection;
@@ -22,11 +23,31 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
   public static final int SHARED_MIGRATION_BASE = 100;
+
+  /**
+   * The oldest system database schema version this SDK can run against.
+   *
+   * <p>Migration 109 created the workflow_input and workflow_output tables, which every workflow
+   * status read now consults, so anything older fails those reads outright. Migrations 110 and 111
+   * add operation_outputs.retention_timestamp and its index, which the payload retention sweep
+   * probes once per batch; at 110 the column exists but its index does not, and the sweep degrades
+   * to a full scan and sort of the largest payload table per batch. That presents as a retention
+   * round that never finishes rather than as an error, so 111 is the floor, not 110.
+   *
+   * <p>Migration 112 deliberately does not raise this. It drops a constraint rather than adding
+   * anything to read, and every delete path clears the child tables by ID, so this SDK behaves
+   * identically whether or not the cascade is still there.
+   *
+   * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
+   * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
+   * unconditionally on a later migration.
+   */
+  public static final int MINIMUM_SYSDB_VERSION = 111;
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
@@ -58,6 +79,116 @@ public class MigrationManager {
     }
   }
 
+  /**
+   * Reads the highest applied migration version, or 0 if dbos_migrations is empty.
+   *
+   * <p>Unlike {@link #getCurrentSysDbVersion}, this lets a {@link SQLException} propagate, so a
+   * caller can tell an unmigrated schema from one it merely cannot read. Swallowed, both arrive as
+   * version 0, and a database DBOS lacks privileges on is reported as one needing the DBOS schema
+   * applied -- sending the operator off to re-apply a schema that is already correct.
+   */
+  private static int readSysDbVersion(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
+            .formatted(schema);
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      return rs.next() ? rs.getInt("version") : 0;
+    }
+  }
+
+  private static boolean migrationTableExists(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT 1 FROM information_schema.tables"
+            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * <p>Used when {@link DBOSConfig#migrate()} is false and the deployment owns schema management.
+   * Without this check the SDK never reads dbos_migrations at all, and a schema older than {@link
+   * #MINIMUM_SYSDB_VERSION} surfaces much later as a raw "relation does not exist" on the first
+   * workflow status read.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(DBOSConfig config) {
+    Objects.requireNonNull(config, "DBOS Config must not be null");
+
+    if (config.dataSource() != null) {
+      validateSysDbVersion(config.dataSource(), config.databaseSchema());
+    } else {
+      validateSysDbVersion(
+          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
+    }
+  }
+
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(String url, String user, String password, String schema) {
+    Objects.requireNonNull(url, "database url must not be null");
+
+    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
+      validateSysDbVersion(ds, schema);
+    }
+  }
+
+  /**
+   * Verifies that the system database schema is new enough for this SDK, without modifying it.
+   *
+   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   */
+  public static void validateSysDbVersion(DataSource ds, String schema) {
+    Objects.requireNonNull(ds, "Data Source must not be null");
+    schema = SystemDatabase.sanitizeSchema(schema);
+
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
+
+    int version;
+    try (var conn = ds.getConnection()) {
+      version = readSysDbVersion(conn, schema);
+    } catch (SQLException e) {
+      // 42P01 undefined_table, 3F000 invalid_schema_name: the schema has never been migrated.
+      // Any other failure -- notably 42501 insufficient_privilege -- says nothing about the
+      // version, so it propagates rather than being reported as a schema that needs applying.
+      var state = e.getSQLState();
+      if ("42P01".equals(state) || "3F000".equals(state)) {
+        throw new IllegalStateException(
+            ("Schema \"%s\" has no dbos_migrations table, so its version cannot be determined."
+                    + " DBOS requires system database schema version %d or later. Apply the DBOS"
+                    + " schema to this database, or let DBOS migrate it, first.")
+                .formatted(schema, MINIMUM_SYSDB_VERSION),
+            e);
+      }
+      throw new RuntimeException("Failed to read the system database schema version", e);
+    }
+
+    if (version < MINIMUM_SYSDB_VERSION) {
+      throw new IllegalStateException(
+          ("Schema \"%s\" is at system database version %d, but this version of DBOS requires %d"
+                  + " or later. Bring the schema up to date, or let DBOS migrate it, first.")
+              .formatted(schema, version, MINIMUM_SYSDB_VERSION));
+    }
+
+    logger.debug(
+        "Schema {} is at system database version {} (minimum {})",
+        schema,
+        version,
+        MINIMUM_SYSDB_VERSION);
+  }
+
   private static boolean shouldMigrate(
       Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
       throws SQLException {
@@ -68,15 +199,7 @@ public class MigrationManager {
         if (!rs.next()) return true;
       }
     }
-    var tableSql =
-        "SELECT 1 FROM information_schema.tables"
-            + " WHERE table_schema = ? AND table_name = 'dbos_migrations'";
-    try (var stmt = conn.prepareStatement(tableSql)) {
-      stmt.setString(1, schema);
-      try (var rs = stmt.executeQuery()) {
-        if (!rs.next()) return true;
-      }
-    }
+    if (!migrationTableExists(conn, schema)) return true;
     var currentVersion = getCurrentSysDbVersion(conn, schema);
     var latestVersion = getMigrations(schema, useListenNotify, isCockroach).size();
     return currentVersion < latestVersion;
@@ -256,19 +379,12 @@ public class MigrationManager {
 
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
-    var sql =
-        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
-            .formatted(schema);
-    try (var stmt = conn.createStatement();
-        var rs = stmt.executeQuery(sql)) {
-      if (rs.next()) {
-        return rs.getInt("version");
-      }
+    try {
+      return readSysDbVersion(conn, schema);
     } catch (SQLException e) {
       logger.warn("SQLException thrown querying dbos_migrations table", e);
+      return 0;
     }
-
-    return 0;
   }
 
   private static boolean notificationsPrimaryKeyExists(Connection conn, String schema)
@@ -283,24 +399,6 @@ public class MigrationManager {
       runDbosMigrations(conn, schema, migrations, SystemDatabase.isCockroach(conn));
     } catch (SQLException e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  @FunctionalInterface
-  private interface SqlAction {
-    void run(Connection conn) throws SQLException;
-  }
-
-  private static void runInTransaction(Connection conn, SqlAction action) throws SQLException {
-    conn.setAutoCommit(false);
-    try {
-      action.run(conn);
-      conn.commit();
-    } catch (SQLException e) {
-      conn.rollback();
-      throw e;
-    } finally {
-      conn.setAutoCommit(true);
     }
   }
 
@@ -331,7 +429,7 @@ public class MigrationManager {
           // Migration 10 adds a primary key to notifications. Skip the DDL if one already exists
           // (guard for installs created before the primary key was added to migration 1).
           logger.info("Migration 10 skipped, primary key already exists");
-          runInTransaction(
+          SqlTransaction.run(
               conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
         } else if (ONLINE_MIGRATIONS.contains(migrationIndex) && !isCockroach) {
           // CONCURRENTLY index DDL cannot run inside a transaction. Clean up any indexes left
@@ -341,11 +439,11 @@ public class MigrationManager {
           try (var stmt = conn.createStatement()) {
             stmt.execute(migrationSql);
           }
-          runInTransaction(
+          SqlTransaction.run(
               conn, c -> bumpMigrationVersion(c, schema, migrationIndex, versionBefore));
         } else {
           // Standard migration: DDL and version bump in one transaction.
-          runInTransaction(
+          SqlTransaction.run(
               conn,
               c -> {
                 try (var stmt = c.createStatement()) {
@@ -365,7 +463,7 @@ public class MigrationManager {
     if (migrations.size() > lastApplied) {
       var versionBefore = lastApplied;
       try {
-        runInTransaction(
+        SqlTransaction.run(
             conn, c -> bumpMigrationVersion(c, schema, migrations.size(), versionBefore));
       } catch (SQLException e) {
         throw new RuntimeException("Failed to record migration %d".formatted(migrations.size()), e);
@@ -477,7 +575,12 @@ public class MigrationManager {
             MIGRATION_104,
             migration105(isCockroach),
             MIGRATION_106,
-            migration107(isCockroach)));
+            migration107(isCockroach),
+            MIGRATION_108,
+            MIGRATION_109,
+            MIGRATION_110,
+            migration111(isCockroach),
+            MIGRATION_112));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1386,4 +1489,72 @@ public class MigrationManager {
         + " ON \"%1$s\".\"application_versions\" (\"version_name\")"
         + " WHERE \"application_name\" IS NULL";
   }
+
+  // Migration 108: per-partition limits on queues. Any of these being set partitions the queue;
+  // each applies per partition. ADD COLUMN with a constant default is catalog-only, so no
+  // CONCURRENTLY is needed.
+  static final String MIGRATION_108 =
+      """
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_concurrency" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_worker_concurrency" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_rate_limit_max" INT4 DEFAULT NULL;
+      ALTER TABLE "%1$s"."queues" ADD COLUMN IF NOT EXISTS "partition_rate_limit_period_sec" DOUBLE PRECISION DEFAULT NULL;
+      """;
+
+  // Migration 109: the tables that payloads move into, so a status update no longer rewrites a
+  // large input. Creating them is all this release does: the reads below COALESCE over both
+  // shapes, but every write here still fills the legacy workflow_status columns. Migration 113,
+  // which stops the shared enqueue_workflow function writing them, comes with the writes in a
+  // later release, once every executor can read both shapes.
+  static final String MIGRATION_109 =
+      """
+      CREATE TABLE IF NOT EXISTS "%1$s"."workflow_input" (
+          workflow_uuid TEXT NOT NULL PRIMARY KEY,
+          inputs TEXT,
+          retention_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+
+      CREATE TABLE IF NOT EXISTS "%1$s"."workflow_output" (
+          workflow_uuid TEXT NOT NULL PRIMARY KEY,
+          output TEXT,
+          error TEXT,
+          retention_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+
+      CREATE INDEX IF NOT EXISTS "idx_workflow_input_retention"
+          ON "%1$s"."workflow_input" ("retention_timestamp");
+
+      CREATE INDEX IF NOT EXISTS "idx_workflow_output_retention"
+          ON "%1$s"."workflow_output" ("retention_timestamp");
+      """;
+
+  // Migration 110: sweep order only. The payload sweep deletes by absence of a status row, so
+  // this bounds a round rather than deciding what it may delete.
+  static final String MIGRATION_110 =
+      """
+      ALTER TABLE "%1$s"."operation_outputs"
+          ADD COLUMN IF NOT EXISTS "retention_timestamp" BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint;
+      """;
+
+  static String migration111(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_operation_outputs_retention\""
+        + " ON \"%1$s\".\"operation_outputs\" (\"retention_timestamp\")";
+  }
+
+  // Migration 112: drop the operation_outputs -> workflow_status cascade. The cascade was the only
+  // thing deleting a workflow's steps, and it did so one parent row at a time; the retention sweep
+  // now takes all three child tables in batches instead, which is the point of the redesign. It
+  // also charges a referential check to every step write. Both names appear because the SDKs
+  // created the constraint differently: Java and Python let Postgres name it, TypeScript's Knex
+  // migration named it "_foreign".
+  static final String MIGRATION_112 =
+      """
+      ALTER TABLE "%1$s"."operation_outputs"
+          DROP CONSTRAINT IF EXISTS "operation_outputs_workflow_uuid_foreign";
+
+      ALTER TABLE "%1$s"."operation_outputs"
+          DROP CONSTRAINT IF EXISTS "operation_outputs_workflow_uuid_fkey";
+      """;
 }
