@@ -2294,7 +2294,9 @@ public class WorkflowDAO {
 
     try (var conn = ctx.getConnection()) {
       if (rowsThreshold != null) {
-        var rowsCutoff = getRowsCutoff(ctx, conn, rowsThreshold);
+        var rowsCutoff =
+            SystemDatabase.retryOnSerializationError(
+                "retention rows-threshold probe", () -> getRowsCutoff(ctx, conn, rowsThreshold));
         if (rowsCutoff != null) {
           if (cutoff == null || rowsCutoff.isAfter(cutoff)) {
             cutoff = rowsCutoff;
@@ -2318,20 +2320,28 @@ public class WorkflowDAO {
         "SELECT completed_at FROM \"%s\".workflow_status WHERE %s ORDER BY completed_at LIMIT 1"
             .formatted(ctx.schema(), STATUS_GC_FILTER);
 
-    Long oldest;
-    try (var stmt = conn.prepareStatement(seedSql)) {
-      bindStatusGcFilter(stmt, deadline);
-      try (var rs = stmt.executeQuery()) {
-        oldest = rs.next() ? rs.getLong(1) : null;
-      }
-    }
+    Long oldest =
+        SystemDatabase.retryOnSerializationError(
+            "retention status seed",
+            () -> {
+              try (var stmt = conn.prepareStatement(seedSql)) {
+                bindStatusGcFilter(stmt, deadline);
+                try (var rs = stmt.executeQuery()) {
+                  return rs.next() ? rs.getLong(1) : null;
+                }
+              }
+            });
     if (oldest == null) {
       return;
     }
 
     var watermark = oldest - 1;
     while (true) {
-      var next = deleteStatusBatch(ctx, conn, deadline, watermark, batchSize);
+      final long from = watermark;
+      var next =
+          SystemDatabase.retryOnSerializationError(
+              "retention status batch",
+              () -> deleteStatusBatch(ctx, conn, deadline, from, batchSize));
       if (next == null) {
         return;
       }
@@ -2538,13 +2548,17 @@ public class WorkflowDAO {
                 + " ORDER BY retention_timestamp LIMIT 1")
             .formatted(ctx.schema(), table);
 
-    Long oldest;
-    try (var stmt = conn.prepareStatement(seedSql)) {
-      stmt.setLong(1, deadline);
-      try (var rs = stmt.executeQuery()) {
-        oldest = rs.next() ? rs.getLong(1) : null;
-      }
-    }
+    Long oldest =
+        SystemDatabase.retryOnSerializationError(
+            "retention payload seed",
+            () -> {
+              try (var stmt = conn.prepareStatement(seedSql)) {
+                stmt.setLong(1, deadline);
+                try (var rs = stmt.executeQuery()) {
+                  return rs.next() ? rs.getLong(1) : null;
+                }
+              }
+            });
     if (oldest == null) {
       return 0;
     }
@@ -2563,36 +2577,39 @@ public class WorkflowDAO {
     while (true) {
       final long from = watermark;
       var batch =
-          SqlTransaction.<PayloadBatch>call(
-              conn,
-              c -> {
-                // Batches are cut by candidate count, so rows spared by the anti-join only thin
-                // one out; they are re-checked on the next round.
-                Long step = null;
-                try (var stmt = c.prepareStatement(stepSql)) {
-                  stmt.setLong(1, deadline);
-                  stmt.setLong(2, from);
-                  stmt.setInt(3, batchSize - 1);
-                  try (var rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                      step = rs.getLong(1);
-                    }
-                  }
-                }
+          SystemDatabase.retryOnSerializationError(
+              "retention payload batch",
+              () ->
+                  SqlTransaction.<PayloadBatch>call(
+                      conn,
+                      c -> {
+                        // Batches are cut by candidate count, so rows spared by the anti-join
+                        // only thin one out; they are re-checked on the next round.
+                        Long step = null;
+                        try (var stmt = c.prepareStatement(stepSql)) {
+                          stmt.setLong(1, deadline);
+                          stmt.setLong(2, from);
+                          stmt.setInt(3, batchSize - 1);
+                          try (var rs = stmt.executeQuery()) {
+                            if (rs.next()) {
+                              step = rs.getLong(1);
+                            }
+                          }
+                        }
 
-                // retention_timestamp ties may push the batch slightly over batchSize.
-                var bounded = step != null ? " AND retention_timestamp <= ?" : "";
-                try (var stmt = c.prepareStatement(deleteSql + bounded + orphaned)) {
-                  stmt.setLong(1, deadline);
-                  stmt.setLong(2, from);
-                  var index = 3;
-                  if (step != null) {
-                    stmt.setLong(index++, step);
-                  }
-                  stmt.setLong(index, deadline);
-                  return new PayloadBatch(step, stmt.executeUpdate());
-                }
-              });
+                        // retention_timestamp ties may push the batch slightly over batchSize.
+                        var bounded = step != null ? " AND retention_timestamp <= ?" : "";
+                        try (var stmt = c.prepareStatement(deleteSql + bounded + orphaned)) {
+                          stmt.setLong(1, deadline);
+                          stmt.setLong(2, from);
+                          var index = 3;
+                          if (step != null) {
+                            stmt.setLong(index++, step);
+                          }
+                          stmt.setLong(index, deadline);
+                          return new PayloadBatch(step, stmt.executeUpdate());
+                        }
+                      }));
       deleted += batch.deleted();
       if (batch.step() == null) {
         return deleted;

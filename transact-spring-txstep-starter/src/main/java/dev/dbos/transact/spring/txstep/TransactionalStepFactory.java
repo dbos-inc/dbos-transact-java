@@ -199,7 +199,7 @@ public class TransactionalStepFactory {
                   .<Object, E>toResult(serializer);
             } catch (Exception e) {
               if (!status.isCompleted()) txManager.rollback(status);
-              if (PostgresStepFactory.isSerializationFailure(e)) {
+              if (SystemDatabase.isSerializationError(e)) {
                 try {
                   Thread.sleep(retryWaitMs);
                 } catch (InterruptedException ie) {

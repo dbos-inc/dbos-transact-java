@@ -70,14 +70,20 @@ public abstract class PostgresStepFactory {
     return false;
   }
 
+  /**
+   * Whether a failure is a transaction conflict: SQLSTATE 40001 serialization_failure or 40P01
+   * deadlock_detected.
+   *
+   * @deprecated since 1.1, use {@link SystemDatabase#isSerializationError(Throwable)}, which this
+   *     delegates to. The two matched the same codes by the same cause walk, and two copies of one
+   *     predicate drift. Kept so that anything compiled against it keeps linking; it is removed in
+   *     2.0.
+   * @param e the failure to classify, at any depth in its cause chain
+   * @return whether the database rolled the transaction back for a conflict
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public static boolean isSerializationFailure(Exception e) {
-    for (Throwable t = e; t != null; t = t.getCause()) {
-      if (t instanceof SQLException sq) {
-        var state = sq.getSQLState();
-        if ("40001".equals(state) || "40P01".equals(state)) return true;
-      }
-    }
-    return false;
+    return SystemDatabase.isSerializationError(e);
   }
 
   private static final long RETRY_WAIT_INITIAL_MS = 1L;
@@ -102,7 +108,7 @@ public abstract class PostgresStepFactory {
             try {
               return execute.execute(workflowId, stepId);
             } catch (Exception e) {
-              if (isSerializationFailure(e)) {
+              if (SystemDatabase.isSerializationError(e)) {
                 try {
                   Thread.sleep(retryWaitMs);
                 } catch (InterruptedException ie) {

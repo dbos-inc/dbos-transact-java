@@ -215,6 +215,14 @@ public class QueueService implements AutoCloseable {
         // A peer holding the rows this dequeue wanted to lock is the system working, not a
         // failure: it costs one polling interval and says nothing louder. Every other SDK
         // classifies 55P03 the same way here.
+        //
+        // This try covers more than the dequeue, though: getQueuePartitions above, and the
+        // dispatch loop inside processPartition, which does synchronous database work on this
+        // thread before it submits anything. Since isContentionError began matching 40001, a
+        // conflict raised while *starting* a workflow lands here and is reported as a peer
+        // mid-dequeue -- which is false, and at DEBUG, so it goes unseen. Narrow the try around
+        // startQueuedWorkflows when this catch is next rewritten; see the plan's review check for
+        // the #512/#518 change, which rewrites it.
         if (SystemDatabase.isContentionError(e)) {
           logger.debug("A peer is mid-dequeue on queue {}; backing off", queue.name());
         } else {
