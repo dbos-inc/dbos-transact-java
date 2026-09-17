@@ -2278,77 +2278,6 @@ public class WorkflowDAO {
     return new RetentionLock(ctx.schema(), conn);
   }
 
-  /**
-   * A retention query that may fail with {@link SQLException}.
-   *
-   * @param <T> what the query returns
-   */
-  @FunctionalInterface
-  interface RetentionQuery<T> {
-    T run() throws SQLException;
-  }
-
-  /**
-   * Re-runs a retention batch that lost a deadlock or serialization race. The database already
-   * rolled it back, so replaying it is safe.
-   *
-   * <p>Retention is the only caller that needs this, which is why it lives here rather than beside
-   * {@code SystemDatabase.dbRetry}: it is the only work in the system that deletes in batches from
-   * under live workflows, so it is the only work that loses these races routinely and can replay
-   * them safely. Python and TypeScript confine their equivalents to garbage collection too.
-   *
-   * <p>Bounded, unlike {@code dbRetry}: a conflict means a peer won, which is progress, so spinning
-   * forever would only mean this caller never does. The schedule is Python's and TypeScript's
-   * exactly -- ten attempts, 50 ms doubling to a 2 s cap, jittered so peers that collided do not
-   * collide again.
-   *
-   * <p>Stops on interruption, leaving the flag set for the caller. A round that retried through a
-   * cancellation would keep deleting after {@code sweepPayloadsConcurrently} interrupted its
-   * workers with {@code shutdownNow()} and after {@code runRetentionRound} released the retention
-   * lock -- and, because an already-interrupted {@code Thread.sleep} throws at once, it would do
-   * the remaining attempts back to back with no backoff at all.
-   */
-  static <T> T retryOnSerializationError(RetentionQuery<T> operation) throws SQLException {
-    final int maxAttempts = 10;
-    final double maxBackoffMs = 2000.0;
-    double backoffMs = 50.0;
-    for (int attempt = 1; ; attempt++) {
-      try {
-        return operation.run();
-      } catch (SQLException e) {
-        if (!SystemDatabase.isSerializationError(e)) {
-          throw e;
-        }
-        if (attempt == maxAttempts) {
-          logger.warn("Garbage collection failed after {} attempts", maxAttempts, e);
-          throw e;
-        }
-        logger.warn(
-            "Contention or deadlock detected in workflow garbage collection (attempt {}); retrying",
-            attempt,
-            e);
-        try {
-          SystemDatabase.sleepWithJitter(backoffMs);
-        } catch (InterruptedException ie) {
-          // Restore the flag so the caller can tell cancellation from exhaustion -- both give back
-          // the same SQLException, and the flag is the only thing that separates them.
-          Thread.currentThread().interrupt();
-          logger.warn("Garbage collection interrupted after {} attempts; giving up", attempt, e);
-          throw e;
-        }
-        backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
-      }
-    }
-  }
-
-  /**
-   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
-   * used, or null when there is nothing to collect.
-   *
-   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
-   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
-   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
-   */
   public static @Nullable Instant garbageCollect(
       DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
     if (batchSize < 1) {
@@ -2357,7 +2286,9 @@ public class WorkflowDAO {
 
     try (var conn = ctx.getConnection()) {
       if (rowsThreshold != null) {
-        var rowsCutoff = retryOnSerializationError(() -> getRowsCutoff(ctx, conn, rowsThreshold));
+        var rowsCutoff =
+            SystemDatabase.retryOnSerializationError(
+                "retention rows-threshold probe", () -> getRowsCutoff(ctx, conn, rowsThreshold));
         if (rowsCutoff != null) {
           if (cutoff == null || rowsCutoff.isAfter(cutoff)) {
             cutoff = rowsCutoff;
@@ -2382,7 +2313,8 @@ public class WorkflowDAO {
             .formatted(ctx.schema(), STATUS_GC_FILTER);
 
     Long oldest =
-        retryOnSerializationError(
+        SystemDatabase.retryOnSerializationError(
+            "retention status seed",
             () -> {
               try (var stmt = conn.prepareStatement(seedSql)) {
                 bindStatusGcFilter(stmt, deadline);
@@ -2399,7 +2331,9 @@ public class WorkflowDAO {
     while (true) {
       final long from = watermark;
       var next =
-          retryOnSerializationError(() -> deleteStatusBatch(ctx, conn, deadline, from, batchSize));
+          SystemDatabase.retryOnSerializationError(
+              "retention status batch",
+              () -> deleteStatusBatch(ctx, conn, deadline, from, batchSize));
       if (next == null) {
         return;
       }
@@ -2607,7 +2541,8 @@ public class WorkflowDAO {
             .formatted(ctx.schema(), table);
 
     Long oldest =
-        retryOnSerializationError(
+        SystemDatabase.retryOnSerializationError(
+            "retention payload seed",
             () -> {
               try (var stmt = conn.prepareStatement(seedSql)) {
                 stmt.setLong(1, deadline);
@@ -2634,7 +2569,8 @@ public class WorkflowDAO {
     while (true) {
       final long from = watermark;
       var batch =
-          retryOnSerializationError(
+          SystemDatabase.retryOnSerializationError(
+              "retention payload batch",
               () ->
                   SqlTransaction.<PayloadBatch>call(
                       conn,

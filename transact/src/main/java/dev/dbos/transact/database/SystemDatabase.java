@@ -459,8 +459,9 @@ public class SystemDatabase implements AutoCloseable {
     Thread.sleep((long) (baseMs * jitter));
   }
 
+  /** A database call returning nothing, which may fail with {@link SQLException}. */
   @FunctionalInterface
-  interface SqlRunnable {
+  public interface SqlRunnable {
     void run() throws SQLException;
   }
 
@@ -472,9 +473,108 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  /** A database call returning a value, which may fail with {@link SQLException}. */
   @FunctionalInterface
-  interface SqlSupplier<T> {
+  public interface SqlSupplier<T> {
     T get() throws SQLException;
+  }
+
+  /**
+   * Replays work that a transaction conflict rolled back, up to ten times.
+   *
+   * <p>For callers whose work is safe to re-run: the database has already discarded it, so a replay
+   * starts from the same state the first attempt saw. Only a caller that knows this may use it --
+   * {@link #dbRetry} deliberately does not, because a conflict on the dequeue is a signal the queue
+   * poll loop needs rather than one to sleep off.
+   *
+   * <p>Bounded, unlike {@link #dbRetry}: a conflict means a peer won, which is progress, so
+   * spinning forever would only mean this caller never does. The schedule is Python's and
+   * TypeScript's exactly -- ten attempts, 50 ms doubling to a 2 s cap, jittered so peers that
+   * collided do not collide again.
+   *
+   * <p>Stops on interruption, leaving the flag set for the caller. Both exhaustion and cancellation
+   * give back the same {@link SQLException}, and the interrupt flag is the only thing that
+   * separates them.
+   *
+   * @param operation what is being replayed, for the log
+   * @param work the database call, which must be safe to run more than once
+   */
+  public static <T> T retryOnSerializationError(String operation, SqlSupplier<T> work)
+      throws SQLException {
+    final int maxAttempts = 10;
+    final double maxBackoffMs = 2000.0;
+    double backoffMs = 50.0;
+    for (int attempt = 1; ; attempt++) {
+      try {
+        return work.get();
+      } catch (SQLException e) {
+        if (!isSerializationError(e)) {
+          throw e;
+        }
+        if (attempt == maxAttempts) {
+          logger.warn("{} failed after {} attempts", operation, maxAttempts, e);
+          throw e;
+        }
+        logger.warn(
+            "Contention or deadlock detected in {} (attempt {}); retrying", operation, attempt, e);
+        try {
+          sleepWithJitter(backoffMs);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          logger.warn("{} interrupted after {} attempts; giving up", operation, attempt, e);
+          throw e;
+        }
+        backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
+      }
+    }
+  }
+
+  /** As {@link #retryOnSerializationError(String, SqlSupplier)}, for work returning nothing. */
+  public static void retryOnSerializationError(String operation, SqlRunnable work)
+      throws SQLException {
+    retryOnSerializationError(
+        operation,
+        () -> {
+          work.run();
+          return null;
+        });
+  }
+
+  /**
+   * As {@link #dbRetry(SqlSupplier)}, but a serialization error is replayed rather than thrown at
+   * the caller -- so this retries what {@link #retryOnSerializationError} does as well as what
+   * {@link #dbRetry} does.
+   *
+   * <p>The caller asserts the precondition by choosing this method, and it is stronger than it
+   * looks. A serialization error means a <em>peer committed</em>, so the replay never sees the
+   * state the first attempt saw -- it sees a later one. The work must therefore be safe to re-run
+   * against a database that has changed underneath it, not merely safe because a rollback undid the
+   * first attempt.
+   *
+   * <p>That holds for an upsert keyed on identity, an insert guarded by {@code ON CONFLICT}, a
+   * delete, a read, or a step whose recorded-result check makes a peer's win the right answer. It
+   * does <em>not</em> hold when part of the work has already committed -- a transaction followed by
+   * batched sweeps replays the committed part, and anything it counts or returns will be wrong. See
+   * {@code renameApplication}, which is excluded for exactly that reason.
+   *
+   * <p>The replay goes <em>inside</em> the connection retry, and that order matters: {@link
+   * #dbRetry} turns a failure it will not retry into a {@link RuntimeException}, which {@link
+   * #retryOnSerializationError} does not catch, so the other nesting would silently replay nothing.
+   * Composing it here means no call site can get that wrong.
+   *
+   * @param operation what is being run, for the log
+   * @param supplier the work, which must be safe to run more than once
+   */
+  private <T> T dbRetryIncludingSerializationError(String operation, SqlSupplier<T> supplier) {
+    return dbRetry(() -> retryOnSerializationError(operation, supplier));
+  }
+
+  /**
+   * As {@link #dbRetryIncludingSerializationError(String, SqlSupplier)}, for work returning
+   * nothing.
+   */
+  private void dbRetryIncludingSerializationError(String operation, SqlRunnable runnable) {
+    dbRetry(() -> retryOnSerializationError(operation, runnable));
   }
 
   private <T> T dbRetry(SqlSupplier<T> supplier) {
@@ -639,7 +739,8 @@ public class SystemDatabase implements AutoCloseable {
       throw new IllegalArgumentException(
           String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
     }
-    return dbRetry(
+    return dbRetryIncludingSerializationError(
+        "upsertQueue",
         () -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting, applicationName));
   }
 
@@ -734,7 +835,8 @@ public class SystemDatabase implements AutoCloseable {
       String functionName,
       boolean sendToForks,
       String serialization) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "sendBulk",
         () ->
             NotificationsDAO.sendBulk(
                 ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
@@ -762,7 +864,8 @@ public class SystemDatabase implements AutoCloseable {
       Object message,
       boolean asStep,
       String serialization) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "setEvent",
         () ->
             NotificationsDAO.setEvent(
                 ctx, workflowId, functionId, key, message, asStep, serialization));
@@ -800,7 +903,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetry(() -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
+    dbRetryIncludingSerializationError(
+        "deleteWorkflows", () -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
@@ -812,7 +916,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "createApplicationVersion",
         () -> ApplicationVersionDAO.createApplicationVersion(ctx, versionName, applicationName));
   }
 
@@ -833,6 +938,9 @@ public class SystemDatabase implements AutoCloseable {
       String newName,
       @Nullable Integer batchSize,
       boolean adoptUnclaimedRows) {
+    // Deliberately not dbRetryIncludingSerializationError: this is a transaction followed by two
+    // batched sweeps in their own transactions, so a replay would re-run an already-committed
+    // move -- finding no rows left under the old name, and undercounting what it reports.
     return dbRetry(
         () ->
             ApplicationRenameDAO.renameApplication(
@@ -922,7 +1030,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
-    dbRetry(() -> SchedulesDAO.applySchedules(ctx, schedules));
+    dbRetryIncludingSerializationError(
+        "applySchedules", () -> SchedulesDAO.applySchedules(ctx, schedules));
   }
 
   @SuppressWarnings("removal") // implements the deprecated ExternalState API
@@ -937,7 +1046,8 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<MetricData> getMetrics(
       Instant startTime, Instant endTime, @Nullable List<String> applicationName) {
-    return dbRetry(() -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
+    return dbRetryIncludingSerializationError(
+        "getMetrics", () -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
@@ -965,7 +1075,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
-    dbRetry(() -> WorkflowDAO.importWorkflow(ctx, workflows));
+    dbRetryIncludingSerializationError(
+        "importWorkflow", () -> WorkflowDAO.importWorkflow(ctx, workflows));
   }
 
   public void writeStreamFromStep(
@@ -979,7 +1090,8 @@ public class SystemDatabase implements AutoCloseable {
 
   public void writeStreamFromWorkflow(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "writeStreamFromWorkflow",
         () ->
             StreamsDAO.writeStreamFromWorkflow(
                 ctx, workflowId, functionId, key, value, serializationFormat));
