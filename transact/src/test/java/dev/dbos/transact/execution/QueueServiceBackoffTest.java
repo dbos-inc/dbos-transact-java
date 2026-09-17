@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSSystemDatabaseException;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -121,5 +122,17 @@ public class QueueServiceBackoffTest {
     var raised = Duration.ofSeconds(60);
     assertEquals(2.0, QueueService.nextBackoffFactor(factor, DO_NOT_BACK_OFF, raised));
     assertEquals(2.0, QueueService.nextBackoffFactor(factor, BACK_OFF, raised));
+  }
+
+  @Test
+  @DisplayName("the decision survives dbRetry's wrapper")
+  public void theDecisionSeesThroughTheSystemDatabaseWrapper() {
+    // dbRetry hands failures back as DBOSSystemDatabaseException. If that ever stopped chaining,
+    // every classifier below it would quietly stop matching and a lost lock would back the queue
+    // off -- reintroducing #512. SystemDatabaseExceptionTest guards the wrapper; this guards the
+    // decision that depends on it.
+    assertFalse(QueueService.shouldBackOff(new DBOSSystemDatabaseException(wrapped("55P03"))));
+    assertTrue(QueueService.shouldBackOff(new DBOSSystemDatabaseException(wrapped("40001"))));
+    assertFalse(QueueService.shouldBackOff(new DBOSSystemDatabaseException(wrapped("58030"))));
   }
 }
