@@ -2905,6 +2905,13 @@ public class SystemDatabaseTest {
         SystemDatabase.isSerializationError(new SQLException("too many connections", "53300")));
     assertFalse(SystemDatabase.isSerializationError(new SQLException("no state")));
     assertFalse(SystemDatabase.isSerializationError(new RuntimeException("boom")));
+
+    // JDBC's standard type for exactly these rollbacks extends SQLTransientException, which
+    // dbRetry retries blind. It has to be recognised by SQLSTATE before that branch is reached,
+    // or a driver that throws this type would put a conflict back into the unbounded loop.
+    assertTrue(
+        SystemDatabase.isSerializationError(
+            new java.sql.SQLTransactionRollbackException("serialization failure", "40001")));
   }
 
   @Test

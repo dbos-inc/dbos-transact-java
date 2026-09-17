@@ -482,10 +482,14 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Replays work that a transaction conflict rolled back, up to ten times.
    *
-   * <p>For callers whose work is safe to re-run: the database has already discarded it, so a replay
-   * starts from the same state the first attempt saw. Only a caller that knows this may use it --
-   * {@link #dbRetry} deliberately does not, because a conflict on the dequeue is a signal the queue
-   * poll loop needs rather than one to sleep off.
+   * <p>For callers whose work is safe to re-run -- which is stronger than it sounds. A
+   * serialization error means a <em>peer committed</em>, so the replay never sees the state the
+   * first attempt saw; it sees a later one. The work must be safe against a database that changed
+   * underneath it, not merely safe because a rollback undid the first attempt. See {@link
+   * #dbRetryIncludingSerializationError} for what qualifies.
+   *
+   * <p>Only a caller that knows this may use it. {@link #dbRetry} deliberately does not, because a
+   * conflict on the dequeue is a signal the queue poll loop needs rather than one to sleep off.
    *
    * <p>Bounded, unlike {@link #dbRetry}: a conflict means a peer won, which is progress, so
    * spinning forever would only mean this caller never does. The schedule is Python's and
@@ -595,7 +599,13 @@ public class SystemDatabase implements AutoCloseable {
           if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
             hikariDataSource.getHikariPoolMXBean().softEvictConnections();
           }
-        } else if (e instanceof SQLTransientException || isTransientState(e)) {
+        } else if (!isSerializationError(e)
+            && (e instanceof SQLTransientException || isTransientState(e))) {
+          // SQLSTATE decides before the type, which is too coarse on its own:
+          // SQLTransactionRollbackException is class 40, so OR-ing the instanceof ahead of the
+          // state check let a conflict back into this unbounded loop. The type is a fallback for
+          // an exception carrying no SQLSTATE, and #515 reworks this dispatch to say so -- state
+          // first, type only when there is no state, here and in the branch above.
           logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
         } else {
           throw new RuntimeException(e);

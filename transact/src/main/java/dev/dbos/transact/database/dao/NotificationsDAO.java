@@ -327,9 +327,9 @@ public class NotificationsDAO {
                       stmt.setString(4, recvTopic);
 
                       // Note, if there are two executors running the same workflow waiting on the
-                      // same recv, only the first one will return a row here. The second one get a
-                      // null message but then throw a WorkflowExecutionConflictException when it
-                      // records the step result.
+                      // same recv, only the first one will return a row here. The second one gets
+                      // a null message but then throws a WorkflowExecutionConflictException when
+                      // it records the step result.
                       try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                           serializedMessage = rs.getString("message");
