@@ -21,8 +21,8 @@ public class QueueServiceBackoffTest {
 
   private static final Duration INTERVAL = Duration.ofMillis(200);
 
-  private static final boolean CONTENDED = true;
-  private static final boolean NOT_CONTENDED = false;
+  private static final boolean BACK_OFF = true;
+  private static final boolean DO_NOT_BACK_OFF = false;
 
   private static SQLException wrapped(String sqlState) {
     // Contention reaches the listener wrapped by dbRetry, which is how it arrives in production.
@@ -34,7 +34,7 @@ public class QueueServiceBackoffTest {
   public void contentionEscalatesToTheCeiling() {
     double factor = 1.0;
     for (int poll = 0; poll < 20; poll++) {
-      factor = QueueService.nextBackoffFactor(factor, CONTENDED, INTERVAL);
+      factor = QueueService.nextBackoffFactor(factor, BACK_OFF, INTERVAL);
     }
 
     assertEquals(600.0, factor, "120s over a 200ms interval");
@@ -47,11 +47,11 @@ public class QueueServiceBackoffTest {
     // Back the queue off first, so a frozen factor is distinguishable from a decaying one.
     double factor = 1.0;
     for (int poll = 0; poll < 20; poll++) {
-      factor = QueueService.nextBackoffFactor(factor, CONTENDED, INTERVAL);
+      factor = QueueService.nextBackoffFactor(factor, BACK_OFF, INTERVAL);
     }
     double afterContention = factor;
 
-    factor = QueueService.nextBackoffFactor(factor, NOT_CONTENDED, INTERVAL);
+    factor = QueueService.nextBackoffFactor(factor, DO_NOT_BACK_OFF, INTERVAL);
     assertTrue(
         factor < afterContention,
         "a genuine error must not hold the queue at the interval contention earned");
@@ -63,24 +63,38 @@ public class QueueServiceBackoffTest {
   public void decayFloorsAtTheBaseInterval() {
     double factor = 40.0;
     for (int poll = 0; poll < 100; poll++) {
-      factor = QueueService.nextBackoffFactor(factor, NOT_CONTENDED, INTERVAL);
+      factor = QueueService.nextBackoffFactor(factor, DO_NOT_BACK_OFF, INTERVAL);
     }
 
     assertEquals(1.0, factor, "decay must not poll more often than the queue asked for");
   }
 
   @Test
-  @DisplayName("both contention codes count as contention; nothing else does")
-  public void classificationDecidesWhetherToBackOff() {
-    // A NOWAIT claim losing the lock, and a SERIALIZABLE dequeue losing the race.
-    assertTrue(SystemDatabase.isContentionError(wrapped("55P03")));
-    assertTrue(SystemDatabase.isContentionError(wrapped("40001")));
-    assertTrue(SystemDatabase.isContentionError(new RuntimeException(wrapped("40001"))));
+  @DisplayName("a lost row lock does not back the queue off; a conflict does")
+  public void onlyAConflictAsksToBackOff() {
+    // 55P03: the peer holding those rows commits in milliseconds, so the next tick is enough.
+    // This is the whole of #512 -- backing off here left a queue idle for 25.5s in the report.
+    assertFalse(QueueService.shouldBackOff(wrapped("55P03")));
+    assertFalse(QueueService.shouldBackOff(new RuntimeException(wrapped("55P03"))));
+
+    // 40001: a peer already committed, and under a shared budget that can keep happening.
+    assertTrue(QueueService.shouldBackOff(wrapped("40001")));
+    assertTrue(QueueService.shouldBackOff(new RuntimeException(wrapped("40001"))));
 
     // A deadlock is class 40 too, but nothing expects it, so it is a real error here.
+    assertFalse(QueueService.shouldBackOff(wrapped("40P01")));
+    assertFalse(QueueService.shouldBackOff(new SQLException("no state")));
+    assertFalse(QueueService.shouldBackOff(new RuntimeException("boom")));
+  }
+
+  @Test
+  @DisplayName("both codes still count as contention for skipping a partition")
+  public void bothCodesSkipAPartition() {
+    // The partition sweep skips on either, which is what Python does: a peer winning one
+    // partition says nothing about the rest, whichever way it won.
+    assertTrue(SystemDatabase.isContentionError(wrapped("55P03")));
+    assertTrue(SystemDatabase.isContentionError(wrapped("40001")));
     assertFalse(SystemDatabase.isContentionError(wrapped("40P01")));
-    assertFalse(SystemDatabase.isContentionError(new SQLException("no state")));
-    assertFalse(SystemDatabase.isContentionError(new RuntimeException("boom")));
   }
 
   @Test
@@ -89,7 +103,7 @@ public class QueueServiceBackoffTest {
     var slowInterval = Duration.ofMinutes(5);
 
     // The cap floors at 1.0 rather than going below it, which would poll more often on contention.
-    assertEquals(1.0, QueueService.nextBackoffFactor(1.0, CONTENDED, slowInterval));
+    assertEquals(1.0, QueueService.nextBackoffFactor(1.0, BACK_OFF, slowInterval));
   }
 
   @Test
@@ -98,14 +112,14 @@ public class QueueServiceBackoffTest {
     // Backed off to the 120s ceiling on a 200ms interval.
     double factor = 1.0;
     for (int poll = 0; poll < 20; poll++) {
-      factor = QueueService.nextBackoffFactor(factor, CONTENDED, INTERVAL);
+      factor = QueueService.nextBackoffFactor(factor, BACK_OFF, INTERVAL);
     }
     assertEquals(600.0, factor);
 
     // An operator raises the interval to 60s. Decaying from 600 would poll every 10 hours and
     // take ~60 polls to work off, so the multiplier has to be reclamped, not merely decayed.
     var raised = Duration.ofSeconds(60);
-    assertEquals(2.0, QueueService.nextBackoffFactor(factor, NOT_CONTENDED, raised));
-    assertEquals(2.0, QueueService.nextBackoffFactor(factor, CONTENDED, raised));
+    assertEquals(2.0, QueueService.nextBackoffFactor(factor, DO_NOT_BACK_OFF, raised));
+    assertEquals(2.0, QueueService.nextBackoffFactor(factor, BACK_OFF, raised));
   }
 }

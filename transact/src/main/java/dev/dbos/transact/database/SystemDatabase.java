@@ -445,6 +445,28 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
+   * Whether {@code t} is 55P03 lock_not_available: a {@code FOR UPDATE NOWAIT} that lost the race
+   * for a row lock.
+   *
+   * <p>Separate from {@link #isContentionError} because the two codes deserve different reactions
+   * at the queue poll loop. This one means a peer holds the rows inside its dequeue transaction --
+   * a select, an update and a commit, with dispatch deliberately outside it -- so the obstruction
+   * lasts milliseconds and is gone by the next tick. A serialization failure means a peer already
+   * committed, which under a shared budget can keep happening, so that one is worth damping.
+   *
+   * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
+   */
+  public static boolean isLockNotAvailable(Throwable t) {
+    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sqlException
+          && "55P03".equals(sqlException.getSQLState())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Sleeps for {@code baseMs} scaled by a random factor in [0.5, 1.5), so peers that collided do
    * not collide again.
    *

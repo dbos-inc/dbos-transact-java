@@ -259,7 +259,7 @@ public class QueueService implements AutoCloseable {
       // the finally may escape it -- including reloading the queue's own configuration, which
       // reaches dbRetry and so can throw for a conflict or any non-transient failure.
       boolean reschedule = true;
-      boolean contentionDetected = false;
+      boolean backoffRequested = false;
       try {
         if (dynamic && !refreshQueue()) {
           reschedule = false;
@@ -272,20 +272,18 @@ public class QueueService implements AutoCloseable {
           processPartition(null);
         }
       } catch (Exception e) {
-        // Only contention moves the interval. It is self-limiting -- whoever won the claim is
-        // doing the work -- so polling later just spreads the contenders out. Backing off on a
-        // genuine error sheds no load, since the dequeue is not what broke; Python, TypeScript
-        // and Go all log and poll on schedule.
-        if (SystemDatabase.isContentionError(e)) {
-          contentionDetected = true;
-          logger.debug("A peer is mid-dequeue on queue {}; backing off", queue.name());
+        backoffRequested = shouldBackOff(e);
+        if (backoffRequested) {
+          logger.debug("Lost a dequeue race on queue {}; backing off", queue.name());
+        } else if (SystemDatabase.isLockNotAvailable(e)) {
+          logger.debug("A peer is mid-dequeue on queue {}; retrying next poll", queue.name());
         } else {
           logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
         }
       } finally {
         if (reschedule) {
           backoffFactor =
-              nextBackoffFactor(backoffFactor, contentionDetected, queue.pollingInterval());
+              nextBackoffFactor(backoffFactor, backoffRequested, queue.pollingInterval());
           this.schedule();
         }
       }
@@ -293,8 +291,28 @@ public class QueueService implements AutoCloseable {
   }
 
   /**
-   * The polling multiplier for the next poll: grown on contention, decayed otherwise, and clamped
-   * into range either way.
+   * Whether a failed poll should lengthen the polling interval.
+   *
+   * <p>A lost row lock (55P03) should not: the peer holding those rows commits in milliseconds, so
+   * the obstruction is gone by the next tick and a failed poll costs one read that NOWAIT made fail
+   * immediately. There is no load to shed, and escalating abandons a queue that has work waiting --
+   * which is what #512 measured, 25.5 s of idle time from a 60 s lock hold against a 40 ms
+   * uncontended control.
+   *
+   * <p>A serialization failure (40001) should: a peer already committed, and under a shared budget
+   * that can keep happening, so damping spreads the contenders out. Python draws the line in the
+   * same place; TypeScript and Go back off on both codes.
+   *
+   * <p>Everything else is a genuine error, which backing off would not help either -- see the catch
+   * in {@code run()}.
+   */
+  static boolean shouldBackOff(Throwable failure) {
+    return !SystemDatabase.isLockNotAvailable(failure) && SystemDatabase.isContentionError(failure);
+  }
+
+  /**
+   * The polling multiplier for the next poll: grown when a poll asks to back off, decayed
+   * otherwise, and clamped into range either way.
    *
    * <p>The clamp is not only for growth. A queue's polling interval can be raised while it is
    * backed off, which leaves a multiplier earned against the old interval far too large for the new
@@ -302,15 +320,15 @@ public class QueueService implements AutoCloseable {
    * same reason after reloading the queue's configuration.
    *
    * @param current the multiplier in force
-   * @param contentionDetected whether this poll lost a claim to a peer
+   * @param backoffRequested whether this poll asked to lengthen the interval
    * @param pollingInterval the queue's base interval, which the multiplier scales
    * @return the multiplier for the next poll, within [1.0, {@link #MAX_POLLING_INTERVAL}]
    */
   static double nextBackoffFactor(
-      double current, boolean contentionDetected, Duration pollingInterval) {
+      double current, boolean backoffRequested, Duration pollingInterval) {
     double cap =
         Math.max(1.0, (double) MAX_POLLING_INTERVAL.toMillis() / pollingInterval.toMillis());
-    double next = current * (contentionDetected ? BACKOFF_GROWTH_FACTOR : BACKOFF_SCALEBACK_FACTOR);
+    double next = current * (backoffRequested ? BACKOFF_GROWTH_FACTOR : BACKOFF_SCALEBACK_FACTOR);
     return Math.min(Math.max(next, 1.0), cap);
   }
 
