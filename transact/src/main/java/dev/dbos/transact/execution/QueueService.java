@@ -179,9 +179,9 @@ public class QueueService implements AutoCloseable {
         try {
           processPartition(partition);
         } catch (Exception e) {
-          // Lock held or claim raced by another worker: skip just this partition, no queue-wide
-          // backoff. The other partitions are unrelated rows that this poll can still claim, and
-          // a peer winning one partition says nothing about the rest.
+          // Skip just this partition, no queue-wide backoff -- deliberately including 40001,
+          // which would back off from a non-partitioned dequeue. The other partitions are
+          // unrelated rows this poll can still claim.
           if (!SystemDatabase.isContentionError(e)) {
             throw e;
           }
