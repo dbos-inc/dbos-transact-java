@@ -223,7 +223,18 @@ public class QueueService implements AutoCloseable {
         if (queue.partitioningEnabled()) {
           var partitions = systemDatabase.getQueuePartitions(queue.name());
           for (var partition : partitions) {
-            processPartition(partition);
+            try {
+              processPartition(partition);
+            } catch (Exception e) {
+              // Lock held or claim raced by another worker: skip just this partition, no
+              // queue-wide backoff. The other partitions are unrelated rows that this poll can
+              // still claim, and a peer winning one partition says nothing about the rest.
+              if (!SystemDatabase.isContentionError(e)) {
+                throw e;
+              }
+              logger.debug(
+                  "Partition {} of queue {} is contended; skipping it", partition, queue.name());
+            }
           }
         } else {
           processPartition(null);
