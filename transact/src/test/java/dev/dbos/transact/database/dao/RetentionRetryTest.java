@@ -54,6 +54,35 @@ public class RetentionRetryTest {
   }
 
   @Test
+  @DisplayName("an interrupt stops the retry and leaves the flag set")
+  public void retryStopsWhenInterrupted() {
+    var attempts = new AtomicInteger();
+    try {
+      var thrown =
+          assertThrows(
+              SQLException.class,
+              () ->
+                  WorkflowDAO.retryOnSerializationError(
+                      () -> {
+                        if (attempts.incrementAndGet() == 1) {
+                          // The round is cancelled while it is working, as shutdownNow() does.
+                          Thread.currentThread().interrupt();
+                        }
+                        throw sqlState("40001");
+                      }));
+
+      assertEquals("40001", thrown.getSQLState());
+      assertEquals(1, attempts.get(), "the round must not retry past its own cancellation");
+      assertTrue(
+          Thread.currentThread().isInterrupted(),
+          "the flag must survive, or the caller cannot tell cancellation from exhaustion");
+    } finally {
+      // Clear it, so the flag cannot leak into whatever runs next on this thread.
+      Thread.interrupted();
+    }
+  }
+
+  @Test
   @DisplayName("anything that is not a conflict is handed straight back, unretried")
   public void retryDoesNotSwallowOtherFailures() {
     var attempts = new AtomicInteger();

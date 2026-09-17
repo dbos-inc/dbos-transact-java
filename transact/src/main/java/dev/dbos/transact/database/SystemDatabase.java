@@ -446,16 +446,17 @@ public class SystemDatabase implements AutoCloseable {
 
   /**
    * Sleeps for {@code baseMs} scaled by a random factor in [0.5, 1.5), so peers that collided do
-   * not collide again. Restores the interrupt flag and returns early rather than throwing.
+   * not collide again.
+   *
+   * <p>Propagates {@link InterruptedException} rather than restoring the flag and returning. Both
+   * callers are retry loops that must stop when cancelled, and a swallowed interrupt reaches them
+   * as a normal return with a flag quietly set -- invisible unless the loop remembers to check it.
+   * Declaring it makes the compiler ask the question instead. A caller that cannot propagate it
+   * restores the flag with {@code Thread.currentThread().interrupt()} and stops.
    */
-  public static void sleepWithJitter(double baseMs) {
+  public static void sleepWithJitter(double baseMs) throws InterruptedException {
     double jitter = 0.5 + ThreadLocalRandom.current().nextDouble(); // [0.5, 1.5)
-    long sleepMs = (long) (baseMs * jitter);
-    try {
-      Thread.sleep(sleepMs);
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
+    Thread.sleep((long) (baseMs * jitter));
   }
 
   @FunctionalInterface
@@ -499,7 +500,15 @@ public class SystemDatabase implements AutoCloseable {
         } else {
           throw new RuntimeException(e);
         }
-        sleepWithJitter(backoffMs);
+        try {
+          sleepWithJitter(backoffMs);
+        } catch (InterruptedException ie) {
+          // This loop is otherwise unbounded, so an ignored interrupt means nothing can stop it.
+          // Restore the flag for the caller and give back the failure that was being retried.
+          Thread.currentThread().interrupt();
+          logger.warn("Interrupted while retrying a database operation (attempt {})", attempt, e);
+          throw new RuntimeException(e);
+        }
         backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
     }

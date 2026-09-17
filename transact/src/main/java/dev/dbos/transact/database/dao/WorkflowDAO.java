@@ -2301,6 +2301,12 @@ public class WorkflowDAO {
    * forever would only mean this caller never does. The schedule is Python's and TypeScript's
    * exactly -- ten attempts, 50 ms doubling to a 2 s cap, jittered so peers that collided do not
    * collide again.
+   *
+   * <p>Stops on interruption, leaving the flag set for the caller. A round that retried through a
+   * cancellation would keep deleting after {@code sweepPayloadsConcurrently} interrupted its
+   * workers with {@code shutdownNow()} and after {@code runRetentionRound} released the retention
+   * lock -- and, because an already-interrupted {@code Thread.sleep} throws at once, it would do
+   * the remaining attempts back to back with no backoff at all.
    */
   static <T> T retryOnSerializationError(RetentionQuery<T> operation) throws SQLException {
     final int maxAttempts = 10;
@@ -2321,7 +2327,15 @@ public class WorkflowDAO {
             "Contention or deadlock detected in workflow garbage collection (attempt {}); retrying",
             attempt,
             e);
-        SystemDatabase.sleepWithJitter(backoffMs);
+        try {
+          SystemDatabase.sleepWithJitter(backoffMs);
+        } catch (InterruptedException ie) {
+          // Restore the flag so the caller can tell cancellation from exhaustion -- both give back
+          // the same SQLException, and the flag is the only thing that separates them.
+          Thread.currentThread().interrupt();
+          logger.warn("Garbage collection interrupted after {} attempts; giving up", attempt, e);
+          throw e;
+        }
         backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
     }
