@@ -227,20 +227,45 @@ public class QueueService implements AutoCloseable {
       }
     }
 
+    /**
+     * Reloads a database-backed queue's configuration so changes take effect without a restart.
+     *
+     * @return false if the queue no longer exists, in which case this listener stops
+     */
+    boolean refreshQueue() {
+      Optional<Queue> refreshed;
+      try {
+        refreshed = systemDatabase.findQueue(queue.name());
+      } catch (Exception e) {
+        // Keep polling on the configuration already in hand. A row that fails to load is a
+        // reason to try again next poll, not to stop dequeuing this queue for good.
+        logger.warn(
+            "Could not reload queue {}; keeping its current configuration", queue.name(), e);
+        return true;
+      }
+      if (refreshed.isEmpty()) {
+        dbListeningQueues.remove(queue.name());
+        return false;
+      }
+      queue = refreshed.get();
+      return true;
+    }
+
     @Override
     public void run() {
       if (execServiceRef.get() == null) return;
-      if (dynamic) {
-        var refreshed = systemDatabase.findQueue(queue.name());
-        if (refreshed.isEmpty()) {
-          dbListeningQueues.remove(queue.name());
-          return;
-        }
-        queue = refreshed.get();
-      }
 
+      // Rescheduling is the only thing keeping this queue polling, so nothing between here and
+      // the finally may escape it -- including reloading the queue's own configuration, which
+      // reaches dbRetry and so can throw for a conflict or any non-transient failure.
+      boolean reschedule = true;
       boolean contentionDetected = false;
       try {
+        if (dynamic && !refreshQueue()) {
+          reschedule = false;
+          return;
+        }
+
         if (queue.partitioningEnabled()) {
           sweepPartitions();
         } else {
@@ -258,9 +283,11 @@ public class QueueService implements AutoCloseable {
           logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
         }
       } finally {
-        backoffFactor =
-            nextBackoffFactor(backoffFactor, contentionDetected, queue.pollingInterval());
-        this.schedule();
+        if (reschedule) {
+          backoffFactor =
+              nextBackoffFactor(backoffFactor, contentionDetected, queue.pollingInterval());
+          this.schedule();
+        }
       }
     }
   }
