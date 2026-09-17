@@ -2875,11 +2875,33 @@ public class SystemDatabaseTest {
     assertTrue(SystemDatabase.isContentionError(lockNotAvailable));
     assertTrue(SystemDatabase.isContentionError(new RuntimeException(lockNotAvailable)));
 
-    // Class 40 is retried inside dbRetry and never reaches a caller; anything else is a real error.
-    assertFalse(
+    // A REPEATABLE READ dequeue loses the same race as 40001, and dbRetry no longer absorbs it.
+    assertTrue(
         SystemDatabase.isContentionError(new SQLException("serialization failure", "40001")));
+
+    // A deadlock is class 40 too, but nothing in the dequeue expects one. See RetryPolicyTest.
+    assertFalse(SystemDatabase.isContentionError(new SQLException("deadlock detected", "40P01")));
     assertFalse(SystemDatabase.isContentionError(new SQLException("no state")));
     assertFalse(SystemDatabase.isContentionError(new RuntimeException("boom")));
+  }
+
+  @Test
+  public void testSerializationErrorMatchesClass40Codes() {
+    // Retention replays these; nothing else in the system may. See WorkflowDAO.
+    assertTrue(
+        SystemDatabase.isSerializationError(new SQLException("serialization failure", "40001")));
+    assertTrue(SystemDatabase.isSerializationError(new SQLException("deadlock detected", "40P01")));
+    // Wrapped, as the concurrent payload sweep hands its failures up.
+    assertTrue(
+        SystemDatabase.isSerializationError(
+            new RuntimeException(new SQLException("serialization failure", "40001"))));
+
+    assertFalse(
+        SystemDatabase.isSerializationError(new SQLException("lock not available", "55P03")));
+    assertFalse(
+        SystemDatabase.isSerializationError(new SQLException("too many connections", "53300")));
+    assertFalse(SystemDatabase.isSerializationError(new SQLException("no state")));
+    assertFalse(SystemDatabase.isSerializationError(new RuntimeException("boom")));
   }
 
   @Test

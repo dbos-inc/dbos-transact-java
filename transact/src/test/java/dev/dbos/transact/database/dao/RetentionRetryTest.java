@@ -1,0 +1,72 @@
+package dev.dbos.transact.database.dao;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+/**
+ * The conflict retry retention applies to its own batches. Retention is the only work in the system
+ * that deletes in batches from under live workflows, so it is the only caller that loses these
+ * races routinely and can replay them safely; everything else lets a conflict reach its caller. See
+ * {@code SystemDatabase.isTransientState}.
+ */
+public class RetentionRetryTest {
+
+  private static SQLException sqlState(String state) {
+    return new SQLException("synthetic " + state, state);
+  }
+
+  @Test
+  @DisplayName("a replayable batch is retried until it wins")
+  public void retryReplaysUntilItSucceeds() throws SQLException {
+    var attempts = new AtomicInteger();
+    var result =
+        WorkflowDAO.retryOnSerializationError(
+            () -> {
+              if (attempts.incrementAndGet() < 3) {
+                throw sqlState("40001");
+              }
+              return "collected";
+            });
+
+    assertEquals("collected", result);
+    assertEquals(3, attempts.get());
+  }
+
+  @Test
+  @DisplayName("a deadlock is replayed too, since the database already rolled it back")
+  public void retryReplaysDeadlocks() throws SQLException {
+    var attempts = new AtomicInteger();
+    WorkflowDAO.retryOnSerializationError(
+        () -> {
+          if (attempts.incrementAndGet() < 2) {
+            throw sqlState("40P01");
+          }
+          return null;
+        });
+
+    assertEquals(2, attempts.get());
+  }
+
+  @Test
+  @DisplayName("anything that is not a conflict is handed straight back, unretried")
+  public void retryDoesNotSwallowOtherFailures() {
+    var attempts = new AtomicInteger();
+    var thrown =
+        assertThrows(
+            SQLException.class,
+            () ->
+                WorkflowDAO.retryOnSerializationError(
+                    () -> {
+                      attempts.incrementAndGet();
+                      throw sqlState("55P03");
+                    }));
+
+    assertEquals("55P03", thrown.getSQLState());
+    assertEquals(1, attempts.get(), "a lost lock is the caller's to handle, not retention's");
+  }
+}

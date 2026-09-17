@@ -374,9 +374,44 @@ public class SystemDatabase implements AutoCloseable {
     return false;
   }
 
+  /**
+   * Whether a failure is worth retrying blind: SQLSTATE class 53, insufficient resources.
+   *
+   * <p>Class 40 is deliberately absent. A transaction conflict is the caller's business, not this
+   * helper's: Python's {@code retriable_postgres_exception} matches classes 08, 53 and 57 only,
+   * TypeScript's connection retrier likewise, and Go retries conflicts solely where a call site
+   * opts in with {@code WithRetryCondition(IsRetryableTransaction)}. Retrying one here would sleep
+   * a pooled thread for at least a second on a path -- the queue dequeue -- where losing a
+   * serialization race is routine rather than exceptional, and would hide the failure from the poll
+   * loop whose job is to react to it.
+   */
   private static boolean isTransientState(SQLException e) {
     String state = e.getSQLState();
-    return state != null && (state.startsWith("40") || state.startsWith("53"));
+    return state != null && state.startsWith("53");
+  }
+
+  /**
+   * Whether a failure is a transaction conflict the database has already rolled back: SQLSTATE
+   * 40001 serialization_failure or 40P01 deadlock_detected.
+   *
+   * <p>Named for Python's {@code _is_serialization_error} and TypeScript's {@code
+   * isSerializationError}, which match the same two codes; Go's {@code IsRetryableTransaction} is
+   * the same predicate under another name.
+   *
+   * <p>Retrying one means replaying the whole transaction, so only a caller that knows its work is
+   * replayable may do it. Retention is the only one in this system; see {@code
+   * WorkflowDAO.retryOnSerializationError}.
+   */
+  public static boolean isSerializationError(Throwable t) {
+    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sqlException) {
+        String state = sqlException.getSQLState();
+        if ("40001".equals(state) || "40P01".equals(state)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -384,25 +419,34 @@ public class SystemDatabase implements AutoCloseable {
    * 55P03 lock_not_available, raised by the {@code FOR UPDATE NOWAIT} that rate-limited queues take
    * so every executor sees a consistent count.
    *
-   * <p>Matched by code rather than by class, because {@link #isTransientState} works by SQLSTATE
-   * class prefix and class 55 is not class 40. That is the right call for {@link #dbRetry}, which
-   * cannot know that asking again on the next poll is exactly what the queue listener does; it just
-   * means the caller has to recognise the code itself. Serialization failures (class 40) never
-   * reach a caller, since dbRetry retries those internally.
+   * <p>40001 serialization_failure counts too: a dequeue that escalates to REPEATABLE READ to keep
+   * a shared budget consistent loses the race the same way, and the queue listener reacts to both
+   * identically. TypeScript classifies exactly these two codes here, and Go the same plus 40P01.
+   * Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects one, so a
+   * deadlock is a real error and should be logged as one.
+   *
+   * <p>{@link #dbRetry} no longer absorbs class 40, so a serialization failure now reaches this
+   * caller rather than being slept off on a pooled thread.
    *
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isContentionError(Throwable t) {
     for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException
-          && "55P03".equals(sqlException.getSQLState())) {
-        return true;
+      if (cause instanceof SQLException sqlException) {
+        String state = sqlException.getSQLState();
+        if ("55P03".equals(state) || "40001".equals(state)) {
+          return true;
+        }
       }
     }
     return false;
   }
 
-  private static void sleepWithJitter(double baseMs) {
+  /**
+   * Sleeps for {@code baseMs} scaled by a random factor in [0.5, 1.5), so peers that collided do
+   * not collide again. Restores the interrupt flag and returns early rather than throwing.
+   */
+  public static void sleepWithJitter(double baseMs) {
     double jitter = 0.5 + ThreadLocalRandom.current().nextDouble(); // [0.5, 1.5)
     long sleepMs = (long) (baseMs * jitter);
     try {
