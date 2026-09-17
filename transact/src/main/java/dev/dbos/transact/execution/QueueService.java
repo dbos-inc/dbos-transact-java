@@ -26,6 +26,11 @@ public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
   private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
+
+  /** Matches the backoff and scaleback factors every other SDK's queue runner uses. */
+  private static final double BACKOFF_GROWTH_FACTOR = 2.0;
+
+  private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
@@ -200,6 +205,7 @@ public class QueueService implements AutoCloseable {
         queue = refreshed.get();
       }
 
+      boolean contentionDetected = false;
       try {
         if (queue.partitioningEnabled()) {
           var partitions = systemDatabase.getQueuePartitions(queue.name());
@@ -209,32 +215,49 @@ public class QueueService implements AutoCloseable {
         } else {
           processPartition(null);
         }
-
-        backoffFactor = Math.max(backoffFactor * 0.9, 1.0);
       } catch (Exception e) {
-        // A peer holding the rows this dequeue wanted to lock is the system working, not a
-        // failure: it costs one polling interval and says nothing louder. Every other SDK
-        // classifies 55P03 the same way here.
-        //
-        // This try covers more than the dequeue, though: getQueuePartitions above, and the
-        // dispatch loop inside processPartition, which does synchronous database work on this
-        // thread before it submits anything. Since isContentionError began matching 40001, a
-        // conflict raised while *starting* a workflow lands here and is reported as a peer
-        // mid-dequeue -- which is false, and at DEBUG, so it goes unseen. Narrow the try around
-        // startQueuedWorkflows when this catch is next rewritten; see the plan's review check for
-        // the #512/#518 change, which rewrites it.
+        // Only contention moves the interval. It is self-limiting -- whoever won the claim is
+        // doing the work -- so polling later just spreads the contenders out. Backing off on a
+        // genuine error sheds no load, since the dequeue is not what broke; Python, TypeScript
+        // and Go all log and poll on schedule.
         if (SystemDatabase.isContentionError(e)) {
+          contentionDetected = true;
           logger.debug("A peer is mid-dequeue on queue {}; backing off", queue.name());
         } else {
           logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
         }
-        double maxFactor =
-            (double) MAX_POLLING_INTERVAL.toMillis() / queue.pollingInterval().toMillis();
-        backoffFactor = Math.min(backoffFactor * 2.0, maxFactor);
       } finally {
+        backoffFactor =
+            nextBackoffFactor(backoffFactor, contentionDetected, queue.pollingInterval());
         this.schedule();
       }
     }
+  }
+
+  /**
+   * The polling multiplier for the next poll.
+   *
+   * <p>A contended poll doubles it, but never past {@link #MAX_POLLING_INTERVAL}; the cap floors at
+   * 1.0 so a queue already polling slower than the ceiling is left alone rather than polled more
+   * often. Every other poll -- a clean one, and a poll that failed for any reason other than
+   * contention -- decays it back toward the queue's base interval.
+   *
+   * <p>Deciding both cases in one function is what makes the behaviour testable: the alternative is
+   * a branch inside {@code run()}, reachable only through a live queue whose dequeue latency is far
+   * too timing-dependent to assert on.
+   *
+   * @param current the multiplier in force
+   * @param contentionDetected whether this poll lost a claim to a peer
+   * @param pollingInterval the queue's base interval, which the multiplier scales
+   */
+  static double nextBackoffFactor(
+      double current, boolean contentionDetected, Duration pollingInterval) {
+    if (!contentionDetected) {
+      return Math.max(current * BACKOFF_SCALEBACK_FACTOR, 1.0);
+    }
+    double cap =
+        Math.max(1.0, (double) MAX_POLLING_INTERVAL.toMillis() / pollingInterval.toMillis());
+    return Math.min(current * BACKOFF_GROWTH_FACTOR, cap);
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
