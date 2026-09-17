@@ -188,7 +188,20 @@ public class QueueService implements AutoCloseable {
               workflowId,
               partitionLog,
               queue.name());
-          dbosExecutor.executeWorkflowById(workflowId, false, true);
+          try {
+            dbosExecutor.executeWorkflowById(workflowId, false, true);
+          } catch (Exception e) {
+            // Dispatch does synchronous database work on this thread, so without this catch a
+            // conflict from starting a workflow reaches the poll loop and is misread as dequeue
+            // contention. Log it against its own workflow and start the next one, as the other
+            // SDKs do.
+            logger.error(
+                "Error starting workflow {} from {} partition of queue {}",
+                workflowId,
+                partitionLog,
+                queue.name(),
+                e);
+          }
         }
       }
     }
