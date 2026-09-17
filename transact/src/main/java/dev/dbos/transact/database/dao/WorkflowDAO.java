@@ -2279,14 +2279,6 @@ public class WorkflowDAO {
   }
 
   /**
-   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
-   * used, or null when there is nothing to collect.
-   *
-   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
-   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
-   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
-   */
-  /**
    * A retention query that may fail with {@link SQLException}.
    *
    * @param <T> what the query returns
@@ -2335,6 +2327,14 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
+   * used, or null when there is nothing to collect.
+   *
+   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
+   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
+   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
+   */
   public static @Nullable Instant garbageCollect(
       DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
     if (batchSize < 1) {

@@ -2879,7 +2879,8 @@ public class SystemDatabaseTest {
     assertTrue(
         SystemDatabase.isContentionError(new SQLException("serialization failure", "40001")));
 
-    // A deadlock is class 40 too, but nothing in the dequeue expects one. See RetryPolicyTest.
+    // A deadlock is class 40 too, but nothing in the dequeue expects one. Callers that can replay
+    // their transaction handle it themselves; see RetentionRetryTest.
     assertFalse(SystemDatabase.isContentionError(new SQLException("deadlock detected", "40P01")));
     assertFalse(SystemDatabase.isContentionError(new SQLException("no state")));
     assertFalse(SystemDatabase.isContentionError(new RuntimeException("boom")));
@@ -2887,11 +2888,13 @@ public class SystemDatabaseTest {
 
   @Test
   public void testSerializationErrorMatchesClass40Codes() {
-    // Retention replays these; nothing else in the system may. See WorkflowDAO.
+    // Retention and transactional steps replay these; nothing else may. See
+    // WorkflowDAO.retryOnSerializationError and PostgresStepFactory.runTxStep.
     assertTrue(
         SystemDatabase.isSerializationError(new SQLException("serialization failure", "40001")));
     assertTrue(SystemDatabase.isSerializationError(new SQLException("deadlock detected", "40P01")));
-    // Wrapped, as the concurrent payload sweep hands its failures up.
+    // Wrapped, as a step factory sees it: the JDBC exception arrives inside whatever the
+    // datasource layer threw, so the predicate has to walk the cause chain.
     assertTrue(
         SystemDatabase.isSerializationError(
             new RuntimeException(new SQLException("serialization failure", "40001"))));

@@ -70,16 +70,6 @@ public abstract class PostgresStepFactory {
     return false;
   }
 
-  public static boolean isSerializationFailure(Exception e) {
-    for (Throwable t = e; t != null; t = t.getCause()) {
-      if (t instanceof SQLException sq) {
-        var state = sq.getSQLState();
-        if ("40001".equals(state) || "40P01".equals(state)) return true;
-      }
-    }
-    return false;
-  }
-
   private static final long RETRY_WAIT_INITIAL_MS = 1L;
   private static final double RETRY_BACKOFF_FACTOR = 1.5;
   private static final long RETRY_WAIT_MAX_MS = 2000L;
@@ -102,7 +92,7 @@ public abstract class PostgresStepFactory {
             try {
               return execute.execute(workflowId, stepId);
             } catch (Exception e) {
-              if (isSerializationFailure(e)) {
+              if (SystemDatabase.isSerializationError(e)) {
                 try {
                   Thread.sleep(retryWaitMs);
                 } catch (InterruptedException ie) {

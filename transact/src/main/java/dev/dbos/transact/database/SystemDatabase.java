@@ -399,8 +399,10 @@ public class SystemDatabase implements AutoCloseable {
    * the same predicate under another name.
    *
    * <p>Retrying one means replaying the whole transaction, so only a caller that knows its work is
-   * replayable may do it. Retention is the only one in this system; see {@code
-   * WorkflowDAO.retryOnSerializationError}.
+   * replayable may do it: retention's batch sweep, see {@code
+   * WorkflowDAO.retryOnSerializationError}, and a transactional step, whose body is the whole
+   * transaction and which has not yet recorded an output, see {@code
+   * PostgresStepFactory.runTxStep}. Every other caller lets the conflict reach its own caller.
    */
   public static boolean isSerializationError(Throwable t) {
     for (Throwable cause = t; cause != null; cause = cause.getCause()) {

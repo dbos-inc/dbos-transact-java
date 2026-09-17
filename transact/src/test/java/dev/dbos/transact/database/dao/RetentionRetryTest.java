@@ -11,8 +11,9 @@ import org.junit.jupiter.api.Test;
 /**
  * The conflict retry retention applies to its own batches. Retention is the only work in the system
  * that deletes in batches from under live workflows, so it is the only caller that loses these
- * races routinely and can replay them safely; everything else lets a conflict reach its caller. See
- * {@code SystemDatabase.isTransientState}.
+ * races routinely and can replay them safely; of the rest, only a transactional step replays a
+ * conflict, and everything else lets one reach its caller. See {@code
+ * SystemDatabase.isSerializationError}.
  */
 public class RetentionRetryTest {
 
