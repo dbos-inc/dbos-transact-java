@@ -2278,6 +2278,14 @@ public class WorkflowDAO {
     return new RetentionLock(ctx.schema(), conn);
   }
 
+  /**
+   * Deletes old terminal workflows throughout the system database, returning the cutoff actually
+   * used, or null when there is nothing to collect.
+   *
+   * <p>The sweep advances a {@code completed_at} watermark, committing one batch per transaction;
+   * it never materializes workflow ids, so its memory cost is flat however much it collects. Call
+   * {@link #garbageCollectPayloads} afterwards to reclaim the rows it orphaned.
+   */
   public static @Nullable Instant garbageCollect(
       DbContext ctx, Instant cutoff, Long rowsThreshold, int batchSize) throws SQLException {
     if (batchSize < 1) {
@@ -2575,9 +2583,8 @@ public class WorkflowDAO {
                   SqlTransaction.<PayloadBatch>call(
                       conn,
                       c -> {
-                        // Batches are cut by candidate count, so rows spared by the anti-join only
-                        // thin
-                        // one out; they are re-checked on the next round.
+                        // Batches are cut by candidate count, so rows spared by the anti-join
+                        // only thin one out; they are re-checked on the next round.
                         Long step = null;
                         try (var stmt = c.prepareStatement(stepSql)) {
                           stmt.setLong(1, deadline);

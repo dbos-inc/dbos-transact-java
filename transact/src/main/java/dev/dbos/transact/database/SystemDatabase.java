@@ -399,10 +399,10 @@ public class SystemDatabase implements AutoCloseable {
    * the same predicate under another name.
    *
    * <p>Retrying one means replaying the whole transaction, so only a caller that knows its work is
-   * replayable may do it: retention's batch sweep, see {@code
-   * WorkflowDAO.retryOnSerializationError}, and a transactional step, whose body is the whole
-   * transaction and which has not yet recorded an output, see {@code
-   * PostgresStepFactory.runTxStep}. Every other caller lets the conflict reach its own caller.
+   * safe to re-run may do it -- see {@link #retryOnSerializationError} for what that requires, and
+   * {@link #dbRetryIncludingSerializationError} for the callers that opt in. {@link #dbRetry} does
+   * not, so any caller that has not opted in lets the conflict reach its own caller; the dequeue
+   * relies on that.
    */
   public static boolean isSerializationError(Throwable t) {
     for (Throwable cause = t; cause != null; cause = cause.getCause()) {
@@ -908,11 +908,14 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetry(() -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+    return dbRetryIncludingSerializationError(
+        "forkWorkflow",
+        () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
   }
 
   public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
-    return dbRetry(() -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
+    return dbRetryIncludingSerializationError(
+        "forkFromFailure", () -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {
@@ -1099,7 +1102,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(() -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
+    dbRetryIncludingSerializationError(
+        "closeStream", () -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
     // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
     signal(new SignalKey.Stream(workflowId, key));
   }

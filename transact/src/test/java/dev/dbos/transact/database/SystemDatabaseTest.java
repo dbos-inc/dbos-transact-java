@@ -2880,7 +2880,7 @@ public class SystemDatabaseTest {
         SystemDatabase.isContentionError(new SQLException("serialization failure", "40001")));
 
     // A deadlock is class 40 too, but nothing in the dequeue expects one. Callers that can replay
-    // their transaction handle it themselves; see RetentionRetryTest.
+    // their transaction handle it themselves; see ConflictRetryTest.
     assertFalse(SystemDatabase.isContentionError(new SQLException("deadlock detected", "40P01")));
     assertFalse(SystemDatabase.isContentionError(new SQLException("no state")));
     assertFalse(SystemDatabase.isContentionError(new RuntimeException("boom")));
