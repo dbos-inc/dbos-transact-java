@@ -91,4 +91,21 @@ public class QueueServiceBackoffTest {
     // The cap floors at 1.0 rather than going below it, which would poll more often on contention.
     assertEquals(1.0, QueueService.nextBackoffFactor(1.0, CONTENDED, slowInterval));
   }
+
+  @Test
+  @DisplayName("raising a backed-off queue's interval reclamps the multiplier")
+  public void aLongerIntervalReclampsTheMultiplier() {
+    // Backed off to the 120s ceiling on a 200ms interval.
+    double factor = 1.0;
+    for (int poll = 0; poll < 20; poll++) {
+      factor = QueueService.nextBackoffFactor(factor, CONTENDED, INTERVAL);
+    }
+    assertEquals(600.0, factor);
+
+    // An operator raises the interval to 60s. Decaying from 600 would poll every 10 hours and
+    // take ~60 polls to work off, so the multiplier has to be reclamped, not merely decayed.
+    var raised = Duration.ofSeconds(60);
+    assertEquals(2.0, QueueService.nextBackoffFactor(factor, NOT_CONTENDED, raised));
+    assertEquals(2.0, QueueService.nextBackoffFactor(factor, CONTENDED, raised));
+  }
 }

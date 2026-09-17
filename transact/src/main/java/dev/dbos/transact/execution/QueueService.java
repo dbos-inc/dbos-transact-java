@@ -27,9 +27,8 @@ public class QueueService implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
   private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
 
-  /** Matches the backoff and scaleback factors every other SDK's queue runner uses. */
+  // Matches the backoff and scaleback factors every other SDK's queue runner uses.
   private static final double BACKOFF_GROWTH_FACTOR = 2.0;
-
   private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
@@ -145,7 +144,8 @@ public class QueueService implements AutoCloseable {
 
   // ── Queue listener task ───────────────────────────────────────────────────
 
-  private class QueueListenerTask implements Runnable {
+  // Package-private, with its sweep and dispatch, so a test can drive one poll directly.
+  class QueueListenerTask implements Runnable {
 
     Queue queue;
     double backoffFactor = 1.0;
@@ -168,7 +168,30 @@ public class QueueService implements AutoCloseable {
       }
     }
 
-    private void processPartition(String partition) {
+    /**
+     * Claims from each partition in turn, skipping any a peer is already dequeuing.
+     *
+     * <p>Contention listing the partitions is left to propagate: it is not scoped to any one
+     * partition, so it backs the whole queue off.
+     */
+    void sweepPartitions() {
+      for (var partition : systemDatabase.getQueuePartitions(queue.name())) {
+        try {
+          processPartition(partition);
+        } catch (Exception e) {
+          // Lock held or claim raced by another worker: skip just this partition, no queue-wide
+          // backoff. The other partitions are unrelated rows that this poll can still claim, and
+          // a peer winning one partition says nothing about the rest.
+          if (!SystemDatabase.isContentionError(e)) {
+            throw e;
+          }
+          logger.debug(
+              "Partition {} of queue {} is contended; skipping it", partition, queue.name());
+        }
+      }
+    }
+
+    void processPartition(String partition) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       if (!paused.get()) {
         long localRunningCount = dbosExecutor.queueActiveCount(queue.name(), partition);
@@ -191,10 +214,8 @@ public class QueueService implements AutoCloseable {
           try {
             dbosExecutor.executeWorkflowById(workflowId, false, true);
           } catch (Exception e) {
-            // Dispatch does synchronous database work on this thread, so without this catch a
-            // conflict from starting a workflow reaches the poll loop and is misread as dequeue
-            // contention. Log it against its own workflow and start the next one, as the other
-            // SDKs do.
+            // A failed dispatch must not strand the rest of the batch, and its failure is not
+            // the dequeue contention the poll loop would read it as.
             logger.error(
                 "Error starting workflow {} from {} partition of queue {}",
                 workflowId,
@@ -221,21 +242,7 @@ public class QueueService implements AutoCloseable {
       boolean contentionDetected = false;
       try {
         if (queue.partitioningEnabled()) {
-          var partitions = systemDatabase.getQueuePartitions(queue.name());
-          for (var partition : partitions) {
-            try {
-              processPartition(partition);
-            } catch (Exception e) {
-              // Lock held or claim raced by another worker: skip just this partition, no
-              // queue-wide backoff. The other partitions are unrelated rows that this poll can
-              // still claim, and a peer winning one partition says nothing about the rest.
-              if (!SystemDatabase.isContentionError(e)) {
-                throw e;
-              }
-              logger.debug(
-                  "Partition {} of queue {} is contended; skipping it", partition, queue.name());
-            }
-          }
+          sweepPartitions();
         } else {
           processPartition(null);
         }
@@ -259,29 +266,25 @@ public class QueueService implements AutoCloseable {
   }
 
   /**
-   * The polling multiplier for the next poll.
+   * The polling multiplier for the next poll: grown on contention, decayed otherwise, and clamped
+   * into range either way.
    *
-   * <p>A contended poll doubles it, but never past {@link #MAX_POLLING_INTERVAL}; the cap floors at
-   * 1.0 so a queue already polling slower than the ceiling is left alone rather than polled more
-   * often. Every other poll -- a clean one, and a poll that failed for any reason other than
-   * contention -- decays it back toward the queue's base interval.
-   *
-   * <p>Deciding both cases in one function is what makes the behaviour testable: the alternative is
-   * a branch inside {@code run()}, reachable only through a live queue whose dequeue latency is far
-   * too timing-dependent to assert on.
+   * <p>The clamp is not only for growth. A queue's polling interval can be raised while it is
+   * backed off, which leaves a multiplier earned against the old interval far too large for the new
+   * one, and decay alone would take hours of polls to work it off. Every other SDK reclamps for the
+   * same reason after reloading the queue's configuration.
    *
    * @param current the multiplier in force
    * @param contentionDetected whether this poll lost a claim to a peer
    * @param pollingInterval the queue's base interval, which the multiplier scales
+   * @return the multiplier for the next poll, within [1.0, {@link #MAX_POLLING_INTERVAL}]
    */
   static double nextBackoffFactor(
       double current, boolean contentionDetected, Duration pollingInterval) {
-    if (!contentionDetected) {
-      return Math.max(current * BACKOFF_SCALEBACK_FACTOR, 1.0);
-    }
     double cap =
         Math.max(1.0, (double) MAX_POLLING_INTERVAL.toMillis() / pollingInterval.toMillis());
-    return Math.min(current * BACKOFF_GROWTH_FACTOR, cap);
+    double next = current * (contentionDetected ? BACKOFF_GROWTH_FACTOR : BACKOFF_SCALEBACK_FACTOR);
+    return Math.min(Math.max(next, 1.0), cap);
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
