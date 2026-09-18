@@ -13,8 +13,7 @@ interface ScheduledWorkflowService {
 
   void latchedRun(Instant scheduled, Object context);
 
-  // Declared portable, to prove a schedule's runs ignore that: see
-  // WorkflowScheduleTest.scheduledRunsIgnoreADeclaredPortableStrategy.
+  // Declared portable, to prove a schedule's runs ignore that.
   void portableLatchedRun(Instant scheduled, Object context);
 }
 

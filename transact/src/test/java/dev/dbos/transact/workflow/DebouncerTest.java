@@ -377,7 +377,7 @@ public class DebouncerTest {
   }
 
   // The debouncer's own control message is a Java record read back by a Java workflow, whatever
-  // format the workflow that happened to call debounce() runs under.
+  // format the caller runs under.
   @Test
   public void debounceFromAPortableWorkflowDeliversItsControlMessage() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
@@ -390,8 +390,8 @@ public class DebouncerTest {
     assertEquals("result:second", h.getResult());
     assertEquals(1, serviceImpl.callCount());
 
-    // A message the debouncer cannot read kills its workflow: the caller's retry loop papers
-    // over it by starting a fresh debouncer, so the only durable trace is the errored run.
+    // A message it cannot read kills the debouncer workflow. The caller's retry loop papers over
+    // that by starting a fresh one, so the errored run is the only durable trace.
     var debouncers =
         dbos.listWorkflows(
             new ListWorkflowsInput().withWorkflowName(Constants.DEBOUNCER_WORKFLOW_NAME));

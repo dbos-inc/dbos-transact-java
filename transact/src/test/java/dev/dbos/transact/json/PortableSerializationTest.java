@@ -529,8 +529,8 @@ public class PortableSerializationTest {
 
   /**
    * A message is read back in the format its row records, so a workflow running under a portable
-   * row must send under it too: a peer in another language is the reason the row is portable at
-   * all. Default send inherits the workflow's format exactly as default setEvent does.
+   * row must send under it too. Default send inherits the workflow's format, as default setEvent
+   * does.
    */
   @Test
   public void testSendInheritsPortableWorkflowSerialization() throws Exception {
@@ -1106,11 +1106,9 @@ public class PortableSerializationTest {
   // ============ Custom Serializer: Schedules ============
 
   /**
-   * A value the built-in Jackson serializer writes happily and cannot read back: it has no default
-   * constructor and no creator, so deserialization fails. JDK serialization restores it without
-   * calling a constructor at all. It stands in for the values that made dbos-transact-java#523
-   * visible -- a scheduled run persisted under the wrong serializer is not merely inconsistent, its
-   * result cannot be read at all.
+   * A value only the custom serializer carries whole: {@code hidden} has no accessor, so Jackson
+   * writes the object without it and reads it back null. A scheduled run persisted under the wrong
+   * serializer does not merely record the wrong name, it gives back the wrong result.
    */
   public static final class Payload {
     public String tag;
@@ -1156,9 +1154,7 @@ public class PortableSerializationTest {
   private static final String SCHEDULED_WORKFLOW = "scheduledPayload";
   private static final String SCHEDULED_CLASS = PayloadScheduleServiceImpl.class.getName();
 
-  /**
-   * The polling interval keeps the cron from firing on its own: every run observed is asked for.
-   */
+  /** The long polling interval keeps the cron from firing: every run observed is asked for. */
   private DBOS launchWithKryo() {
     var localDbos =
         new DBOS(
@@ -1177,9 +1173,7 @@ public class PortableSerializationTest {
   /** The row records the configured serializer, and the run's result reads back through it. */
   private void assertScheduledRunUsedTheConfiguredSerializer(DBOS localDbos, String workflowId)
       throws Exception {
-    // The consequence first, so a failure reads as the symptom rather than as metadata: the
-    // output is written and read back through whatever format the row records, so a row that
-    // claims the built-in one loses the part of this value only Kryo can carry.
+    // The consequence first, so a failure reads as the symptom rather than as metadata.
     var status = localDbos.retrieveWorkflow(workflowId).getStatus();
     var scheduledAt = status.input()[0];
     assertEquals(new Payload("ran-at-" + scheduledAt, "hidden-" + scheduledAt), status.output());
@@ -1230,10 +1224,9 @@ public class PortableSerializationTest {
   }
 
   /**
-   * The entry points the Conductor's trigger_schedule and backfill_schedule handlers call. They
-   * take the serializer from the system database they write through, so a caller holding no
-   * serializer of its own -- exactly the Conductor's position, and the bug in #523 -- still records
-   * the configured one.
+   * The entry points the Conductor's handlers call. They take the serializer from the system
+   * database they write through, so a caller holding none of its own -- the Conductor's position,
+   * and the bug in #523 -- still records the configured one.
    */
   @Test
   public void testCustomSerializerScheduleStaticEntryPoints() throws Exception {

@@ -3391,9 +3391,8 @@ public class ConductorTest {
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now(), null));
   }
 
-  // The workflow row's serialization format decides how its output is written and
-  // read back, so a Conductor-started scheduled workflow must use the application's
-  // configured serializer exactly like the in-process trigger/backfill APIs do.
+  // A workflow's output is written and read back in the format its row records, so a
+  // Conductor-started scheduled run must use the application's configured serializer.
   @RetryingTest(3)
   public void triggerScheduleUsesConfiguredSerializer() throws Exception {
     MessageListener listener = new MessageListener();

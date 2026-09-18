@@ -61,9 +61,9 @@ class DBOSExecutorTest {
   }
 
   /**
-   * The default configuration has no custom serializer, so nothing may name one directly: the
-   * debouncer records a terminal ERROR through here when it cannot start the user workflow, and an
-   * exception on this path leaves the caller's handle polling a row that never appears.
+   * The default configuration has no custom serializer, so nothing may name one directly. The
+   * debouncer records a terminal ERROR through here when it cannot start the user workflow, and
+   * throwing instead leaves the caller's handle polling a row that never appears.
    */
   @Test
   public void recordsErrorForUnstartedWorkflowWithoutACustomSerializer() throws Exception {

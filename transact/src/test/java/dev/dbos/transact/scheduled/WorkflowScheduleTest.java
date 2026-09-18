@@ -755,10 +755,9 @@ class WorkflowScheduleTest {
   // ── Workflow ID format ────────────────────────────────────────────────────
 
   /**
-   * A schedule fires inside one application, and cross-language interop happens at the enqueue and
-   * the message, never at a schedule. So a scheduled workflow's runs are written with the
-   * application's own serializer even where the workflow declares a portable one -- and, crucially,
-   * every path that starts a schedule agrees: cron, trigger and backfill.
+   * A schedule fires inside one application, never at the enqueue or message boundary where interop
+   * happens, so its runs take the application's own serializer even where the workflow declares a
+   * portable one -- and every path agrees: cron, trigger and backfill.
    */
   @Test
   public void scheduledRunsIgnoreADeclaredPortableStrategy() throws Exception {

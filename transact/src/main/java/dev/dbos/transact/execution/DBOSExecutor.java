@@ -577,10 +577,9 @@ public class DBOSExecutor implements AutoCloseable {
       SerializationStrategy serialization,
       String functionName) {
 
-    // The row is authoritative: a workflow running under a portable row writes its messages
-    // in that format too, so a peer in another language can read them. setEvent and
-    // writeStream already inherit it; send must not be the one write that drops back to the
-    // application's own serializer.
+    // The row is authoritative: a workflow running under a portable row writes its messages in
+    // that format too, so a peer in another language can read them. setEvent and writeStream
+    // already inherit it.
     if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
       serialization =
           Objects.requireNonNullElse(
@@ -611,12 +610,10 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * Send a message that DBOS itself reads back, such as the debouncer's control messages.
-   *
-   * <p>It carries a Java value to a Java workflow, so it is written with the application's own
-   * serializer whatever format the workflow that happened to make the call runs under. Inheriting a
-   * portable format here would encode the message as plain JSON and the receiving workflow would be
-   * handed a Map where it expects its own type.
+   * Send a message that DBOS itself reads back, such as the debouncer's control messages. It
+   * carries a Java value to a Java workflow, so it takes the application's own serializer whatever
+   * format the calling workflow runs under: inherit a portable one and the receiver is handed a Map
+   * where it expects its own type.
    */
   public void sendInternal(
       String destinationId, Object message, String topic, String idempotencyKey) {
@@ -1872,12 +1869,9 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // A scheduled run is never the workflow another language enqueues: interop happens at the
-    // enqueue and the message, and a schedule fires inside one application. So a schedule's runs
-    // use the application's own serializer whatever the workflow declares, which is what Python,
-    // TypeScript and Go all do -- none of them consult a declared format when a schedule fires.
-    // Honouring it here and not on the trigger and backfill paths, which have no registration to
-    // read, would only make the same schedule's runs disagree with each other.
+    // Failing an explicit choice, the registration's declared format applies -- except to a
+    // scheduled run, which takes the application's own serializer as in Python, TypeScript and Go,
+    // so that cron, trigger and backfill agree.
     if (options.serialization() == null && options.scheduleName() == null) {
       if (workflow.serializationStrategy() != null) {
         options = options.withSerialization(workflow.serializationStrategy().formatName());
@@ -2174,9 +2168,9 @@ public class DBOSExecutor implements AutoCloseable {
       ExecutionOptions options,
       @Nullable String applicationName) {
 
-    // The row is read back with the format it records, so the serializer is the one the
-    // system database being written to was configured with -- never a second one passed in
-    // alongside it, which could only ever match or be a bug.
+    // The row is read back with the format it records, so the serializer is the one the system
+    // database being written to was configured with -- never a second one passed in alongside it,
+    // which could only match or be a bug.
     var serializer = systemDatabase.serializer();
 
     // Serialize inputs using the specified serialization format
@@ -2265,8 +2259,8 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String instanceName,
       @Nullable Object[] args,
       Throwable error) {
-    // No configured serializer means the built-in one, which only SerializationUtil knows;
-    // naming it here would dereference a null serializer on the default configuration.
+    // No configured serializer means the built-in one, which only SerializationUtil knows:
+    // naming it here dereferences null on the default configuration.
     var serializedArgs =
         SerializationUtil.serializeArgs(
             Objects.requireNonNullElseGet(args, () -> new Object[0]), null, null, this.serializer);
