@@ -81,7 +81,6 @@ public class DBOSClient implements AutoCloseable {
   }
 
   private final @NonNull SystemDatabase systemDatabase;
-  private final @Nullable DBOSSerializer serializer;
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
@@ -174,7 +173,6 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String applicationName) {
     MigrationManager.validateSysDbVersion(url, user, password, schema);
 
-    this.serializer = serializer;
     systemDatabase =
         new SystemDatabase(
             url, user, password, schema, serializer, useListenNotify, applicationName);
@@ -279,7 +277,6 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String applicationName) {
     MigrationManager.validateSysDbVersion(dataSource, schema);
 
-    this.serializer = serializer;
     systemDatabase =
         new SystemDatabase(dataSource, schema, serializer, useListenNotify, applicationName);
     systemDatabase.start();
@@ -1044,8 +1041,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         options.applicationName(),
-        systemDatabase,
-        this.serializer);
+        systemDatabase);
 
     return new WorkflowHandleClient<>(workflowId);
   }

@@ -1118,10 +1118,7 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         null, // applicationName: this executor's own
-        systemDatabase,
-        // The row is read back with the format it records, so a scheduled run must be
-        // written with the serializer the system database was configured with.
-        systemDatabase.serializer());
+        systemDatabase);
   }
 
   @SuppressWarnings("removal") // implements the deprecated ExternalState API
@@ -1708,8 +1705,7 @@ public class DBOSExecutor implements AutoCloseable {
         executorId(),
         appId(),
         options.applicationName(),
-        systemDatabase,
-        this.serializer);
+        systemDatabase);
 
     return new WorkflowHandleDBPoll<>(this, workflowId);
   }
@@ -1904,8 +1900,7 @@ public class DBOSExecutor implements AutoCloseable {
           executorId(),
           appId(),
           null, // applicationName: this executor's own
-          systemDatabase,
-          this.serializer);
+          systemDatabase);
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
@@ -1949,8 +1944,7 @@ public class DBOSExecutor implements AutoCloseable {
             appId(),
             parent,
             options,
-            null, // applicationName: this executor's own
-            this.serializer);
+            null); // applicationName: this executor's own
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
@@ -2110,8 +2104,7 @@ public class DBOSExecutor implements AutoCloseable {
       String executorId,
       String appId,
       @Nullable String applicationName,
-      SystemDatabase systemDatabase,
-      DBOSSerializer serializer) {
+      SystemDatabase systemDatabase) {
 
     if (Objects.requireNonNull(options.workflowId(), "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
@@ -2144,8 +2137,7 @@ public class DBOSExecutor implements AutoCloseable {
           appId,
           parent,
           options,
-          applicationName,
-          serializer);
+          applicationName);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
     } catch (DBOSQueueDuplicatedException e) {
@@ -2174,8 +2166,12 @@ public class DBOSExecutor implements AutoCloseable {
       String appId,
       WorkflowInfo parentWorkflow,
       ExecutionOptions options,
-      @Nullable String applicationName,
-      DBOSSerializer serializer) {
+      @Nullable String applicationName) {
+
+    // The row is read back with the format it records, so the serializer is the one the
+    // system database being written to was configured with -- never a second one passed in
+    // alongside it, which could only ever match or be a bug.
+    var serializer = systemDatabase.serializer();
 
     // Serialize inputs using the specified serialization format
     var serializedArgs =
