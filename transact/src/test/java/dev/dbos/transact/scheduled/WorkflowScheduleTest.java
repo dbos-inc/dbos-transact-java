@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
@@ -752,6 +753,56 @@ class WorkflowScheduleTest {
   }
 
   // ── Workflow ID format ────────────────────────────────────────────────────
+
+  /**
+   * A schedule fires inside one application, and cross-language interop happens at the enqueue and
+   * the message, never at a schedule. So a scheduled workflow's runs are written with the
+   * application's own serializer even where the workflow declares a portable one -- and, crucially,
+   * every path that starts a schedule agrees: cron, trigger and backfill.
+   */
+  @Test
+  public void scheduledRunsIgnoreADeclaredPortableStrategy() throws Exception {
+    var impl = registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("portable-cron", "portableLatchedRun", className(), "0/1 * * * * *"));
+    assertTrue(impl.portableLatch.await(15, TimeUnit.SECONDS));
+
+    var cronRuns =
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("sched-portable-cron-"));
+    assertFalse(cronRuns.isEmpty());
+    for (var run : cronRuns) {
+      assertEquals(
+          SerializationUtil.NATIVE, run.serialization(), "cron-fired run " + run.workflowId());
+    }
+
+    dbos.pauseSchedule("portable-cron");
+
+    // The same schedule, started the other two ways.
+    dbos.createSchedule(
+        new WorkflowSchedule("portable-trigger", "portableLatchedRun", className(), "0 0 0 1 1 *"));
+    var triggered = dbos.<Void, RuntimeException>triggerSchedule("portable-trigger");
+    triggered.getResult();
+    assertEquals(
+        SerializationUtil.NATIVE,
+        dbos.listWorkflows(new ListWorkflowsInput(triggered.workflowId())).get(0).serialization());
+
+    dbos.createSchedule(
+        new WorkflowSchedule(
+            "portable-backfill", "portableLatchedRun", className(), "0 * * * * *"));
+    var backfilled =
+        dbos.backfillSchedule(
+            "portable-backfill",
+            Instant.parse("2024-01-01T10:00:30Z"),
+            Instant.parse("2024-01-01T10:02:30Z"));
+    assertEquals(2, backfilled.size());
+    for (var handle : backfilled) {
+      handle.getResult();
+      assertEquals(
+          SerializationUtil.NATIVE,
+          dbos.listWorkflows(new ListWorkflowsInput(handle.workflowId())).get(0).serialization());
+    }
+  }
 
   @Test
   public void workflowIdUsesOffsetDateTimeFormat() throws Exception {

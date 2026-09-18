@@ -1,5 +1,6 @@
 package dev.dbos.transact.scheduled;
 
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
@@ -11,6 +12,10 @@ interface ScheduledWorkflowService {
   void scheduledRun(Instant scheduled, Object context);
 
   void latchedRun(Instant scheduled, Object context);
+
+  // Declared portable, to prove a schedule's runs ignore that: see
+  // WorkflowScheduleTest.scheduledRunsIgnoreADeclaredPortableStrategy.
+  void portableLatchedRun(Instant scheduled, Object context);
 }
 
 class ScheduledWorkflowImpl implements ScheduledWorkflowService {
@@ -20,6 +25,7 @@ class ScheduledWorkflowImpl implements ScheduledWorkflowService {
   volatile Object lastContext = null;
   final List<Instant> allScheduledTimes = new CopyOnWriteArrayList<>();
   final CountDownLatch latch = new CountDownLatch(3);
+  final CountDownLatch portableLatch = new CountDownLatch(1);
 
   @Override
   @Workflow
@@ -34,6 +40,12 @@ class ScheduledWorkflowImpl implements ScheduledWorkflowService {
   @Workflow
   public void latchedRun(Instant scheduled, Object context) {
     latch.countDown();
+  }
+
+  @Override
+  @Workflow(serializationStrategy = SerializationStrategy.PORTABLE)
+  public void portableLatchedRun(Instant scheduled, Object context) {
+    portableLatch.countDown();
   }
 
   void reset() {

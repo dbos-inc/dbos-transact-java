@@ -1872,7 +1872,13 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    if (options.serialization() == null) {
+    // A scheduled run is never the workflow another language enqueues: interop happens at the
+    // enqueue and the message, and a schedule fires inside one application. So a schedule's runs
+    // use the application's own serializer whatever the workflow declares, which is what Python,
+    // TypeScript and Go all do -- none of them consult a declared format when a schedule fires.
+    // Honouring it here and not on the trigger and backfill paths, which have no registration to
+    // read, would only make the same schedule's runs disagree with each other.
+    if (options.serialization() == null && options.scheduleName() == null) {
       if (workflow.serializationStrategy() != null) {
         options = options.withSerialization(workflow.serializationStrategy().formatName());
       }
