@@ -388,6 +388,53 @@ public class SystemDatabase implements AutoCloseable {
     return anySqlState(t, state -> true);
   }
 
+  /** What {@link #dbRetry} does about a failure. */
+  enum Failure {
+    /** Reset the pool and try again. */
+    CONNECTION,
+    /** Try again. */
+    TRANSIENT,
+    /** Not ours to retry: hand it up. */
+    CALLERS
+  }
+
+  /**
+   * What a failed statement means, deciding on the SQLSTATE when there is one and on the exception
+   * type only when there is not.
+   *
+   * <p>These are two tiers, not two alternatives. The dispatch used to OR them -- {@code e
+   * instanceof SQLTransientException || isTransientState(e)} -- which let the coarse signal
+   * override the precise one. {@link SQLTransientException} has three standard subclasses and one
+   * of them, {@link java.sql.SQLTransactionRollbackException}, is class 40: a serialization failure
+   * or deadlock arriving as JDBC's standard type went back into this unbounded loop, which is what
+   * the conflict-retry change set out to stop. PgJDBC's {@code PSQLException} extends {@link
+   * SQLException} directly, so it does not fire on the current driver, which is why no test caught
+   * it. The narrow guard that patched it is gone: a class 40 state now falls through to {@link
+   * Failure#CALLERS} because it is not a state this retries, without having to be named.
+   *
+   * <p>All three reference SDKs read the code first and fall back to type or message only for
+   * errors carrying no code: Go reads {@code pgErrCode} then {@code net.Error}, Python reads {@code
+   * pgcode} then driver message text, TypeScript reads {@code code} then its errno set.
+   *
+   * <p>Which failures evict the Hikari pool moves slightly with this, since eviction follows the
+   * {@link Failure#CONNECTION} answer rather than a separate condition. A class 08 or 57 state
+   * evicts as before. What no longer evicts is a failure carrying some other state whose message
+   * merely reads like a connection error -- the message tier is now reached only when nothing in
+   * either chain carries a state at all.
+   */
+  static Failure classify(SQLException e) {
+    if (hasSqlState(e)) {
+      if (isConnectionState(e)) {
+        return Failure.CONNECTION;
+      }
+      return isTransientState(e) ? Failure.TRANSIENT : Failure.CALLERS;
+    }
+    if (e instanceof SQLRecoverableException || hasConnectionMessage(e)) {
+      return Failure.CONNECTION;
+    }
+    return e instanceof SQLTransientException ? Failure.TRANSIENT : Failure.CALLERS;
+  }
+
   /** Class 08 connection_exception or class 57 operator_intervention, anywhere in the chains. */
   static boolean isConnectionState(Throwable t) {
     return anySqlState(t, state -> state.startsWith("08") || state.startsWith("57"));
@@ -428,17 +475,6 @@ public class SystemDatabase implements AutoCloseable {
    * serialization race is routine rather than exceptional, and would hide the failure from the poll
    * loop whose job is to react to it.
    */
-  /**
-   * Whether {@code e} looks like a connection failure: the SQLSTATE if there is one, the message if
-   * there is not.
-   *
-   * <p>Kept as one predicate while {@code dbRetry} still ORs type against state; the two tiers are
-   * separated there in the dispatch rework, which is what stops a message overriding a SQLSTATE.
-   */
-  private static boolean isConnectionFailure(Throwable t) {
-    return isConnectionState(t) || hasConnectionMessage(t);
-  }
-
   /** Class 53 insufficient_resources, anywhere in the chains. */
   static boolean isTransientState(Throwable t) {
     return anySqlState(t, state -> state.startsWith("53"));
@@ -661,22 +697,16 @@ public class SystemDatabase implements AutoCloseable {
         return supplier.get();
       } catch (SQLException e) {
         attempt++;
-        if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
-          logger.warn(
-              "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
-          if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
-            hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+        switch (classify(e)) {
+          case CONNECTION -> {
+            logger.warn(
+                "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
+            if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
+              hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+            }
           }
-        } else if (!isSerializationError(e)
-            && (e instanceof SQLTransientException || isTransientState(e))) {
-          // SQLSTATE decides before the type, which is too coarse on its own:
-          // SQLTransactionRollbackException is class 40, so OR-ing the instanceof ahead of the
-          // state check let a conflict back into this unbounded loop. The type is a fallback for
-          // an exception carrying no SQLSTATE, and #515 reworks this dispatch to say so -- state
-          // first, type only when there is no state, here and in the branch above.
-          logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
-        } else {
-          throw new DBOSSystemDatabaseException(e);
+          case TRANSIENT -> logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
+          case CALLERS -> throw new DBOSSystemDatabaseException(e);
         }
         try {
           sleepWithJitter(backoffMs);

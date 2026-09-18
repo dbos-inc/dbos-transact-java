@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -97,5 +98,64 @@ public class ErrorClassificationTest {
     assertFalse(SystemDatabase.isContentionError(bare));
     assertFalse(SystemDatabase.isSerializationError(bare));
     assertFalse(SystemDatabase.isLockNotAvailable(bare));
+  }
+
+  @Test
+  @DisplayName("JDBC's standard rollback type does not put a conflict back in the retry loop")
+  public void aStandardRollbackTypeReachesTheCaller() {
+    // SQLTransactionRollbackException is a SQLTransientException, and the dispatch used to OR the
+    // type in front of the state. A driver that throws JDBC's standard type for a serialization
+    // failure would have had it retried forever. PgJDBC does not, which is why nothing caught it.
+    var standard = new java.sql.SQLTransactionRollbackException("conflict", "40001");
+
+    assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(standard));
+  }
+
+  @Test
+  @DisplayName("a SQLSTATE decides even when the exception type disagrees")
+  public void theStateOutranksTheType() {
+    // A transient *type* carrying a state this does not retry is the caller's.
+    assertEquals(
+        SystemDatabase.Failure.CALLERS,
+        SystemDatabase.classify(new java.sql.SQLTimeoutException("gone", "42P01")));
+
+    // A recoverable *type* carrying a conflict is likewise the caller's, not a pool reset.
+    assertEquals(
+        SystemDatabase.Failure.CALLERS,
+        SystemDatabase.classify(new java.sql.SQLRecoverableException("conflict", "40001")));
+
+    // And the states this does retry still decide, whatever the type.
+    assertEquals(
+        SystemDatabase.Failure.CONNECTION,
+        SystemDatabase.classify(new SQLException("down", "08006")));
+    assertEquals(
+        SystemDatabase.Failure.TRANSIENT,
+        SystemDatabase.classify(new SQLException("no room", "53300")));
+  }
+
+  @Test
+  @DisplayName("with no SQLSTATE anywhere, the type and message decide")
+  public void withoutAStateTheTypeDecides() {
+    assertEquals(
+        SystemDatabase.Failure.CONNECTION,
+        SystemDatabase.classify(new java.sql.SQLRecoverableException("socket closed")));
+    assertEquals(
+        SystemDatabase.Failure.CONNECTION,
+        SystemDatabase.classify(new SQLException("Connection is closed")));
+    assertEquals(
+        SystemDatabase.Failure.TRANSIENT,
+        SystemDatabase.classify(new java.sql.SQLTransientException("try again")));
+    assertEquals(
+        SystemDatabase.Failure.CALLERS, SystemDatabase.classify(new SQLException("duplicate key")));
+  }
+
+  @Test
+  @DisplayName("a message that reads like a connection error no longer overrides a state")
+  public void aMessageDoesNotOverrideAState() {
+    // This is the deliberate change in which failures evict the Hikari pool: the message tier is
+    // reached only when nothing in either chain carries a state.
+    var stated = new SQLException("Connection is closed", "23505");
+
+    assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(stated));
   }
 }
