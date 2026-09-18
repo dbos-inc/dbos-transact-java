@@ -43,6 +43,9 @@ class ExecutingServiceImpl implements ExecutingService {
   public int step1Count = 0;
   public int step2Count = 0;
 
+  /** Counts entries into a workflow body, which no step guard stands in front of. */
+  public int workflowBodyCount = 0;
+
   public ExecutingServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
@@ -54,6 +57,7 @@ class ExecutingServiceImpl implements ExecutingService {
   @Override
   @Workflow(name = "workflowMethod")
   public String workflowMethod(String input) {
+    ++workflowBodyCount;
     return input + input;
   }
 

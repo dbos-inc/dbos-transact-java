@@ -487,6 +487,33 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void theClaimCountsTheDispatch() throws Exception {
+    // The queue's ENQUEUED -> PENDING claim is the only thing that counts a dispatch now, so it
+    // is the only thing bounding recovery: without this increment a workflow whose executor keeps
+    // dying is swept back, claimed and lost forever, never reaching the dead-letter threshold.
+    var wfid = "wfid-claim-counts";
+    var queue = new Queue("claim-count-q");
+    var status =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .queueName(queue.name())
+            .build();
+
+    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5).status());
+    assertEquals(0, DBUtils.getWorkflowRow(dataSource, wfid).recoveryAttempts());
+
+    var claimed =
+        sysdb.startQueuedWorkflows(
+            queue, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
+    assertEquals(List.of(wfid), claimed);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.PENDING.name(), row.status());
+    assertEquals(1, row.recoveryAttempts(), "the claim must count this dispatch");
+  }
+
+  @Test
   public void testDedupeId() throws Exception {
     var wfid = "wfid-1";
     var builder =

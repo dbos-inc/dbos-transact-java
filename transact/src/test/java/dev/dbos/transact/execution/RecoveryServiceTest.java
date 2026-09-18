@@ -340,6 +340,112 @@ class RecoveryServiceTest {
     }
   }
 
+  @Test
+  void theDeadLetterThresholdFallsBetweenTheLastAttemptAndTheOneAfterIt() throws Exception {
+    // The claim counts the dispatch before the threshold is read, so a row sitting at N is
+    // judged at N + 1. DEFAULT_MAX_RECOVERY_ATTEMPTS + 1 dispatches are allowed; the next one
+    // dead-letters. Pinning both sides catches an off-by-one in either direction, which would
+    // otherwise only show as workflows dying one attempt early.
+    var lastAllowed = Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS; // claimed at 101, runs
+    var firstRefused = Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS + 1; // claimed at 102, dead-letters
+
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      for (var id : List.of("wf-dlq-boundary-allowed", "wf-dlq-boundary-refused")) {
+        try (var ctx = new WorkflowOptions(id).setContext()) {
+          executingService.workflowMethod("test-item");
+        }
+      }
+
+      setWorkflowStateToPending(dataSource);
+      setRecoveryAttempts(dataSource, "wf-dlq-boundary-allowed", lastAllowed);
+      setRecoveryAttempts(dataSource, "wf-dlq-boundary-refused", firstRefused);
+
+      assertEquals(
+          2, dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId())).size());
+
+      var allowed = dbos.retrieveWorkflow("wf-dlq-boundary-allowed");
+      allowed.getResult();
+      assertEquals(
+          WorkflowState.SUCCESS,
+          allowed.getStatus().status(),
+          "a workflow on its last allowed attempt must still run");
+
+      String refusedStatus = null;
+      for (var i = 0; i < 300; i++) {
+        refusedStatus = DBUtils.getWorkflowRow(dataSource, "wf-dlq-boundary-refused").status();
+        if (WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name().equals(refusedStatus)) {
+          break;
+        }
+        Thread.sleep(100);
+      }
+      assertEquals(
+          WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(),
+          refusedStatus,
+          "one attempt further must be dead-lettered");
+    }
+  }
+
+  @Test
+  void aRowThatMovedOnSinceTheClaimIsNotRun() throws Exception {
+    // cancelWorkflow moves PENDING rows to CANCELLED, so it can land between the claim and the
+    // status read the dispatch does. The run must not go ahead on a row it no longer owns: the
+    // outcome write would be discarded, but the side effects would already have happened.
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl = new ExecutingServiceImpl(dbos);
+      var service = dbos.registerProxy(ExecutingService.class, impl);
+      impl.setSelf(service);
+      dbos.launch();
+      dbos.registerQueue(testQueue, QueueOptions.empty());
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+      var queueService = DBOSTestAccess.getQueueService(dbos);
+
+      var wfid = "wf-cancelled-after-claim";
+      queueService.pause();
+      try {
+        var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
+        dbos.startWorkflow(() -> service.workflowMethod("test-item"), options);
+
+        // Claim it by hand, exactly as the queue would.
+        var claimed =
+            systemDatabase.startQueuedWorkflows(
+                dbos.findQueue(testQueue).orElseThrow(),
+                dbosExecutor.executorId(),
+                dbosExecutor.appVersion(),
+                null,
+                0);
+        assertEquals(List.of(wfid), claimed);
+
+        // The cancellation lands in the window between that claim and the dispatch below.
+        DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
+
+        dbosExecutor.executeWorkflowById(wfid);
+      } finally {
+        queueService.unpause();
+      }
+
+      // The run would go to a virtual thread, so wait well past the point it would have entered
+      // the body -- roughly 40ms without the guard.
+      for (var i = 0; i < 20 && impl.workflowBodyCount == 0; i++) {
+        Thread.sleep(100);
+      }
+      // A step would be refused anyway, since the step machinery checks cancellation itself.
+      // What has nothing standing in front of it is everything in the body that is not a step.
+      assertEquals(
+          0, impl.workflowBodyCount, "a cancelled row must not have its workflow body entered");
+      assertEquals(
+          WorkflowState.CANCELLED.name(),
+          DBUtils.getWorkflowRow(dataSource, wfid).status(),
+          "the dispatch must leave the cancellation in place");
+    }
+  }
+
   private static void setRecoveryAttempts(DataSource ds, String workflowId, int attempts)
       throws SQLException {
     try (var conn = ds.getConnection();

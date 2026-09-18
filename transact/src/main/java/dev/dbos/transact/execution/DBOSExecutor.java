@@ -1915,14 +1915,23 @@ public class DBOSExecutor implements AutoCloseable {
       // The unannotated default applies here as it did when the status upsert made this decision.
       int attempts = Objects.requireNonNullElse(claimed.recoveryAttempts(), 0);
       int retries = Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS);
-      if (attempts > retries + 1) {
+      if (!claimed.status().equals(WorkflowState.SUCCESS)
+          && !claimed.status().equals(WorkflowState.ERROR)
+          && attempts > retries + 1) {
         systemDatabase.deadLetterWorkflows(List.of(workflowId), attempts);
         throw new DBOSMaxRecoveryAttemptsExceededException(workflowId, retries);
       }
+      // Only a PENDING row owns its outcome. A row that moved on since the claim -- cancelled, or
+      // finished by whoever held it before -- has nothing left for this run to do, and running it
+      // would enter the workflow body, which no step guard stands in front of. The row was just
+      // read, so failIfMissing: one deleted in the meantime raises rather than polling forever.
+      if (!claimed.status().equals(WorkflowState.PENDING)) {
+        return new WorkflowHandleDBPoll<>(this, workflowId, true);
+      }
       // Deliberately no persistWorkflow: the claim already wrote the status, executor, deadline
       // and attempt count, and this row was read back from it, so re-upserting would only rewrite
-      // what it just read. The claim is this run's title to the workflow, so it executes unless
-      // the status below says the outcome is already recorded.
+      // what it just read. The claim is this run's title to the workflow, and the row is still
+      // PENDING, so it executes.
       initResult =
           new WorkflowInitResult(
               claimed.status(), claimed.deadline(), true, claimed.serialization());
@@ -2221,8 +2230,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.scheduleName(),
             applicationName);
 
-    WorkflowInitResult[] initResult = {null};
-    initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
+    var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
@@ -2233,7 +2241,7 @@ public class DBOSExecutor implements AutoCloseable {
           startTime);
     }
 
-    return initResult[0];
+    return initResult;
   }
 
   private boolean persistWorkflowOutput(String workflowId, Object result, String serialization) {
