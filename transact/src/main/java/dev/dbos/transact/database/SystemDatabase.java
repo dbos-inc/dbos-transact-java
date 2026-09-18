@@ -352,35 +352,53 @@ public class SystemDatabase implements AutoCloseable {
     notificationSource.start();
   }
 
+  /** How far {@link #anyLinked} walks before giving up; see its note on cycles. */
+  private static final int MAX_LINKED_EXCEPTIONS = 1000;
+
   /**
-   * Whether any SQLSTATE reachable from {@code t} satisfies {@code match}.
+   * Whether anything reachable from {@code t} along either of JDBC's chains satisfies {@code
+   * match}.
    *
-   * <p>"Reachable" means two chains, not one. Causes carry the wrapping this class does itself --
-   * {@link DBOSSystemDatabaseException} above a driver exception. {@link
-   * SQLException#getNextException()} carries what JDBC uses for batch failures: {@code
-   * executeBatch()} throws a {@link java.sql.BatchUpdateException} and hangs the driver-specific
-   * failure, which is the one holding the real SQLSTATE, off the next-exception chain. This class
-   * runs 13 batches, so that chain is not hypothetical.
+   * <p>Two chains, not one. Causes carry DBOS's own wrapping; {@link
+   * SQLException#getNextException()} carries what JDBC links rather than wraps -- HikariCP's
+   * connection failure behind a pool timeout, and a failed batch's second and later errors.
    *
-   * <p>{@link SQLException} is {@link Iterable}, and its iterator covers both from any SQLException
-   * it is given -- itself, its causes, its next exceptions and their causes. The outer loop only
-   * has to find the first SQLException, since the top of the chain may be a wrapper that is not
-   * one.
+   * <p>{@link SQLException}'s iterator covers an exception, its causes, its next exceptions and
+   * their causes, but not a nested cause's next exceptions, which is why the outer loop re-enters
+   * at every level.
+   *
+   * <p>Bounded because neither chain is guaranteed acyclic: {@link SQLException#setNextException}
+   * has no self-link guard, and the iterator over a self-linked exception never ends. Giving up can
+   * only lose a SQLSTATE, which hands the failure up rather than retrying it.
    */
-  private static boolean anySqlState(Throwable t, Predicate<String> match) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+  private static boolean anyLinked(Throwable t, Predicate<Throwable> match) {
+    int budget = MAX_LINKED_EXCEPTIONS;
+    for (Throwable cause = t; cause != null && budget-- > 0; cause = cause.getCause()) {
+      if (match.test(cause)) {
+        return true;
+      }
       if (cause instanceof SQLException sqlException) {
         for (Throwable linked : sqlException) {
-          if (linked instanceof SQLException linkedSql) {
-            String state = linkedSql.getSQLState();
-            if (state != null && match.test(state)) {
-              return true;
-            }
+          if (budget-- <= 0) {
+            return false;
+          }
+          if (match.test(linked)) {
+            return true;
           }
         }
       }
     }
     return false;
+  }
+
+  /** Whether any SQLSTATE reachable from {@code t} satisfies {@code match}. */
+  private static boolean anySqlState(Throwable t, Predicate<String> match) {
+    return anyLinked(
+        t,
+        linked ->
+            linked instanceof SQLException sqlException
+                && sqlException.getSQLState() != null
+                && match.test(sqlException.getSQLState()));
   }
 
   /** Whether anything in {@code t}'s chains carries a SQLSTATE at all. */
@@ -396,6 +414,34 @@ public class SystemDatabase implements AutoCloseable {
     TRANSIENT,
     /** Not ours to retry: hand it up. */
     CALLERS
+  }
+
+  /**
+   * Whether a failure is evidence that the pooled connections themselves are gone, so recycling
+   * them is what lets a retry succeed.
+   *
+   * <p>Separate from {@link #classify} because retrying and recycling are different questions whose
+   * answers do not coincide. Class 08 and the {@code 57P0x} shutdown codes mean the connection or
+   * the server went away, and a retry on the same socket cannot succeed. {@code 57014
+   * query_canceled} is class 57 too, but it means a {@code statement_timeout} fired or someone
+   * cancelled the backend: the statement is in trouble and the connection is fine, so recycling
+   * every pooled connection over it is collateral damage. A borrow that timed out is likewise
+   * contention for healthy connections, and recycling them mid-shortage makes the shortage worse.
+   *
+   * <p>HikariCP copies the last connection failure's SQLSTATE onto its timeout exception, so a
+   * timeout from genuinely broken connections carries class 08 and does evict. That copy is not
+   * always about the timeout: {@code PoolBase} records the last failure on a failed keepalive too
+   * and clears it only when a new connection is established, so a demand-spike timeout can carry a
+   * state from something else a {@code maxLifetime} earlier and be handed to the caller on its
+   * account. Left alone: the states realistically sitting there are from connections that could not
+   * be made, and handing those up beats retrying them forever.
+   */
+  static boolean evictsPool(SQLException e) {
+    if (hasSqlState(e)) {
+      return anySqlState(
+          e, state -> state.startsWith("08") || (state.startsWith("57") && !"57014".equals(state)));
+    }
+    return e instanceof SQLRecoverableException || anyMessage(e, DEAD_CONNECTION_MESSAGES);
   }
 
   /**
@@ -416,37 +462,10 @@ public class SystemDatabase implements AutoCloseable {
    * errors carrying no code: Go reads {@code pgErrCode} then {@code net.Error}, Python reads {@code
    * pgcode} then driver message text, TypeScript reads {@code code} then its errno set.
    *
-   * <p>Which failures evict the Hikari pool moves slightly with this, since eviction follows the
-   * {@link Failure#CONNECTION} answer rather than a separate condition. A class 08 or 57 state
-   * evicts as before. What no longer evicts is a failure carrying some other state whose message
-   * merely reads like a connection error -- the message tier is now reached only when nothing in
-   * either chain carries a state at all.
+   * <p>This answers only whether to retry; whether to recycle the pool is {@link #evictsPool},
+   * decided separately. A {@link Failure#CONNECTION} verdict does not by itself evict: {@code
+   * 57014} and a state-less pool timeout are both retried on the pool they arrived from.
    */
-  /**
-   * Whether a failure is evidence that the pooled connections themselves are gone, so recycling
-   * them is what lets a retry succeed.
-   *
-   * <p>Separate from {@link #classify} because retrying and recycling are different questions whose
-   * answers do not coincide. Class 08 and the {@code 57P0x} shutdown codes mean the connection or
-   * the server went away, and a retry on the same socket cannot succeed. {@code 57014
-   * query_canceled} is class 57 too, but it means a {@code statement_timeout} fired or someone
-   * cancelled the backend: the statement is in trouble and the connection is fine, so recycling
-   * every pooled connection over it is collateral damage. A borrow that timed out is likewise
-   * contention for healthy connections, and recycling them mid-shortage makes the shortage worse.
-   *
-   * <p>HikariCP copies the SQLSTATE of the last real connection failure onto its timeout exception
-   * and hangs that failure off {@link SQLException#setNextException}, so a pool timeout caused by
-   * genuinely broken connections arrives carrying class 08 and does evict, while one caused purely
-   * by demand carries no state and reaches the message tier, which declines.
-   */
-  static boolean evictsPool(SQLException e) {
-    if (hasSqlState(e)) {
-      return anySqlState(
-          e, state -> state.startsWith("08") || (state.startsWith("57") && !"57014".equals(state)));
-    }
-    return e instanceof SQLRecoverableException || anyMessage(e, DEAD_CONNECTION_MESSAGES);
-  }
-
   static Failure classify(SQLException e) {
     if (hasSqlState(e)) {
       if (isConnectionState(e)) {
@@ -481,19 +500,7 @@ public class SystemDatabase implements AutoCloseable {
 
   /** Whether any message along either chain contains one of {@code needles}. */
   private static boolean anyMessage(Throwable t, List<String> needles) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (messageContains(cause, needles)) {
-        return true;
-      }
-      if (cause instanceof SQLException sqlException) {
-        for (Throwable linked : sqlException) {
-          if (messageContains(linked, needles)) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
+    return anyLinked(t, linked -> messageContains(linked, needles));
   }
 
   private static boolean messageContains(Throwable t, List<String> needles) {

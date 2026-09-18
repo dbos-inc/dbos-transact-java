@@ -2,12 +2,15 @@ package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.exceptions.DBOSSystemDatabaseException;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.time.Duration;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,13 +18,12 @@ import org.junit.jupiter.api.Test;
 /**
  * How deeply the SQLSTATE predicates look for the state that carries the answer.
  *
- * <p>Two chains matter, not one. Causes carry this class's own wrapping; {@code getNextException()}
- * carries what JDBC uses for batch failures, where the driver exception holding the real SQLSTATE
- * hangs off the next-exception chain rather than the cause chain.
+ * <p>Two chains matter, not one: causes carry DBOS's own wrapping, and {@code getNextException()}
+ * carries what JDBC links rather than wraps.
  */
 public class ErrorClassificationTest {
 
-  /** A batch failure shaped as JDBC specifies: the real state hangs off the next exception. */
+  /** A batch failure with the state only on the next exception, as the JDBC contract permits. */
   private static BatchUpdateException batchFailure(String sqlState) {
     var batch = new BatchUpdateException("batch entry 0 failed", null, 0, new int[] {}, null);
     batch.setNextException(new SQLException("the actual failure", sqlState));
@@ -206,5 +208,75 @@ public class ErrorClassificationTest {
     // Broken connections: Hikari copies the last failure's state and hangs it off setNextException,
     // so this arrives carrying class 08 and the pool is worth recycling.
     assertTrue(SystemDatabase.evictsPool(poolTimeout("08006")));
+  }
+
+  /**
+   * A batch failure shaped as PgJDBC builds one: the first error's state copied onto the {@link
+   * BatchUpdateException}, that error the cause, later entries chained off it.
+   */
+  private static BatchUpdateException pgBatchFailure(String firstState, String laterState) {
+    var driverError = new SQLException("the actual failure", firstState);
+    var batch =
+        new BatchUpdateException(
+            "Batch entry 0 was aborted", firstState, 0, new int[] {}, driverError);
+    batch.setNextException(new SQLException("a later entry", laterState));
+    return batch;
+  }
+
+  @Test
+  @DisplayName("a state reachable only through a cause outranks a connection-sounding message")
+  public void aDeepStateOutranksAShallowMessage() {
+    // The tier gate has to look as deep as the predicates do, or a wrapper whose message reads
+    // like a dead connection sends a permanent failure back into an unbounded retry.
+    var wrapper = new SQLException("Connection is closed", (String) null);
+    wrapper.initCause(new SQLException("duplicate key value violates unique constraint", "23505"));
+
+    assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(wrapper));
+    assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(batchFailure("23505")));
+  }
+
+  @Test
+  @DisplayName("a next-exception chain hanging off a nested cause is still found")
+  public void aNestedCausesNextChainIsFound() {
+    // The iterator does not cover a nested cause's next exceptions; only re-entering at each
+    // cause finds this.
+    var inner = new SQLException("wrapping", (String) null);
+    inner.setNextException(new SQLException("the actual failure", "40001"));
+    var outer = new SQLException("outer", (String) null);
+    outer.initCause(inner);
+
+    assertTrue(SystemDatabase.isSerializationError(outer));
+    assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(outer));
+    assertEquals("40001", new DBOSSystemDatabaseException(outer).sqlState());
+  }
+
+  @Test
+  @DisplayName("a connection state outranks a transient one in the same chain")
+  public void aConnectionStateOutranksATransientOne() {
+    // A batch can fail several entries for several reasons; pin which state decides.
+    var mixed = pgBatchFailure("53300", "08006");
+
+    assertEquals(SystemDatabase.Failure.CONNECTION, SystemDatabase.classify(mixed));
+    assertTrue(SystemDatabase.evictsPool(mixed));
+  }
+
+  @Test
+  @DisplayName("a chain linked to itself does not hang the retry loop")
+  public void aSelfLinkedChainTerminates() {
+    // A self-linked exception makes the iterator run forever, inside dbRetry's catch, where a
+    // spin is unkillable.
+    var stated = new SQLException("boom", "23505");
+    stated.setNextException(stated);
+    var stateless = new SQLException("boom", (String) null);
+    stateless.setNextException(stateless);
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(10),
+        () -> {
+          assertFalse(SystemDatabase.isSerializationError(stated));
+          assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(stated));
+          assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(stateless));
+          assertNull(new DBOSSystemDatabaseException(stateless).sqlState());
+        });
   }
 }
