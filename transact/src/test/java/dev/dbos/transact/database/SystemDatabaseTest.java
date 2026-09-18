@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,7 @@ import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.exceptions.DBOSSystemDatabaseException;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -64,6 +67,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 // Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
@@ -560,7 +564,35 @@ public class SystemDatabaseTest {
   @Test
   public void testCreateScheduleDuplicate() {
     sysdb.createSchedule(makeSchedule("sched-dup"));
+    // SchedulesDAO catches 23505 and raises its own message, so this never reaches dbRetry's
+    // terminal path. What dbRetry throws is pinned by dbRetryThrowsTypedOnANonRetryableFailure.
     assertThrows(RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup")));
+  }
+
+  @Test
+  @DisplayName("dbRetry hands a non-retryable failure back as a typed, chained exception")
+  public void dbRetryThrowsTypedOnANonRetryableFailure() throws SQLException {
+    // Driven through a real SystemDatabase call rather than by constructing the exception, so
+    // that regressing the throw site to a bare RuntimeException fails this test. 42P01 is not a
+    // state dbRetry retries, so it takes the terminal path on the first attempt and the test
+    // does not sit through any backoff.
+    var failure = new SQLException("relation \"dbos.workflow_schedules\" does not exist", "42P01");
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    when(conn.prepareStatement(anyString())).thenThrow(failure);
+    when(conn.createStatement()).thenThrow(failure);
+    var ds = mock(DataSource.class);
+    when(ds.getConnection()).thenReturn(conn);
+
+    try (var db = new SystemDatabase(ds, "dbos", null, false, "app")) {
+      var thrown =
+          assertThrows(DBOSSystemDatabaseException.class, () -> db.getSchedule("anything"));
+
+      assertSame(failure, thrown.getCause(), "the driver's failure is the cause, one level down");
+      assertEquals("42P01", thrown.sqlState());
+    }
   }
 
   @Test

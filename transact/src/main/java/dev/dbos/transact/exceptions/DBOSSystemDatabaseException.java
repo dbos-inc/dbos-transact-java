@@ -3,9 +3,15 @@ package dev.dbos.transact.exceptions;
 import java.sql.SQLException;
 
 /**
- * This exception is thrown by DBOS when the system database cannot be reached, despite numerous
- * retries. Handling this exception is unlikely to end well. A new execution should be started once
- * system database connectivity is restored.
+ * A system database operation that DBOS will not retry any further.
+ *
+ * <p>This covers two rather different situations, and the SQLSTATE is what tells them apart.
+ * Connectivity failures are retried first, so one arriving here means the database stayed
+ * unreachable across numerous attempts; handling that is unlikely to end well, and a new execution
+ * should be started once connectivity is restored. A failure that retrying could never fix -- a
+ * constraint violation, a syntax error, a missing relation -- is not retried at all and arrives
+ * immediately, and may well be something the caller can act on. {@link #sqlState()} is how to
+ * decide which is in hand.
  *
  * <p>The failure that caused it is the {@linkplain #getCause() cause}, and is the only level of
  * wrapping: the retry loop that throws this never throws on a path it would retry, so a caller
