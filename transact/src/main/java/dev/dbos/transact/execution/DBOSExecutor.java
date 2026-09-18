@@ -1085,6 +1085,16 @@ public class DBOSExecutor implements AutoCloseable {
     return workflowId;
   }
 
+  /**
+   * The format a schedule's runs are recorded in: the application's own serializer, named
+   * explicitly so that no path promotes the workflow's declared one over it. A schedule fires
+   * inside one application, never across the enqueue or message boundary where interop happens, so
+   * its runs take this whatever the workflow declares -- as in Python, TypeScript and Go.
+   */
+  private static String scheduledSerialization(@Nullable DBOSSerializer serializer) {
+    return serializer != null ? serializer.name() : SerializationUtil.NATIVE;
+  }
+
   private static void enqueueScheduledWorkflow(
       @NonNull String workflowName,
       @NonNull String className,
@@ -1102,7 +1112,8 @@ public class DBOSExecutor implements AutoCloseable {
         new ExecutionOptions(workflowId)
             .withQueueName(queueName)
             .withAppVersion(latestAppVersion)
-            .withScheduleName(scheduleName);
+            .withScheduleName(scheduleName)
+            .withSerialization(scheduledSerialization(systemDatabase.serializer()));
     enqueueWorkflow(
         workflowName,
         className,
@@ -1617,7 +1628,9 @@ public class DBOSExecutor implements AutoCloseable {
                 options != null && options.attributes() != null
                     ? options.attributes()
                     : ctx.resolveNextAttributes())
-            .withScheduleName(scheduleName);
+            .withScheduleName(scheduleName)
+            .withSerialization(
+                scheduleName == null ? null : scheduledSerialization(this.serializer));
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
@@ -1869,10 +1882,8 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // Failing an explicit choice, the registration's declared format applies -- except to a
-    // scheduled run, which takes the application's own serializer as in Python, TypeScript and Go,
-    // so that cron, trigger and backfill agree.
-    if (options.serialization() == null && options.scheduleName() == null) {
+    // Failing an explicit choice, the registration's declared format applies.
+    if (options.serialization() == null) {
       if (workflow.serializationStrategy() != null) {
         options = options.withSerialization(workflow.serializationStrategy().formatName());
       }
