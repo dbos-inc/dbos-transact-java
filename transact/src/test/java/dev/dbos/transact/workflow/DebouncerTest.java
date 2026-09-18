@@ -351,6 +351,59 @@ public class DebouncerTest {
     assertEquals(Integer.valueOf(42), userWfStatus.priority());
   }
 
+  public interface PortableOrchestratorService {
+    String debounceTwice(String arg);
+  }
+
+  public static class PortableOrchestratorServiceImpl implements PortableOrchestratorService {
+    private final DBOS dbos;
+    private final DebouncedService svc;
+
+    public PortableOrchestratorServiceImpl(DBOS dbos, DebouncedService svc) {
+      this.dbos = dbos;
+      this.svc = svc;
+    }
+
+    @Override
+    @Workflow(serializationStrategy = SerializationStrategy.PORTABLE)
+    public String debounceTwice(String arg) {
+      var debouncer = dbos.<String>debouncer();
+      // The first call creates the debouncer workflow; the second sends it a DebouncerMessage.
+      debouncer.debounce("portable-debounce", Duration.ofMillis(800), () -> svc.process("first"));
+      return debouncer
+          .debounce("portable-debounce", Duration.ofMillis(800), () -> svc.process(arg))
+          .getResult();
+    }
+  }
+
+  // The debouncer's own control message is a Java record read back by a Java workflow, whatever
+  // format the workflow that happened to call debounce() runs under.
+  @Test
+  public void debounceFromAPortableWorkflowDeliversItsControlMessage() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(
+            PortableOrchestratorService.class, new PortableOrchestratorServiceImpl(dbos, svc));
+    dbos.launch();
+
+    var h = dbos.startWorkflow(() -> orch.debounceTwice("second"));
+    assertEquals("result:second", h.getResult());
+    assertEquals(1, serviceImpl.callCount());
+
+    // A message the debouncer cannot read kills its workflow: the caller's retry loop papers
+    // over it by starting a fresh debouncer, so the only durable trace is the errored run.
+    var debouncers =
+        dbos.listWorkflows(
+            new ListWorkflowsInput().withWorkflowName(Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertTrue(
+        debouncers.stream().noneMatch(w -> w.status() == WorkflowState.ERROR),
+        "a debouncer workflow failed: "
+            + debouncers.stream()
+                .filter(w -> w.status() == WorkflowState.ERROR)
+                .map(w -> w.workflowId() + " " + w.error())
+                .toList());
+  }
+
   // Verify that a second debounce call after the first window closes starts a fresh window.
   // Regression test for: deduplication_id is cleared to NULL on completion, so the UNIQUE
   // constraint no longer blocks a new enqueue with the same key.

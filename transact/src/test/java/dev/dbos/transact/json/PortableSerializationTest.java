@@ -327,7 +327,7 @@ public class PortableSerializationTest {
       return "done";
     }
 
-    @Workflow(name = "senderWorkflow")
+    @Workflow(name = "senderWorkflow", serializationStrategy = SerializationStrategy.PORTABLE)
     @Override
     public void senderWorkflow(String targetId) {
       // Send messages with different serialization types
@@ -524,6 +524,73 @@ public class PortableSerializationTest {
       // Also verify the message format
       // Portable format wraps strings in quotes
       assertEquals("\"portableMsg\"", portableNotif.get().message());
+    }
+  }
+
+  /**
+   * A message is read back in the format its row records, so a workflow running under a portable
+   * row must send under it too: a peer in another language is the reason the row is portable at
+   * all. Default send inherits the workflow's format exactly as default setEvent does.
+   */
+  @Test
+  public void testSendInheritsPortableWorkflowSerialization() throws Exception {
+    var portsvc =
+        dbos.registerProxy(ExplicitSerService.class, new ExplicitSerServicePortableImpl(dbos));
+
+    dbos.launch();
+
+    // Create a target workflow to receive messages
+    String targetId = UUID.randomUUID().toString();
+
+    // Insert a dummy workflow to be the target (so FK constraint is satisfied)
+    try (Connection conn = dataSource.getConnection()) {
+      String insertSql =
+          """
+          INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
+          VALUES (?, 'dummy', 'Dummy', '', 'PENDING', ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+        stmt.setString(1, targetId);
+        stmt.setLong(2, System.currentTimeMillis());
+        stmt.executeUpdate();
+      }
+    }
+
+    {
+      String workflowId = UUID.randomUUID().toString();
+
+      // Started in process, so the registration's PORTABLE strategy decides the row's format.
+      var handle =
+          dbos.startWorkflow(
+              () -> portsvc.senderWorkflow(targetId), new StartWorkflowOptions(workflowId));
+      handle.getResult();
+
+      var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(wfRow);
+      assertEquals("portable_json", wfRow.serialization());
+
+      var notifications = DBUtils.getNotifications(dataSource, targetId);
+      assertEquals(3, notifications.size());
+
+      var defaultNotif =
+          notifications.stream().filter(n -> n.topic().equals("defaultTopic")).findFirst();
+      var nativeNotif =
+          notifications.stream().filter(n -> n.topic().equals("nativeTopic")).findFirst();
+      var portableNotif =
+          notifications.stream().filter(n -> n.topic().equals("portableTopic")).findFirst();
+
+      assertTrue(defaultNotif.isPresent());
+      assertTrue(nativeNotif.isPresent());
+      assertTrue(portableNotif.isPresent());
+
+      // Default send inherits the workflow's portable format
+      assertEquals("portable_json", defaultNotif.get().serialization());
+      // An explicit strategy still wins over the inherited one
+      assertEquals("java_jackson", nativeNotif.get().serialization());
+      assertEquals("portable_json", portableNotif.get().serialization());
+
+      // Portable format wraps strings in quotes
+      assertEquals("\"defaultMsg\"", defaultNotif.get().message());
     }
   }
 

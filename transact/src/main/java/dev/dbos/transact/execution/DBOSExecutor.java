@@ -577,20 +577,54 @@ public class DBOSExecutor implements AutoCloseable {
       SerializationStrategy serialization,
       String functionName) {
 
+    // The row is authoritative: a workflow running under a portable row writes its messages
+    // in that format too, so a peer in another language can read them. setEvent and
+    // writeStream already inherit it; send must not be the one write that drops back to the
+    // application's own serializer.
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      serialization =
+          Objects.requireNonNullElse(
+              DBOSContextHolder.get().getSerialization(), SerializationStrategy.DEFAULT);
+    }
+
+    sendBulkAs(messages, sendToForks, serialization.formatName(), functionName);
+  }
+
+  /**
+   * Send with a resolved serialization format, where null means the application's configured
+   * serializer.
+   */
+  private void sendBulkAs(
+      List<SendMessage> messages,
+      boolean sendToForks,
+      @Nullable String serializationFormat,
+      String functionName) {
+
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepId = ctx.getAndIncrementFunctionId();
       systemDatabase.sendBulk(
-          messages,
-          ctx.getWorkflowId(),
-          stepId,
-          functionName,
-          sendToForks,
-          serialization.formatName());
+          messages, ctx.getWorkflowId(), stepId, functionName, sendToForks, serializationFormat);
     } else {
-      systemDatabase.sendBulk(
-          messages, null, -1, functionName, sendToForks, serialization.formatName());
+      systemDatabase.sendBulk(messages, null, -1, functionName, sendToForks, serializationFormat);
     }
+  }
+
+  /**
+   * Send a message that DBOS itself reads back, such as the debouncer's control messages.
+   *
+   * <p>It carries a Java value to a Java workflow, so it is written with the application's own
+   * serializer whatever format the workflow that happened to make the call runs under. Inheriting a
+   * portable format here would encode the message as plain JSON and the receiving workflow would be
+   * handed a Map where it expects its own type.
+   */
+  public void sendInternal(
+      String destinationId, Object message, String topic, String idempotencyKey) {
+    sendBulkAs(
+        List.of(new SendMessage(destinationId, message, topic, idempotencyKey)),
+        false,
+        null,
+        "DBOS.send");
   }
 
   public void sendBulk(
