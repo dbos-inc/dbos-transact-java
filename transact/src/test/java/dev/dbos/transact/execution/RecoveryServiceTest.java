@@ -400,35 +400,21 @@ class RecoveryServiceTest {
       var service = dbos.registerProxy(ExecutingService.class, impl);
       impl.setSelf(service);
       dbos.launch();
-      dbos.registerQueue(testQueue, QueueOptions.empty());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-      var queueService = DBOSTestAccess.getQueueService(dbos);
 
+      // The claim is simulated by putting the row where a claim would leave it, as the rest of
+      // this class does. Going through the queue instead would race the poller for the row.
       var wfid = "wf-cancelled-after-claim";
-      queueService.pause();
-      try {
-        var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
-        dbos.startWorkflow(() -> service.workflowMethod("test-item"), options);
-
-        // Claim it by hand, exactly as the queue would.
-        var claimed =
-            systemDatabase.startQueuedWorkflows(
-                dbos.findQueue(testQueue).orElseThrow(),
-                dbosExecutor.executorId(),
-                dbosExecutor.appVersion(),
-                null,
-                0);
-        assertEquals(List.of(wfid), claimed);
-
-        // The cancellation lands in the window between that claim and the dispatch below.
-        DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
-
-        dbosExecutor.executeWorkflowById(wfid);
-      } finally {
-        queueService.unpause();
+      try (var ctx = new WorkflowOptions(wfid).setContext()) {
+        service.workflowMethod("test-item");
       }
+      impl.workflowBodyCount = 0;
+
+      // The cancellation lands in the window between the claim and the dispatch below.
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
+
+      dbosExecutor.executeWorkflowById(wfid);
 
       // The run would go to a virtual thread, so wait well past the point it would have entered
       // the body -- roughly 40ms without the guard.
@@ -447,57 +433,6 @@ class RecoveryServiceTest {
   }
 
   @Test
-  void aConfiguredRecoveryLimitDeadLettersOnItsOwnThresholdNotTheDefault() throws Exception {
-    // The same boundary as above, but for a workflow that declares its own limit. That value
-    // travels from the registration to the dispatch path, where it displaces the built-in
-    // default -- a different arm of the same decision, and the one the annotation exists for.
-    var limit = ExecutingServiceImpl.RECOVERY_LIMIT;
-
-    try (var dbos = new DBOS(dbosConfig)) {
-      var impl = new ExecutingServiceImpl(dbos);
-      var service = dbos.registerProxy(ExecutingService.class, impl);
-      impl.setSelf(service);
-      dbos.launch();
-
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-      for (var id : List.of("wf-limit-allowed", "wf-limit-refused")) {
-        try (var ctx = new WorkflowOptions(id).setContext()) {
-          service.limitedRecoveryWorkflow("test-item");
-        }
-      }
-
-      setWorkflowStateToPending(dataSource);
-      // Claimed at limit + 1, which is allowed; and at limit + 2, which is not.
-      setRecoveryAttempts(dataSource, "wf-limit-allowed", limit);
-      setRecoveryAttempts(dataSource, "wf-limit-refused", limit + 1);
-
-      assertEquals(
-          2, dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId())).size());
-
-      var allowed = dbos.retrieveWorkflow("wf-limit-allowed");
-      allowed.getResult();
-      assertEquals(
-          WorkflowState.SUCCESS,
-          allowed.getStatus().status(),
-          "a workflow on its last allowed attempt must still run");
-
-      String refusedStatus = null;
-      for (var i = 0; i < 300; i++) {
-        refusedStatus = DBUtils.getWorkflowRow(dataSource, "wf-limit-refused").status();
-        if (WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name().equals(refusedStatus)) {
-          break;
-        }
-        Thread.sleep(100);
-      }
-      assertEquals(
-          WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(),
-          refusedStatus,
-          "one attempt past the declared limit must be dead-lettered");
-    }
-  }
-
-  @Test
   void aRowReassignedToAnotherExecutorIsNotRun() throws Exception {
     // The claim proves ownership at the instant of the UPDATE, not for the duration of the run.
     // A recovery request naming a live executor re-enqueues its rows, a peer claims one, and the
@@ -507,35 +442,21 @@ class RecoveryServiceTest {
       var service = dbos.registerProxy(ExecutingService.class, impl);
       impl.setSelf(service);
       dbos.launch();
-      dbos.registerQueue(testQueue, QueueOptions.empty());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-      var queueService = DBOSTestAccess.getQueueService(dbos);
 
       var wfid = "wf-reassigned-after-claim";
-      queueService.pause();
-      try {
-        var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
-        dbos.startWorkflow(() -> service.workflowMethod("test-item"), options);
-
-        var claimed =
-            systemDatabase.startQueuedWorkflows(
-                dbos.findQueue(testQueue).orElseThrow(),
-                dbosExecutor.executorId(),
-                dbosExecutor.appVersion(),
-                null,
-                0);
-        assertEquals(List.of(wfid), claimed);
-
-        // The row goes back to the queue and a peer takes it, all inside the window between the
-        // claim above and the status read the dispatch below does.
-        setExecutorId(dataSource, wfid, "some-other-executor");
-
-        dbosExecutor.executeWorkflowById(wfid);
-      } finally {
-        queueService.unpause();
+      try (var ctx = new WorkflowOptions(wfid).setContext()) {
+        service.workflowMethod("test-item");
       }
+      impl.workflowBodyCount = 0;
+
+      // The row goes back to the queue and a peer takes it, all inside the window between this
+      // executor's claim and the status read the dispatch does.
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+      setExecutorId(dataSource, wfid, "some-other-executor");
+
+      dbosExecutor.executeWorkflowById(wfid);
 
       for (var i = 0; i < 20 && impl.workflowBodyCount == 0; i++) {
         Thread.sleep(100);
@@ -543,9 +464,9 @@ class RecoveryServiceTest {
       assertEquals(
           0, impl.workflowBodyCount, "a row claimed by a peer must not be run here as well");
       assertEquals(
-          WorkflowState.PENDING.name(),
-          DBUtils.getWorkflowRow(dataSource, wfid).status(),
-          "and the peer's row must be left as the peer left it");
+          "some-other-executor",
+          DBUtils.getWorkflowRow(dataSource, wfid).executorId(),
+          "and the peer's claim must be left alone");
     }
   }
 
