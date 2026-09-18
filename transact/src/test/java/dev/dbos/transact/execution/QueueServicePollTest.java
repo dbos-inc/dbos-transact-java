@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -67,7 +66,7 @@ public class QueueServicePollTest {
 
     taskFor(PARTITIONED).sweepPartitions();
 
-    verify(dbosExecutor).executeWorkflowById("wf-b", false, true);
+    verify(dbosExecutor).executeWorkflowById("wf-b");
   }
 
   @Test
@@ -93,12 +92,11 @@ public class QueueServicePollTest {
   public void failedDispatchDoesNotStrandTheBatch() {
     when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong()))
         .thenReturn(List.of("wf-1", "wf-2"));
-    when(dbosExecutor.executeWorkflowById(eq("wf-1"), anyBoolean(), anyBoolean()))
-        .thenThrow(contention("40001"));
+    when(dbosExecutor.executeWorkflowById("wf-1")).thenThrow(contention("40001"));
 
     taskFor(PLAIN).processPartition(null);
 
-    verify(dbosExecutor).executeWorkflowById("wf-2", false, true);
+    verify(dbosExecutor).executeWorkflowById("wf-2");
   }
 
   @Test

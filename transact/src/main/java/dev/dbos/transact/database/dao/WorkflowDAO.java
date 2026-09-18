@@ -155,9 +155,7 @@ public class WorkflowDAO {
   public static WorkflowInitResult initWorkflowStatus(
       DbContext ctx,
       WorkflowStatusInternal initStatus,
-      Integer maxRetries,
-      boolean isRecoveryRequest,
-      boolean isDequeuedRequest,
+      @Nullable Integer maxRetries,
       String ownerXid)
       throws SQLException {
 
@@ -172,13 +170,7 @@ public class WorkflowDAO {
         conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
         InsertWorkflowResult resRow =
-            insertWorkflowStatus(
-                conn,
-                ctx.schema(),
-                initStatus,
-                ownerXid,
-                isRecoveryRequest || isDequeuedRequest,
-                owner(ctx, initStatus));
+            insertWorkflowStatus(conn, ctx.schema(), initStatus, ownerXid, owner(ctx, initStatus));
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -204,43 +196,18 @@ public class WorkflowDAO {
 
         var state = resRow.status;
 
-        // If there is an existing DB record and we aren't here to recover it,
-        //  leave it be.  Roll back the change to max recovery attempts.
-        if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
+        // Only the first writer of a row owns its execution. A caller that finds someone else's
+        // row polls for the outcome instead, and one that finds a dead-lettered row is told so.
+        if (!ownerXid.equals(resRow.ownerXid)) {
           if (resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
-            throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
+            throw new DBOSMaxRecoveryAttemptsExceededException(
+                initStatus.workflowId(),
+                Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS));
           }
           return new WorkflowInitResult(state, resRow.deadline(), false, resRow.serialization());
         }
 
-        // Upsert above already set executor assignment and incremented the recovery attempt
         shouldCommit = true;
-
-        final int attempts = resRow.recoveryAttempts();
-        if (maxRetries != null && attempts > maxRetries + 1) {
-
-          var sql =
-              """
-                UPDATE "%s".workflow_status
-                SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
-                    updated_at = ?, completed_at = ?
-                WHERE workflow_uuid = ? AND status = ?
-              """
-                  .formatted(ctx.schema());
-
-          try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            long now = System.currentTimeMillis();
-            stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
-            stmt.setLong(2, now);
-            stmt.setLong(3, now);
-            stmt.setString(4, initStatus.workflowId());
-            stmt.setString(5, WorkflowState.PENDING.name());
-
-            stmt.executeUpdate();
-          }
-
-          throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
-        }
 
         return new WorkflowInitResult(state, resRow.deadline(), true, resRow.serialization());
 
@@ -253,6 +220,38 @@ public class WorkflowDAO {
         DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT);
       }
     } // end try with resources connection closed
+  }
+
+  /**
+   * Moves claimed workflows that have exhausted their attempts off the queue.
+   *
+   * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
+   * decision was read from: a row another executor has already moved on, or one given a fresh
+   * budget by resume, is left alone.
+   */
+  public static void deadLetterWorkflows(
+      DbContext ctx, List<String> workflowIds, int minRecoveryAttempts) throws SQLException {
+
+    final String sql =
+        """
+          UPDATE "%s".workflow_status
+          SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
+              updated_at = ?, completed_at = ?
+          WHERE workflow_uuid = ANY(?) AND status = ? AND recovery_attempts >= ?
+        """
+            .formatted(ctx.schema());
+
+    try (Connection conn = ctx.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      long now = System.currentTimeMillis();
+      stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
+      stmt.setLong(2, now);
+      stmt.setLong(3, now);
+      stmt.setArray(4, conn.createArrayOf("text", workflowIds.toArray()));
+      stmt.setString(5, WorkflowState.PENDING.name());
+      stmt.setInt(6, minRecoveryAttempts);
+      stmt.executeUpdate();
+    }
   }
 
   record InsertWorkflowResult(
@@ -278,7 +277,6 @@ public class WorkflowDAO {
       String schema,
       WorkflowStatusInternal status,
       String ownerXid,
-      boolean incrementAttempts,
       @Nullable String appName)
       throws SQLException {
 
@@ -299,11 +297,7 @@ public class WorkflowDAO {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
-              recovery_attempts = CASE
-                  WHEN workflow_status.status !='ENQUEUED' AND workflow_status.status !='DELAYED'
-                  THEN workflow_status.recovery_attempts + ?
-                  ELSE workflow_status.recovery_attempts
-              END,
+              -- recovery_attempts is absent by design: only the queue's claim counts a dispatch.
               updated_at = EXCLUDED.updated_at,
               executor_id = CASE
                   WHEN EXCLUDED.status != 'ENQUEUED' AND EXCLUDED.status != 'DELAYED'
@@ -367,7 +361,6 @@ public class WorkflowDAO {
       stmt.setString(26, attributesJson);
       stmt.setString(27, status.scheduleName());
       stmt.setString(28, appName);
-      stmt.setInt(29, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -503,12 +496,7 @@ public class WorkflowDAO {
     // idempotent and the outcome update is safe to repeat.
     try (var conn = ctx.getConnection()) {
       insertWorkflowStatus(
-          conn,
-          ctx.schema(),
-          initStatus,
-          UUID.randomUUID().toString(),
-          false,
-          owner(ctx, initStatus));
+          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), owner(ctx, initStatus));
       updateWorkflowOutcome(
           conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
     }

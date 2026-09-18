@@ -3415,7 +3415,7 @@ public class ConductorTest {
 
       ArgumentCaptor<dev.dbos.transact.workflow.internal.WorkflowStatusInternal> captor =
           ArgumentCaptor.forClass(dev.dbos.transact.workflow.internal.WorkflowStatusInternal.class);
-      verify(mockDB).initWorkflowStatus(captor.capture(), any(), anyBoolean(), anyBoolean());
+      verify(mockDB).initWorkflowStatus(captor.capture(), any());
       assertEquals(dev.dbos.transact.json.KryoSerializer.NAME, captor.getValue().serialization());
     }
   }
@@ -3445,7 +3445,7 @@ public class ConductorTest {
 
       ArgumentCaptor<dev.dbos.transact.workflow.internal.WorkflowStatusInternal> captor =
           ArgumentCaptor.forClass(dev.dbos.transact.workflow.internal.WorkflowStatusInternal.class);
-      verify(mockDB).initWorkflowStatus(captor.capture(), any(), anyBoolean(), anyBoolean());
+      verify(mockDB).initWorkflowStatus(captor.capture(), any());
       assertEquals(dev.dbos.transact.json.KryoSerializer.NAME, captor.getValue().serialization());
     }
   }

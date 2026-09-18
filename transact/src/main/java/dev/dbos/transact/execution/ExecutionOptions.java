@@ -6,6 +6,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -30,9 +31,10 @@ public record ExecutionOptions(
     String assumedRole,
     List<String> authenticatedRoles,
     Map<String, Object> attributes,
-    // True when re-executing a workflow that previously crashed; skips re-enqueue guards.
-    boolean isRecoveryRequest,
-    boolean isDequeuedRequest,
+    // The persisted row this execution was claimed from, when it is a dispatch rather than a
+    // fresh invocation. Its presence means the claim already wrote this workflow's status, so the
+    // run must not insert one, and it carries the queue slot the run occupies.
+    WorkflowStatus claimedStatus,
     // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
     String scheduleName) {
   public ExecutionOptions {
@@ -97,8 +99,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
-        false,
-        false,
+        null,
         null);
   }
 
@@ -118,8 +119,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
-        false,
-        false,
+        null,
         null);
   }
 
@@ -139,20 +139,20 @@ public record ExecutionOptions(
         null,
         null,
         null,
-        false,
-        false,
+        null,
         null);
   }
 
-  public ExecutionOptions asRecoveryRequest() {
+  /** The options for running a workflow from a row the queue has already claimed. */
+  public ExecutionOptions asClaimed(WorkflowStatus claimed) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
         this.deadline,
-        this.queueName,
+        claimed.queueName(),
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey,
+        claimed.queuePartitionKey(),
         this.delay,
         this.appVersion,
         this.serialization,
@@ -160,29 +160,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        true,
-        false,
-        this.scheduleName);
-  }
-
-  public ExecutionOptions asDequeuedRequest(String queueName, String partitionKey) {
-    return new ExecutionOptions(
-        this.workflowId,
-        this.timeout,
-        this.deadline,
-        queueName,
-        this.deduplicationId,
-        this.priority,
-        partitionKey,
-        this.delay,
-        this.appVersion,
-        this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles,
-        this.attributes,
-        false,
-        true,
+        claimed,
         this.scheduleName);
   }
 
@@ -202,8 +180,7 @@ public record ExecutionOptions(
         options.assumedRole(),
         options.authenticatedRoles(),
         options.attributes(),
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -226,8 +203,7 @@ public record ExecutionOptions(
         options.assumedRole(),
         options.authenticatedRoles(),
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -247,8 +223,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -268,8 +243,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -289,8 +263,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -310,8 +283,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -331,8 +303,7 @@ public record ExecutionOptions(
         assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -352,8 +323,7 @@ public record ExecutionOptions(
         this.assumedRole,
         authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -373,8 +343,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -394,8 +363,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -415,8 +383,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -436,8 +403,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -457,8 +423,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         this.scheduleName);
   }
 
@@ -478,8 +443,7 @@ public record ExecutionOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.isRecoveryRequest,
-        this.isDequeuedRequest,
+        this.claimedStatus,
         scheduleName);
   }
 

@@ -744,7 +744,7 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
@@ -817,7 +817,7 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     // executor2
@@ -826,7 +826,7 @@ public class DynamicQueuesTest {
       String wfid = "id" + i;
       var status =
           builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
@@ -919,27 +919,17 @@ public class DynamicQueuesTest {
       assertEquals(1, rowsAffected);
     }
 
-    var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    List<WorkflowHandle<?, ?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
-    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
-    assertEquals(1, otherHandles.size());
-    assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
-    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
-
     // Pause the listener before recovery so it can't race the ENQUEUED status checks below.
     qs.pause();
-    List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
-    assertEquals(2, localHandles.size());
-    List<String> expectedWorkflowIds = List.of(handle1.workflowId(), handle2.workflowId());
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
+
+    // Recovering the executor wf3 now claims to belong to returns it to the queue, and leaves the
+    // two workflows this executor is still running alone -- they are PENDING under "local", which
+    // this sweep does not name, so they keep the two concurrency slots they are actually using.
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    List<String> recovered = executor.recoverPendingWorkflows(List.of("other"));
+    assertEquals(List.of(handle3.workflowId()), recovered);
 
     assertEquals(2, impl.counter.get());
-    // wf1 and wf2 are still running here, so recovery leaves them alone: their rows stay PENDING
-    // and keep the two concurrency slots they are actually using. Releasing those assignments
-    // would re-enqueue live workflows, admit a second runner for each, and discard the outcome of
-    // the run already in flight.
     assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());

@@ -56,9 +56,7 @@ public class ImportExportTest {
             .appVersion("1.0.0")
             .priority(0)
             .build(),
-        null,
-        false,
-        false);
+        null);
     sysdb.recordWorkflowOutput(wfId, null);
 
     long now = System.currentTimeMillis();
@@ -84,9 +82,7 @@ public class ImportExportTest {
             .appVersion("1.0.0")
             .priority(0)
             .build(),
-        null,
-        false,
-        false);
+        null);
     sysdb.recordWorkflowOutput(wfId, null);
   }
 
@@ -100,9 +96,7 @@ public class ImportExportTest {
             .priority(0)
             .parentWorkflowId(parentId)
             .build(),
-        null,
-        false,
-        false);
+        null);
     sysdb.recordWorkflowOutput(wfId, null);
   }
 

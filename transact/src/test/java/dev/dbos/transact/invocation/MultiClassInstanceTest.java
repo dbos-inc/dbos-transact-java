@@ -180,7 +180,7 @@ public class MultiClassInstanceTest {
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      var eh = dbosExecutor.executeWorkflowById(handle.workflowId(), false, true);
+      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(

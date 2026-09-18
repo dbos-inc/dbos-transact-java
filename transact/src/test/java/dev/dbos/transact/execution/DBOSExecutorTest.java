@@ -147,7 +147,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-      var handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      var handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = (String) handle.getResult();
       assertEquals("test-itemtest-item", result);
@@ -168,7 +168,7 @@ class DBOSExecutorTest {
 
       boolean error = false;
       try {
-        dbosExecutor.executeWorkflowById("wf-124", false, false);
+        dbosExecutor.executeWorkflowById("wf-124");
       } catch (Exception e) {
         error = true;
         assertTrue(
@@ -205,7 +205,7 @@ class DBOSExecutorTest {
 
       boolean error = false;
       try {
-        dbosExecutor.executeWorkflowById(wfid, false, false);
+        dbosExecutor.executeWorkflowById(wfid);
       } catch (Exception e) {
         error = true;
         assertTrue(
@@ -242,7 +242,7 @@ class DBOSExecutorTest {
       DBUtils.deleteAllStepOutputs(dataSource, wfid);
       awaitStepCount(dbos, wfid, 0, 2000);
 
-      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = handle.getResult();
       assertEquals("test-itemstepOnestepTwo", result);
@@ -285,7 +285,7 @@ class DBOSExecutorTest {
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
       awaitStepCount(dbos, wfid, 1, 2000);
 
-      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = handle.getResult();
       assertEquals("test-itemstepOnestepTwo", result);
@@ -352,7 +352,7 @@ class DBOSExecutorTest {
       DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 
       long starttime = System.currentTimeMillis();
-      var h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      var h = dbosExecutor.executeWorkflowById(wfid);
       h.getResult();
 
       long duration = System.currentTimeMillis() - starttime;

@@ -6,7 +6,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -132,10 +131,7 @@ public class AdminServer implements AutoCloseable {
     List<String> executorIds =
         JsonUtility.fromJson(exchange.getRequestBody(), new TypeReference<>() {});
     logger.debug("workflowRecovery executors {}", executorIds);
-    var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-    List<String> workflowIds =
-        handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
-    sendMappedJson(exchange, 200, workflowIds);
+    sendMappedJson(exchange, 200, dbosExecutor.recoverPendingWorkflows(executorIds));
   }
 
   private void deactivate(HttpExchange exchange) throws IOException {

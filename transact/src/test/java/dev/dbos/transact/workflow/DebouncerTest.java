@@ -452,10 +452,11 @@ public class DebouncerTest {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     awaitDebouncerFlippedToPending(Duration.ofSeconds(30));
 
+    // Recovery re-enqueues rather than running the workflow here, so wait on the queue's dispatch.
     var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
     assertEquals(1, recovered.size());
-    for (var h : recovered) {
-      h.getResult();
+    for (var id : recovered) {
+      dbos.retrieveWorkflow(id).getResult();
     }
 
     // Replay reused the same user workflow id and did not run the user workflow again. The count
@@ -589,14 +590,12 @@ public class DebouncerTest {
     // needs nothing further from this test -- only the doctored row is in question.
     flipToPending(orchestratorId);
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var recoveredHandles = executor.recoverPendingWorkflows(List.of(executor.executorId()));
-    var replayed =
-        recoveredHandles.stream().filter(h -> orchestratorId.equals(h.workflowId())).findFirst();
-    assertTrue(replayed.isPresent(), "orchestrator was not recovered");
+    var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    assertTrue(recovered.contains(orchestratorId), "orchestrator was not recovered");
 
     // Without the adapter this throws ClassCastException instead of resuming: the recorded String
-    // cannot be assigned to DeduplicationHolder.
-    assertEquals(userWorkflowId, replayed.get().getResult());
+    // cannot be assigned to DeduplicationHolder. The queue runs the replay, so this polls for it.
+    assertEquals(userWorkflowId, dbos.retrieveWorkflow(orchestratorId).getResult());
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
   }
 

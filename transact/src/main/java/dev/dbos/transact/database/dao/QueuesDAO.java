@@ -239,7 +239,10 @@ public class QueuesDAO {
                 application_version = ?,
                 executor_id = ?,
                 started_at_epoch_ms = ?,
+                updated_at = ?,
                 rate_limited = ?,
+                -- Count this dispatch against the dead-letter budget; no later write does it.
+                recovery_attempts = recovery_attempts + 1,
                 -- Claim it as it is taken, so the unclaimed backlog drains as workflows run.
                 -- Left unclaimed, the row is PENDING and still visible to every peer's
                 -- recovery and global-timeout sweeps until it starts executing here.
@@ -267,12 +270,13 @@ public class QueuesDAO {
             ps.setString(2, appVersion);
             ps.setString(3, executorId);
             ps.setLong(4, now);
-            ps.setBoolean(5, queue.rateLimit() != null);
-            ps.setString(6, ctx.appName());
-            ps.setLong(7, now);
-            ps.setString(8, id);
-            ps.setString(9, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 10);
+            ps.setLong(5, now);
+            ps.setBoolean(6, queue.rateLimit() != null);
+            ps.setString(7, ctx.appName());
+            ps.setLong(8, now);
+            ps.setString(9, id);
+            ps.setString(10, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 11);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
@@ -303,23 +307,60 @@ public class QueuesDAO {
     }
   }
 
-  public static boolean clearQueueAssignment(DbContext ctx, String workflowId) throws SQLException {
+  /**
+   * Returns the given executors' PENDING workflows to their queues, and reports which rows moved.
+   *
+   * <p>This is the whole of recovery. A workflow whose executor is gone goes back to ENQUEUED -- on
+   * the internal queue if it never had one of its own -- and whichever executor next polls that
+   * queue runs it. Two things follow. The fleet shares the backlog, rather than one executor
+   * working through all of it alone. And a repeat costs nothing: the queue's atomic ENQUEUED ->
+   * PENDING claim admits exactly one runner, and once a live executor has taken a row, its
+   * executor_id no longer matches the dead one this sweep names.
+   *
+   * <p>The internal queue has no concurrency limit, here as in every other SDK, so a workflow that
+   * was never queued stays unthrottled by choice rather than by oversight.
+   */
+  public static List<String> reenqueueForRecovery(
+      DbContext ctx, List<String> executorIds, String appVersion, String recoveryQueueName)
+      throws SQLException {
+
+    if (executorIds.isEmpty()) {
+      return List.of();
+    }
 
     final String sql =
         """
           UPDATE "%s".workflow_status
-          SET started_at_epoch_ms = NULL, status = ?
-          WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
+          SET status = ?,
+              started_at_epoch_ms = NULL,
+              updated_at = ?,
+              queue_name = COALESCE(NULLIF(queue_name, ''), ?)
+          WHERE status = ?
+            AND executor_id = ANY(?)
+            AND application_version = ?
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope()
+            + " RETURNING workflow_uuid";
+
     try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
+      Array executorIdArray = connection.createArrayOf("text", executorIds.toArray());
       stmt.setString(1, WorkflowState.ENQUEUED.name());
-      stmt.setString(2, workflowId);
-      stmt.setString(3, WorkflowState.PENDING.name());
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, recoveryQueueName);
+      stmt.setString(4, WorkflowState.PENDING.name());
+      stmt.setArray(5, executorIdArray);
+      stmt.setString(6, appVersion);
+      ctx.bindAppScope(stmt, 7);
 
-      int affectedRows = stmt.executeUpdate();
-      return affectedRows > 0;
+      var workflowIds = new ArrayList<String>();
+      try (ResultSet rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          workflowIds.add(rs.getString("workflow_uuid"));
+        }
+      }
+      return workflowIds;
     }
   }
 
