@@ -60,6 +60,33 @@ class DBOSExecutorTest {
     assertEquals(expected, dbos.listWorkflowSteps(wfid).size());
   }
 
+  /**
+   * The default configuration has no custom serializer, so nothing may name one directly. The
+   * debouncer records a terminal ERROR through here when it cannot start the user workflow, and
+   * throwing instead leaves the caller's handle polling a row that never appears.
+   */
+  @Test
+  public void recordsErrorForUnstartedWorkflowWithoutACustomSerializer() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      dbos.launch();
+      assertNull(dbosConfig.serializer());
+
+      var workflowId = UUID.randomUUID().toString();
+      DBOSTestAccess.getDbosExecutor(dbos)
+          .recordErrorForUnstartedWorkflow(
+              workflowId,
+              "missingWorkflow",
+              "MissingService",
+              null,
+              new Object[] {"arg"},
+              new DBOSWorkflowFunctionNotFoundException(workflowId, "missingWorkflow"));
+
+      var status = dbos.retrieveWorkflow(workflowId).getStatus();
+      assertEquals(WorkflowState.ERROR, status.status());
+      assertEquals(SerializationUtil.NATIVE, status.serialization());
+    }
+  }
+
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {

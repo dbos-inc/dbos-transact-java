@@ -317,8 +317,10 @@ public final class Debouncer<R> {
         }
         String existingDebouncerId = holder.workflowId();
         DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
-        // messageId is the idempotency key — exactly-once delivery.
-        dbos.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
+        // messageId is the idempotency key — exactly-once delivery. Internal, because the
+        // debouncer reads it back as a DebouncerMessage: it must not inherit a portable format
+        // from whatever workflow called debounce().
+        executor.sendInternal(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
         // processing this message, no ack arrives — start over.
