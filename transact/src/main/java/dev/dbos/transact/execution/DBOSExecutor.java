@@ -1992,6 +1992,16 @@ public class DBOSExecutor implements AutoCloseable {
                 args,
                 finalOptions);
 
+            // A workflow's own writes inherit the format its row records. Only the two
+            // built-in formats need naming: a custom serializer's name falls to DEFAULT,
+            // which resolves to that same serializer.
+            var serializationStrategy =
+                SerializationUtil.PORTABLE.equals(initResult.serialization())
+                    ? SerializationStrategy.PORTABLE
+                    : SerializationUtil.NATIVE.equals(initResult.serialization())
+                        ? SerializationStrategy.NATIVE
+                        : SerializationStrategy.DEFAULT;
+
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId,
@@ -2001,9 +2011,7 @@ public class DBOSExecutor implements AutoCloseable {
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),
                     finalOptions.authenticatedRoles(),
-                    SerializationUtil.PORTABLE.equals(initResult.serialization())
-                        ? SerializationStrategy.PORTABLE
-                        : SerializationStrategy.DEFAULT));
+                    serializationStrategy));
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");

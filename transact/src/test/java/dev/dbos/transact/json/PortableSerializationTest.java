@@ -337,6 +337,79 @@ public class PortableSerializationTest {
     }
   }
 
+  /** A workflow declared NATIVE, in an application whose configured serializer is not native. */
+  public interface NativeSerService {
+    String eventAndSendWorkflow(String targetId);
+  }
+
+  @WorkflowClassName("NativeSerService")
+  public static class NativeSerServiceImpl implements NativeSerService {
+    private final DBOS dbos;
+
+    public NativeSerServiceImpl(DBOS dbos) {
+      this.dbos = dbos;
+    }
+
+    @Workflow(name = "eventAndSendWorkflow", serializationStrategy = SerializationStrategy.NATIVE)
+    @Override
+    public String eventAndSendWorkflow(String targetId) {
+      dbos.setEvent("nativeEvent", "eventValue");
+      dbos.send(targetId, "nativeMsg", "nativeTopic");
+      return "done";
+    }
+  }
+
+  /**
+   * A workflow writes in the format its own row records, which for a NATIVE declaration is
+   * java_jackson even where the application configures something else. Without that, a workflow
+   * whose arguments and result are deliberately native would set events and send messages the
+   * custom serializer had to read back.
+   */
+  @Test
+  public void testNativeWorkflowWritesNativeUnderACustomSerializer() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = new DBOS(dbosConfig.withSerializer(new TestBase64Serializer()))) {
+      var svc =
+          localDbos.registerProxy(NativeSerService.class, new NativeSerServiceImpl(localDbos));
+      localDbos.launch();
+
+      // A target workflow for the message to land on (so the FK constraint is satisfied)
+      String targetId = UUID.randomUUID().toString();
+      try (Connection conn = dataSource.getConnection()) {
+        String insertSql =
+            """
+            INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
+            VALUES (?, 'dummy', 'Dummy', '', 'PENDING', ?)
+            """;
+        try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+          stmt.setString(1, targetId);
+          stmt.setLong(2, System.currentTimeMillis());
+          stmt.executeUpdate();
+        }
+      }
+
+      String workflowId = UUID.randomUUID().toString();
+      var handle =
+          localDbos.startWorkflow(
+              () -> svc.eventAndSendWorkflow(targetId), new StartWorkflowOptions(workflowId));
+      assertEquals("done", handle.getResult());
+
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals(SerializationUtil.NATIVE, row.serialization());
+
+      // The event and the message follow the row, not the application's own serializer.
+      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+      assertEquals(1, events.size());
+      assertEquals(SerializationUtil.NATIVE, events.get(0).serialization());
+
+      var notifications = DBUtils.getNotifications(dataSource, targetId);
+      assertEquals(1, notifications.size());
+      assertEquals(SerializationUtil.NATIVE, notifications.get(0).serialization());
+    }
+  }
+
   /** Workflow that throws an error for testing portable error serialization. */
   public interface ErrorService {
     void errorWorkflow();
