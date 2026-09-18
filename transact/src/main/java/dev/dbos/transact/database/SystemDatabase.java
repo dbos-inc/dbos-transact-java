@@ -48,6 +48,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import javax.sql.DataSource;
 
@@ -351,43 +352,180 @@ public class SystemDatabase implements AutoCloseable {
     notificationSource.start();
   }
 
-  private static boolean isConnectionFailure(SQLException e) {
-    String state = e.getSQLState();
-    if (state != null && (state.startsWith("08") || state.startsWith("57"))) {
-      return true;
-    }
-    // HikariCP and JDBC throw connection errors without a SQLSTATE (e.g. "Connection is closed").
-    // Walk the cause chain so wrapped exceptions are also caught.
-    for (Throwable t = e; t != null; t = t.getCause()) {
-      String msg = t.getMessage();
-      if (msg != null) {
-        String lower = msg.toLowerCase();
-        if (lower.contains("connection is closed")
-            || lower.contains("connection is not available")
-            || lower.contains("connection reset")
-            || lower.contains("broken pipe")
-            || lower.contains("socket closed")) {
-          return true;
+  /** How far {@link #anyLinked} walks before giving up; see its note on cycles. */
+  private static final int MAX_LINKED_EXCEPTIONS = 1000;
+
+  /**
+   * Whether anything reachable from {@code t} along either of JDBC's chains satisfies {@code
+   * match}.
+   *
+   * <p>Two chains, not one. Causes carry DBOS's own wrapping; {@link
+   * SQLException#getNextException()} carries what JDBC links rather than wraps -- HikariCP's
+   * connection failure behind a pool timeout, and a failed batch's second and later errors.
+   *
+   * <p>{@link SQLException}'s iterator covers an exception, its causes, its next exceptions and
+   * their causes, but not a nested cause's next exceptions, which is why the outer loop re-enters
+   * at every level.
+   *
+   * <p>Bounded because neither chain is guaranteed acyclic: {@link SQLException#setNextException}
+   * has no self-link guard, and the iterator over a self-linked exception never ends. Giving up can
+   * only lose a SQLSTATE, which hands the failure up rather than retrying it.
+   */
+  private static boolean anyLinked(Throwable t, Predicate<Throwable> match) {
+    int budget = MAX_LINKED_EXCEPTIONS;
+    for (Throwable cause = t; cause != null && budget-- > 0; cause = cause.getCause()) {
+      if (match.test(cause)) {
+        return true;
+      }
+      if (cause instanceof SQLException sqlException) {
+        for (Throwable linked : sqlException) {
+          if (budget-- <= 0) {
+            return false;
+          }
+          if (match.test(linked)) {
+            return true;
+          }
         }
       }
     }
     return false;
   }
 
+  /** Whether any SQLSTATE reachable from {@code t} satisfies {@code match}. */
+  private static boolean anySqlState(Throwable t, Predicate<String> match) {
+    return anyLinked(
+        t,
+        linked ->
+            linked instanceof SQLException sqlException
+                && sqlException.getSQLState() != null
+                && match.test(sqlException.getSQLState()));
+  }
+
+  /** Whether anything in {@code t}'s chains carries a SQLSTATE at all. */
+  private static boolean hasSqlState(Throwable t) {
+    return anySqlState(t, state -> true);
+  }
+
+  /** What {@link #dbRetry} does about a failure. */
+  enum Failure {
+    /** Reset the pool and try again. */
+    CONNECTION,
+    /** Try again. */
+    TRANSIENT,
+    /** Not ours to retry: hand it up. */
+    CALLERS
+  }
+
   /**
-   * Whether a failure is worth retrying blind: SQLSTATE class 53, insufficient resources.
+   * Whether a failure is evidence that the pooled connections themselves are gone, so recycling
+   * them is what lets a retry succeed.
    *
-   * <p>Class 40 is deliberately absent. A transaction conflict is the caller's business, not this
-   * helper's: Python's {@code retriable_postgres_exception} matches classes 08, 53 and 57 only,
-   * TypeScript's connection retrier likewise, and Go retries conflicts solely where a call site
-   * opts in with {@code WithRetryCondition(IsRetryableTransaction)}. Retrying one here would sleep
-   * a pooled thread for at least a second on a path -- the queue dequeue -- where losing a
-   * serialization race is routine rather than exceptional, and would hide the failure from the poll
-   * loop whose job is to react to it.
+   * <p>Separate from {@link #classify} because retrying and recycling are different questions whose
+   * answers do not coincide. Class 08 and the {@code 57P0x} shutdown codes mean the connection or
+   * the server went away, and a retry on the same socket cannot succeed. {@code 57014
+   * query_canceled} is class 57 too, but it means a {@code statement_timeout} fired or someone
+   * cancelled the backend: the statement is in trouble and the connection is fine, so recycling
+   * every pooled connection over it is collateral damage. A borrow that timed out is likewise
+   * contention for healthy connections, and recycling them mid-shortage makes the shortage worse.
+   *
+   * <p>HikariCP copies the last connection failure's SQLSTATE onto its timeout exception, so a
+   * timeout from genuinely broken connections carries class 08 and does evict. That copy is not
+   * always about the timeout: {@code PoolBase} records the last failure on a failed keepalive too
+   * and clears it only when a new connection is established, so a demand-spike timeout can carry a
+   * state from something else a {@code maxLifetime} earlier and be handed to the caller on its
+   * account. Left alone: the states realistically sitting there are from connections that could not
+   * be made, and handing those up beats retrying them forever.
    */
-  private static boolean isTransientState(SQLException e) {
-    String state = e.getSQLState();
-    return state != null && state.startsWith("53");
+  static boolean evictsPool(SQLException e) {
+    if (hasSqlState(e)) {
+      return anySqlState(
+          e, state -> state.startsWith("08") || (state.startsWith("57") && !"57014".equals(state)));
+    }
+    return e instanceof SQLRecoverableException || anyMessage(e, DEAD_CONNECTION_MESSAGES);
+  }
+
+  /**
+   * What a failed statement means, deciding on the SQLSTATE when there is one and on the exception
+   * type only when there is not.
+   *
+   * <p>These are two tiers, not two alternatives. The dispatch used to OR them -- {@code e
+   * instanceof SQLTransientException || isTransientState(e)} -- which let the coarse signal
+   * override the precise one. {@link SQLTransientException} has three standard subclasses and one
+   * of them, {@link java.sql.SQLTransactionRollbackException}, is class 40: a serialization failure
+   * or deadlock arriving as JDBC's standard type went back into this unbounded loop, which is what
+   * the conflict-retry change set out to stop. PgJDBC's {@code PSQLException} extends {@link
+   * SQLException} directly, so it does not fire on the current driver, which is why no test caught
+   * it. The narrow guard that patched it is gone: a class 40 state now falls through to {@link
+   * Failure#CALLERS} because it is not a state this retries, without having to be named.
+   *
+   * <p>All three reference SDKs read the code first and fall back to type or message only for
+   * errors carrying no code: Go reads {@code pgErrCode} then {@code net.Error}, Python reads {@code
+   * pgcode} then driver message text, TypeScript reads {@code code} then its errno set.
+   *
+   * <p>This answers only whether to retry; whether to recycle the pool is {@link #evictsPool},
+   * decided separately. A {@link Failure#CONNECTION} verdict does not by itself evict: {@code
+   * 57014} and a state-less pool timeout are both retried on the pool they arrived from.
+   */
+  static Failure classify(SQLException e) {
+    if (hasSqlState(e)) {
+      if (isConnectionState(e)) {
+        return Failure.CONNECTION;
+      }
+      return isTransientState(e) ? Failure.TRANSIENT : Failure.CALLERS;
+    }
+    if (e instanceof SQLRecoverableException || hasConnectionMessage(e)) {
+      return Failure.CONNECTION;
+    }
+    return e instanceof SQLTransientException ? Failure.TRANSIENT : Failure.CALLERS;
+  }
+
+  /** Class 08 connection_exception or class 57 operator_intervention, anywhere in the chains. */
+  static boolean isConnectionState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("08") || state.startsWith("57"));
+  }
+
+  /**
+   * Messages naming a connection that is gone. HikariCP and JDBC raise these below the protocol
+   * level, with no SQLSTATE to prefer over them.
+   */
+  private static final List<String> DEAD_CONNECTION_MESSAGES =
+      List.of("connection is closed", "connection reset", "broken pipe", "socket closed");
+
+  /**
+   * HikariCP's message for a borrow that timed out. Unlike the above this is contention for live
+   * connections, not a dead one: worth retrying, not worth recycling the pool over.
+   */
+  private static final List<String> POOL_EXHAUSTED_MESSAGES =
+      List.of("connection is not available");
+
+  /** Whether any message along either chain contains one of {@code needles}. */
+  private static boolean anyMessage(Throwable t, List<String> needles) {
+    return anyLinked(t, linked -> messageContains(linked, needles));
+  }
+
+  private static boolean messageContains(Throwable t, List<String> needles) {
+    String msg = t.getMessage();
+    if (msg == null) {
+      return false;
+    }
+    String lower = msg.toLowerCase();
+    return needles.stream().anyMatch(lower::contains);
+  }
+
+  /**
+   * Whether any message in the chains names a connection failure.
+   *
+   * <p>Only for exceptions carrying no SQLSTATE at all: HikariCP and JDBC raise connection errors
+   * as bare messages ("Connection is closed"). A message is a guess where a SQLSTATE is a fact, so
+   * this is the fallback tier and never overrides one.
+   */
+  static boolean hasConnectionMessage(Throwable t) {
+    return anyMessage(t, DEAD_CONNECTION_MESSAGES) || anyMessage(t, POOL_EXHAUSTED_MESSAGES);
+  }
+
+  /** Class 53 insufficient_resources, anywhere in the chains. */
+  static boolean isTransientState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("53"));
   }
 
   /**
@@ -405,15 +543,7 @@ public class SystemDatabase implements AutoCloseable {
    * relies on that.
    */
   public static boolean isSerializationError(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException) {
-        String state = sqlException.getSQLState();
-        if ("40001".equals(state) || "40P01".equals(state)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return anySqlState(t, state -> "40001".equals(state) || "40P01".equals(state));
   }
 
   /**
@@ -433,15 +563,7 @@ public class SystemDatabase implements AutoCloseable {
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isContentionError(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException) {
-        String state = sqlException.getSQLState();
-        if ("55P03".equals(state) || "40001".equals(state)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return anySqlState(t, state -> "55P03".equals(state) || "40001".equals(state));
   }
 
   /**
@@ -457,13 +579,7 @@ public class SystemDatabase implements AutoCloseable {
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isLockNotAvailable(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException
-          && "55P03".equals(sqlException.getSQLState())) {
-        return true;
-      }
-    }
-    return false;
+    return anySqlState(t, "55P03"::equals);
   }
 
   /**
@@ -629,22 +745,23 @@ public class SystemDatabase implements AutoCloseable {
         return supplier.get();
       } catch (SQLException e) {
         attempt++;
-        if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
-          logger.warn(
-              "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
-          if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
-            hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+        switch (classify(e)) {
+          case CONNECTION -> {
+            if (evictsPool(e)) {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
+              if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
+                hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+              }
+            } else {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), retrying on the same pool",
+                  attempt,
+                  e);
+            }
           }
-        } else if (!isSerializationError(e)
-            && (e instanceof SQLTransientException || isTransientState(e))) {
-          // SQLSTATE decides before the type, which is too coarse on its own:
-          // SQLTransactionRollbackException is class 40, so OR-ing the instanceof ahead of the
-          // state check let a conflict back into this unbounded loop. The type is a fallback for
-          // an exception carrying no SQLSTATE, and #515 reworks this dispatch to say so -- state
-          // first, type only when there is no state, here and in the branch above.
-          logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
-        } else {
-          throw new DBOSSystemDatabaseException(e);
+          case TRANSIENT -> logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
+          case CALLERS -> throw new DBOSSystemDatabaseException(e);
         }
         try {
           sleepWithJitter(backoffMs);

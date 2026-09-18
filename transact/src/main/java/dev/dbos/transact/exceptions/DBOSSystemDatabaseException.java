@@ -26,21 +26,30 @@ public class DBOSSystemDatabaseException extends RuntimeException {
   /**
    * The SQLSTATE of the failure, or null if it carried none.
    *
-   * <p>Looks along both of JDBC's chains rather than at the wrapped exception alone, because the
-   * exception holding the state is not always the one thrown. {@code executeBatch()} throws a
-   * {@link java.sql.BatchUpdateException} and hangs the driver's own failure, which is the one
-   * carrying the state, off {@link SQLException#getNextException()}. {@link SQLException} is {@link
-   * Iterable} over both chains, so the first state found is the most specific one available.
+   * <p>Walks both of JDBC's chains, re-entering at every cause, because that is how the classifier
+   * that decided to throw this reads them. Reporting no state for a failure it resolved by one
+   * would make this accessor useless for the choice above.
    */
   public String sqlState() {
-    return firstSqlState((SQLException) getCause());
+    return firstSqlState(getCause());
   }
 
+  /** How far {@link #firstSqlState} walks before giving up; neither chain is guaranteed acyclic. */
+  private static final int MAX_LINKED_EXCEPTIONS = 1000;
+
   /** The first SQLSTATE along either chain, or null if nothing carries one. */
-  private static String firstSqlState(SQLException e) {
-    for (Throwable linked : e) {
-      if (linked instanceof SQLException sqlException && sqlException.getSQLState() != null) {
-        return sqlException.getSQLState();
+  private static String firstSqlState(Throwable t) {
+    int budget = MAX_LINKED_EXCEPTIONS;
+    for (Throwable cause = t; cause != null && budget-- > 0; cause = cause.getCause()) {
+      if (cause instanceof SQLException sqlException) {
+        for (Throwable linked : sqlException) {
+          if (budget-- <= 0) {
+            return null;
+          }
+          if (linked instanceof SQLException linkedSql && linkedSql.getSQLState() != null) {
+            return linkedSql.getSQLState();
+          }
+        }
       }
     }
     return null;
