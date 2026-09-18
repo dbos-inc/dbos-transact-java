@@ -421,8 +421,7 @@ public class StaticQueuesTest {
   @Test
   public void testWorkerConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
 
     dbos.launch();
@@ -495,8 +494,7 @@ public class StaticQueuesTest {
   @Test
   public void testGlobalConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);

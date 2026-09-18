@@ -32,6 +32,9 @@ public class StartWorkflowTest {
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeEach
+  // Registers one partitioned queue through the deprecated flag; #507's later slices
+  // replace it with a per-partition limit.
+  @SuppressWarnings("removal")
   void beforeEachTest() {
     var dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);

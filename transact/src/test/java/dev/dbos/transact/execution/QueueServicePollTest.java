@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
  * rather than through a running queue service: the behaviour under test is which claims a poll
  * still makes after a failure, and a live scheduler would answer that only incidentally, on timing.
  */
+// Exercises the deprecated partitioning surface, which #507's later slices replace.
+@SuppressWarnings("removal")
 public class QueueServicePollTest {
 
   private static final Queue PARTITIONED =
