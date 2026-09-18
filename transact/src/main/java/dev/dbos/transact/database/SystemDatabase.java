@@ -603,6 +603,20 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> retryOnSerializationError(operation, runnable));
   }
 
+  /**
+   * Runs {@code supplier}, retrying while the failure looks like it will pass, and adapting the
+   * checked {@link SQLException} the caller cannot declare into an unchecked one.
+   *
+   * <p>Every exit that carries a database failure wraps it in {@link DBOSSystemDatabaseException}
+   * and does so <b>exactly once</b>: this never throws from a path it would retry, so nothing
+   * re-enters and wraps a second time. That is what lets the SQLSTATE classifiers find the original
+   * one level down a chain of known depth.
+   *
+   * @throws DBOSSystemDatabaseException if the failure is not one worth retrying, or an interrupt
+   *     stops the loop
+   * @throws IllegalStateException if the system database has been closed, which is a lifecycle
+   *     error rather than a database one and so is not wrapped
+   */
   private <T> T dbRetry(SqlSupplier<T> supplier) {
     double backoffMs = 1000.0;
     final double maxBackoffMs = 60_000.0;
@@ -630,7 +644,7 @@ public class SystemDatabase implements AutoCloseable {
           // first, type only when there is no state, here and in the branch above.
           logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
         } else {
-          throw new RuntimeException(e);
+          throw new DBOSSystemDatabaseException(e);
         }
         try {
           sleepWithJitter(backoffMs);
@@ -639,7 +653,7 @@ public class SystemDatabase implements AutoCloseable {
           // Restore the flag for the caller and give back the failure that was being retried.
           Thread.currentThread().interrupt();
           logger.warn("Interrupted while retrying a database operation (attempt {})", attempt, e);
-          throw new RuntimeException(e);
+          throw new DBOSSystemDatabaseException(e);
         }
         backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
