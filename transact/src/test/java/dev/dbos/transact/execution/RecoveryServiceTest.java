@@ -497,6 +497,70 @@ class RecoveryServiceTest {
     }
   }
 
+  @Test
+  void aRowReassignedToAnotherExecutorIsNotRun() throws Exception {
+    // The claim proves ownership at the instant of the UPDATE, not for the duration of the run.
+    // A recovery request naming a live executor re-enqueues its rows, a peer claims one, and the
+    // original dispatch then finds a PENDING row that belongs to the peer.
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl = new ExecutingServiceImpl(dbos);
+      var service = dbos.registerProxy(ExecutingService.class, impl);
+      impl.setSelf(service);
+      dbos.launch();
+      dbos.registerQueue(testQueue, QueueOptions.empty());
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+      var queueService = DBOSTestAccess.getQueueService(dbos);
+
+      var wfid = "wf-reassigned-after-claim";
+      queueService.pause();
+      try {
+        var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
+        dbos.startWorkflow(() -> service.workflowMethod("test-item"), options);
+
+        var claimed =
+            systemDatabase.startQueuedWorkflows(
+                dbos.findQueue(testQueue).orElseThrow(),
+                dbosExecutor.executorId(),
+                dbosExecutor.appVersion(),
+                null,
+                0);
+        assertEquals(List.of(wfid), claimed);
+
+        // The row goes back to the queue and a peer takes it, all inside the window between the
+        // claim above and the status read the dispatch below does.
+        setExecutorId(dataSource, wfid, "some-other-executor");
+
+        dbosExecutor.executeWorkflowById(wfid);
+      } finally {
+        queueService.unpause();
+      }
+
+      for (var i = 0; i < 20 && impl.workflowBodyCount == 0; i++) {
+        Thread.sleep(100);
+      }
+      assertEquals(
+          0, impl.workflowBodyCount, "a row claimed by a peer must not be run here as well");
+      assertEquals(
+          WorkflowState.PENDING.name(),
+          DBUtils.getWorkflowRow(dataSource, wfid).status(),
+          "and the peer's row must be left as the peer left it");
+    }
+  }
+
+  private static void setExecutorId(DataSource ds, String workflowId, String executorId)
+      throws SQLException {
+    try (var conn = ds.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.workflow_status SET executor_id = ? WHERE workflow_uuid = ?")) {
+      stmt.setString(1, executorId);
+      stmt.setString(2, workflowId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
   private static void setRecoveryAttempts(DataSource ds, String workflowId, int attempts)
       throws SQLException {
     try (var conn = ds.getConnection();

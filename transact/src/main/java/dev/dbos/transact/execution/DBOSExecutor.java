@@ -1722,6 +1722,19 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
+    // The claim wrote this executor's id. A row naming another has been re-enqueued and taken by a
+    // peer since -- a recovery request naming a live executor does that -- so this dispatch no
+    // longer owns it. Checked before the error paths below, which would otherwise record a failure
+    // on a row the peer is actively running.
+    if (!executorId().equals(status.executorId())) {
+      logger.warn(
+          "Workflow {} is claimed by executor {}, not {}; not running it here",
+          workflowId,
+          status.executorId(),
+          executorId());
+      return new WorkflowHandleDBPoll<>(this, workflowId, true);
+    }
+
     // Reading the row reports an unreadable payload as null, so running the workflow refuses for
     // itself: a workflow invoked with arguments it never had is worse than one marked ERROR.
     if (!SerializationUtil.canDeserialize(status.serialization(), serializer)) {

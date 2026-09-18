@@ -493,19 +493,23 @@ public class SystemDatabaseTest {
     // dying is swept back, claimed and lost forever, never reaching the dead-letter threshold.
     var wfid = "wfid-claim-counts";
     var queue = new Queue("claim-count-q");
+    var appVersion = "v-claim-counts";
     var status =
         WorkflowStatusInternalBuilder.create(wfid)
             .workflowName("wf-name")
             .inputs("wf-inputs")
             .queueName(queue.name())
+            // Pinned, not left null: a null version is only claimable while this worker runs
+            // the latest registered one, which depends on what other tests left behind in
+            // application_versions. An exact match is claimable either way.
+            .appVersion(appVersion)
             .build();
 
     assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5).status());
     assertEquals(0, DBUtils.getWorkflowRow(dataSource, wfid).recoveryAttempts());
 
     var claimed =
-        sysdb.startQueuedWorkflows(
-            queue, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
+        sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0);
     assertEquals(List.of(wfid), claimed);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);

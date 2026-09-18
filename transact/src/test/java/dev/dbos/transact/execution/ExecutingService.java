@@ -47,7 +47,7 @@ class ExecutingServiceImpl implements ExecutingService {
   public int step2Count = 0;
 
   /** Counts entries into a workflow body, which no step guard stands in front of. */
-  public int workflowBodyCount = 0;
+  public volatile int workflowBodyCount = 0;
 
   public ExecutingServiceImpl(DBOS dbos) {
     this.dbos = dbos;
