@@ -422,6 +422,31 @@ public class SystemDatabase implements AutoCloseable {
    * merely reads like a connection error -- the message tier is now reached only when nothing in
    * either chain carries a state at all.
    */
+  /**
+   * Whether a failure is evidence that the pooled connections themselves are gone, so recycling
+   * them is what lets a retry succeed.
+   *
+   * <p>Separate from {@link #classify} because retrying and recycling are different questions whose
+   * answers do not coincide. Class 08 and the {@code 57P0x} shutdown codes mean the connection or
+   * the server went away, and a retry on the same socket cannot succeed. {@code 57014
+   * query_canceled} is class 57 too, but it means a {@code statement_timeout} fired or someone
+   * cancelled the backend: the statement is in trouble and the connection is fine, so recycling
+   * every pooled connection over it is collateral damage. A borrow that timed out is likewise
+   * contention for healthy connections, and recycling them mid-shortage makes the shortage worse.
+   *
+   * <p>HikariCP copies the SQLSTATE of the last real connection failure onto its timeout exception
+   * and hangs that failure off {@link SQLException#setNextException}, so a pool timeout caused by
+   * genuinely broken connections arrives carrying class 08 and does evict, while one caused purely
+   * by demand carries no state and reaches the message tier, which declines.
+   */
+  static boolean evictsPool(SQLException e) {
+    if (hasSqlState(e)) {
+      return anySqlState(
+          e, state -> state.startsWith("08") || (state.startsWith("57") && !"57014".equals(state)));
+    }
+    return e instanceof SQLRecoverableException || anyMessage(e, DEAD_CONNECTION_MESSAGES);
+  }
+
   static Failure classify(SQLException e) {
     if (hasSqlState(e)) {
       if (isConnectionState(e)) {
@@ -441,40 +466,56 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Whether any message in the chain names a connection failure.
-   *
-   * <p>Only for exceptions carrying no SQLSTATE at all: HikariCP and JDBC raise connection errors
-   * as bare messages ("Connection is closed"). A message is a guess where a SQLSTATE is a fact, so
-   * this is the fallback tier and never overrides one.
+   * Messages naming a connection that is gone. HikariCP and JDBC raise these below the protocol
+   * level, with no SQLSTATE to prefer over them.
    */
-  static boolean hasConnectionMessage(Throwable t) {
+  private static final List<String> DEAD_CONNECTION_MESSAGES =
+      List.of("connection is closed", "connection reset", "broken pipe", "socket closed");
+
+  /**
+   * HikariCP's message for a borrow that timed out. Unlike the above this is contention for live
+   * connections, not a dead one: worth retrying, not worth recycling the pool over.
+   */
+  private static final List<String> POOL_EXHAUSTED_MESSAGES =
+      List.of("connection is not available");
+
+  /** Whether any message along either chain contains one of {@code needles}. */
+  private static boolean anyMessage(Throwable t, List<String> needles) {
     for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      String msg = cause.getMessage();
-      if (msg != null) {
-        String lower = msg.toLowerCase();
-        if (lower.contains("connection is closed")
-            || lower.contains("connection is not available")
-            || lower.contains("connection reset")
-            || lower.contains("broken pipe")
-            || lower.contains("socket closed")) {
-          return true;
+      if (messageContains(cause, needles)) {
+        return true;
+      }
+      if (cause instanceof SQLException sqlException) {
+        for (Throwable linked : sqlException) {
+          if (messageContains(linked, needles)) {
+            return true;
+          }
         }
       }
     }
     return false;
   }
 
+  private static boolean messageContains(Throwable t, List<String> needles) {
+    String msg = t.getMessage();
+    if (msg == null) {
+      return false;
+    }
+    String lower = msg.toLowerCase();
+    return needles.stream().anyMatch(lower::contains);
+  }
+
   /**
-   * Whether a failure is worth retrying blind: SQLSTATE class 53, insufficient resources.
+   * Whether any message in the chains names a connection failure.
    *
-   * <p>Class 40 is deliberately absent. A transaction conflict is the caller's business, not this
-   * helper's: Python's {@code retriable_postgres_exception} matches classes 08, 53 and 57 only,
-   * TypeScript's connection retrier likewise, and Go retries conflicts solely where a call site
-   * opts in with {@code WithRetryCondition(IsRetryableTransaction)}. Retrying one here would sleep
-   * a pooled thread for at least a second on a path -- the queue dequeue -- where losing a
-   * serialization race is routine rather than exceptional, and would hide the failure from the poll
-   * loop whose job is to react to it.
+   * <p>Only for exceptions carrying no SQLSTATE at all: HikariCP and JDBC raise connection errors
+   * as bare messages ("Connection is closed"). A message is a guess where a SQLSTATE is a fact, so
+   * this is the fallback tier and never overrides one.
    */
+  static boolean hasConnectionMessage(Throwable t) {
+    return anyMessage(t, DEAD_CONNECTION_MESSAGES) || anyMessage(t, POOL_EXHAUSTED_MESSAGES);
+  }
+
   /** Class 53 insufficient_resources, anywhere in the chains. */
   static boolean isTransientState(Throwable t) {
     return anySqlState(t, state -> state.startsWith("53"));
@@ -699,10 +740,17 @@ public class SystemDatabase implements AutoCloseable {
         attempt++;
         switch (classify(e)) {
           case CONNECTION -> {
-            logger.warn(
-                "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
-            if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
-              hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+            if (evictsPool(e)) {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
+              if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
+                hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+              }
+            } else {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), retrying on the same pool",
+                  attempt,
+                  e);
             }
           }
           case TRANSIENT -> logger.warn("Transient DB error (attempt {}), retrying", attempt, e);

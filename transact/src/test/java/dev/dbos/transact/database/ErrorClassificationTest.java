@@ -158,4 +158,53 @@ public class ErrorClassificationTest {
 
     assertEquals(SystemDatabase.Failure.CALLERS, SystemDatabase.classify(stated));
   }
+
+  /** A pool timeout shaped as HikariCP builds one: the real failure on the next-exception chain. */
+  private static SQLException poolTimeout(String stateFromLastFailure) {
+    var timeout =
+        new java.sql.SQLTransientConnectionException(
+            "HikariPool-1 - Connection is not available, request timed out after 30000ms",
+            stateFromLastFailure,
+            0,
+            null);
+    if (stateFromLastFailure != null) {
+      timeout.setNextException(new SQLException("the last real failure", stateFromLastFailure));
+    }
+    return timeout;
+  }
+
+  @Test
+  @DisplayName("a cancelled statement does not recycle the pool")
+  public void aCancelledStatementDoesNotEvict() {
+    // 57014 query_canceled is class 57, so it retries like the shutdown codes -- but the statement
+    // is what is in trouble, not the connection, and evicting every pooled connection over a
+    // statement_timeout is collateral damage.
+    var cancelled = new SQLException("canceling statement due to statement timeout", "57014");
+
+    assertEquals(SystemDatabase.Failure.CONNECTION, SystemDatabase.classify(cancelled));
+    assertFalse(SystemDatabase.evictsPool(cancelled));
+  }
+
+  @Test
+  @DisplayName("a connection or server that went away does recycle the pool")
+  public void aDeadConnectionEvicts() {
+    assertTrue(SystemDatabase.evictsPool(new SQLException("gone", "08006")));
+    assertTrue(SystemDatabase.evictsPool(new SQLException("shutting down", "57P01")));
+    assertTrue(SystemDatabase.evictsPool(new SQLException("crash", "57P02")));
+    // No state at all: the message is all there is to go on.
+    assertTrue(SystemDatabase.evictsPool(new SQLException("socket closed")));
+  }
+
+  @Test
+  @DisplayName("a pool timeout recycles only when the connections themselves failed")
+  public void aPoolTimeoutEvictsOnlyOnRealFailures() {
+    // Pure demand: Hikari found no state to copy, so only its own message is left. Recycling
+    // healthy connections mid-shortage would make the shortage worse.
+    assertEquals(SystemDatabase.Failure.CONNECTION, SystemDatabase.classify(poolTimeout(null)));
+    assertFalse(SystemDatabase.evictsPool(poolTimeout(null)));
+
+    // Broken connections: Hikari copies the last failure's state and hangs it off setNextException,
+    // so this arrives carrying class 08 and the pool is worth recycling.
+    assertTrue(SystemDatabase.evictsPool(poolTimeout("08006")));
+  }
 }
