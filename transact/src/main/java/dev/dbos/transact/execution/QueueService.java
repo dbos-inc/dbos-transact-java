@@ -26,6 +26,10 @@ public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
   private static final Duration MAX_POLLING_INTERVAL = Duration.ofSeconds(120);
+
+  // Matches the backoff and scaleback factors every other SDK's queue runner uses.
+  private static final double BACKOFF_GROWTH_FACTOR = 2.0;
+  private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
@@ -140,7 +144,8 @@ public class QueueService implements AutoCloseable {
 
   // ── Queue listener task ───────────────────────────────────────────────────
 
-  private class QueueListenerTask implements Runnable {
+  // Package-private, with its sweep and dispatch, so a test can drive one poll directly.
+  class QueueListenerTask implements Runnable {
 
     Queue queue;
     double backoffFactor = 1.0;
@@ -163,7 +168,30 @@ public class QueueService implements AutoCloseable {
       }
     }
 
-    private void processPartition(String partition) {
+    /**
+     * Claims from each partition in turn, skipping any a peer is already dequeuing.
+     *
+     * <p>Contention listing the partitions is left to propagate: it is not scoped to any one
+     * partition, so it backs the whole queue off.
+     */
+    void sweepPartitions() {
+      for (var partition : systemDatabase.getQueuePartitions(queue.name())) {
+        try {
+          processPartition(partition);
+        } catch (Exception e) {
+          // Skip just this partition, no queue-wide backoff -- deliberately including 40001,
+          // which would back off from a non-partitioned dequeue. The other partitions are
+          // unrelated rows this poll can still claim.
+          if (!SystemDatabase.isContentionError(e)) {
+            throw e;
+          }
+          logger.debug(
+              "Partition {} of queue {} is contended; skipping it", partition, queue.name());
+        }
+      }
+    }
+
+    void processPartition(String partition) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       if (!paused.get()) {
         long localRunningCount = dbosExecutor.queueActiveCount(queue.name(), partition);
@@ -183,58 +211,125 @@ public class QueueService implements AutoCloseable {
               workflowId,
               partitionLog,
               queue.name());
-          dbosExecutor.executeWorkflowById(workflowId, false, true);
+          try {
+            dbosExecutor.executeWorkflowById(workflowId, false, true);
+          } catch (Exception e) {
+            // A failed dispatch must not strand the rest of the batch, and its failure is not
+            // the dequeue contention the poll loop would read it as.
+            logger.error(
+                "Error starting workflow {} from {} partition of queue {}",
+                workflowId,
+                partitionLog,
+                queue.name(),
+                e);
+          }
         }
       }
+    }
+
+    /**
+     * Reloads a database-backed queue's configuration so changes take effect without a restart.
+     *
+     * @return false if the queue no longer exists, in which case this listener stops
+     */
+    boolean refreshQueue() {
+      Optional<Queue> refreshed;
+      try {
+        refreshed = systemDatabase.findQueue(queue.name());
+      } catch (Exception e) {
+        // Keep polling on the configuration already in hand. A row that fails to load is a
+        // reason to try again next poll, not to stop dequeuing this queue for good.
+        logger.warn(
+            "Could not reload queue {}; keeping its current configuration", queue.name(), e);
+        return true;
+      }
+      if (refreshed.isEmpty()) {
+        dbListeningQueues.remove(queue.name());
+        return false;
+      }
+      queue = refreshed.get();
+      return true;
     }
 
     @Override
     public void run() {
       if (execServiceRef.get() == null) return;
-      if (dynamic) {
-        var refreshed = systemDatabase.findQueue(queue.name());
-        if (refreshed.isEmpty()) {
-          dbListeningQueues.remove(queue.name());
+
+      // Rescheduling is the only thing keeping this queue polling, so nothing between here and
+      // the finally may escape it -- including reloading the queue's own configuration, which
+      // reaches dbRetry and so can throw for a conflict or any non-transient failure.
+      boolean reschedule = true;
+      boolean backoffRequested = false;
+      try {
+        if (dynamic && !refreshQueue()) {
+          reschedule = false;
           return;
         }
-        queue = refreshed.get();
-      }
 
-      try {
         if (queue.partitioningEnabled()) {
-          var partitions = systemDatabase.getQueuePartitions(queue.name());
-          for (var partition : partitions) {
-            processPartition(partition);
-          }
+          sweepPartitions();
         } else {
           processPartition(null);
         }
-
-        backoffFactor = Math.max(backoffFactor * 0.9, 1.0);
       } catch (Exception e) {
-        // A peer holding the rows this dequeue wanted to lock is the system working, not a
-        // failure: it costs one polling interval and says nothing louder. Every other SDK
-        // classifies 55P03 the same way here.
-        //
-        // This try covers more than the dequeue, though: getQueuePartitions above, and the
-        // dispatch loop inside processPartition, which does synchronous database work on this
-        // thread before it submits anything. Since isContentionError began matching 40001, a
-        // conflict raised while *starting* a workflow lands here and is reported as a peer
-        // mid-dequeue -- which is false, and at DEBUG, so it goes unseen. Narrow the try around
-        // startQueuedWorkflows when this catch is next rewritten; see the plan's review check for
-        // the #512/#518 change, which rewrites it.
-        if (SystemDatabase.isContentionError(e)) {
-          logger.debug("A peer is mid-dequeue on queue {}; backing off", queue.name());
+        backoffRequested = shouldBackOff(e);
+        if (backoffRequested) {
+          logger.debug("Lost a dequeue race on queue {}; backing off", queue.name());
+        } else if (SystemDatabase.isLockNotAvailable(e)) {
+          logger.debug("A peer is mid-dequeue on queue {}; retrying next poll", queue.name());
         } else {
           logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
         }
-        double maxFactor =
-            (double) MAX_POLLING_INTERVAL.toMillis() / queue.pollingInterval().toMillis();
-        backoffFactor = Math.min(backoffFactor * 2.0, maxFactor);
       } finally {
-        this.schedule();
+        if (reschedule) {
+          backoffFactor =
+              nextBackoffFactor(backoffFactor, backoffRequested, queue.pollingInterval());
+          this.schedule();
+        }
       }
     }
+  }
+
+  /**
+   * Whether a failed poll should lengthen the polling interval.
+   *
+   * <p>A lost row lock (55P03) should not: the peer holding those rows commits in milliseconds, so
+   * the obstruction is gone by the next tick and a failed poll costs one read that NOWAIT made fail
+   * immediately. There is no load to shed, and escalating abandons a queue that has work waiting --
+   * which is what #512 measured, 25.5 s of idle time from a 60 s lock hold against a 40 ms
+   * uncontended control.
+   *
+   * <p>A serialization failure (40001) should: a peer already committed, and under a shared budget
+   * that can keep happening, so damping spreads the contenders out. Python draws the line in the
+   * same place; TypeScript and Go back off on both codes.
+   *
+   * <p>Everything else is a genuine error, which backing off would not help either -- see the catch
+   * in {@code run()}.
+   */
+  static boolean shouldBackOff(Throwable failure) {
+    return !SystemDatabase.isLockNotAvailable(failure) && SystemDatabase.isContentionError(failure);
+  }
+
+  /**
+   * The polling multiplier for the next poll: grown when a poll asks to back off, decayed
+   * otherwise, and clamped into range either way.
+   *
+   * <p>The clamp is not only for growth. A queue's polling interval can be raised while it is
+   * backed off, which leaves a multiplier earned against the old interval far too large for the new
+   * one, and decay alone would take hours of polls to work it off. Every other SDK reclamps for the
+   * same reason after reloading the queue's configuration.
+   *
+   * @param current the multiplier in force
+   * @param backoffRequested whether this poll asked to lengthen the interval
+   * @param pollingInterval the queue's base interval, which the multiplier scales
+   * @return the multiplier for the next poll, within [1.0, {@link #MAX_POLLING_INTERVAL}]
+   */
+  static double nextBackoffFactor(
+      double current, boolean backoffRequested, Duration pollingInterval) {
+    double cap =
+        Math.max(1.0, (double) MAX_POLLING_INTERVAL.toMillis() / pollingInterval.toMillis());
+    double next = current * (backoffRequested ? BACKOFF_GROWTH_FACTOR : BACKOFF_SCALEBACK_FACTOR);
+    return Math.min(Math.max(next, 1.0), cap);
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
