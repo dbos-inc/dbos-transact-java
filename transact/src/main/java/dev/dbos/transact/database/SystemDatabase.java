@@ -48,6 +48,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import javax.sql.DataSource;
 
@@ -351,15 +352,57 @@ public class SystemDatabase implements AutoCloseable {
     notificationSource.start();
   }
 
-  private static boolean isConnectionFailure(SQLException e) {
-    String state = e.getSQLState();
-    if (state != null && (state.startsWith("08") || state.startsWith("57"))) {
-      return true;
+  /**
+   * Whether any SQLSTATE reachable from {@code t} satisfies {@code match}.
+   *
+   * <p>"Reachable" means two chains, not one. Causes carry the wrapping this class does itself --
+   * {@link DBOSSystemDatabaseException} above a driver exception. {@link
+   * SQLException#getNextException()} carries what JDBC uses for batch failures: {@code
+   * executeBatch()} throws a {@link java.sql.BatchUpdateException} and hangs the driver-specific
+   * failure, which is the one holding the real SQLSTATE, off the next-exception chain. This class
+   * runs 13 batches, so that chain is not hypothetical.
+   *
+   * <p>{@link SQLException} is {@link Iterable}, and its iterator covers both from any SQLException
+   * it is given -- itself, its causes, its next exceptions and their causes. The outer loop only
+   * has to find the first SQLException, since the top of the chain may be a wrapper that is not
+   * one.
+   */
+  private static boolean anySqlState(Throwable t, Predicate<String> match) {
+    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sqlException) {
+        for (Throwable linked : sqlException) {
+          if (linked instanceof SQLException linkedSql) {
+            String state = linkedSql.getSQLState();
+            if (state != null && match.test(state)) {
+              return true;
+            }
+          }
+        }
+      }
     }
-    // HikariCP and JDBC throw connection errors without a SQLSTATE (e.g. "Connection is closed").
-    // Walk the cause chain so wrapped exceptions are also caught.
-    for (Throwable t = e; t != null; t = t.getCause()) {
-      String msg = t.getMessage();
+    return false;
+  }
+
+  /** Whether anything in {@code t}'s chains carries a SQLSTATE at all. */
+  private static boolean hasSqlState(Throwable t) {
+    return anySqlState(t, state -> true);
+  }
+
+  /** Class 08 connection_exception or class 57 operator_intervention, anywhere in the chains. */
+  static boolean isConnectionState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("08") || state.startsWith("57"));
+  }
+
+  /**
+   * Whether any message in the chain names a connection failure.
+   *
+   * <p>Only for exceptions carrying no SQLSTATE at all: HikariCP and JDBC raise connection errors
+   * as bare messages ("Connection is closed"). A message is a guess where a SQLSTATE is a fact, so
+   * this is the fallback tier and never overrides one.
+   */
+  static boolean hasConnectionMessage(Throwable t) {
+    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+      String msg = cause.getMessage();
       if (msg != null) {
         String lower = msg.toLowerCase();
         if (lower.contains("connection is closed")
@@ -385,9 +428,20 @@ public class SystemDatabase implements AutoCloseable {
    * serialization race is routine rather than exceptional, and would hide the failure from the poll
    * loop whose job is to react to it.
    */
-  private static boolean isTransientState(SQLException e) {
-    String state = e.getSQLState();
-    return state != null && state.startsWith("53");
+  /**
+   * Whether {@code e} looks like a connection failure: the SQLSTATE if there is one, the message if
+   * there is not.
+   *
+   * <p>Kept as one predicate while {@code dbRetry} still ORs type against state; the two tiers are
+   * separated there in the dispatch rework, which is what stops a message overriding a SQLSTATE.
+   */
+  private static boolean isConnectionFailure(Throwable t) {
+    return isConnectionState(t) || hasConnectionMessage(t);
+  }
+
+  /** Class 53 insufficient_resources, anywhere in the chains. */
+  static boolean isTransientState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("53"));
   }
 
   /**
@@ -405,15 +459,7 @@ public class SystemDatabase implements AutoCloseable {
    * relies on that.
    */
   public static boolean isSerializationError(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException) {
-        String state = sqlException.getSQLState();
-        if ("40001".equals(state) || "40P01".equals(state)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return anySqlState(t, state -> "40001".equals(state) || "40P01".equals(state));
   }
 
   /**
@@ -433,15 +479,7 @@ public class SystemDatabase implements AutoCloseable {
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isContentionError(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException) {
-        String state = sqlException.getSQLState();
-        if ("55P03".equals(state) || "40001".equals(state)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return anySqlState(t, state -> "55P03".equals(state) || "40001".equals(state));
   }
 
   /**
@@ -457,13 +495,7 @@ public class SystemDatabase implements AutoCloseable {
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isLockNotAvailable(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException
-          && "55P03".equals(sqlException.getSQLState())) {
-        return true;
-      }
-    }
-    return false;
+    return anySqlState(t, "55P03"::equals);
   }
 
   /**
