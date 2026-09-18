@@ -446,6 +446,57 @@ class RecoveryServiceTest {
     }
   }
 
+  @Test
+  void aConfiguredRecoveryLimitDeadLettersOnItsOwnThresholdNotTheDefault() throws Exception {
+    // The same boundary as above, but for a workflow that declares its own limit. That value
+    // travels from the registration to the dispatch path, where it displaces the built-in
+    // default -- a different arm of the same decision, and the one the annotation exists for.
+    var limit = ExecutingServiceImpl.RECOVERY_LIMIT;
+
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl = new ExecutingServiceImpl(dbos);
+      var service = dbos.registerProxy(ExecutingService.class, impl);
+      impl.setSelf(service);
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      for (var id : List.of("wf-limit-allowed", "wf-limit-refused")) {
+        try (var ctx = new WorkflowOptions(id).setContext()) {
+          service.limitedRecoveryWorkflow("test-item");
+        }
+      }
+
+      setWorkflowStateToPending(dataSource);
+      // Claimed at limit + 1, which is allowed; and at limit + 2, which is not.
+      setRecoveryAttempts(dataSource, "wf-limit-allowed", limit);
+      setRecoveryAttempts(dataSource, "wf-limit-refused", limit + 1);
+
+      assertEquals(
+          2, dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId())).size());
+
+      var allowed = dbos.retrieveWorkflow("wf-limit-allowed");
+      allowed.getResult();
+      assertEquals(
+          WorkflowState.SUCCESS,
+          allowed.getStatus().status(),
+          "a workflow on its last allowed attempt must still run");
+
+      String refusedStatus = null;
+      for (var i = 0; i < 300; i++) {
+        refusedStatus = DBUtils.getWorkflowRow(dataSource, "wf-limit-refused").status();
+        if (WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name().equals(refusedStatus)) {
+          break;
+        }
+        Thread.sleep(100);
+      }
+      assertEquals(
+          WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(),
+          refusedStatus,
+          "one attempt past the declared limit must be dead-lettered");
+    }
+  }
+
   private static void setRecoveryAttempts(DataSource ds, String workflowId, int attempts)
       throws SQLException {
     try (var conn = ds.getConnection();

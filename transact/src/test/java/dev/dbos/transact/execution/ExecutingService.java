@@ -32,6 +32,9 @@ interface ExecutingService {
   void stepThatThrows() throws MyAppException;
 
   void workflowWithNoResultSteps();
+
+  /** Declares its own recovery-attempt limit, rather than taking the built-in default. */
+  String limitedRecoveryWorkflow(String input);
 }
 
 class ExecutingServiceImpl implements ExecutingService {
@@ -52,6 +55,16 @@ class ExecutingServiceImpl implements ExecutingService {
 
   public void setSelf(ExecutingService self) {
     this.self = self;
+  }
+
+  /** Low enough to reach in a test, where the default of 100 would be tedious to seed. */
+  public static final int RECOVERY_LIMIT = 3;
+
+  @Override
+  @Workflow(name = "limitedRecoveryWorkflow", maxRecoveryAttempts = RECOVERY_LIMIT)
+  public String limitedRecoveryWorkflow(String input) {
+    ++workflowBodyCount;
+    return input;
   }
 
   @Override
