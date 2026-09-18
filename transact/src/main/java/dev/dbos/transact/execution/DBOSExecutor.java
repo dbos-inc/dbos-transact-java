@@ -2263,13 +2263,12 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String instanceName,
       @Nullable Object[] args,
       Throwable error) {
-    String serialization = this.serializer.name();
+    // No configured serializer means the built-in one, which only SerializationUtil knows;
+    // naming it here would dereference a null serializer on the default configuration.
     var serializedArgs =
         SerializationUtil.serializeArgs(
-            Objects.requireNonNullElseGet(args, () -> new Object[0]),
-            null,
-            serialization,
-            this.serializer);
+            Objects.requireNonNullElseGet(args, () -> new Object[0]), null, null, this.serializer);
+    String serialization = serializedArgs.serialization();
     var serializedError = SerializationUtil.serializeError(error, serialization, this.serializer);
     var initStatus =
         new WorkflowStatusInternal(
