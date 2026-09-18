@@ -971,8 +971,7 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOS.backfillSchedule cannot be called from within a workflow");
     }
 
-    var workflowIds =
-        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    var workflowIds = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
@@ -980,8 +979,7 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String scheduleName,
       @NonNull Instant start,
       @NonNull Instant end,
-      @NonNull SystemDatabase systemDatabase,
-      @Nullable DBOSSerializer serializer) {
+      @NonNull SystemDatabase systemDatabase) {
 
     var schedule =
         Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
@@ -1014,8 +1012,7 @@ public class DBOSExecutor implements AutoCloseable {
           schedule.queueName(),
           next.toInstant(),
           schedule.scheduleName(),
-          systemDatabase,
-          serializer);
+          systemDatabase);
 
       workflowIds.add(workflowId);
     }
@@ -1029,12 +1026,12 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOS.triggerSchedule cannot be called from within a workflow");
     }
 
-    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    var workflowId = triggerSchedule(scheduleName, systemDatabase);
     return retrieveWorkflow(workflowId);
   }
 
   public static String triggerSchedule(
-      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+      @NonNull String scheduleName, @NonNull SystemDatabase systemDatabase) {
     var schedule =
         Objects.requireNonNull(systemDatabase)
             .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
@@ -1053,8 +1050,7 @@ public class DBOSExecutor implements AutoCloseable {
         schedule.queueName(),
         now,
         schedule.scheduleName(),
-        systemDatabase,
-        serializer);
+        systemDatabase);
     return workflowId;
   }
 
@@ -1066,8 +1062,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       @NonNull Instant scheduledAt,
       String scheduleName,
-      SystemDatabase systemDatabase,
-      DBOSSerializer serializer) {
+      SystemDatabase systemDatabase) {
     var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
     queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
     var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
@@ -1090,7 +1085,9 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null, // applicationName: this executor's own
         systemDatabase,
-        serializer);
+        // The row is read back with the format it records, so a scheduled run must be
+        // written with the serializer the system database was configured with.
+        systemDatabase.serializer());
   }
 
   @SuppressWarnings("removal") // implements the deprecated ExternalState API

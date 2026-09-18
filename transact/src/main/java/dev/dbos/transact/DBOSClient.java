@@ -1674,7 +1674,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
       @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-    var ids = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    var ids = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
     return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
   }
 
@@ -1686,7 +1686,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
       @NonNull String scheduleName) {
-    var id = DBOSExecutor.triggerSchedule(scheduleName, systemDatabase, serializer);
+    var id = DBOSExecutor.triggerSchedule(scheduleName, systemDatabase);
     return retrieveWorkflow(id);
   }
 

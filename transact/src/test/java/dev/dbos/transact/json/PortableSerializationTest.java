@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusRow;
@@ -15,6 +17,7 @@ import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.nio.charset.StandardCharsets;
@@ -1029,6 +1032,195 @@ public class PortableSerializationTest {
             IllegalArgumentException.class,
             () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)).orElseThrow(),
             "Serialization is not available");
+      }
+    }
+  }
+
+  // ============ Custom Serializer: Schedules ============
+
+  /**
+   * A value the built-in Jackson serializer writes happily and cannot read back: it has no default
+   * constructor and no creator, so deserialization fails. JDK serialization restores it without
+   * calling a constructor at all. It stands in for the values that made dbos-transact-java#523
+   * visible -- a scheduled run persisted under the wrong serializer is not merely inconsistent, its
+   * result cannot be read at all.
+   */
+  public static final class Payload {
+    public String tag;
+    private String hidden;
+
+    public Payload() {}
+
+    Payload(String tag, String hidden) {
+      this.tag = tag;
+      this.hidden = hidden;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof Payload p
+          && java.util.Objects.equals(tag, p.tag)
+          && java.util.Objects.equals(hidden, p.hidden);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(tag, hidden);
+    }
+
+    @Override
+    public String toString() {
+      return "Payload[" + tag + ", " + hidden + "]";
+    }
+  }
+
+  public interface PayloadScheduleService {
+    Payload scheduledPayload(Instant scheduled, Object context);
+  }
+
+  public static class PayloadScheduleServiceImpl implements PayloadScheduleService {
+    @Override
+    @Workflow
+    public Payload scheduledPayload(Instant scheduled, Object context) {
+      return new Payload("ran-at-" + scheduled, "hidden-" + scheduled);
+    }
+  }
+
+  private static final String SCHEDULED_WORKFLOW = "scheduledPayload";
+  private static final String SCHEDULED_CLASS = PayloadScheduleServiceImpl.class.getName();
+
+  /**
+   * The polling interval keeps the cron from firing on its own: every run observed is asked for.
+   */
+  private DBOS launchWithKryo() {
+    var localDbos =
+        new DBOS(
+            dbosConfig
+                .withSerializer(KryoSerializer.INSTANCE)
+                .withSchedulerPollingInterval(Duration.ofSeconds(30)));
+    localDbos.registerProxy(PayloadScheduleService.class, new PayloadScheduleServiceImpl());
+    localDbos.launch();
+    return localDbos;
+  }
+
+  private void createPayloadSchedule(DBOS localDbos, String name, String cron) {
+    localDbos.createSchedule(new WorkflowSchedule(name, SCHEDULED_WORKFLOW, SCHEDULED_CLASS, cron));
+  }
+
+  /** The row records the configured serializer, and the run's result reads back through it. */
+  private void assertScheduledRunUsedTheConfiguredSerializer(DBOS localDbos, String workflowId)
+      throws Exception {
+    // The consequence first, so a failure reads as the symptom rather than as metadata: the
+    // output is written and read back through whatever format the row records, so a row that
+    // claims the built-in one loses the part of this value only Kryo can carry.
+    var status = localDbos.retrieveWorkflow(workflowId).getStatus();
+    var scheduledAt = status.input()[0];
+    assertEquals(new Payload("ran-at-" + scheduledAt, "hidden-" + scheduledAt), status.output());
+
+    // Then the cause.
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(row, "no workflow row for " + workflowId);
+    assertEquals(KryoSerializer.NAME, row.serialization());
+    assertNotEquals(DBOSJavaSerializer.NAME, row.serialization());
+  }
+
+  /** A triggered schedule is persisted with the application's configured serializer. */
+  @Test
+  public void testCustomSerializerTriggerSchedule() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      // Jan 1st only, so the poller never fires it during the test.
+      createPayloadSchedule(localDbos, "trigger-ser", "0 0 0 1 1 *");
+
+      var handle = localDbos.<Payload, RuntimeException>triggerSchedule("trigger-ser");
+      assertInstanceOf(Payload.class, handle.getResult());
+      assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+    }
+  }
+
+  /** Every run a backfill enqueues is persisted with the application's configured serializer. */
+  @Test
+  public void testCustomSerializerBackfillSchedule() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "backfill-ser", "0 * * * * *");
+
+      // Every minute over a three minute window, in the past: three runs.
+      var handles =
+          localDbos.backfillSchedule(
+              "backfill-ser",
+              Instant.parse("2024-01-01T10:00:30Z"),
+              Instant.parse("2024-01-01T10:03:30Z"));
+
+      assertEquals(3, handles.size());
+      for (var handle : handles) {
+        assertInstanceOf(Payload.class, handle.getResult());
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+      }
+    }
+  }
+
+  /**
+   * The entry points the Conductor's trigger_schedule and backfill_schedule handlers call. They
+   * take the serializer from the system database they write through, so a caller holding no
+   * serializer of its own -- exactly the Conductor's position, and the bug in #523 -- still records
+   * the configured one.
+   */
+  @Test
+  public void testCustomSerializerScheduleStaticEntryPoints() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "static-ser", "0 0 0 1 1 *");
+      createPayloadSchedule(localDbos, "static-ser-min", "0 * * * * *");
+
+      var systemDatabase = DBOSTestAccess.getSystemDatabase(localDbos);
+      assertEquals(KryoSerializer.NAME, systemDatabase.serializer().name());
+
+      var workflowIds = new ArrayList<String>();
+      workflowIds.add(DBOSExecutor.triggerSchedule("static-ser", systemDatabase));
+      var backfilled =
+          DBOSExecutor.backfillSchedule(
+              "static-ser-min",
+              Instant.parse("2024-01-01T10:00:30Z"),
+              Instant.parse("2024-01-01T10:03:30Z"),
+              systemDatabase);
+      assertEquals(3, backfilled.size());
+      workflowIds.addAll(backfilled);
+
+      for (var workflowId : workflowIds) {
+        localDbos.retrieveWorkflow(workflowId).getResult();
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, workflowId);
+      }
+    }
+  }
+
+  /** The client hands its own serializer to the system database it opens, and schedules use it. */
+  @Test
+  public void testCustomSerializerClientSchedules() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "client-ser", "0 0 0 1 1 *");
+      createPayloadSchedule(localDbos, "client-ser-min", "0 * * * * *");
+
+      try (var client = new DBOSClient(dataSource, null, KryoSerializer.INSTANCE)) {
+        var triggered = client.<Payload, RuntimeException>triggerSchedule("client-ser");
+        assertInstanceOf(Payload.class, triggered.getResult());
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, triggered.workflowId());
+
+        var handles =
+            client.backfillSchedule(
+                "client-ser-min",
+                Instant.parse("2024-01-01T10:00:30Z"),
+                Instant.parse("2024-01-01T10:03:30Z"));
+        assertEquals(3, handles.size());
+        for (var handle : handles) {
+          handle.getResult();
+          assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+        }
       }
     }
   }

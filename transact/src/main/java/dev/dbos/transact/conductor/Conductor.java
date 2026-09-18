@@ -1589,7 +1589,7 @@ public class Conductor implements AutoCloseable {
             var end = Instant.parse(request.end);
             List<String> workflowIds =
                 DBOSExecutor.backfillSchedule(
-                    request.schedule_name, start, end, conductor.systemDatabase, null);
+                    request.schedule_name, start, end, conductor.systemDatabase);
             return new BackfillScheduleResponse(request, workflowIds);
           } catch (Exception e) {
             logger.error(
@@ -1605,7 +1605,7 @@ public class Conductor implements AutoCloseable {
         () -> {
           try {
             String workflowId =
-                DBOSExecutor.triggerSchedule(request.schedule_name, conductor.systemDatabase, null);
+                DBOSExecutor.triggerSchedule(request.schedule_name, conductor.systemDatabase);
             return new TriggerScheduleResponse(request, workflowId);
           } catch (Exception e) {
             logger.error(
