@@ -402,9 +402,6 @@ public class QueuesDAO {
    * @param applicationName the application that owns the queue and polls it; null for this handle's
    *     own, which is a nameless handle's way of leaving the queue unclaimed
    */
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
-  @SuppressWarnings("removal")
   public static boolean upsertQueue(
       DbContext ctx,
       String name,
@@ -412,32 +409,39 @@ public class QueuesDAO {
       boolean updateExisting,
       @Nullable String applicationName)
       throws SQLException {
-    refusePartitionLimits(options);
     Queue queue = queueFromOptions(name, options);
+    // The rules the constructor cannot apply, because it is also the read path.
+    queue.validateForRegistration();
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
         """
         INSERT INTO "%s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
+            partition_concurrency, partition_worker_concurrency,
+            partition_rate_limit_max, partition_rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema());
     final String updateSql =
         """
         UPDATE "%s".queues SET
-          concurrency           = ?,
-          worker_concurrency    = ?,
-          rate_limit_max        = ?,
-          rate_limit_period_sec = ?,
-          priority_enabled      = ?,
-          partition_queue       = ?,
-          polling_interval_sec  = ?,
-          updated_at            = ?,
+          concurrency                     = ?,
+          worker_concurrency              = ?,
+          rate_limit_max                  = ?,
+          rate_limit_period_sec           = ?,
+          partition_concurrency           = ?,
+          partition_worker_concurrency    = ?,
+          partition_rate_limit_max        = ?,
+          partition_rate_limit_period_sec = ?,
+          priority_enabled                = ?,
+          partition_queue                 = ?,
+          polling_interval_sec            = ?,
+          updated_at                      = ?,
           -- Claim only an unclaimed row, so a registration landing between the ownership
           -- check above and this write keeps the name it just took.
-          application_name      = COALESCE(application_name, ?)
+          application_name                = COALESCE(application_name, ?)
         WHERE name = ?
         """
             .formatted(ctx.schema());
@@ -457,20 +461,18 @@ public class QueuesDAO {
         try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
           setNullableInt(ps, 1, queue.concurrency());
           setNullableInt(ps, 2, queue.workerConcurrency());
-          var rateLimit = queue.rateLimit();
-          if (rateLimit != null) {
-            ps.setInt(3, rateLimit.limit());
-            ps.setDouble(4, rateLimit.period().toMillis() / 1000.0);
-          } else {
-            ps.setNull(3, java.sql.Types.INTEGER);
-            ps.setNull(4, java.sql.Types.DOUBLE);
-          }
-          ps.setBoolean(5, queue.priorityEnabled());
-          ps.setBoolean(6, queue.partitioningEnabled());
-          ps.setDouble(7, queue.pollingInterval().toMillis() / 1000.0);
-          ps.setLong(8, System.currentTimeMillis());
-          ps.setString(9, owner);
-          ps.setString(10, queue.name());
+          setRateLimit(ps, 3, queue.rateLimit());
+          setNullableInt(ps, 5, queue.partitionConcurrency());
+          setNullableInt(ps, 6, queue.partitionWorkerConcurrency());
+          setRateLimit(ps, 7, queue.partitionRateLimit());
+          ps.setBoolean(9, queue.priorityEnabled());
+          // Derived, not copied, with the gap bindQueueParams describes: until #507's dequeue
+          // slice, the consumers still read this column and the queue-wide limits raw.
+          ps.setBoolean(10, queue.isPartitioned());
+          ps.setDouble(11, queue.pollingInterval().toMillis() / 1000.0);
+          ps.setLong(12, System.currentTimeMillis());
+          ps.setString(13, owner);
+          ps.setString(14, queue.name());
           ps.executeUpdate();
         }
       }
@@ -478,61 +480,64 @@ public class QueuesDAO {
     }
   }
 
-  /**
-   * Refuses options carrying a per-partition limit, which this slice cannot yet persist.
-   *
-   * <p>Deleted by the persistence slice of #507, which writes the columns. Until then the surface
-   * exists and the storage does not, and failing loudly beats writing a queue that silently has no
-   * limit -- the symptom of which arrives much later, as a partition key rejected by a queue the
-   * caller believes is partitioned.
-   */
-  private static void refusePartitionLimits(QueueOptions options) {
-    if (options.partitionConcurrency().isPresent()
-        || options.partitionWorkerConcurrency().isPresent()
-        || options.partitionRateLimitMax().isPresent()
-        || options.partitionRateLimitPeriod().isPresent()) {
-      throw new UnsupportedOperationException(
-          "Per-partition queue limits are not persisted yet; see dbos-transact-java#507");
-    }
-  }
-
   /** Binds a queue row's columns from {@code offset}, returning the next free index. */
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
-  @SuppressWarnings("removal")
   private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
     ps.setString(offset, queue.name());
     setNullableInt(ps, offset + 1, queue.concurrency());
     setNullableInt(ps, offset + 2, queue.workerConcurrency());
-    var rateLimit = queue.rateLimit();
-    if (rateLimit != null) {
-      ps.setInt(offset + 3, rateLimit.limit());
-      ps.setDouble(offset + 4, rateLimit.period().toMillis() / 1000.0);
-    } else {
-      ps.setNull(offset + 3, java.sql.Types.INTEGER);
-      ps.setNull(offset + 4, java.sql.Types.DOUBLE);
-    }
-    ps.setBoolean(offset + 5, queue.priorityEnabled());
-    ps.setBoolean(offset + 6, queue.partitioningEnabled());
-    ps.setDouble(offset + 7, queue.pollingInterval().toMillis() / 1000.0);
-    ps.setLong(offset + 8, System.currentTimeMillis());
-    return offset + 9;
+    setRateLimit(ps, offset + 3, queue.rateLimit());
+    setNullableInt(ps, offset + 5, queue.partitionConcurrency());
+    setNullableInt(ps, offset + 6, queue.partitionWorkerConcurrency());
+    setRateLimit(ps, offset + 7, queue.partitionRateLimit());
+    ps.setBoolean(offset + 9, queue.priorityEnabled());
+    // Derived, not copied: the column follows the per-partition limits, and other SDKs read it
+    // to decide whether to dequeue per partition.
+    //
+    // KNOWN GAP, closed by #507's dequeue slice. The consumers of this column still read it raw
+    // and still read the queue-wide limits raw -- QueueService branches on partitioningEnabled()
+    // and startQueuedWorkflows reads concurrency()/workerConcurrency()/rateLimit() rather than
+    // resolveLimits(). So a queue registered with a per-partition limit stores true here, is
+    // polled one partition at a time, and has its queue-wide limits counted within each
+    // partition: setConcurrency(10).andPartitionConcurrency(2) runs up to 10 per partition key
+    // and ignores the 2. That is the legacy mode's meaning, reached by a queue that never asked
+    // for it. Nothing smaller than the dequeue slice fixes it -- writing the flag and
+    // interpreting it have to change under one rule -- and refusing the input here instead is
+    // what this slice exists to stop doing.
+    ps.setBoolean(offset + 10, queue.isPartitioned());
+    ps.setDouble(offset + 11, queue.pollingInterval().toMillis() / 1000.0);
+    ps.setLong(offset + 12, System.currentTimeMillis());
+    return offset + 13;
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
+    try (Connection connection = ctx.getConnection()) {
+      return findQueue(connection, ctx.schema(), name, false);
+    }
+  }
+
+  /**
+   * Reads one queue on a caller-supplied connection.
+   *
+   * @param forUpdate locks the row for the rest of the caller's transaction, so a read-modify-write
+   *     cannot lose a concurrent registration
+   */
+  private static Optional<Queue> findQueue(
+      Connection connection, String schema, String name, boolean forUpdate) throws SQLException {
     final String sql =
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
+          partition_concurrency, partition_worker_concurrency,
+          partition_rate_limit_max, partition_rate_limit_period_sec,
           priority_enabled, partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         WHERE name = ?
         """
-            .formatted(ctx.schema());
+                .formatted(schema)
+            + (forUpdate ? " FOR UPDATE" : "");
 
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, name);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -560,6 +565,8 @@ public class QueuesDAO {
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
+          partition_concurrency, partition_worker_concurrency,
+          partition_rate_limit_max, partition_rate_limit_period_sec,
           priority_enabled, partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         """
@@ -588,42 +595,168 @@ public class QueuesDAO {
     }
   }
 
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
-  @SuppressWarnings("removal")
   public static void updateQueue(DbContext ctx, String name, QueueOptions update)
       throws SQLException {
-    refusePartitionLimits(update);
     if (update.isEmpty()) return;
 
-    List<String> setClauses = new ArrayList<>();
-    List<Object> params = new ArrayList<>();
+    // Read, apply, validate, write -- all on one connection in one transaction. Validating the
+    // row an update would produce, rather than the update on its own, is the only way to check a
+    // rule that spans fields the caller did not all supply. Sharing the transaction is what makes
+    // the check mean anything: read and write on separate connections would let a concurrent
+    // registration land in between, and this write would then silently discard it.
+    try (Connection connection = ctx.getConnection()) {
+      connection.setAutoCommit(false);
+      boolean committed = false;
+      try {
+        var current = findQueue(connection, ctx.schema(), name, true);
+        // No row to update: the statement below would match nothing anyway.
+        if (current.isEmpty()) {
+          connection.rollback();
+          return;
+        }
+        requireNotLegacyPartitioned(current.get(), update);
+        var updated = applyUpdate(current.get(), update);
+        updated.validateForRegistration();
 
-    collectField(setClauses, params, "concurrency", update.concurrency());
-    collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
-    collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
-    collectField(
-        setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
-    collectOptional(setClauses, params, "priority_enabled", update.priorityEnabled());
-    collectOptional(setClauses, params, "partition_queue", update.partitionQueue());
-    collectOptional(
-        setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
+        List<String> setClauses = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
 
-    setClauses.add("\"updated_at\" = ?");
-    params.add(System.currentTimeMillis());
-    params.add(name);
+        collectField(setClauses, params, "concurrency", update.concurrency());
+        collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
+        collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
+        collectField(
+            setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
+        collectField(setClauses, params, "partition_concurrency", update.partitionConcurrency());
+        collectField(
+            setClauses,
+            params,
+            "partition_worker_concurrency",
+            update.partitionWorkerConcurrency());
+        collectField(
+            setClauses, params, "partition_rate_limit_max", update.partitionRateLimitMax());
+        collectField(
+            setClauses,
+            params,
+            "partition_rate_limit_period_sec",
+            durationToSec(update.partitionRateLimitPeriod()));
+        collectOptional(setClauses, params, "priority_enabled", update.priorityEnabled());
+        // Partitioning is inferred from the per-partition limits, so the stored flag follows them
+        // on every write. Left alone it would go stale in both directions: unset on a queue that
+        // just gained its first partition limit, and still set on one that just lost its last.
+        // Carries the same gap bindQueueParams describes, until #507's dequeue slice.
+        setClauses.add("\"partition_queue\" = ?");
+        params.add(updated.isPartitioned());
+        collectOptional(
+            setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
-    String sql =
-        "UPDATE \"%s\".queues SET %s WHERE name = ?"
-            .formatted(ctx.schema(), String.join(", ", setClauses));
+        setClauses.add("\"updated_at\" = ?");
+        params.add(System.currentTimeMillis());
+        params.add(name);
 
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement ps = connection.prepareStatement(sql)) {
-      for (int i = 0; i < params.size(); i++) {
-        ps.setObject(i + 1, params.get(i));
+        String sql =
+            "UPDATE \"%s\".queues SET %s WHERE name = ?"
+                .formatted(ctx.schema(), String.join(", ", setClauses));
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+          for (int i = 0; i < params.size(); i++) {
+            ps.setObject(i + 1, params.get(i));
+          }
+          ps.executeUpdate();
+        }
+        connection.commit();
+        committed = true;
+      } finally {
+        if (!committed) {
+          connection.rollback();
+        }
       }
-      ps.executeUpdate();
     }
+  }
+
+  /**
+   * Refuses to carry a queue between the two partitioning modes by an update to its limits.
+   *
+   * <p>Under the deprecated {@code partitionQueue} flag the queue-wide limits are enforced per
+   * partition, so the two modes disagree about what {@code concurrency} means. A legacy queue that
+   * gained its first per-partition limit would silently rescope every limit the update did not
+   * mention, and one that then lost it again would come back unpartitioned, after which every
+   * enqueue carrying a partition key fails. Re-registration is the supported way across, which is
+   * what the message points at; this is Go's {@code requireNotLegacyPartitioned}.
+   */
+  @SuppressWarnings("removal") // reads the legacy partitionQueue option
+  private static void requireNotLegacyPartitioned(Queue current, QueueOptions update) {
+    if (current.isLegacyPartitioned()) {
+      var field = firstLimitSet(update);
+      if (field != null) {
+        throw new IllegalArgumentException(
+            ("cannot set %s on queue %s: it is registered with the deprecated partitionQueue"
+                    + " option, under which concurrency, workerConcurrency and rateLimit apply per"
+                    + " partition; re-register the queue with the partition limits instead")
+                .formatted(field, current.name()));
+      }
+    } else if (current.hasPartitionLimits() && update.partitionQueue().isPresent()) {
+      throw new IllegalArgumentException(
+          ("cannot set partitionQueue on queue %s: it is partitioned by its partition limits;"
+                  + " clear those instead")
+              .formatted(current.name()));
+    }
+  }
+
+  /** The first limit this update sets, named as the caller named it, or null if it sets none. */
+  private static @Nullable String firstLimitSet(QueueOptions update) {
+    if (update.concurrency().isPresent()) return "concurrency";
+    if (update.workerConcurrency().isPresent()) return "workerConcurrency";
+    if (update.rateLimitMax().isPresent() || update.rateLimitPeriod().isPresent()) {
+      return "rateLimit";
+    }
+    if (update.partitionConcurrency().isPresent()) return "partitionConcurrency";
+    if (update.partitionWorkerConcurrency().isPresent()) return "partitionWorkerConcurrency";
+    if (update.partitionRateLimitMax().isPresent() || update.partitionRateLimitPeriod().isPresent())
+      return "partitionRateLimit";
+    return null;
+  }
+
+  /**
+   * The queue a partial update would produce, built through the {@link Queue} constructor so it is
+   * checked by the same rules that reading the row back would apply.
+   */
+  @SuppressWarnings("removal") // reads the legacy partitionQueue option verbatim
+  private static Queue applyUpdate(Queue current, QueueOptions update) {
+    var updated =
+        new Queue(
+            current.name(),
+            intAfter(current.concurrency(), update.concurrency()),
+            intAfter(current.workerConcurrency(), update.workerConcurrency()),
+            update.priorityEnabled().orElse(current.priorityEnabled()),
+            // Carry the legacy flag's meaning, not the stored column: the column is derived, so
+            // on a queue partitioned by its limits it is already true and would read back as a
+            // request for legacy partitioning that the caller never made.
+            update.partitionQueue().orElse(current.isLegacyPartitioned()),
+            rateLimitAfter(current.rateLimit(), update.rateLimitMax(), update.rateLimitPeriod()),
+            intAfter(current.partitionConcurrency(), update.partitionConcurrency()),
+            intAfter(current.partitionWorkerConcurrency(), update.partitionWorkerConcurrency()),
+            rateLimitAfter(
+                current.partitionRateLimit(),
+                update.partitionRateLimitMax(),
+                update.partitionRateLimitPeriod()),
+            update.pollingInterval().orElse(current.pollingInterval()),
+            current.applicationName());
+    return updated;
+  }
+
+  /** The value a partial update leaves in a nullable integer column. */
+  private static @Nullable Integer intAfter(@Nullable Integer current, Field<Integer> update) {
+    return update.isPresent() ? update.get() : current;
+  }
+
+  /** The rate limit a partial update leaves, where either half may be set, cleared or untouched. */
+  private static Queue.@Nullable RateLimit rateLimitAfter(
+      Queue.@Nullable RateLimit current, Field<Integer> max, Field<Duration> period) {
+    Integer newMax = max.isPresent() ? max.get() : (current != null ? current.limit() : null);
+    Duration newPeriod =
+        period.isPresent() ? period.get() : (current != null ? current.period() : null);
+    if (newMax == null || newPeriod == null) return null;
+    return new Queue.RateLimit(newMax, newPeriod);
   }
 
   private static <T> void collectField(
@@ -663,9 +796,15 @@ public class QueuesDAO {
     }
   }
 
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
-  @SuppressWarnings("removal")
+  /** A rate limit from its two columns, or null when either is unset. */
+  private static Queue.@Nullable RateLimit rateLimitFromResultSet(
+      ResultSet rs, String maxColumn, String periodColumn) throws SQLException {
+    Integer max = rs.getObject(maxColumn, Integer.class);
+    Double periodSec = rs.getObject(periodColumn, Double.class);
+    if (max == null || periodSec == null) return null;
+    return new Queue.RateLimit(max, Duration.ofMillis((long) (periodSec * 1000)));
+  }
+
   private static Queue queueFromResultSet(ResultSet rs) throws SQLException {
     String name = rs.getString("name");
     Integer concurrency = rs.getObject("concurrency", Integer.class);
@@ -692,6 +831,9 @@ public class QueuesDAO {
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
+        rs.getObject("partition_concurrency", Integer.class),
+        rs.getObject("partition_worker_concurrency", Integer.class),
+        rateLimitFromResultSet(rs, "partition_rate_limit_max", "partition_rate_limit_period_sec"),
         pollingInterval,
         rs.getString("application_name"));
   }
@@ -715,6 +857,16 @@ public class QueuesDAO {
           new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
     }
 
+    Queue.RateLimit partitionRateLimit = null;
+    if (options.partitionRateLimitMax().isPresent()
+        && options.partitionRateLimitPeriod().isPresent()
+        && options.partitionRateLimitMax().get() != null
+        && options.partitionRateLimitPeriod().get() != null) {
+      partitionRateLimit =
+          new Queue.RateLimit(
+              options.partitionRateLimitMax().get(), options.partitionRateLimitPeriod().get());
+    }
+
     Duration pollingIntervalVal = options.pollingInterval().orElse(Queue.DEFAULT_POLLING_INTERVAL);
 
     return new Queue(
@@ -724,8 +876,25 @@ public class QueuesDAO {
         priorityEnabledVal,
         partitionQueueVal,
         rateLimit,
+        options.partitionConcurrency().isPresent() ? options.partitionConcurrency().get() : null,
+        options.partitionWorkerConcurrency().isPresent()
+            ? options.partitionWorkerConcurrency().get()
+            : null,
+        partitionRateLimit,
         pollingIntervalVal,
         null); // the owner is resolved and written separately by upsertQueue
+  }
+
+  /** Binds a rate limit's two columns, or two nulls, at {@code index} and {@code index + 1}. */
+  private static void setRateLimit(
+      PreparedStatement stmt, int index, Queue.@Nullable RateLimit rateLimit) throws SQLException {
+    if (rateLimit != null) {
+      stmt.setInt(index, rateLimit.limit());
+      stmt.setDouble(index + 1, rateLimit.period().toMillis() / 1000.0);
+    } else {
+      stmt.setNull(index, java.sql.Types.INTEGER);
+      stmt.setNull(index + 1, java.sql.Types.DOUBLE);
+    }
   }
 
   private static void setNullableInt(PreparedStatement stmt, int index, Integer value)

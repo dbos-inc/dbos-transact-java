@@ -136,43 +136,176 @@ public class DynamicQueuesTest {
   }
 
   @Test
-  public void aPerPartitionLimitIsRefusedUntilItCanBePersisted() throws Exception {
-    // The surface exists before the storage does. Refusing is the point: accepting would write a
-    // queue with no limit at all, and the caller would only find out much later, when a partition
-    // key was rejected by a queue they believe is partitioned.
+  public void aPerPartitionLimitRoundTrips() throws Exception {
+    // The refusal 7a shipped is gone: the columns exist now, so the limits are stored and read
+    // back rather than dropped.
     dbos.launch();
 
-    assertThrows(
-        UnsupportedOperationException.class,
-        () -> dbos.registerQueue("q-pp", QueueOptions.setPartitionConcurrency(2)));
+    dbos.registerQueue(
+        "q-pp",
+        QueueOptions.setPartitionConcurrency(4)
+            .andPartitionWorkerConcurrency(2)
+            .andPartitionRateLimit(5, Duration.ofSeconds(30)));
 
-    dbos.registerQueue("q-pp-ok", QueueOptions.setConcurrency(2));
-    assertThrows(
-        UnsupportedOperationException.class,
-        () -> dbos.updateQueue("q-pp-ok", QueueOptions.setPartitionWorkerConcurrency(1)));
-    assertThrows(
-        UnsupportedOperationException.class,
-        () ->
-            dbos.updateQueue(
-                "q-pp-ok", QueueOptions.setPartitionRateLimit(1, Duration.ofSeconds(1))));
+    var q = dbos.findQueue("q-pp").orElseThrow();
+    assertEquals(4, q.partitionConcurrency());
+    assertEquals(2, q.partitionWorkerConcurrency());
+    assertEquals(5, q.partitionRateLimit().limit());
+    assertEquals(Duration.ofSeconds(30), q.partitionRateLimit().period());
+    assertTrue(q.isPartitioned(), "a per-partition limit partitions the queue");
+    assertFalse(q.isLegacyPartitioned());
   }
 
   @Test
-  public void aQueueWrittenByUpdateStaysReadable() throws Exception {
-    // The compact constructor is also the read path, so a rule it enforces that the write path
-    // does not is a way to store a row nobody can load -- which takes listQueues with it.
+  // Reads the deprecated stored flag on purpose: it is the column under test.
+  @SuppressWarnings("removal")
+  public void thePartitionQueueColumnFollowsTheLimits() throws Exception {
+    // The stored flag is derived on every write, in both directions. Other SDKs read this column
+    // to decide whether to dequeue per partition, so a stale value is visible across languages.
     dbos.launch();
 
-    dbos.registerQueue("q-readback", QueueOptions.setConcurrency(2));
-    dbos.updateQueue("q-readback", QueueOptions.setWorkerConcurrency(5));
+    dbos.registerQueue("q-derived", QueueOptions.setConcurrency(4));
+    assertFalse(dbos.findQueue("q-derived").orElseThrow().partitioningEnabled());
 
-    var q =
-        dbos.listQueues().stream()
-            .filter(x -> x.name().equals("q-readback"))
-            .findFirst()
-            .orElseThrow();
-    assertEquals(2, q.concurrency());
-    assertEquals(5, q.workerConcurrency());
+    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(2));
+    assertTrue(
+        dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
+        "gaining a partition limit sets the flag");
+
+    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(null));
+    assertFalse(
+        dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
+        "losing the last partition limit clears it again");
+  }
+
+  @Test
+  public void anUpdateIsValidatedAgainstTheRowItWouldProduce() throws Exception {
+    // A cross-field rule can only be checked against the values already stored, so the update is
+    // applied to the current row and the result is validated before anything is written.
+    dbos.launch();
+
+    dbos.registerQueue("q-cross", QueueOptions.setConcurrency(2));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-cross", QueueOptions.setWorkerConcurrency(5)));
+
+    var unchanged = dbos.findQueue("q-cross").orElseThrow();
+    assertEquals(2, unchanged.concurrency());
+    assertNull(unchanged.workerConcurrency(), "the rejected update must not have been written");
+
+    // The same field is fine once the row it lands on allows it.
+    dbos.updateQueue("q-cross", QueueOptions.setConcurrency(8).andWorkerConcurrency(5));
+    var widened = dbos.findQueue("q-cross").orElseThrow();
+    assertEquals(8, widened.concurrency());
+    assertEquals(5, widened.workerConcurrency());
+  }
+
+  @Test
+  public void registrationIsValidatedAgainstTheSameRules() throws Exception {
+    // The cross-field rule guards both write paths, from call sites a few lines apart in
+    // QueuesDAO. anUpdateIsValidatedAgainstTheRowItWouldProduce covers the update; this covers
+    // the insert, so dropping either call fails a test rather than only one of them.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg", QueueOptions.setConcurrency(2).andWorkerConcurrency(5)));
+    assertTrue(dbos.findQueue("q-reg").isEmpty(), "the rejected queue must not have been written");
+
+    dbos.registerQueue("q-reg", QueueOptions.setConcurrency(5).andWorkerConcurrency(2));
+    assertEquals(2, dbos.findQueue("q-reg").orElseThrow().workerConcurrency());
+  }
+
+  @Test
+  public void aQueueWideRateLimitMustBeWhole() throws Exception {
+    // The other half of what the constructor cannot check. A stored row with a zero limit has to
+    // stay loadable -- the constructor is the read path -- so the write paths are the only place
+    // this rule is ever applied, on both of them.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ZERO)));
+    assertTrue(dbos.findQueue("q-rl").isEmpty(), "neither rejected queue may have been written");
+
+    dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+    assertEquals(
+        5,
+        dbos.findQueue("q-rl").orElseThrow().rateLimit().limit(),
+        "the rejected update must not have been written");
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
+  @SuppressWarnings("removal")
+  public void aLegacyPartitionedQueueKeepsItsMeaningAcrossAnUnrelatedUpdate() throws Exception {
+    // partition_queue is derived, so a legacy queue reads back with the flag set. Feeding that
+    // back in as-is would be indistinguishable from the caller asking for legacy partitioning,
+    // which is why applyUpdate carries isLegacyPartitioned() rather than the stored column.
+    dbos.launch();
+
+    dbos.registerQueue("q-legacy", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+    assertTrue(dbos.findQueue("q-legacy").orElseThrow().isLegacyPartitioned());
+
+    dbos.updateQueue("q-legacy", QueueOptions.setPriorityEnabled(true));
+
+    var after = dbos.findQueue("q-legacy").orElseThrow();
+    assertTrue(after.isLegacyPartitioned(), "still legacy, not promoted by its own stored flag");
+    assertEquals(4, after.resolveLimits().partitionConcurrency());
+    assertNull(after.resolveLimits().concurrency());
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
+  @SuppressWarnings("removal")
+  public void aLegacyPartitionedQueueRefusesLimitUpdates() throws Exception {
+    // The two modes disagree about what concurrency means, so an update may not carry a queue
+    // between them. Without this, a legacy queue that gained a per-partition limit and then lost
+    // it again would come back unpartitioned, and every enqueue with a partition key would fail.
+    dbos.launch();
+
+    dbos.registerQueue("q-legacy-lock", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setPartitionConcurrency(2)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setConcurrency(9)));
+
+    var after = dbos.findQueue("q-legacy-lock").orElseThrow();
+    assertTrue(after.isLegacyPartitioned(), "neither rejected update may have been written");
+    assertEquals(4, after.resolveLimits().partitionConcurrency());
+
+    // Only its limits are frozen; everything else still updates.
+    dbos.updateQueue("q-legacy-lock", QueueOptions.setPriorityEnabled(true));
+    assertTrue(dbos.findQueue("q-legacy-lock").orElseThrow().priorityEnabled());
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: refusing to set it is what this covers.
+  @SuppressWarnings("removal")
+  public void aQueuePartitionedByItsLimitsRefusesTheLegacyFlag() throws Exception {
+    // The other direction. The flag is derived, so setting it on a queue that already partitions
+    // by its limits could only mean a demotion to legacy enforcement the caller cannot have meant.
+    dbos.launch();
+
+    dbos.registerQueue("q-limits", QueueOptions.setPartitionConcurrency(2));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-limits", QueueOptions.setPartitionQueue(true)));
+
+    var after = dbos.findQueue("q-limits").orElseThrow();
+    assertFalse(after.isLegacyPartitioned());
+    assertEquals(2, after.resolveLimits().partitionConcurrency());
   }
 
   @Test

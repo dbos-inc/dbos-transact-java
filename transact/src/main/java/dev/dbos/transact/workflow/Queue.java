@@ -231,6 +231,28 @@ public record Queue(
     return partitioningEnabled && !hasPartitionLimits();
   }
 
+  /**
+   * Checks the rules that can only be applied to a queue being written, not to one being read.
+   *
+   * <p>Go, Python and TypeScript enforce these in the constructor. Java cannot, because its
+   * constructor is also the read path -- {@code QueuesDAO.queueFromResultSet} builds a {@code
+   * Queue} out of every row it loads -- and Java accepted {@code workerConcurrency > concurrency}
+   * for long enough that such rows exist. Enforcing them on read would make those rows unloadable,
+   * and one unloadable row stops queue discovery for the whole process, silently.
+   *
+   * <p>So they are enforced where a row is created or changed instead, which is where the other
+   * three SDKs enforce them too. A row already stored in violation keeps loading, and is only
+   * rejected if something tries to write it again.
+   *
+   * @throws IllegalArgumentException if this queue may not be written
+   */
+  public void validateForRegistration() {
+    if (workerConcurrency != null && concurrency != null && workerConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to workerConcurrency");
+    validateRateLimit("rateLimit", rateLimit);
+  }
+
   /** Maps each of the queue's limits to the scope it is enforced at. */
   public @NonNull ResolvedLimits resolveLimits() {
     if (isLegacyPartitioned()) {

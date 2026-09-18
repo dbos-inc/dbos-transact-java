@@ -254,7 +254,10 @@ public class QueueService implements AutoCloseable {
 
     @Override
     // Reads the stored partitioning flag directly; moves to isPartitioned() in #507's
-    // dequeue slice, which is where this call site changes.
+    // dequeue slice, which is where this call site changes. Until then the flag is derived from
+    // the per-partition limits on write but still interpreted here as the legacy mode, so a queue
+    // partitioned by its limits is polled per partition with its queue-wide limits enforced
+    // within each one. QueuesDAO.bindQueueParams has the whole of it.
     @SuppressWarnings("removal")
     public void run() {
       if (execServiceRef.get() == null) return;
