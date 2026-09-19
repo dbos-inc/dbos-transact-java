@@ -1818,6 +1818,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   private void validateQueue(String queueName, String queuePartitionKey) {
     if (queueName == null || queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
       if (queuePartitionKey != null) {

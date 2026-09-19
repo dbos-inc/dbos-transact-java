@@ -9,7 +9,13 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Property definition for a DBOS workflow queue. Provides options for a name, concurrency and rate
- * limits, prioritization behavior and partitioned behavior
+ * limits, prioritization behavior and partitioned behavior.
+ *
+ * <p>A queue carries flow control at two scopes at once. The queue-wide limits ({@code
+ * concurrency}, {@code workerConcurrency}, {@code rateLimit}) bound the queue as a whole, while the
+ * per-partition limits ({@code partitionConcurrency}, {@code partitionWorkerConcurrency}, {@code
+ * partitionRateLimit}) bound each partition key independently. Setting any per-partition limit
+ * partitions the queue; there is no separate switch for it.
  */
 public record Queue(
     @NonNull String name,
@@ -18,6 +24,9 @@ public record Queue(
     boolean priorityEnabled,
     boolean partitioningEnabled,
     @Nullable RateLimit rateLimit,
+    @Nullable Integer partitionConcurrency,
+    @Nullable Integer partitionWorkerConcurrency,
+    @Nullable RateLimit partitionRateLimit,
     @NonNull Duration pollingInterval,
     /**
      * The application that owns this queue and polls it, as recorded in the system database, or
@@ -32,6 +41,21 @@ public record Queue(
   /** Rate limit parameter structure for DBOS workflow queues */
   public record RateLimit(int limit, Duration period) {}
 
+  /**
+   * Every limit on a queue, mapped to the scope it is actually enforced at.
+   *
+   * <p>This is what the dequeue reads, rather than the raw fields: a legacy {@code
+   * partitioningEnabled} queue records its limits in the queue-wide columns but enforces them per
+   * partition, so the two differ for exactly that case.
+   */
+  public record ResolvedLimits(
+      @Nullable Integer concurrency,
+      @Nullable Integer workerConcurrency,
+      @Nullable RateLimit rateLimit,
+      @Nullable Integer partitionConcurrency,
+      @Nullable Integer partitionWorkerConcurrency,
+      @Nullable RateLimit partitionRateLimit) {}
+
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
     Objects.requireNonNull(pollingInterval, "Queue pollingInterval must not be null");
@@ -41,8 +65,85 @@ public record Queue(
     if (workerConcurrency != null && workerConcurrency <= 0)
       throw new IllegalArgumentException(
           "If specified, queue workerConcurrency must be greater than zero");
+    if (partitionConcurrency != null && partitionConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionConcurrency must be greater than zero");
+    if (partitionWorkerConcurrency != null && partitionWorkerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionWorkerConcurrency must be greater than zero");
+    // A limit enforced at a narrower scope can never usefully exceed one enforced at a wider
+    // scope: the wider limit would bind first and the narrower one would never be reached.
+    if (partitionWorkerConcurrency != null
+        && partitionConcurrency != null
+        && partitionWorkerConcurrency > partitionConcurrency)
+      throw new IllegalArgumentException(
+          "Queue partitionConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionWorkerConcurrency != null
+        && workerConcurrency != null
+        && partitionWorkerConcurrency > workerConcurrency)
+      throw new IllegalArgumentException(
+          "Queue workerConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionConcurrency != null && concurrency != null && partitionConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionConcurrency");
+    if (partitionWorkerConcurrency != null
+        && concurrency != null
+        && partitionWorkerConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionWorkerConcurrency");
+    // Only the per-partition rate limit is validated here. The queue-wide one is not, and
+    // neither is concurrency >= workerConcurrency, though Go, Python and TypeScript check both:
+    // this constructor is also the read path (QueuesDAO.queueFromResultSet builds through it),
+    // so a rule added here rejects rows already in the database, and one unreadable row takes
+    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules land
+    // with the write-side guard, in the persistence slice. A per-partition column cannot appear
+    // in an existing row, so validating it has nothing to reject.
+    validateRateLimit("partitionRateLimit", partitionRateLimit);
     if (pollingInterval.isNegative() || pollingInterval.isZero())
       throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
+  }
+
+  private static void validateRateLimit(String name, @Nullable RateLimit rateLimit) {
+    if (rateLimit == null) return;
+    if (rateLimit.limit() <= 0)
+      throw new IllegalArgumentException(
+          "Queue %s limit must be greater than zero".formatted(name));
+    if (rateLimit.period() == null
+        || rateLimit.period().isNegative()
+        || rateLimit.period().isZero())
+      throw new IllegalArgumentException(
+          "Queue %s period must be greater than zero".formatted(name));
+  }
+
+  /**
+   * Constructs a queue with no per-partition limits.
+   *
+   * @deprecated A {@code Queue} is what {@link dev.dbos.transact.DBOS#findQueue(String)} returns,
+   *     not something to build. Register with {@link dev.dbos.transact.DBOS#registerQueue(String,
+   *     QueueOptions)}.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public Queue(
+      @NonNull String name,
+      @Nullable Integer concurrency,
+      @Nullable Integer workerConcurrency,
+      boolean priorityEnabled,
+      boolean partitioningEnabled,
+      @Nullable RateLimit rateLimit,
+      @NonNull Duration pollingInterval,
+      @Nullable String applicationName) {
+    this(
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        null,
+        null,
+        null,
+        pollingInterval,
+        applicationName);
   }
 
   /**
@@ -86,10 +187,62 @@ public record Queue(
   }
 
   /**
-   * @return true if the Queue has rate-limiting enforced
+   * Whether the deprecated partitioning flag is set on this queue, as stored. It says that the
+   * queue partitions, but not why: once the stored column is derived from the per-partition limits,
+   * a queue that partitions because of a limit will read back with the flag set too.
+   *
+   * @deprecated Use {@link #isPartitioned()} to ask whether the queue dequeues per partition, or
+   *     {@link #isLegacyPartitioned()} to ask whether its queue-wide limits are enforced per
+   *     partition.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public boolean partitioningEnabled() {
+    return partitioningEnabled;
+  }
+
+  /**
+   * @return true if the Queue has queue-wide rate-limiting enforced
    */
   public boolean hasLimiter() {
     return rateLimit != null;
+  }
+
+  /**
+   * @return true if any per-partition limit is set
+   */
+  public boolean hasPartitionLimits() {
+    return partitionConcurrency != null
+        || partitionWorkerConcurrency != null
+        || partitionRateLimit != null;
+  }
+
+  /**
+   * @return true if the queue dequeues one partition key at a time
+   */
+  public boolean isPartitioned() {
+    return partitioningEnabled || hasPartitionLimits();
+  }
+
+  /**
+   * @return true if this is the deprecated mode in which the queue-wide limits are enforced per
+   *     partition rather than across the queue
+   */
+  public boolean isLegacyPartitioned() {
+    return partitioningEnabled && !hasPartitionLimits();
+  }
+
+  /** Maps each of the queue's limits to the scope it is enforced at. */
+  public @NonNull ResolvedLimits resolveLimits() {
+    if (isLegacyPartitioned()) {
+      return new ResolvedLimits(null, null, null, concurrency, workerConcurrency, rateLimit);
+    }
+    return new ResolvedLimits(
+        concurrency,
+        workerConcurrency,
+        rateLimit,
+        partitionConcurrency,
+        partitionWorkerConcurrency,
+        partitionRateLimit);
   }
 
   /**
@@ -99,15 +252,14 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withName(@NonNull String name) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
@@ -118,15 +270,14 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withConcurrency(@Nullable Integer concurrency) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
@@ -137,15 +288,14 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withWorkerConcurrency(@Nullable Integer workerConcurrency) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
@@ -155,33 +305,31 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPriorityEnabled(boolean priorityEnabled) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
    * Produces a new Queue with partitioning enabled/disabled.
    *
-   * @deprecated Configure a queue with {@link QueueOptions} at registration.
+   * @deprecated Set a per-partition limit instead, which partitions the queue on its own.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPartitioningEnabled(boolean partitioningEnabled) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
@@ -192,15 +340,14 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withRateLimit(@Nullable RateLimit rateLimit) {
-    return new Queue(
+    return copyWith(
         name,
         concurrency,
         workerConcurrency,
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
-        pollingInterval,
-        applicationName);
+        pollingInterval);
   }
 
   /**
@@ -230,6 +377,25 @@ public record Queue(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPollingInterval(@NonNull Duration pollingInterval) {
+    return copyWith(
+        name,
+        concurrency,
+        workerConcurrency,
+        priorityEnabled,
+        partitioningEnabled,
+        rateLimit,
+        pollingInterval);
+  }
+
+  /** Rebuilds the queue from the fields the deprecated withers can change, carrying the rest. */
+  private Queue copyWith(
+      String name,
+      @Nullable Integer concurrency,
+      @Nullable Integer workerConcurrency,
+      boolean priorityEnabled,
+      boolean partitioningEnabled,
+      @Nullable RateLimit rateLimit,
+      Duration pollingInterval) {
     return new Queue(
         name,
         concurrency,
@@ -237,6 +403,9 @@ public record Queue(
         priorityEnabled,
         partitioningEnabled,
         rateLimit,
+        partitionConcurrency,
+        partitionWorkerConcurrency,
+        partitionRateLimit,
         pollingInterval,
         applicationName);
   }

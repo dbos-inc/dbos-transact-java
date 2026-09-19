@@ -253,6 +253,9 @@ public class QueueService implements AutoCloseable {
     }
 
     @Override
+    // Reads the stored partitioning flag directly; moves to isPartitioned() in #507's
+    // dequeue slice, which is where this call site changes.
+    @SuppressWarnings("removal")
     public void run() {
       if (execServiceRef.get() == null) return;
 

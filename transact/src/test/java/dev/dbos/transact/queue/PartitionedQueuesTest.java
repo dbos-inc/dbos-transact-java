@@ -77,6 +77,8 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   }
 }
 
+// Exercises the deprecated partitioning surface, which #507's later slices replace.
+@SuppressWarnings("removal")
 public class PartitionedQueuesTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

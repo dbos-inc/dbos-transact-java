@@ -402,6 +402,9 @@ public class QueuesDAO {
    * @param applicationName the application that owns the queue and polls it; null for this handle's
    *     own, which is a nameless handle's way of leaving the queue unclaimed
    */
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   public static boolean upsertQueue(
       DbContext ctx,
       String name,
@@ -409,6 +412,7 @@ public class QueuesDAO {
       boolean updateExisting,
       @Nullable String applicationName)
       throws SQLException {
+    refusePartitionLimits(options);
     Queue queue = queueFromOptions(name, options);
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
@@ -474,7 +478,28 @@ public class QueuesDAO {
     }
   }
 
+  /**
+   * Refuses options carrying a per-partition limit, which this slice cannot yet persist.
+   *
+   * <p>Deleted by the persistence slice of #507, which writes the columns. Until then the surface
+   * exists and the storage does not, and failing loudly beats writing a queue that silently has no
+   * limit -- the symptom of which arrives much later, as a partition key rejected by a queue the
+   * caller believes is partitioned.
+   */
+  private static void refusePartitionLimits(QueueOptions options) {
+    if (options.partitionConcurrency().isPresent()
+        || options.partitionWorkerConcurrency().isPresent()
+        || options.partitionRateLimitMax().isPresent()
+        || options.partitionRateLimitPeriod().isPresent()) {
+      throw new UnsupportedOperationException(
+          "Per-partition queue limits are not persisted yet; see dbos-transact-java#507");
+    }
+  }
+
   /** Binds a queue row's columns from {@code offset}, returning the next free index. */
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
     ps.setString(offset, queue.name());
@@ -563,8 +588,12 @@ public class QueuesDAO {
     }
   }
 
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   public static void updateQueue(DbContext ctx, String name, QueueOptions update)
       throws SQLException {
+    refusePartitionLimits(update);
     if (update.isEmpty()) return;
 
     List<String> setClauses = new ArrayList<>();
@@ -634,6 +663,9 @@ public class QueuesDAO {
     }
   }
 
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   private static Queue queueFromResultSet(ResultSet rs) throws SQLException {
     String name = rs.getString("name");
     Integer concurrency = rs.getObject("concurrency", Integer.class);
@@ -664,6 +696,9 @@ public class QueuesDAO {
         rs.getString("application_name"));
   }
 
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   private static Queue queueFromOptions(String name, QueueOptions options) {
     Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
     Integer workerConcurrencyVal =

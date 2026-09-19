@@ -136,6 +136,46 @@ public class DynamicQueuesTest {
   }
 
   @Test
+  public void aPerPartitionLimitIsRefusedUntilItCanBePersisted() throws Exception {
+    // The surface exists before the storage does. Refusing is the point: accepting would write a
+    // queue with no limit at all, and the caller would only find out much later, when a partition
+    // key was rejected by a queue they believe is partitioned.
+    dbos.launch();
+
+    assertThrows(
+        UnsupportedOperationException.class,
+        () -> dbos.registerQueue("q-pp", QueueOptions.setPartitionConcurrency(2)));
+
+    dbos.registerQueue("q-pp-ok", QueueOptions.setConcurrency(2));
+    assertThrows(
+        UnsupportedOperationException.class,
+        () -> dbos.updateQueue("q-pp-ok", QueueOptions.setPartitionWorkerConcurrency(1)));
+    assertThrows(
+        UnsupportedOperationException.class,
+        () ->
+            dbos.updateQueue(
+                "q-pp-ok", QueueOptions.setPartitionRateLimit(1, Duration.ofSeconds(1))));
+  }
+
+  @Test
+  public void aQueueWrittenByUpdateStaysReadable() throws Exception {
+    // The compact constructor is also the read path, so a rule it enforces that the write path
+    // does not is a way to store a row nobody can load -- which takes listQueues with it.
+    dbos.launch();
+
+    dbos.registerQueue("q-readback", QueueOptions.setConcurrency(2));
+    dbos.updateQueue("q-readback", QueueOptions.setWorkerConcurrency(5));
+
+    var q =
+        dbos.listQueues().stream()
+            .filter(x -> x.name().equals("q-readback"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(2, q.concurrency());
+    assertEquals(5, q.workerConcurrency());
+  }
+
+  @Test
   public void testUpdateQueue() throws Exception {
     dbos.launch();
 
