@@ -402,24 +402,6 @@ public class QueuesDAO {
    * @param applicationName the application that owns the queue and polls it; null for this handle's
    *     own, which is a nameless handle's way of leaving the queue unclaimed
    */
-  /**
-   * Refuses options carrying a per-partition limit, which this slice cannot yet persist.
-   *
-   * <p>Deleted by the persistence slice of #507, which writes the columns. Until then the surface
-   * exists and the storage does not, and failing loudly beats writing a queue that silently has no
-   * limit -- the symptom of which arrives much later, as a partition key rejected by a queue the
-   * caller believes is partitioned.
-   */
-  private static void refusePartitionLimits(QueueOptions options) {
-    if (options.partitionConcurrency().isPresent()
-        || options.partitionWorkerConcurrency().isPresent()
-        || options.partitionRateLimitMax().isPresent()
-        || options.partitionRateLimitPeriod().isPresent()) {
-      throw new UnsupportedOperationException(
-          "Per-partition queue limits are not persisted yet; see dbos-transact-java#507");
-    }
-  }
-
   // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
   // persistence and dequeue slices, which is where these call sites change.
   @SuppressWarnings("removal")
@@ -493,6 +475,24 @@ public class QueuesDAO {
         }
       }
       return inserted;
+    }
+  }
+
+  /**
+   * Refuses options carrying a per-partition limit, which this slice cannot yet persist.
+   *
+   * <p>Deleted by the persistence slice of #507, which writes the columns. Until then the surface
+   * exists and the storage does not, and failing loudly beats writing a queue that silently has no
+   * limit -- the symptom of which arrives much later, as a partition key rejected by a queue the
+   * caller believes is partitioned.
+   */
+  private static void refusePartitionLimits(QueueOptions options) {
+    if (options.partitionConcurrency().isPresent()
+        || options.partitionWorkerConcurrency().isPresent()
+        || options.partitionRateLimitMax().isPresent()
+        || options.partitionRateLimitPeriod().isPresent()) {
+      throw new UnsupportedOperationException(
+          "Per-partition queue limits are not persisted yet; see dbos-transact-java#507");
     }
   }
 

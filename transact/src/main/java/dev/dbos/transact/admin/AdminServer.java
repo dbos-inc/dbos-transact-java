@@ -6,10 +6,12 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +23,7 @@ import java.util.stream.Collectors;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.core.type.TypeReference;
@@ -146,7 +149,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void workflowQueuesMetadata(HttpExchange exchange) throws IOException {
-    var queues = dbosExecutor.getStaticQueues();
+    var queues = dbosExecutor.getStaticQueues().stream().map(QueueOutput::from).toList();
     sendMappedJson(exchange, 200, queues);
   }
 
@@ -310,4 +313,32 @@ public class AdminServer implements AutoCloseable {
   record ForkRequest(Integer start_step, String new_workflow_id, String application_version) {}
 
   record ForkResponse(String workflow_id) {}
+
+  // The response body of /dbos-workflow-queues-metadata. Serializing Queue itself made every
+  // component name a wire name, so the per-partition limits became keys here the moment they
+  // were added to the record.
+  record QueueOutput(
+      String name,
+      @Nullable Integer concurrency,
+      @Nullable Integer workerConcurrency,
+      boolean priorityEnabled,
+      boolean partitioningEnabled,
+      Queue.@Nullable RateLimit rateLimit,
+      Duration pollingInterval,
+      @Nullable String applicationName) {
+
+    // Reads the deprecated stored flag: it is what this payload has always carried.
+    @SuppressWarnings("removal")
+    static QueueOutput from(Queue q) {
+      return new QueueOutput(
+          q.name(),
+          q.concurrency(),
+          q.workerConcurrency(),
+          q.priorityEnabled(),
+          q.partitioningEnabled(),
+          q.rateLimit(),
+          q.pollingInterval(),
+          q.applicationName());
+    }
+  }
 }
