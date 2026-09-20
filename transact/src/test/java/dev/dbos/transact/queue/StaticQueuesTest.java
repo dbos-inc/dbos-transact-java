@@ -82,6 +82,73 @@ public class StaticQueuesTest {
   }
 
   @Test
+  public void staticRegistrationAppliesTheWriteTimeRules() throws Exception {
+    // The Queue constructor deliberately accepts these, because it is also the row-reading path,
+    // so a queue built by hand reaches this registry unchecked. Registering after launch refuses
+    // them; registering in memory has to refuse the same configurations, or which registration
+    // path a queue took would decide whether its limits were checked at all.
+    var zeroLimit =
+        new Queue(
+            "static-rl-max",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(0, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroLimit));
+
+    var zeroPeriod =
+        new Queue(
+            "static-rl-period",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ZERO),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroPeriod));
+
+    var workerOverQueue =
+        new Queue(
+            "static-wc",
+            2,
+            5,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(workerOverQueue));
+
+    var valid =
+        new Queue(
+            "static-ok",
+            5,
+            2,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    dbos.registerQueue(valid);
+  }
+
+  @Test
   public void testQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);

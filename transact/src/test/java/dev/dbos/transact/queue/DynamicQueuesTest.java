@@ -17,6 +17,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
@@ -240,6 +241,57 @@ public class DynamicQueuesTest {
         5,
         dbos.findQueue("q-rl").orElseThrow().rateLimit().limit(),
         "the rejected update must not have been written");
+  }
+
+  @Test
+  public void aRateLimitIsUpdatedAsAPairOrNotAtAll() throws Exception {
+    // The UPDATE writes only the columns the caller supplied, so a half-set result cannot be read
+    // as no limit: that would validate an unlimited queue and store one column of a limit, and a
+    // later update supplying the other half would complete a live limit neither update checked.
+    dbos.launch();
+    dbos.registerQueue("q-half", QueueOptions.empty().andConcurrency(4));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(0))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.updateQueue(
+                "q-half", QueueOptions.empty().withRateLimitPeriod(Field.of(Duration.ZERO))));
+    assertNull(
+        dbos.findQueue("q-half").orElseThrow().rateLimit(),
+        "no half of a rate limit may have been written");
+
+    // The same for the partition limits, where the derived partitioning flag would have gone out
+    // with the half-written column, computed from a limit this saw as absent.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.updateQueue(
+                "q-half", QueueOptions.empty().withPartitionRateLimitMax(Field.of(2))));
+    var afterPartitionHalf = dbos.findQueue("q-half").orElseThrow();
+    assertNull(afterPartitionHalf.partitionRateLimit());
+    assertFalse(
+        afterPartitionHalf.isPartitioned(),
+        "a refused partition limit may not have partitioned the queue");
+
+    // Both halves together are the supported way in, and one half of an existing limit may still
+    // be changed on its own: the other half carries over from the row, so the pair stays whole.
+    dbos.updateQueue("q-half", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(7)));
+    var updated = dbos.findQueue("q-half").orElseThrow();
+    assertEquals(7, updated.rateLimit().limit());
+    assertEquals(Duration.ofSeconds(1), updated.rateLimit().period());
+
+    // Clearing is a pair too: dropping only the max would leave the period behind in the row.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(null))));
+    assertEquals(7, dbos.findQueue("q-half").orElseThrow().rateLimit().limit());
+
+    dbos.updateQueue("q-half", QueueOptions.empty().andRateLimit(null, null));
+    assertNull(dbos.findQueue("q-half").orElseThrow().rateLimit());
   }
 
   @Test

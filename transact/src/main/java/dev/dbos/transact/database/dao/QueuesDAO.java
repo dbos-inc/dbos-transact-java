@@ -732,10 +732,17 @@ public class QueuesDAO {
             // on a queue partitioned by its limits it is already true and would read back as a
             // request for legacy partitioning that the caller never made.
             update.partitionQueue().orElse(current.isLegacyPartitioned()),
-            rateLimitAfter(current.rateLimit(), update.rateLimitMax(), update.rateLimitPeriod()),
+            rateLimitAfter(
+                current.name(),
+                "rateLimit",
+                current.rateLimit(),
+                update.rateLimitMax(),
+                update.rateLimitPeriod()),
             intAfter(current.partitionConcurrency(), update.partitionConcurrency()),
             intAfter(current.partitionWorkerConcurrency(), update.partitionWorkerConcurrency()),
             rateLimitAfter(
+                current.name(),
+                "partitionRateLimit",
                 current.partitionRateLimit(),
                 update.partitionRateLimitMax(),
                 update.partitionRateLimitPeriod()),
@@ -749,13 +756,32 @@ public class QueuesDAO {
     return update.isPresent() ? update.get() : current;
   }
 
-  /** The rate limit a partial update leaves, where either half may be set, cleared or untouched. */
+  /**
+   * The rate limit a partial update leaves, where either half may be set, cleared or untouched.
+   *
+   * <p>A result with exactly one half set is refused rather than read as no limit. The UPDATE
+   * writes only the columns the caller supplied, so collapsing such a result to null would validate
+   * a queue with no limit while storing one half of one: {@code rateLimitMax = 0} alone passes as
+   * null here and lands in the row, and a later update supplying only the period then completes a
+   * live limit that neither update ever validated as a pair. For the partition limits the derived
+   * {@code partition_queue} flag would go out with it, computed from a limit this saw as absent.
+   */
   private static Queue.@Nullable RateLimit rateLimitAfter(
-      Queue.@Nullable RateLimit current, Field<Integer> max, Field<Duration> period) {
+      String queue,
+      String name,
+      Queue.@Nullable RateLimit current,
+      Field<Integer> max,
+      Field<Duration> period) {
     Integer newMax = max.isPresent() ? max.get() : (current != null ? current.limit() : null);
     Duration newPeriod =
         period.isPresent() ? period.get() : (current != null ? current.period() : null);
-    if (newMax == null || newPeriod == null) return null;
+    if (newMax == null && newPeriod == null) return null;
+    if (newMax == null || newPeriod == null) {
+      throw new IllegalArgumentException(
+          ("cannot leave queue %s with half of %s: %sMax and %sPeriod are set and cleared"
+                  + " together")
+              .formatted(queue, name, name, name));
+    }
     return new Queue.RateLimit(newMax, newPeriod);
   }
 

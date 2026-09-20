@@ -26,14 +26,11 @@ public class QueueRegistry {
           String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
     }
 
-    if (queue.concurrency() != null
-        && queue.workerConcurrency() != null
-        && queue.workerConcurrency() > queue.concurrency()) {
-      throw new IllegalArgumentException(
-          String.format(
-              "workerConcurrency must be less than or equal to concurrency for queue %s",
-              queue.name()));
-    }
+    // The same write-time rules the database-backed path applies. The Queue constructor cannot
+    // enforce them, because it is also the read path -- see validateForRegistration -- so a queue
+    // built by hand for this registry reaches here unchecked, and until now a zero rate-limit max
+    // or period was accepted here while the same configuration was refused after launch.
+    queue.validateForRegistration();
 
     // Per-partition limits are a database-backed feature, and permanently so. An in-memory queue
     // is polled from this map and never written, so the partitioning flag other SDKs read is
