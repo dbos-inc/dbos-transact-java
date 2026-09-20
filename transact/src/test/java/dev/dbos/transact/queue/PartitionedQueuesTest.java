@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
@@ -621,6 +622,14 @@ public class PartitionedQueuesTest {
     impl.blockingLatch.countDown();
     assertEquals(orphan.workflowId(), orphan.getResult());
 
+    // Hold the listener off across the enqueue and the update. The latch is already down, so a
+    // poll landing in that window would claim this row and run it to completion while the queue
+    // is still unpartitioned -- which is not what this test is about, and would fail it.
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.pause();
+    // Long enough for a poll already in flight when pause() was set to have finished.
+    Thread.sleep(500);
+
     var stranded =
         dbos.startWorkflow(
             () -> proxy.blockedWorkflow(), new StartWorkflowOptions().withQueue(queue));
@@ -630,6 +639,9 @@ public class PartitionedQueuesTest {
     assertTrue(dbos.findQueue(queue).orElseThrow().isPartitioned());
 
     // getQueuePartitions reads the keys present, and this row has none, so no sweep reaches it.
+    // Polling resumes here, against the partitioned queue, so the sweeps that follow are the ones
+    // the assertion is about.
+    queueService.unpause();
     Thread.sleep(1_000);
     assertEquals(
         WorkflowState.ENQUEUED,

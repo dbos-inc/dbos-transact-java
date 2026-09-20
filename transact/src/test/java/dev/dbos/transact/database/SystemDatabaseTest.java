@@ -2810,6 +2810,56 @@ public class SystemDatabaseTest {
         "global-concurrency queue must use REPEATABLE READ");
   }
 
+  /** A queue partitioned by its limits, which only the full constructor can express. */
+  private static Queue partitionedQueue(
+      String name, Integer concurrency, Integer partitionConcurrency) {
+    return new Queue(
+        name,
+        concurrency,
+        null,
+        false,
+        false,
+        null,
+        partitionConcurrency,
+        null,
+        null,
+        Queue.DEFAULT_POLLING_INTERVAL,
+        null);
+  }
+
+  @Test
+  public void testQueueWideBudgetInAPartitionUsesSerializable() throws SQLException {
+    // A queue-wide budget spent one partition at a time is a write skew: each partition's sweep
+    // reads the same budget and claims against its own snapshot, so together they overshoot it.
+    // REPEATABLE READ does not rule that out; only serializability does. Without a partition
+    // there is nothing to skew across, which the two tests above cover at their own levels.
+    Queue queue = partitionedQueue("iso-partition-gc", 3, 1);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_SERIALIZABLE,
+        ds.lastIsolationLevel,
+        "a queue-wide budget claimed within one partition must use SERIALIZABLE");
+  }
+
+  @Test
+  public void testPartitionLimitAloneUsesRepeatableRead() throws SQLException {
+    // A per-partition budget is counted within the partition being swept, so the sweeps do not
+    // share it and a consistent snapshot is enough. This pins the boundary: the escalation above
+    // must follow the queue-wide budget, not the presence of a partition key.
+    Queue queue = partitionedQueue("iso-partition-only", null, 2);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_REPEATABLE_READ,
+        ds.lastIsolationLevel,
+        "a partition-scoped budget must not escalate to SERIALIZABLE");
+  }
+
   @Test
   public void testRateLimitBoundsDequeueBatch() throws SQLException {
     // A rate-limited queue must ask for only as many rows as its window still has slots for.
