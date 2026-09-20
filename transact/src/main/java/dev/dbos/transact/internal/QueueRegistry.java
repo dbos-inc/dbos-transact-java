@@ -35,15 +35,19 @@ public class QueueRegistry {
               queue.name()));
     }
 
-    // The same refusal QueuesDAO makes for dynamic registration, which this path never reaches:
-    // a static queue is polled from memory and never written to the database. Nothing here
-    // enforces a per-partition limit yet -- every consumer still branches on the stored
-    // partitioningEnabled flag -- so a queue registered with one would be polled as though it
-    // were unpartitioned, and would reject the partition keys the caller then tried to enqueue
-    // with. Deleted by #507's dequeue slice, which is what makes the limits mean something.
+    // Per-partition limits are a database-backed feature, and permanently so. An in-memory queue
+    // is polled from this map and never written, so the partitioning flag other SDKs read is
+    // never stored for it, and its limits would be invisible to every other executor -- which is
+    // the opposite of what a limit shared across partitions means. Go has no in-memory queues at
+    // all, and this path is itself deprecated for removal, so the feature simply does not extend
+    // to it: register the queue after launch to use these limits.
     if (queue.hasPartitionLimits()) {
-      throw new UnsupportedOperationException(
-          "Per-partition queue limits are not enforced yet; see dbos-transact-java#507");
+      throw new IllegalArgumentException(
+          String.format(
+              "cannot set per-partition limits on in-memory queue %s: they are supported only on"
+                  + " database-backed queues, registered with registerQueue(String, QueueOptions)"
+                  + " after launch",
+              queue.name()));
     }
 
     var queueName = queue.name();
