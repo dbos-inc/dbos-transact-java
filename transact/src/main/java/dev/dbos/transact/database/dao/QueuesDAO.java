@@ -265,7 +265,10 @@ public class QueuesDAO {
             ps.setString(3, executorId);
             ps.setLong(4, now);
             ps.setLong(5, now);
-            ps.setBoolean(6, queue.rateLimit() != null);
+            // Whichever scope the limiter is at: rateLimitRemaining counts only rows marked
+            // here, so a queue limited solely per partition would otherwise count none of its
+            // own claims and hand back the full limit every poll.
+            ps.setBoolean(6, limits.rateLimit() != null || limits.partitionRateLimit() != null);
             ps.setString(7, ctx.appName());
             ps.setLong(8, now);
             ps.setString(9, id);
@@ -718,6 +721,18 @@ public class QueuesDAO {
         }
         connection.commit();
         committed = true;
+
+        // Partitioning an existing queue strands whatever is already on it: those rows were
+        // enqueued without a partition key -- enqueue refused one while the queue was
+        // unpartitioned -- and a partitioned queue only dequeues from its partitions, which
+        // getQueuePartitions reads from the keys present. Go warns at the same transition.
+        if (!current.get().isPartitioned() && updated.isPartitioned()) {
+          logger.warn(
+              "Queue {} is now partitioned by its per-partition limits. Workflows already"
+                  + " enqueued on it have no partition key and will never be dequeued; drain the"
+                  + " queue before partitioning it, or re-enqueue them with a partition key.",
+              name);
+        }
       } finally {
         if (!committed) {
           connection.rollback();

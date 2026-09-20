@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,7 +28,8 @@ import org.junit.jupiter.api.Test;
  * rather than through a running queue service: the behaviour under test is which claims a poll
  * still makes after a failure, and a live scheduler would answer that only incidentally, on timing.
  */
-// Exercises the deprecated partitioning surface, which #507's later slices replace.
+// Builds its partitioned queue through the deprecated flag on purpose: the sweep is the same
+// either way, and this keeps the fixture to one field.
 @SuppressWarnings("removal")
 public class QueueServicePollTest {
 
@@ -74,8 +75,11 @@ public class QueueServicePollTest {
   @Test
   @DisplayName("a genuine error on a partition still stops the sweep")
   public void genuineErrorOnAPartitionPropagates() {
-    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
+    // The sweep visits partitions in a random order, so which one fails is not fixed: every
+    // partition throws, and the assertion is that the sweep stopped at the first rather than
+    // carrying on through the rest.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
         .thenThrow(new RuntimeException(new SQLException("disk on fire", "58030")));
 
     var task = taskFor(PARTITIONED);
@@ -86,8 +90,8 @@ public class QueueServicePollTest {
       // The poll loop classifies it there, logs at error, and lets the interval decay.
     }
 
-    verify(systemDatabase, never())
-        .startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong());
+    verify(systemDatabase, times(1))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
   }
 
   @Test

@@ -323,6 +323,45 @@ public class PartitionedQueuesTest {
     assertTrue(DBUtils.queueEntriesCleanedUp(dataSource));
   }
 
+  /**
+   * partitionRateLimit bounds each partition over its period, which needs the claim to be marked
+   * rate-limited: the limiter counts only rows carrying that mark, so a queue limited solely per
+   * partition would otherwise count none of its own claims and start the full limit every poll.
+   */
+  @Test
+  public void testPartitionRateLimitIsCountedAcrossPolls() throws Exception {
+    String queue = "partition-rate-limit-queue";
+    var impl = new PartitionLimitTestServiceImpl();
+    var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
+    dbos.launch();
+    dbos.registerQueue(
+        queue, QueueOptions.empty().andPartitionRateLimit(2, Duration.ofSeconds(30)));
+
+    var registered = dbos.findQueue(queue).orElseThrow();
+    assertTrue(registered.isPartitioned());
+
+    // Three on "a" and one on "b", with a period long enough that nothing refills mid-test. Two
+    // from "a" may start; the third waits for the next period. "b" has its own budget.
+    var a = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("a");
+    var b = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("b");
+    var a1 = dbos.startWorkflow(() -> proxy.blockedWorkflow(), a);
+    var a2 = dbos.startWorkflow(() -> proxy.blockedWorkflow(), a);
+    var a3 = dbos.startWorkflow(() -> proxy.blockedWorkflow(), a);
+    var b1 = dbos.startWorkflow(() -> proxy.blockedWorkflow(), b);
+
+    awaitCount(impl.started, 3, 10_000);
+    // Several polls have run by now; without the mark each would hand back the full limit again
+    // and a3 would have started too.
+    Thread.sleep(1_000);
+    assertEquals(3, impl.started.get(), "the partition limiter must hold across polls");
+    assertEquals(WorkflowState.ENQUEUED, a3.getStatus().status());
+
+    impl.blockingLatch.countDown();
+    assertEquals(a1.workflowId(), a1.getResult());
+    assertEquals(a2.workflowId(), a2.getResult());
+    assertEquals(b1.workflowId(), b1.getResult());
+  }
+
   /** partitionWorkerConcurrency bounds each partition on this executor and partitions the queue. */
   @Test
   public void testPartitionWorkerConcurrencyPartitionsTheQueue() throws Exception {
@@ -559,6 +598,43 @@ public class PartitionedQueuesTest {
     var after = dbos.findQueue(queue).orElseThrow();
     assertTrue(after.isLegacyPartitioned(), "neither rejected update may have been written");
     assertEquals(4, after.resolveLimits().partitionConcurrency());
+  }
+
+  /**
+   * Partitioning an existing queue abandons whatever is already enqueued on it: those rows have no
+   * partition key, and a partitioned queue dequeues only from the keys present. The update warns;
+   * this pins the behaviour the warning describes, so it cannot change unnoticed.
+   */
+  @Test
+  public void partitioningAQueueStrandsItsKeylessBacklog() throws Exception {
+    String queue = "newly-partitioned-queue";
+    var impl = new PartitionLimitTestServiceImpl();
+    var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
+    dbos.launch();
+    dbos.registerQueue(queue, QueueOptions.empty().andConcurrency(1));
+
+    // Enqueued while the queue is unpartitioned, so it has no partition key.
+    var orphan =
+        dbos.startWorkflow(
+            () -> proxy.blockedWorkflow(), new StartWorkflowOptions().withQueue(queue));
+    awaitCount(impl.started, 1, 10_000);
+    impl.blockingLatch.countDown();
+    assertEquals(orphan.workflowId(), orphan.getResult());
+
+    var stranded =
+        dbos.startWorkflow(
+            () -> proxy.blockedWorkflow(), new StartWorkflowOptions().withQueue(queue));
+    assertEquals(WorkflowState.ENQUEUED, stranded.getStatus().status());
+
+    dbos.updateQueue(queue, QueueOptions.empty().andPartitionConcurrency(1));
+    assertTrue(dbos.findQueue(queue).orElseThrow().isPartitioned());
+
+    // getQueuePartitions reads the keys present, and this row has none, so no sweep reaches it.
+    Thread.sleep(1_000);
+    assertEquals(
+        WorkflowState.ENQUEUED,
+        stranded.getStatus().status(),
+        "a keyless row is invisible to a partitioned sweep");
   }
 
   /** A limit enforced at a narrower scope may never exceed one enforced at a wider scope. */
