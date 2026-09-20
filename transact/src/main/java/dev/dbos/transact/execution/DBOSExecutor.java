@@ -551,6 +551,13 @@ public class DBOSExecutor implements AutoCloseable {
     return activeWorkflows.values().stream().filter(target::equals).count();
   }
 
+  /** Workflows this executor is running from {@code queueName}, across every partition of it. */
+  public long queueActiveCount(String queueName) {
+    return activeWorkflows.values().stream()
+        .filter(bucket -> queueName.equals(bucket.queueName()))
+        .count();
+  }
+
   // DBOS / DBOSClient API methods
 
   private void sendBulkInternal(
@@ -1830,13 +1837,13 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       var queue = findQueue(queueName);
       if (queue.isPresent()) {
-        if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
+        if (queue.get().isPartitioned() && queuePartitionKey == null) {
           throw new IllegalArgumentException(
               "queue %s partitions enabled, but no partition key was provided"
                   .formatted(queueName));
         }
 
-        if (!queue.get().partitioningEnabled() && queuePartitionKey != null) {
+        if (!queue.get().isPartitioned() && queuePartitionKey != null) {
           throw new IllegalArgumentException(
               "queue %s is not a partitioned queue, but a partition key was provided"
                   .formatted(queueName));

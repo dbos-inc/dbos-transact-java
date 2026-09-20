@@ -5,7 +5,9 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -169,15 +172,28 @@ public class QueueService implements AutoCloseable {
     }
 
     /**
-     * Claims from each partition in turn, skipping any a peer is already dequeuing.
+     * Sweeps every partition once, in a random order and within the queue-wide worker budget,
+     * skipping any partition a peer is already dequeuing.
+     *
+     * <p>A fixed order would let whichever partitions the database returned first spend a shared
+     * budget before the rest were reached, starving them for as long as they stayed behind in the
+     * ordering.
      *
      * <p>Contention listing the partitions is left to propagate: it is not scoped to any one
      * partition, so it backs the whole queue off.
      */
     void sweepPartitions() {
-      for (var partition : systemDatabase.getQueuePartitions(queue.name())) {
+      var partitions = new ArrayList<>(systemDatabase.getQueuePartitions(queue.name()));
+      Collections.shuffle(partitions, ThreadLocalRandom.current());
+      // Snapshot the running count once and carry this sweep's own claims forward in `claimed`:
+      // dispatch is asynchronous, so re-reading per partition would not yet see what the
+      // partitions before it just claimed, and every partition would spend the same budget.
+      long running = dbosExecutor.queueActiveCount(queue.name());
+      long claimed = 0;
+      for (var partition : partitions) {
+        if (workerBudget(running + claimed) <= 0) break;
         try {
-          processPartition(partition);
+          claimed += processPartition(partition, running + claimed);
         } catch (Exception e) {
           // Skip just this partition, no queue-wide backoff -- deliberately including 40001,
           // which would back off from a non-partitioned dequeue. The other partitions are
@@ -191,13 +207,35 @@ public class QueueService implements AutoCloseable {
       }
     }
 
-    void processPartition(String partition) {
+    /**
+     * Room left under this worker's queue-wide concurrency limit, given how many of its workflows
+     * are already running or claimed. Unbounded when only a per-partition worker limit is set,
+     * which the dequeue enforces within each partition instead.
+     */
+    private long workerBudget(long running) {
+      var workerConcurrency = queue.resolveLimits().workerConcurrency();
+      if (workerConcurrency == null) return Long.MAX_VALUE;
+      return Math.max(0, workerConcurrency - running);
+    }
+
+    /**
+     * Dequeues and dispatches one partition of the queue, or the whole queue when {@code partition}
+     * is null.
+     *
+     * @param running how many of this queue's workflows this worker is already running or has
+     *     claimed earlier in this sweep
+     * @return how many workflows this call claimed
+     */
+    int processPartition(@Nullable String partition, long running) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       if (!paused.get()) {
-        long localRunningCount = dbosExecutor.queueActiveCount(queue.name(), partition);
+        // The two worker-scoped limits count different things: workerConcurrency bounds the queue
+        // across every partition, partitionWorkerConcurrency bounds this partition alone.
+        long partitionLocalRunningCount =
+            partition == null ? running : dbosExecutor.queueActiveCount(queue.name(), partition);
         var workflowIds =
             systemDatabase.startQueuedWorkflows(
-                queue, executorId, appVersion, partition, localRunningCount);
+                queue, executorId, appVersion, partition, running, partitionLocalRunningCount);
         if (!workflowIds.isEmpty()) {
           logger.debug(
               "Retrieved {} workflows from {} partition of queue {}",
@@ -225,7 +263,9 @@ public class QueueService implements AutoCloseable {
                 e);
           }
         }
+        return workflowIds.size();
       }
+      return 0;
     }
 
     /**
@@ -253,12 +293,6 @@ public class QueueService implements AutoCloseable {
     }
 
     @Override
-    // Reads the stored partitioning flag directly; moves to isPartitioned() in #507's
-    // dequeue slice, which is where this call site changes. Until then the flag is derived from
-    // the per-partition limits on write but still interpreted here as the legacy mode, so a queue
-    // partitioned by its limits is polled per partition with its queue-wide limits enforced
-    // within each one. QueuesDAO.bindQueueParams has the whole of it.
-    @SuppressWarnings("removal")
     public void run() {
       if (execServiceRef.get() == null) return;
 
@@ -273,10 +307,10 @@ public class QueueService implements AutoCloseable {
           return;
         }
 
-        if (queue.partitioningEnabled()) {
+        if (queue.isPartitioned()) {
           sweepPartitions();
         } else {
-          processPartition(null);
+          processPartition(null, dbosExecutor.queueActiveCount(queue.name()));
         }
       } catch (Exception e) {
         backoffRequested = shouldBackOff(e);

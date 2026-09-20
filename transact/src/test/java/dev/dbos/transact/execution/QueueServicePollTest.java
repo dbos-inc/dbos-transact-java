@@ -61,9 +61,9 @@ public class QueueServicePollTest {
   @DisplayName("a contended partition costs its own turn, not the rest of the sweep")
   public void contendedPartitionDoesNotStrandTheOthers() {
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
         .thenThrow(contention("55P03"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong()))
         .thenReturn(List.of("wf-b"));
 
     taskFor(PARTITIONED).sweepPartitions();
@@ -75,7 +75,7 @@ public class QueueServicePollTest {
   @DisplayName("a genuine error on a partition still stops the sweep")
   public void genuineErrorOnAPartitionPropagates() {
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
         .thenThrow(new RuntimeException(new SQLException("disk on fire", "58030")));
 
     var task = taskFor(PARTITIONED);
@@ -86,17 +86,18 @@ public class QueueServicePollTest {
       // The poll loop classifies it there, logs at error, and lets the interval decay.
     }
 
-    verify(systemDatabase, never()).startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong());
+    verify(systemDatabase, never())
+        .startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong());
   }
 
   @Test
   @DisplayName("a workflow that will not start does not strand the rest of the batch")
   public void failedDispatchDoesNotStrandTheBatch() {
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong(), anyLong()))
         .thenReturn(List.of("wf-1", "wf-2"));
     when(dbosExecutor.executeWorkflowById("wf-1")).thenThrow(contention("40001"));
 
-    taskFor(PLAIN).processPartition(null);
+    taskFor(PLAIN).processPartition(null, 0);
 
     verify(dbosExecutor).executeWorkflowById("wf-2");
   }
