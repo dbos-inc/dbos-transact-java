@@ -61,10 +61,9 @@ public class StaticQueuesTest {
 
   @Test
   public void aPerPartitionLimitIsRefusedByStaticRegistrationToo() throws Exception {
-    // Static queues never reach QueuesDAO -- they are polled from memory and never written -- so
-    // the refusal there does not cover this path. Nothing enforces a per-partition limit yet, so
-    // a queue registered with one would be polled as unpartitioned and would then reject the
-    // partition keys the caller enqueued with.
+    // Per-partition limits are a database-backed feature. An in-memory queue is never written, so
+    // the flag other executors read is never stored for it and its limits could not be shared
+    // with them. The refusal is permanent, not a stand-in for enforcement that has yet to land.
     var queue =
         new Queue(
             "static-pp",
@@ -79,7 +78,74 @@ public class StaticQueuesTest {
             Queue.DEFAULT_POLLING_INTERVAL,
             null);
 
-    assertThrows(UnsupportedOperationException.class, () -> dbos.registerQueue(queue));
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(queue));
+  }
+
+  @Test
+  public void staticRegistrationAppliesTheWriteTimeRules() throws Exception {
+    // The Queue constructor deliberately accepts these, because it is also the row-reading path,
+    // so a queue built by hand reaches this registry unchecked. Registering after launch refuses
+    // them; registering in memory has to refuse the same configurations, or which registration
+    // path a queue took would decide whether its limits were checked at all.
+    var zeroLimit =
+        new Queue(
+            "static-rl-max",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(0, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroLimit));
+
+    var zeroPeriod =
+        new Queue(
+            "static-rl-period",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ZERO),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroPeriod));
+
+    var workerOverQueue =
+        new Queue(
+            "static-wc",
+            2,
+            5,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(workerOverQueue));
+
+    var valid =
+        new Queue(
+            "static-ok",
+            5,
+            2,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    dbos.registerQueue(valid);
   }
 
   @Test
