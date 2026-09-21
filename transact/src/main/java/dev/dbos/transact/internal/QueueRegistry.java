@@ -35,6 +35,17 @@ public class QueueRegistry {
               queue.name()));
     }
 
+    // The same refusal QueuesDAO makes for dynamic registration, which this path never reaches:
+    // a static queue is polled from memory and never written to the database. Nothing here
+    // enforces a per-partition limit yet -- every consumer still branches on the stored
+    // partitioningEnabled flag -- so a queue registered with one would be polled as though it
+    // were unpartitioned, and would reject the partition keys the caller then tried to enqueue
+    // with. Deleted by #507's dequeue slice, which is what makes the limits mean something.
+    if (queue.hasPartitionLimits()) {
+      throw new UnsupportedOperationException(
+          "Per-partition queue limits are not enforced yet; see dbos-transact-java#507");
+    }
+
     var queueName = queue.name();
     var previous = registry.putIfAbsent(queueName, queue);
 

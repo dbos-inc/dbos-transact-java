@@ -60,6 +60,29 @@ public class StaticQueuesTest {
   }
 
   @Test
+  public void aPerPartitionLimitIsRefusedByStaticRegistrationToo() throws Exception {
+    // Static queues never reach QueuesDAO -- they are polled from memory and never written -- so
+    // the refusal there does not cover this path. Nothing enforces a per-partition limit yet, so
+    // a queue registered with one would be polled as unpartitioned and would then reject the
+    // partition keys the caller enqueued with.
+    var queue =
+        new Queue(
+            "static-pp",
+            null,
+            null,
+            false,
+            false,
+            null,
+            2,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+
+    assertThrows(UnsupportedOperationException.class, () -> dbos.registerQueue(queue));
+  }
+
+  @Test
   public void testQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
@@ -421,8 +444,7 @@ public class StaticQueuesTest {
   @Test
   public void testWorkerConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
 
     dbos.launch();
@@ -495,8 +517,7 @@ public class StaticQueuesTest {
   @Test
   public void testGlobalConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);

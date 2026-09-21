@@ -13,6 +13,9 @@ public record QueueOutput(
     double polling_interval_sec,
     String application_name) {
 
+  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
+  // persistence and dequeue slices, which is where these call sites change.
+  @SuppressWarnings("removal")
   public static QueueOutput from(Queue q) {
     Queue.RateLimit rl = q.rateLimit();
     return new QueueOutput(

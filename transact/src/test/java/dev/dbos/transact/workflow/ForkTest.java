@@ -48,6 +48,9 @@ public class ForkTest {
   private String testPartitionQueue = "test-partition-queue";
 
   @BeforeEach
+  // Registers one partitioned queue through the deprecated flag; #507's later slices
+  // replace it with a per-partition limit.
+  @SuppressWarnings("removal")
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
