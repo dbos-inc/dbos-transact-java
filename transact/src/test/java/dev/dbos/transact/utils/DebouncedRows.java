@@ -103,18 +103,50 @@ public final class DebouncedRows {
     return workflowId;
   }
 
+  /** Plants the payload-table copy of a workflow's inputs, which readers prefer when present. */
+  public static void insertInput(DataSource dataSource, String workflowId, String inputs)
+      throws SQLException {
+    var sql =
+        """
+          INSERT INTO "dbos".workflow_input (workflow_uuid, inputs, retention_timestamp)
+          VALUES (?, ?, ?)
+        """;
+    try (Connection conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, inputs);
+      stmt.setLong(3, System.currentTimeMillis());
+      stmt.executeUpdate();
+    }
+  }
+
+  /** The payload-table copy of a workflow's inputs, or null if there is none. */
+  public static @Nullable String readInput(DataSource dataSource, String workflowId)
+      throws SQLException {
+    var sql = "SELECT inputs FROM \"dbos\".workflow_input WHERE workflow_uuid = ?";
+    try (Connection conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString("inputs") : null;
+      }
+    }
+  }
+
   /** What the row holds now: the columns a bounce or a transition touches. */
   public record State(
       String status,
       @Nullable String deduplicationId,
       @Nullable Long delayUntilEpochMs,
       String inputs,
-      @Nullable String serialization) {}
+      @Nullable String serialization,
+      @Nullable String applicationName) {}
 
   public static State read(DataSource dataSource, String workflowId) throws SQLException {
     var sql =
         """
-          SELECT status, deduplication_id, delay_until_epoch_ms, inputs, serialization
+          SELECT status, deduplication_id, delay_until_epoch_ms, inputs, serialization,
+                 application_name
             FROM "dbos".workflow_status
            WHERE workflow_uuid = ?
         """;
@@ -130,7 +162,8 @@ public final class DebouncedRows {
             rs.getString("deduplication_id"),
             rs.getObject("delay_until_epoch_ms", Long.class),
             rs.getString("inputs"),
-            rs.getString("serialization"));
+            rs.getString("serialization"),
+            rs.getString("application_name"));
       }
     }
   }

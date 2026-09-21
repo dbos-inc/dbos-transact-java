@@ -686,7 +686,10 @@ public class WorkflowDAO {
       String inputs,
       @Nullable String serialization)
       throws SQLException {
-    // CASE rather than LEAST, for portability across the databases the DAO supports.
+    // CASE rather than LEAST, for portability across the databases the DAO supports. An unclaimed
+    // row is claimed for this application, as its dequeue would: left unclaimed, every peer
+    // coalesces onto the one workflow and the last inputs win.
+    var claim = ctx.appName() == null ? "" : ",\n application_name = COALESCE(application_name, ?)";
     var sql =
         """
           UPDATE "%s".workflow_status
@@ -697,7 +700,7 @@ public class WorkflowDAO {
                  END,
                  inputs = ?,
                  serialization = ?,
-                 updated_at = ?
+                 updated_at = ?%s
            WHERE name = ?
              AND class_name = ?
              AND COALESCE(config_name, '') = ?
@@ -706,28 +709,60 @@ public class WorkflowDAO {
              AND status = ?
              AND is_debounced = TRUE
         """
-                .formatted(ctx.schema())
+                .formatted(ctx.schema(), claim)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
+    // The inputs are read back through the payload table first, so the bounce has to replace them
+    // there as well as on the status row, in the same transaction.
+    var inputsSql =
+        """
+          INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
+          VALUES (?, ?, ?)
+          ON CONFLICT (workflow_uuid) DO UPDATE SET inputs = EXCLUDED.inputs
+        """
+            .formatted(ctx.schema());
     try (var conn = ctx.getConnection()) {
-      try (var stmt = conn.prepareStatement(sql)) {
-        stmt.setLong(1, delayUntilEpochMs);
-        stmt.setLong(2, delayUntilEpochMs);
-        stmt.setString(3, inputs);
-        stmt.setString(4, serialization);
-        stmt.setLong(5, System.currentTimeMillis());
-        stmt.setString(6, workflowName);
-        stmt.setString(7, className);
-        stmt.setString(8, Objects.requireNonNullElse(instanceName, ""));
-        stmt.setString(9, queueName);
-        stmt.setString(10, deduplicationId);
-        stmt.setString(11, WorkflowState.DELAYED.name());
-        ctx.bindAppScope(stmt, 12);
-        try (var rs = stmt.executeQuery()) {
-          if (rs.next()) {
-            return new DebounceResult(rs.getString("workflow_uuid"), null);
-          }
-        }
+      var bounced =
+          SqlTransaction.call(
+              conn,
+              c -> {
+                String workflowId = null;
+                try (var stmt = c.prepareStatement(sql)) {
+                  long now = System.currentTimeMillis();
+                  int i = 1;
+                  stmt.setLong(i++, delayUntilEpochMs);
+                  stmt.setLong(i++, delayUntilEpochMs);
+                  stmt.setString(i++, inputs);
+                  stmt.setString(i++, serialization);
+                  stmt.setLong(i++, now);
+                  if (ctx.appName() != null) {
+                    stmt.setString(i++, ctx.appName());
+                  }
+                  stmt.setString(i++, workflowName);
+                  stmt.setString(i++, className);
+                  stmt.setString(i++, Objects.requireNonNullElse(instanceName, ""));
+                  stmt.setString(i++, queueName);
+                  stmt.setString(i++, deduplicationId);
+                  stmt.setString(i++, WorkflowState.DELAYED.name());
+                  ctx.bindAppScope(stmt, i);
+                  try (var rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                      workflowId = rs.getString("workflow_uuid");
+                    }
+                  }
+                }
+                if (workflowId != null) {
+                  try (var stmt = c.prepareStatement(inputsSql)) {
+                    stmt.setString(1, workflowId);
+                    stmt.setString(2, inputs);
+                    stmt.setLong(3, System.currentTimeMillis());
+                    stmt.executeUpdate();
+                  }
+                }
+                return workflowId;
+              });
+      if (bounced != null) {
+        return new DebounceResult(bounced, null);
       }
       // No match: the key is unheld, or held by something this bounce must not extend.
       return new DebounceResult(

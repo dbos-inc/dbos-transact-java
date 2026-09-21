@@ -500,7 +500,8 @@ public final class Debouncer<R> {
       return result;
     }
     if (recorded instanceof Map<?, ?> map
-        && (map.containsKey("bouncedWorkflowId") || map.containsKey("holder"))) {
+        && (map.isEmpty() || map.containsKey("bouncedWorkflowId") || map.containsKey("holder"))) {
+      // An unheld result under a serializer that drops nulls is an empty map.
       return new DebounceResult(
           map.get("bouncedWorkflowId") instanceof String bounced ? bounced : null,
           toDeduplicationHolder(map.get("holder")));

@@ -640,6 +640,9 @@ public class DebouncerTest {
     var waiting =
         DebouncedRows.insert(
             dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+    // The writer also kept the inputs in the payload table, which the runner reads first.
+    DebouncedRows.insertInput(
+        dataSource, waiting, DebouncedRows.read(dataSource, waiting).inputs());
 
     var handle =
         dbos.<String>debouncer()

@@ -105,6 +105,44 @@ public class DebounceDelayedWorkflowTest {
   }
 
   @Test
+  void replacesTheInputsInThePayloadTableToo() throws Exception {
+    // Readers prefer workflow_input over workflow_status.inputs, so a bounce that left the payload
+    // table alone would run the workflow with the arguments it was meant to replace.
+    long now = System.currentTimeMillis();
+    var id = plant(now + 1_000, null, NAME, "app-a");
+    DebouncedRows.insertInput(dataSource, id, stale());
+
+    assertEquals(id, bounce(now + 5_000, NAME, null).bouncedWorkflowId());
+
+    var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
+    assertEquals(fresh.serializedValue(), DebouncedRows.readInput(dataSource, id));
+    assertEquals(fresh.serializedValue(), DebouncedRows.read(dataSource, id).inputs());
+  }
+
+  @Test
+  void writesThePayloadTableWhenTheRowHadNone() throws Exception {
+    long now = System.currentTimeMillis();
+    var id = plant(now + 1_000, null, NAME, "app-a");
+    assertNull(DebouncedRows.readInput(dataSource, id));
+
+    bounce(now + 5_000, NAME, null);
+
+    var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
+    assertEquals(fresh.serializedValue(), DebouncedRows.readInput(dataSource, id));
+  }
+
+  @Test
+  void leavesThePayloadTableAloneWhenNothingMatched() throws Exception {
+    long now = System.currentTimeMillis();
+    var id = plant(now + 1_000, null, "other", "app-a");
+    DebouncedRows.insertInput(dataSource, id, stale());
+
+    assertFalse(bounce(now + 5_000, NAME, null).bounced());
+
+    assertEquals(stale(), DebouncedRows.readInput(dataSource, id));
+  }
+
+  @Test
   void capsTheDelayAtTheDebounceDeadline() throws Exception {
     long now = System.currentTimeMillis();
     var id = plant(now + 1_000, now + 2_000, NAME, "app-a");
@@ -116,11 +154,24 @@ public class DebounceDelayedWorkflowTest {
   }
 
   @Test
-  void extendsAnUnclaimedRow() throws Exception {
+  void extendsAnUnclaimedRowAndClaimsIt() throws Exception {
     long now = System.currentTimeMillis();
     var id = plant(now + 1_000, null, NAME, null);
 
     assertEquals(id, bounce(now + 5_000, NAME, null).bouncedWorkflowId());
+
+    // Claimed for the bouncing application, as its dequeue would claim it.
+    assertEquals("app-a", DebouncedRows.read(dataSource, id).applicationName());
+  }
+
+  @Test
+  void keepsTheOwnerOfAClaimedRow() throws Exception {
+    long now = System.currentTimeMillis();
+    var id = plant(now + 1_000, null, NAME, "app-a");
+
+    bounce(now + 5_000, NAME, null);
+
+    assertEquals("app-a", DebouncedRows.read(dataSource, id).applicationName());
   }
 
   // ==================== Reporting the holder ====================

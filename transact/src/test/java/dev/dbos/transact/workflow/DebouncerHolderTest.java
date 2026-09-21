@@ -233,6 +233,15 @@ public class DebouncerHolderTest {
     assertNull(result.holder());
   }
 
+  @Test
+  void anEmptyMapMeansTheKeyWasUnheld() {
+    // A serializer that drops nulls records an unheld result as nothing at all.
+    var result = Debouncer.toDebounceResult(new HashMap<String, Object>());
+
+    assertFalse(result.bounced());
+    assertNull(result.holder());
+  }
+
   // ==================== Replay of the first step ====================
 
   @Test
