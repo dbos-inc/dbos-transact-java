@@ -349,15 +349,17 @@ public final class Debouncer<R> {
                           debouncerDeduplicationId,
                           delayUntil(debouncePeriod),
                           invocation.args());
-                  return bounce.bounced() ? bounce : (Object) bounce.holder();
+                  return bounce instanceof DebounceResult.NotBounced not
+                      ? (Object) not.holder()
+                      : bounce;
                 },
                 "DBOS.lookupDebouncer",
                 null);
         DebounceResult result = toDebounceResult(recorded);
-        if (result.bounced()) {
-          return dbos.retrieveWorkflow(result.bouncedWorkflowId());
+        if (result instanceof DebounceResult.Bounced bounced) {
+          return dbos.retrieveWorkflow(bounced.bouncedWorkflowId());
         }
-        DeduplicationHolder holder = result.holder();
+        DeduplicationHolder holder = ((DebounceResult.NotBounced) result).holder();
         if (holder == null) {
           // The existing holder finished between the enqueue attempt and now. Retry from
           // scratch — the next enqueue should succeed.
@@ -443,16 +445,15 @@ public final class Debouncer<R> {
     String userWorkflowId = DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString());
     String messageId = UUID.randomUUID().toString();
     String bouncedWorkflowId = null;
-    if (queueName != null) {
-      bouncedWorkflowId =
-          executor
-              .debounceDelayedWorkflow(
-                  userWorkflow,
-                  queueName,
-                  debouncerDeduplicationId,
-                  delayUntil(debouncePeriod),
-                  invocation.args())
-              .bouncedWorkflowId();
+    if (queueName != null
+        && executor.debounceDelayedWorkflow(
+                userWorkflow,
+                queueName,
+                debouncerDeduplicationId,
+                delayUntil(debouncePeriod),
+                invocation.args())
+            instanceof DebounceResult.Bounced bounced) {
+      bouncedWorkflowId = bounced.bouncedWorkflowId();
     }
     return new DebounceIds(userWorkflowId, messageId, bouncedWorkflowId);
   }
@@ -507,14 +508,17 @@ public final class Debouncer<R> {
     if (recorded instanceof DebounceResult result) {
       return result;
     }
-    if (recorded instanceof Map<?, ?> map
-        && (map.isEmpty() || map.containsKey("bouncedWorkflowId") || map.containsKey("holder"))) {
-      // An unheld result under a serializer that drops nulls is an empty map.
-      return new DebounceResult(
-          map.get("bouncedWorkflowId") instanceof String bounced ? bounced : null,
-          toDeduplicationHolder(map.get("holder")));
+    if (recorded instanceof Map<?, ?> map) {
+      if (map.get("bouncedWorkflowId") instanceof String bounced) {
+        return new DebounceResult.Bounced(bounced);
+      }
+      if (map.isEmpty() || map.containsKey("holder")) {
+        // A NotBounced as such: an empty map under a serializer that drops nulls, or its holder
+        // wrapped. Only the holder itself is recorded, but the wrapped shape is read too.
+        return new DebounceResult.NotBounced(toDeduplicationHolder(map.get("holder")));
+      }
     }
-    return new DebounceResult(null, toDeduplicationHolder(recorded));
+    return new DebounceResult.NotBounced(toDeduplicationHolder(recorded));
   }
 
   /**

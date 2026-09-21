@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.exceptions.DBOSDebouncerUnreachableException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
+import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -373,8 +374,8 @@ public final class DebouncerClient<R> {
                 delayUntil(debouncePeriod),
                 args,
                 serialization);
-        if (bounced.bounced()) {
-          return client.retrieveWorkflow(bounced.bouncedWorkflowId());
+        if (bounced instanceof DebounceResult.Bounced b) {
+          return client.retrieveWorkflow(b.bouncedWorkflowId());
         }
       }
       try {
@@ -394,10 +395,10 @@ public final class DebouncerClient<R> {
                 delayUntil(debouncePeriod),
                 args,
                 serialization);
-        if (result.bounced()) {
-          return client.retrieveWorkflow(result.bouncedWorkflowId());
+        if (result instanceof DebounceResult.Bounced b) {
+          return client.retrieveWorkflow(b.bouncedWorkflowId());
         }
-        var holder = result.holder();
+        var holder = ((DebounceResult.NotBounced) result).holder();
         if (holder == null) {
           logger.debug(
               "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);

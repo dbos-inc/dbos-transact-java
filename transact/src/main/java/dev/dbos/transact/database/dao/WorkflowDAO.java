@@ -766,11 +766,11 @@ public class WorkflowDAO {
                 return workflowId;
               });
       if (bounced != null) {
-        return new DebounceResult(bounced, null);
+        return new DebounceResult.Bounced(bounced);
       }
       // No match: the key is unheld, or held by something this bounce must not extend.
-      return new DebounceResult(
-          null, findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
+      return new DebounceResult.NotBounced(
+          findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
     }
   }
 

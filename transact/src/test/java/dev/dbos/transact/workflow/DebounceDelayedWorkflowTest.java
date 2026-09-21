@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,9 +93,7 @@ public class DebounceDelayedWorkflowTest {
 
     var result = bounce(now + 5_000, NAME, null);
 
-    assertTrue(result.bounced());
-    assertEquals(id, result.bouncedWorkflowId());
-    assertNull(result.holder());
+    assertEquals(new DebounceResult.Bounced(id), result);
     var row = DebouncedRows.read(dataSource, id);
     assertEquals(WorkflowState.DELAYED.name(), row.status());
     assertEquals(DEDUP, row.deduplicationId());
@@ -112,7 +111,7 @@ public class DebounceDelayedWorkflowTest {
     var id = plant(now + 1_000, null, NAME, "app-a");
     DebouncedRows.insertInput(dataSource, id, stale());
 
-    assertEquals(id, bounce(now + 5_000, NAME, null).bouncedWorkflowId());
+    assertEquals(new DebounceResult.Bounced(id), bounce(now + 5_000, NAME, null));
 
     var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
     assertEquals(fresh.serializedValue(), DebouncedRows.readInput(dataSource, id));
@@ -139,7 +138,7 @@ public class DebounceDelayedWorkflowTest {
     var id = plant(now + 1_000, null, "other", "app-a");
     DebouncedRows.insertInput(dataSource, id, stale());
 
-    assertFalse(bounce(now + 5_000, NAME, null).bounced());
+    assertInstanceOf(DebounceResult.NotBounced.class, bounce(now + 5_000, NAME, null));
 
     assertEquals(stale(), DebouncedRows.readInput(dataSource, id));
   }
@@ -151,7 +150,7 @@ public class DebounceDelayedWorkflowTest {
 
     var result = bounce(now + 5_000, NAME, null);
 
-    assertEquals(id, result.bouncedWorkflowId());
+    assertEquals(new DebounceResult.Bounced(id), result);
     assertEquals(now + 2_000, DebouncedRows.read(dataSource, id).delayUntilEpochMs());
   }
 
@@ -160,7 +159,7 @@ public class DebounceDelayedWorkflowTest {
     long now = System.currentTimeMillis();
     var id = plant(now + 1_000, null, NAME, null);
 
-    assertEquals(id, bounce(now + 5_000, NAME, null).bouncedWorkflowId());
+    assertEquals(new DebounceResult.Bounced(id), bounce(now + 5_000, NAME, null));
 
     // Claimed for the bouncing application, as its dequeue would claim it.
     assertEquals("app-a", DebouncedRows.read(dataSource, id).applicationName());
@@ -182,8 +181,7 @@ public class DebounceDelayedWorkflowTest {
   void reportsAnUnheldKey() {
     var result = bounce(System.currentTimeMillis() + 5_000, NAME, null);
 
-    assertFalse(result.bounced());
-    assertNull(result.holder());
+    assertEquals(new DebounceResult.NotBounced(null), result);
   }
 
   @Test
@@ -193,8 +191,7 @@ public class DebounceDelayedWorkflowTest {
 
     var result = bounce(now + 5_000, NAME, null);
 
-    assertFalse(result.bounced());
-    var holder = result.holder();
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
     assertNotNull(holder);
     assertEquals(id, holder.workflowId());
     assertEquals("other", holder.workflowName());
@@ -216,8 +213,8 @@ public class DebounceDelayedWorkflowTest {
 
     var result = bounce(now + 5_000, NAME, "east");
 
-    assertFalse(result.bounced());
-    assertEquals(id, result.holder().workflowId());
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
+    assertEquals(id, holder.workflowId());
     assertEquals(now + 1_000, DebouncedRows.read(dataSource, id).delayUntilEpochMs());
   }
 
@@ -228,8 +225,7 @@ public class DebounceDelayedWorkflowTest {
 
     var result = bounce(now + 5_000, NAME, null);
 
-    assertFalse(result.bounced());
-    var holder = result.holder();
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
     assertEquals(id, holder.workflowId());
     assertEquals("app-b", holder.applicationName());
     assertTrue(holder.isForeignTo("app-a"));
@@ -245,8 +241,7 @@ public class DebounceDelayedWorkflowTest {
     var result = bounce(now + 5_000, NAME, null);
 
     // The key was cleared by the transition, so nothing holds it any more.
-    assertFalse(result.bounced());
-    assertNull(result.holder());
+    assertEquals(new DebounceResult.NotBounced(null), result);
     assertEquals(WorkflowState.ENQUEUED.name(), DebouncedRows.read(dataSource, id).status());
   }
 
