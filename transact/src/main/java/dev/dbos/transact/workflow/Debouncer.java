@@ -61,19 +61,6 @@ public final class Debouncer<R> {
   private static final Logger logger = LoggerFactory.getLogger(Debouncer.class);
 
   /**
-   * How long to wait for the debouncer service workflow to acknowledge a forwarded message before
-   * retrying.
-   */
-  private static final Duration ACK_TIMEOUT = Duration.ofSeconds(1);
-
-  /**
-   * How many times in a row one debouncer service workflow may fail to acknowledge before it is
-   * declared unreachable. A live one answers within milliseconds; one that holds the key and stays
-   * silent this long is stranded, and retrying forever would hang the caller.
-   */
-  static final int MAX_SILENT_ACKS = 5;
-
-  /**
    * What the first step of a debounce records. The name and the first two components predate the
    * bounce and are kept as they are so that steps recorded by older versions still replay.
    */
@@ -402,11 +389,11 @@ public final class Debouncer<R> {
 
         // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
         // processing this message, no ack arrives — start over.
-        var ack = dbos.getEvent(existingDebouncerId, messageId, ACK_TIMEOUT);
+        var ack = dbos.getEvent(existingDebouncerId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
         if (ack.isEmpty()) {
           silentAcks = existingDebouncerId.equals(silentHolderId) ? silentAcks + 1 : 1;
           silentHolderId = existingDebouncerId;
-          if (silentAcks >= MAX_SILENT_ACKS) {
+          if (silentAcks >= Constants.DEBOUNCER_MAX_SILENT_ACKS) {
             throw new DBOSDebouncerUnreachableException(
                 existingDebouncerId, Constants.DBOS_INTERNAL_QUEUE, debouncerDeduplicationId);
           }
@@ -418,7 +405,9 @@ public final class Debouncer<R> {
         // If the ack arrived, the debouncer has already published this event — it cannot be empty.
         var childId =
             dbos.<String>getEvent(
-                    existingDebouncerId, Constants.DEBOUNCER_CHILD_ID_KEY, ACK_TIMEOUT)
+                    existingDebouncerId,
+                    Constants.DEBOUNCER_CHILD_ID_KEY,
+                    Constants.DEBOUNCER_ACK_TIMEOUT)
                 .orElseThrow(
                     () ->
                         new IllegalStateException(

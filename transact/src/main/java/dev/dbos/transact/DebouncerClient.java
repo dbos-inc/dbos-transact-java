@@ -48,10 +48,6 @@ import org.slf4j.LoggerFactory;
 public final class DebouncerClient<R> {
 
   private static final Logger logger = LoggerFactory.getLogger(DebouncerClient.class);
-  private static final Duration ACK_TIMEOUT = Duration.ofSeconds(1);
-
-  /** See {@code Debouncer.MAX_SILENT_ACKS}. */
-  static final int MAX_SILENT_ACKS = 5;
 
   private final DBOSClient client;
   private final String workflowName;
@@ -433,11 +429,11 @@ public final class DebouncerClient<R> {
         DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
         client.send(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
 
-        var ack = client.getEvent(existingDebouncerId, messageId, ACK_TIMEOUT);
+        var ack = client.getEvent(existingDebouncerId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
         if (ack.isEmpty()) {
           silentAcks = existingDebouncerId.equals(silentHolderId) ? silentAcks + 1 : 1;
           silentHolderId = existingDebouncerId;
-          if (silentAcks >= MAX_SILENT_ACKS) {
+          if (silentAcks >= Constants.DEBOUNCER_MAX_SILENT_ACKS) {
             throw new DBOSDebouncerUnreachableException(
                 existingDebouncerId, Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
           }
@@ -450,7 +446,10 @@ public final class DebouncerClient<R> {
         // recv-loop. If the ack arrived the event should be available; retry if not to guard
         // against transient delays.
         var childIdOpt =
-            client.getEvent(existingDebouncerId, Constants.DEBOUNCER_CHILD_ID_KEY, ACK_TIMEOUT);
+            client.getEvent(
+                existingDebouncerId,
+                Constants.DEBOUNCER_CHILD_ID_KEY,
+                Constants.DEBOUNCER_ACK_TIMEOUT);
         if (childIdOpt.isEmpty()) {
           logger.debug(
               "DEBOUNCER_CHILD_ID_KEY not yet available from {}; retrying", existingDebouncerId);
