@@ -26,7 +26,7 @@ public class DebouncerHolderTest {
 
   @Test
   void aPeersHolderIsForeign() {
-    var holder = new DeduplicationHolder("wf-1", "app-b");
+    var holder = new DeduplicationHolder("wf-1", "app-b", null, null, null, null, false);
 
     assertTrue(holder.isForeignTo("app-a"));
     assertFalse(holder.isForeignTo("app-b"));
@@ -34,14 +34,14 @@ public class DebouncerHolderTest {
 
   @Test
   void anUnclaimedHolderBelongsToEveryone() {
-    var holder = new DeduplicationHolder("wf-1", null);
+    var holder = new DeduplicationHolder("wf-1", null, null, null, null, null, false);
 
     assertFalse(holder.isForeignTo("app-a"));
   }
 
   @Test
   void aNamelessCallerIsShutOutOfNothing() {
-    var holder = new DeduplicationHolder("wf-1", "app-b");
+    var holder = new DeduplicationHolder("wf-1", "app-b", null, null, null, null, false);
 
     assertFalse(holder.isForeignTo(null));
   }
@@ -67,7 +67,7 @@ public class DebouncerHolderTest {
 
   @Test
   void passesThroughAHolderRecordedByThisVersion() {
-    var recorded = new DeduplicationHolder("wf-456", "app-a");
+    var recorded = new DeduplicationHolder("wf-456", "app-a", null, null, null, null, false);
 
     assertSame(recorded, Debouncer.toDeduplicationHolder(recorded));
   }
@@ -87,7 +87,9 @@ public class DebouncerHolderTest {
   void adaptsAHolderRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
     var recorded =
-        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-7", "app-b")));
+        serializer.deserialize(
+            serializer.serialize(
+                new DeduplicationHolder("wf-7", "app-b", null, null, null, null, false)));
 
     var holder = Debouncer.toDeduplicationHolder(recorded);
 
@@ -100,7 +102,9 @@ public class DebouncerHolderTest {
   void adaptsAnUnclaimedHolderRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
     var recorded =
-        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-8", null)));
+        serializer.deserialize(
+            serializer.serialize(
+                new DeduplicationHolder("wf-8", null, null, null, null, null, false)));
 
     var holder = Debouncer.toDeduplicationHolder(recorded);
 
@@ -144,7 +148,9 @@ public class DebouncerHolderTest {
   @Test
   void aHolderOfUnknownNameCountsAsAService() {
     // Recorded before debounced workflows existed, when nothing else held a debounce key.
-    assertTrue(new DeduplicationHolder("wf-1", "app-a").isDebouncerService());
+    assertTrue(
+        new DeduplicationHolder("wf-1", "app-a", null, null, null, null, false)
+            .isDebouncerService());
   }
 
   @Test
@@ -185,7 +191,9 @@ public class DebouncerHolderTest {
 
   @Test
   void aRecordedHolderMeansNothingWasBounced() {
-    var result = Debouncer.toDebounceResult(new DeduplicationHolder("wf-456", "app-a"));
+    var result =
+        Debouncer.toDebounceResult(
+            new DeduplicationHolder("wf-456", "app-a", null, null, null, null, false));
 
     assertFalse(result.bounced());
     assertEquals("wf-456", result.holder().workflowId());

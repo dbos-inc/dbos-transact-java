@@ -333,16 +333,24 @@ public final class Debouncer<R> {
         // deterministic. Typed as Object so that replay does not cast the recorded value: a step
         // recorded before this SDK bounced holds a holder, or before application names a bare
         // workflow id, and toDebounceResult adapts both.
+        //
+        // Unless a bounce happened, what is recorded is the holder alone, the shape the previous
+        // version reads. With a pinned application version a workflow this node records can be
+        // recovered by a node of that version, and a bounce can only happen against a row a
+        // newer version wrote, which never shares a fleet with the previous one. So every step
+        // recorded in a fleet the previous version is part of stays readable by it.
         Object recorded =
             executor.runDbosFunctionAsStep(
-                () ->
-                    (Object)
-                        executor.debounceDelayedWorkflow(
-                            userWorkflow,
-                            Constants.DBOS_INTERNAL_QUEUE,
-                            debouncerDeduplicationId,
-                            delayUntil(debouncePeriod),
-                            invocation.args()),
+                () -> {
+                  var bounce =
+                      executor.debounceDelayedWorkflow(
+                          userWorkflow,
+                          Constants.DBOS_INTERNAL_QUEUE,
+                          debouncerDeduplicationId,
+                          delayUntil(debouncePeriod),
+                          invocation.args());
+                  return bounce.bounced() ? bounce : (Object) bounce.holder();
+                },
                 "DBOS.lookupDebouncer",
                 null);
         DebounceResult result = toDebounceResult(recorded);
@@ -525,7 +533,7 @@ public final class Debouncer<R> {
       return holder;
     }
     if (recorded instanceof String workflowId) {
-      return new DeduplicationHolder(workflowId, null);
+      return new DeduplicationHolder(workflowId, null, null, null, null, null, false);
     }
     // A serializer that does not preserve Java types -- the portable one, or a custom JSON one --
     // round-trips the record to a map. Everything the record held is still there; only the type

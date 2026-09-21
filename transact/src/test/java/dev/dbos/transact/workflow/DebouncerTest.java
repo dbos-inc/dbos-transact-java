@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -605,6 +606,41 @@ public class DebouncerTest {
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
   }
 
+  /**
+   * With a pinned application version, a workflow recorded here can be recovered by a node of the
+   * previous version, which knows the holder but not the bounce result. Joining a service workflow
+   * -- the only conflict the previous version can be part of -- must therefore record the holder
+   * alone.
+   */
+  @Test
+  public void recordsTheHolderAloneWhenJoiningAServiceWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+
+    var holder =
+        dbos.<String>debouncer()
+            .debounce("shape-key", Duration.ofSeconds(5), () -> svc.process("first"));
+    var orchestratorId = "wf-shape-orchestrator";
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      orch.joinDebounce("shape-key", "second");
+    }
+
+    var recorded = lookupDebouncerStep(orchestratorId);
+    assertTrue(
+        recorded.output().contains(DeduplicationHolder.class.getName()),
+        "recorded: " + recorded.output());
+    assertFalse(
+        recorded.output().contains(DebounceResult.class.getName()),
+        "recorded: " + recorded.output());
+    // The holder it names is the service workflow, not the user workflow the handle points at.
+    assertTrue(
+        recorded.output().contains(Constants.DEBOUNCER_WORKFLOW_NAME),
+        "recorded: " + recorded.output());
+    assertFalse(recorded.output().contains(holder.workflowId()), "recorded: " + recorded.output());
+  }
+
   // ==================== Coalescing into a debounced workflow ====================
   //
   // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its
@@ -733,11 +769,11 @@ public class DebouncerTest {
     assertEquals(0, serviceImpl.callCount());
   }
 
-  private record RecordedStep(int functionId, String serialization) {}
+  private record RecordedStep(int functionId, String serialization, String output) {}
 
   private RecordedStep lookupDebouncerStep(String workflowId) throws SQLException {
     var sql =
-        "SELECT function_id, serialization FROM dbos.operation_outputs"
+        "SELECT function_id, serialization, output FROM dbos.operation_outputs"
             + " WHERE workflow_uuid = ? AND function_name = ?";
     try (Connection conn = pgContainer.dataSource().getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -745,7 +781,8 @@ public class DebouncerTest {
       stmt.setString(2, "DBOS.lookupDebouncer");
       try (var rs = stmt.executeQuery()) {
         assertTrue(rs.next(), "no DBOS.lookupDebouncer step was recorded");
-        return new RecordedStep(rs.getInt("function_id"), rs.getString("serialization"));
+        return new RecordedStep(
+            rs.getInt("function_id"), rs.getString("serialization"), rs.getString("output"));
       }
     }
   }

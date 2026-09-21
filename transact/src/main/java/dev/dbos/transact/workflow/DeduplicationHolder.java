@@ -37,11 +37,6 @@ public record DeduplicationHolder(
     @Nullable WorkflowState status,
     boolean isDebounced) {
 
-  /** A holder known only by its workflow and owner. */
-  public DeduplicationHolder(String workflowId, @Nullable String applicationName) {
-    this(workflowId, applicationName, null, null, null, null, false);
-  }
-
   /**
    * Whether this holder answers to some other application than {@code appName}. An unclaimed holder
    * belongs to everyone, and a caller acting for no application in particular is in no position to
