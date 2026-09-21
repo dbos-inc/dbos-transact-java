@@ -8,6 +8,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DebouncerClient;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.exceptions.DBOSDebouncerUnreachableException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DebouncedRows;
@@ -227,6 +228,21 @@ public class DebouncerClientTest {
         () -> debouncer().debounce("mixed", Duration.ofMillis(500), "fresh"));
 
     assertEquals(planted, DebouncedRows.read(dataSource, other).delayUntilEpochMs());
+    assertEquals(0, serviceImpl.callCount.get());
+  }
+
+  @Test
+  void givesUpOnAServiceWorkflowThatNeverAcknowledges() throws Exception {
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var stranded =
+        DebouncedRows.insertStrandedService(dataSource, "process-stranded", executor.appName());
+
+    var e =
+        assertThrows(
+            DBOSDebouncerUnreachableException.class,
+            () -> debouncer().debounce("stranded", Duration.ofMillis(500), "lost"));
+
+    assertEquals(stranded, e.holderWorkflowId());
     assertEquals(0, serviceImpl.callCount.get());
   }
 }

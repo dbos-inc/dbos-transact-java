@@ -1,5 +1,6 @@
 package dev.dbos.transact.utils;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.Connection;
@@ -63,6 +64,40 @@ public final class DebouncedRows {
       stmt.setString(13, spec.applicationName());
       stmt.setLong(14, now);
       stmt.setLong(15, now);
+      stmt.executeUpdate();
+    }
+    return workflowId;
+  }
+
+  /**
+   * Plants a debouncer service workflow that nothing will ever run: enqueued under an application
+   * version no executor serves, holding the key. That is what an in-flight debouncer becomes once
+   * the last node of the SDK version that enqueued it is gone.
+   */
+  public static String insertStrandedService(
+      DataSource dataSource, String deduplicationId, @Nullable String applicationName)
+      throws SQLException {
+    var workflowId = UUID.randomUUID().toString();
+    var sql =
+        """
+          INSERT INTO "dbos".workflow_status
+              (workflow_uuid, status, name, class_name, queue_name, deduplication_id,
+               inputs, application_version, application_name,
+               created_at, updated_at, recovery_attempts, priority)
+          VALUES (?, ?, ?, ?, ?, ?, '[]', 'no-such-version', ?, ?, ?, 0, 0)
+        """;
+    long now = System.currentTimeMillis();
+    try (Connection conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, WorkflowState.ENQUEUED.name());
+      stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
+      stmt.setString(4, Constants.DEBOUNCER_CLASS_NAME);
+      stmt.setString(5, Constants.DBOS_INTERNAL_QUEUE);
+      stmt.setString(6, deduplicationId);
+      stmt.setString(7, applicationName);
+      stmt.setLong(8, now);
+      stmt.setLong(9, now);
       stmt.executeUpdate();
     }
     return workflowId;
