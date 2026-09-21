@@ -4,12 +4,14 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -58,9 +60,10 @@ public final class DebouncerClient<R> {
   private final @Nullable String userDeduplicationId;
   private final @Nullable Duration workflowTimeout;
   private final @Nullable Map<String, Object> attributes;
+  private final @Nullable SerializationStrategy serialization;
 
   DebouncerClient(@NonNull DBOSClient client, @NonNull String workflowName) {
-    this(client, workflowName, null, null, null, null, null, null, null, null, null);
+    this(client, workflowName, null, null, null, null, null, null, null, null, null, null);
   }
 
   private DebouncerClient(
@@ -74,7 +77,8 @@ public final class DebouncerClient<R> {
       @Nullable Integer priority,
       @Nullable String userDeduplicationId,
       @Nullable Duration workflowTimeout,
-      @Nullable Map<String, Object> attributes) {
+      @Nullable Map<String, Object> attributes,
+      @Nullable SerializationStrategy serialization) {
     this.client = Objects.requireNonNull(client, "client must not be null");
     this.workflowName = Objects.requireNonNull(workflowName, "workflowName must not be null");
     this.className = className;
@@ -86,6 +90,7 @@ public final class DebouncerClient<R> {
     this.userDeduplicationId = userDeduplicationId;
     this.workflowTimeout = workflowTimeout;
     this.attributes = attributes;
+    this.serialization = serialization;
   }
 
   /** Specify the Java class name of the target workflow implementation. */
@@ -101,7 +106,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /** Specify the DBOS instance name of the target workflow implementation. */
@@ -117,7 +123,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /**
@@ -139,7 +146,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /**
@@ -176,7 +184,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /** Target a specific application version for the user workflow. */
@@ -192,7 +201,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /** Set the priority for the user workflow (only used when a queue is configured). */
@@ -208,10 +218,18 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
-  /** Set a deduplication ID to be forwarded to the user workflow. */
+  /**
+   * Set a deduplication ID to be forwarded to the user workflow.
+   *
+   * @deprecated A debounced workflow's deduplication ID is its debounce key. A caller-supplied one
+   *     cannot be honoured once the debouncer holds that key on the user workflow itself, which the
+   *     next release does. Setting one will then throw.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DebouncerClient<R> withDeduplicationId(@Nullable String deduplicationId) {
     return new DebouncerClient<>(
         client,
@@ -224,7 +242,8 @@ public final class DebouncerClient<R> {
         priority,
         deduplicationId,
         workflowTimeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /** Set a timeout for the user workflow. */
@@ -240,7 +259,8 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         timeout,
-        attributes);
+        attributes,
+        serialization);
   }
 
   /** Set JSON-serializable custom attributes to be recorded on the user workflow. */
@@ -256,7 +276,30 @@ public final class DebouncerClient<R> {
         priority,
         userDeduplicationId,
         workflowTimeout,
-        Validation.validateAttributes(attributes));
+        Validation.validateAttributes(attributes),
+        serialization);
+  }
+
+  /**
+   * Set the serialization strategy the user workflow's arguments are written with. It should match
+   * the strategy the workflow is registered with; a bounce that extends a waiting debounced
+   * workflow rewrites its inputs in this format.
+   */
+  public @NonNull DebouncerClient<R> withSerialization(
+      @Nullable SerializationStrategy serialization) {
+    return new DebouncerClient<>(
+        client,
+        workflowName,
+        className,
+        instanceName,
+        userQueueName,
+        debounceTimeout,
+        appVersion,
+        priority,
+        userDeduplicationId,
+        workflowTimeout,
+        attributes,
+        serialization);
   }
 
   /**
@@ -310,24 +353,73 @@ public final class DebouncerClient<R> {
             .withDeduplicationId(deduplicationId);
 
     while (true) {
+      // A newer SDK version keeps its debounced workflows waiting DELAYED on the user queue. Try to
+      // extend one there first, so a fleet mixing the two keeps coalescing on one key.
+      if (userQueueName != null) {
+        var bounced =
+            client.debounceDelayedWorkflow(
+                workflowName,
+                className,
+                instanceName,
+                userQueueName,
+                deduplicationId,
+                delayUntil(debouncePeriod),
+                args,
+                serialization);
+        if (bounced.bounced()) {
+          return client.retrieveWorkflow(bounced.bouncedWorkflowId());
+        }
+      }
       try {
         client.enqueueWorkflow(enqueueOpts, new Object[] {debouncerOpts, ctx, initial});
         return client.retrieveWorkflow(userWorkflowId);
       } catch (DBOSQueueDuplicatedException dup) {
-        // A debouncer for this key is already running — forward the latest args to it.
-        var holder = client.findDeduplicationHolder(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+        // Something already holds this key on the internal queue. If it is a debounced workflow
+        // waiting there, this bounce extends it and the conflict is resolved in one round trip.
+        // Otherwise the result reports the holder so we can coordinate with it or refuse.
+        var result =
+            client.debounceDelayedWorkflow(
+                workflowName,
+                className,
+                instanceName,
+                Constants.DBOS_INTERNAL_QUEUE,
+                deduplicationId,
+                delayUntil(debouncePeriod),
+                args,
+                serialization);
+        if (result.bounced()) {
+          return client.retrieveWorkflow(result.bouncedWorkflowId());
+        }
+        var holder = result.holder();
         if (holder == null) {
           logger.debug(
               "Debouncer for dedupId {} not found after conflict; retrying", deduplicationId);
           continue;
         }
-        // A peer's debouncer is not ours to extend: it dequeues on that application's account, so
+        // A peer's holder is not ours to extend: it dequeues on that application's account, so
         // it may never run at all from here, and the retry below would spin forever waiting for an
         // ack. Surface the collision the way a plain deduplicated enqueue would.
         if (holder.isForeignTo(client.applicationName())) {
           throw new DBOSQueueDuplicatedException(
               userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
         }
+        if (!holder.isDebouncerService()) {
+          if (holder.isDebouncedInstanceOf(workflowName, className, instanceName)) {
+            // A debounced instance of this workflow holds the key but is no longer DELAYED: it
+            // left that state between the enqueue attempt and the bounce, and its key is about to
+            // clear. Retry; the next enqueue starts a fresh debouncer.
+            logger.debug(
+                "Debounced workflow {} for dedupId {} is no longer delayed; retrying",
+                holder.workflowId(),
+                deduplicationId);
+            continue;
+          }
+          // Held by a workflow this debounce must not touch: one that was deduplicated on its
+          // own, or a different workflow whose debounce key collides with ours.
+          throw new DBOSQueueDuplicatedException(
+              userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+        }
+        // A debouncer service workflow for this key is running — forward the latest args to it.
         String existingDebouncerId = holder.workflowId();
 
         DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
@@ -353,5 +445,9 @@ public final class DebouncerClient<R> {
         return client.retrieveWorkflow((String) childIdOpt.get());
       }
     }
+  }
+
+  private static long delayUntil(Duration debouncePeriod) {
+    return Instant.now().plus(debouncePeriod).toEpochMilli();
   }
 }

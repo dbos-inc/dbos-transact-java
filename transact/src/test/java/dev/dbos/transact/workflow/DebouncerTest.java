@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -10,7 +12,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
@@ -484,6 +488,7 @@ public class DebouncerTest {
 
   // withDeduplicationId must forward the id to the queued user workflow.
   @Test
+  @SuppressWarnings("removal")
   public void deduplicationIdForwardedToQueuedUserWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     String userQueue = "dedup-user-queue";
@@ -597,6 +602,104 @@ public class DebouncerTest {
     // cannot be assigned to DeduplicationHolder. The queue runs the replay, so this polls for it.
     assertEquals(userWorkflowId, dbos.retrieveWorkflow(orchestratorId).getResult());
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
+  }
+
+  // ==================== Coalescing into a debounced workflow ====================
+  //
+  // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its
+  // debounce key as its deduplication ID, and coalesces by extending that row. In a fleet mixing
+  // that version with this one, this debouncer has to coalesce into such a row rather than start
+  // a service workflow beside it.
+
+  private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
+    var stale = SerializationUtil.serializeArgs(new Object[] {"stale"}, null, null, serializer);
+    return new DebouncedRows.Spec(
+        workflowName,
+        DebouncedServiceImpl.class.getName(),
+        null,
+        queue,
+        "process-mixed",
+        delayUntil,
+        null,
+        stale.serializedValue(),
+        stale.serialization(),
+        executor.appVersion(),
+        executor.appName());
+  }
+
+  @Test
+  public void coalescesIntoADebouncedWorkflowWaitingOnTheInternalQueue() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    // Far enough out that the row is still waiting when the debounce reaches it.
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
+
+    // The bounce extended the waiting row: the handle is that row, its delay moved to our period
+    // and its inputs are ours. No service workflow was started beside it.
+    assertEquals(waiting, handle.workflowId());
+    var bounced = DebouncedRows.read(dataSource, waiting);
+    assertTrue(bounced.delayUntilEpochMs() < planted);
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+
+    // Once the delay elapses the sweep enqueues it, clearing the key, and it runs with our args.
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
+    assertNull(dbos.getWorkflowStatus(waiting).orElseThrow().deduplicationId());
+  }
+
+  @Test
+  public void coalescesIntoADebouncedWorkflowWaitingOnAUserQueue() throws Exception {
+    String userQueue = "mixed-user-queue";
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    dbos.registerQueue(userQueue, QueueOptions.empty());
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting = DebouncedRows.insert(dataSource, debouncedRow(userQueue, "process", planted));
+
+    var handle =
+        dbos.<String>debouncer()
+            .withQueue(userQueue)
+            .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
+
+    assertEquals(waiting, handle.workflowId());
+    assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
+    assertEquals(userQueue, dbos.getWorkflowStatus(waiting).orElseThrow().queueName());
+  }
+
+  @Test
+  public void refusesAKeyHeldByADifferentDebouncedWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    // "process" + "mixed" collides with "process-mixed" held for another workflow.
+    var other =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "other", planted));
+
+    assertThrows(
+        DBOSQueueDuplicatedException.class,
+        () ->
+            dbos.<String>debouncer()
+                .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh")));
+
+    // Untouched: the other workflow keeps its delay and its inputs.
+    assertEquals(planted, DebouncedRows.read(dataSource, other).delayUntilEpochMs());
+    assertEquals(0, serviceImpl.callCount());
   }
 
   private record RecordedStep(int functionId, String serialization) {}

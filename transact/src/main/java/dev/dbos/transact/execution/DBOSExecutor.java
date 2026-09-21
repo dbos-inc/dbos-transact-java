@@ -30,6 +30,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -437,6 +438,36 @@ public class DBOSExecutor implements AutoCloseable {
   public @Nullable DeduplicationHolder findDeduplicationHolder(
       String queueName, String deduplicationId) {
     return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
+  }
+
+  /**
+   * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs, or
+   * reports who holds the pair instead. The inputs are serialized the way a fresh start of that
+   * workflow would serialize them, so a bounce stays consistent with the initial enqueue.
+   */
+  public DebounceResult debounceDelayedWorkflow(
+      RegisteredWorkflow workflow,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args) {
+    var serialized =
+        SerializationUtil.serializeArgs(
+            args,
+            null,
+            workflow.serializationStrategy() != null
+                ? workflow.serializationStrategy().formatName()
+                : null,
+            systemDatabase.serializer());
+    return systemDatabase.debounceDelayedWorkflow(
+        workflow.workflowName(),
+        workflow.className(),
+        workflow.instanceName(),
+        queueName,
+        deduplicationId,
+        delayUntilEpochMs,
+        serialized.serializedValue(),
+        serialized.serialization());
   }
 
   QueueService getQueueService() {

@@ -19,6 +19,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
+import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -875,6 +876,33 @@ public class SystemDatabase implements AutoCloseable {
   public @Nullable DeduplicationHolder findDeduplicationHolder(
       String queueName, String deduplicationId) {
     return dbRetry(() -> WorkflowDAO.findDeduplicationHolder(ctx, queueName, deduplicationId));
+  }
+
+  /**
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
+   * pair instead. See {@link WorkflowDAO#debounceDelayedWorkflow}.
+   */
+  public DebounceResult debounceDelayedWorkflow(
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      String inputs,
+      @Nullable String serialization) {
+    return dbRetry(
+        () ->
+            WorkflowDAO.debounceDelayedWorkflow(
+                ctx,
+                workflowName,
+                className,
+                instanceName,
+                queueName,
+                deduplicationId,
+                delayUntilEpochMs,
+                inputs,
+                serialization));
   }
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {

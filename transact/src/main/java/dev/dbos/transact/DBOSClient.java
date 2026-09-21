@@ -15,6 +15,7 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
+import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -1252,6 +1253,36 @@ public class DBOSClient implements AutoCloseable {
   public @Nullable DeduplicationHolder findDeduplicationHolder(
       @NonNull String queueName, @NonNull String deduplicationId) {
     return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
+  }
+
+  /**
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
+   * pair instead. Used by {@link DebouncerClient}.
+   */
+  DebounceResult debounceDelayedWorkflow(
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable SerializationStrategy serialization) {
+    var serialized =
+        SerializationUtil.serializeArgs(
+            args,
+            null,
+            serialization != null ? serialization.formatName() : null,
+            systemDatabase.serializer());
+    return systemDatabase.debounceDelayedWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        queueName,
+        deduplicationId,
+        delayUntilEpochMs,
+        serialized.serializedValue(),
+        serialized.serialization());
   }
 
   /**
