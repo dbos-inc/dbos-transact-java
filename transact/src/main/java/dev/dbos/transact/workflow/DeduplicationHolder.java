@@ -5,6 +5,7 @@ import dev.dbos.transact.Constants;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -49,13 +50,16 @@ public record DeduplicationHolder(
 
   /**
    * Whether this holder is a debouncer service workflow: one that absorbs debounce calls for its
-   * key over messages and starts the user workflow itself. A holder whose name is unknown was
-   * recorded before debounced workflows existed, when the service workflow was the only thing that
-   * ever held a debounce key, so it counts as one.
+   * key over messages and starts the user workflow itself. The service workflow has a fixed name
+   * and class, and both must match; a user workflow that shares its name is not one. A holder whose
+   * name is unknown was recorded before debounced workflows existed, when the service workflow was
+   * the only thing that ever held a debounce key, so it counts as one.
    */
   @JsonIgnore // derived, not a component: keep it out of the recorded step
   public boolean isDebouncerService() {
-    return workflowName == null || Constants.DEBOUNCER_WORKFLOW_NAME.equals(workflowName);
+    return workflowName == null
+        || (Constants.DEBOUNCER_WORKFLOW_NAME.equals(workflowName)
+            && Constants.DEBOUNCER_CLASS_NAME.equals(className));
   }
 
   /**
@@ -65,7 +69,7 @@ public record DeduplicationHolder(
    * instance is null, as the row spells it.
    */
   public boolean isDebouncedInstanceOf(
-      String workflowName, String className, @Nullable String instanceName) {
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
     return isDebounced
         && Objects.equals(this.workflowName, workflowName)
         && Objects.equals(this.className, className)

@@ -146,6 +146,21 @@ public class DebouncerHolderTest {
   }
 
   @Test
+  void aUserWorkflowSharingTheServicesNameIsNotAService() {
+    var holder =
+        new DeduplicationHolder(
+            "wf-1",
+            "app-a",
+            Constants.DEBOUNCER_WORKFLOW_NAME,
+            "com.example.Impl",
+            null,
+            WorkflowState.ENQUEUED,
+            false);
+
+    assertFalse(holder.isDebouncerService());
+  }
+
+  @Test
   void aHolderOfUnknownNameCountsAsAService() {
     // Recorded before debounced workflows existed, when nothing else held a debounce key.
     assertTrue(
