@@ -61,14 +61,14 @@ public record DeduplicationHolder(
   /**
    * Whether this holder is a debounced instance of the given workflow: the user workflow itself,
    * holding its debounce key while it waits. Matches the name, class and instance, so a
-   * debounce-key collision between different workflows is never mistaken for a holder to extend.
+   * debounce-key collision between different workflows is never mistaken for a holder to extend. No
+   * instance is null, as the row spells it.
    */
   public boolean isDebouncedInstanceOf(
       String workflowName, String className, @Nullable String instanceName) {
     return isDebounced
         && Objects.equals(this.workflowName, workflowName)
         && Objects.equals(this.className, className)
-        && Objects.requireNonNullElse(this.instanceName, "")
-            .equals(Objects.requireNonNullElse(instanceName, ""));
+        && Objects.equals(this.instanceName, instanceName);
   }
 }

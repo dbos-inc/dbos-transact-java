@@ -161,8 +161,8 @@ public class DebouncerHolderTest {
 
     assertFalse(holder.isDebouncerService());
     assertTrue(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
-    // An absent instance name is spelled both ways.
-    assertTrue(holder.isDebouncedInstanceOf("process", "com.example.Impl", ""));
+    // No instance is null, as the row spells it; an empty string is a different instance.
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", ""));
     assertFalse(holder.isDebouncedInstanceOf("other", "com.example.Impl", null));
     assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Other", null));
     assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", "east"));

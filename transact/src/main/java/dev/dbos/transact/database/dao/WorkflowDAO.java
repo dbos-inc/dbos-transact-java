@@ -703,7 +703,7 @@ public class WorkflowDAO {
                  updated_at = ?%s
            WHERE name = ?
              AND class_name = ?
-             AND COALESCE(config_name, '') = ?
+             AND config_name IS NOT DISTINCT FROM ?
              AND queue_name = ?
              AND deduplication_id = ?
              AND status = ?
@@ -740,7 +740,7 @@ public class WorkflowDAO {
                   }
                   stmt.setString(i++, workflowName);
                   stmt.setString(i++, className);
-                  stmt.setString(i++, Objects.requireNonNullElse(instanceName, ""));
+                  stmt.setString(i++, instanceName);
                   stmt.setString(i++, queueName);
                   stmt.setString(i++, deduplicationId);
                   stmt.setString(i++, WorkflowState.DELAYED.name());
