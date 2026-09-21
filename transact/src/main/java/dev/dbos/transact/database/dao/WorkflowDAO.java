@@ -716,6 +716,11 @@ public class WorkflowDAO {
     // has to have them replaced there too, in the same transaction. A row that has no payload row
     // reads its inputs from the status row, which the bounce updates; this version does not write
     // payload rows of its own, so none is created here.
+    //
+    // When the enqueue moves its inputs write to workflow_input (payload-table phase 2), this
+    // becomes the upsert the other SDKs use, and the status row's inputs need no longer be set
+    // above: every row a bounce can reach will keep its inputs in the payload table. The bounce
+    // writes wherever the enqueue of the same release writes. See dbos-transact-java #457.
     var inputsSql =
         """
           UPDATE "%s".workflow_input SET inputs = ? WHERE workflow_uuid = ?
