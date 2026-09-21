@@ -712,13 +712,13 @@ public class WorkflowDAO {
                 .formatted(ctx.schema(), claim)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
-    // The inputs are read back through the payload table first, so the bounce has to replace them
-    // there as well as on the status row, in the same transaction.
+    // The inputs are read back through the payload table first, so a row that keeps them there
+    // has to have them replaced there too, in the same transaction. A row that has no payload row
+    // reads its inputs from the status row, which the bounce updates; this version does not write
+    // payload rows of its own, so none is created here.
     var inputsSql =
         """
-          INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
-          VALUES (?, ?, ?)
-          ON CONFLICT (workflow_uuid) DO UPDATE SET inputs = EXCLUDED.inputs
+          UPDATE "%s".workflow_input SET inputs = ? WHERE workflow_uuid = ?
         """
             .formatted(ctx.schema());
     try (var conn = ctx.getConnection()) {
@@ -753,9 +753,8 @@ public class WorkflowDAO {
                 }
                 if (workflowId != null) {
                   try (var stmt = c.prepareStatement(inputsSql)) {
-                    stmt.setString(1, workflowId);
-                    stmt.setString(2, inputs);
-                    stmt.setLong(3, System.currentTimeMillis());
+                    stmt.setString(1, inputs);
+                    stmt.setString(2, workflowId);
                     stmt.executeUpdate();
                   }
                 }

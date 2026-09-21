@@ -120,15 +120,17 @@ public class DebounceDelayedWorkflowTest {
   }
 
   @Test
-  void writesThePayloadTableWhenTheRowHadNone() throws Exception {
+  void doesNotCreateAPayloadRowWhenTheRowHadNone() throws Exception {
+    // This version does not write payload rows; such a row reads its inputs from the status row.
     long now = System.currentTimeMillis();
     var id = plant(now + 1_000, null, NAME, "app-a");
     assertNull(DebouncedRows.readInput(dataSource, id));
 
     bounce(now + 5_000, NAME, null);
 
+    assertNull(DebouncedRows.readInput(dataSource, id));
     var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
-    assertEquals(fresh.serializedValue(), DebouncedRows.readInput(dataSource, id));
+    assertEquals(fresh.serializedValue(), DebouncedRows.read(dataSource, id).inputs());
   }
 
   @Test
