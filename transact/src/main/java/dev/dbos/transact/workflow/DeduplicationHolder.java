@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 
 import java.util.Objects;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -52,6 +53,7 @@ public record DeduplicationHolder(
    * recorded before debounced workflows existed, when the service workflow was the only thing that
    * ever held a debounce key, so it counts as one.
    */
+  @JsonIgnore // derived, not a component: keep it out of the recorded step
   public boolean isDebouncerService() {
     return workflowName == null || Constants.DEBOUNCER_WORKFLOW_NAME.equals(workflowName);
   }

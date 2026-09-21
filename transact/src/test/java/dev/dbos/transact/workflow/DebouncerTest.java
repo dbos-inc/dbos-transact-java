@@ -639,6 +639,8 @@ public class DebouncerTest {
         recorded.output().contains(Constants.DEBOUNCER_WORKFLOW_NAME),
         "recorded: " + recorded.output());
     assertFalse(recorded.output().contains(holder.workflowId()), "recorded: " + recorded.output());
+    // Only the record's components are recorded, not what is derived from them.
+    assertFalse(recorded.output().contains("debouncerService"), "recorded: " + recorded.output());
   }
 
   // ==================== Coalescing into a debounced workflow ====================
