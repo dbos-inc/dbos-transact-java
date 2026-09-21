@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,7 +29,9 @@ import org.junit.jupiter.api.Test;
  * rather than through a running queue service: the behaviour under test is which claims a poll
  * still makes after a failure, and a live scheduler would answer that only incidentally, on timing.
  */
-// Exercises the deprecated partitioning surface, which #507's later slices replace.
+// The failure fixtures partition through the deprecated flag on purpose: the sweep is the same
+// either way, and it keeps them to one field. The worker-budget fixture cannot, because that flag
+// rescopes workerConcurrency to the partition.
 @SuppressWarnings("removal")
 public class QueueServicePollTest {
 
@@ -36,6 +39,14 @@ public class QueueServicePollTest {
       new Queue("q", null, null, false, true, null, Duration.ofMillis(200), null);
   private static final Queue PLAIN =
       new Queue("q", null, null, false, false, null, Duration.ofMillis(200), null);
+
+  /**
+   * Partitioned by a per-partition limit, with a queue-wide worker budget of three. The legacy flag
+   * would not do here: under it workerConcurrency is enforced per partition, so there would be no
+   * shared budget for the sweep to carry.
+   */
+  private static final Queue WORKER_BUDGETED =
+      new Queue("q", null, 3, false, false, null, 1, null, null, Duration.ofMillis(200), null);
 
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -61,9 +72,9 @@ public class QueueServicePollTest {
   @DisplayName("a contended partition costs its own turn, not the rest of the sweep")
   public void contendedPartitionDoesNotStrandTheOthers() {
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
         .thenThrow(contention("55P03"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong()))
         .thenReturn(List.of("wf-b"));
 
     taskFor(PARTITIONED).sweepPartitions();
@@ -74,8 +85,11 @@ public class QueueServicePollTest {
   @Test
   @DisplayName("a genuine error on a partition still stops the sweep")
   public void genuineErrorOnAPartitionPropagates() {
-    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong()))
+    // The sweep visits partitions in a random order, so which one fails is not fixed: every
+    // partition throws, and the assertion is that the sweep stopped at the first rather than
+    // carrying on through the rest.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
         .thenThrow(new RuntimeException(new SQLException("disk on fire", "58030")));
 
     var task = taskFor(PARTITIONED);
@@ -86,19 +100,74 @@ public class QueueServicePollTest {
       // The poll loop classifies it there, logs at error, and lets the interval decay.
     }
 
-    verify(systemDatabase, never()).startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong());
+    verify(systemDatabase, times(1))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
   }
 
   @Test
   @DisplayName("a workflow that will not start does not strand the rest of the batch")
   public void failedDispatchDoesNotStrandTheBatch() {
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong(), anyLong()))
         .thenReturn(List.of("wf-1", "wf-2"));
     when(dbosExecutor.executeWorkflowById("wf-1")).thenThrow(contention("40001"));
 
-    taskFor(PLAIN).processPartition(null);
+    taskFor(PLAIN).processPartition(null, 0);
 
     verify(dbosExecutor).executeWorkflowById("wf-2");
+  }
+
+  @Test
+  @DisplayName("a sweep carries its own claims into the budget the next partition is given")
+  public void theSweepCarriesItsClaimsForward() {
+    // Dispatch is asynchronous, so queueActiveCount will not yet report what the partitions
+    // earlier in this sweep just claimed. Re-reading it per partition would hand every partition
+    // the same budget and let them overshoot it together, which is why the sweep carries its own
+    // claims in `claimed` and adds them to the count it snapshotted once.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
+    when(dbosExecutor.queueActiveCount("q")).thenReturn(1L);
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
+        .thenReturn(List.of("wf-a"));
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong()))
+        .thenReturn(List.of("wf-b"));
+
+    taskFor(WORKER_BUDGETED).sweepPartitions();
+
+    // One already running, so the first partition swept is told 1 and the second 2: the claim the
+    // first made, counted before the second is given its budget.
+    verify(systemDatabase).startQueuedWorkflows(any(), any(), any(), any(), eq(1L), anyLong());
+    verify(systemDatabase).startQueuedWorkflows(any(), any(), any(), any(), eq(2L), anyLong());
+    verify(dbosExecutor).executeWorkflowById("wf-a");
+    verify(dbosExecutor).executeWorkflowById("wf-b");
+  }
+
+  @Test
+  @DisplayName("a sweep stops at the partition that exhausts the queue-wide worker budget")
+  public void theSweepStopsWhenTheBudgetIsSpent() {
+    // Three partitions, a budget of three, and two workflows already running: the first partition
+    // swept can claim, and once its claim spends the last of the budget no further partition may
+    // be dequeued at all -- not dequeued and discarded, not visited.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(dbosExecutor.queueActiveCount("q")).thenReturn(2L);
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
+        .thenReturn(List.of("wf-1"));
+
+    taskFor(WORKER_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(1))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
+    verify(dbosExecutor, times(1)).executeWorkflowById("wf-1");
+  }
+
+  @Test
+  @DisplayName("a sweep with no budget left dequeues nothing")
+  public void aSpentBudgetSkipsTheSweepEntirely() {
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
+    when(dbosExecutor.queueActiveCount("q")).thenReturn(3L);
+
+    taskFor(WORKER_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, never())
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
   }
 
   @Test

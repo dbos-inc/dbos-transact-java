@@ -509,7 +509,7 @@ public class SystemDatabaseTest {
     assertEquals(0, DBUtils.getWorkflowRow(dataSource, wfid).recoveryAttempts());
 
     var claimed =
-        sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0);
+        sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
     assertEquals(List.of(wfid), claimed);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
@@ -2788,7 +2788,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-wc").withWorkerConcurrency(2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
 
     assertEquals(
         Connection.TRANSACTION_READ_COMMITTED,
@@ -2802,12 +2802,62 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-gc").withConcurrency(3);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,
         ds.lastIsolationLevel,
         "global-concurrency queue must use REPEATABLE READ");
+  }
+
+  /** A queue partitioned by its limits, which only the full constructor can express. */
+  private static Queue partitionedQueue(
+      String name, Integer concurrency, Integer partitionConcurrency) {
+    return new Queue(
+        name,
+        concurrency,
+        null,
+        false,
+        false,
+        null,
+        partitionConcurrency,
+        null,
+        null,
+        Queue.DEFAULT_POLLING_INTERVAL,
+        null);
+  }
+
+  @Test
+  public void testQueueWideBudgetInAPartitionUsesSerializable() throws SQLException {
+    // A queue-wide budget spent one partition at a time is a write skew: each partition's sweep
+    // reads the same budget and claims against its own snapshot, so together they overshoot it.
+    // REPEATABLE READ does not rule that out; only serializability does. Without a partition
+    // there is nothing to skew across, which the two tests above cover at their own levels.
+    Queue queue = partitionedQueue("iso-partition-gc", 3, 1);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_SERIALIZABLE,
+        ds.lastIsolationLevel,
+        "a queue-wide budget claimed within one partition must use SERIALIZABLE");
+  }
+
+  @Test
+  public void testPartitionLimitAloneUsesRepeatableRead() throws SQLException {
+    // A per-partition budget is counted within the partition being swept, so the sweeps do not
+    // share it and a consistent snapshot is enough. This pins the boundary: the escalation above
+    // must follow the queue-wide budget, not the presence of a partition key.
+    Queue queue = partitionedQueue("iso-partition-only", null, 2);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+
+    assertEquals(
+        Connection.TRANSACTION_REPEATABLE_READ,
+        ds.lastIsolationLevel,
+        "a partition-scoped budget must not escalate to SERIALIZABLE");
   }
 
   @Test
@@ -2819,7 +2869,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("rl-batch").withRateLimit(limit, Duration.ofSeconds(60));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
 
     var candidateSelect =
         ds.preparedSql.stream()
@@ -2879,7 +2929,7 @@ public class SystemDatabaseTest {
 
       assertThrows(
           Exception.class,
-          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0),
+          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0, 0),
           "a rate-limited dequeue must not skip past a peer's open claim");
       peer.rollback();
     }
@@ -2945,7 +2995,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-rl").withRateLimit(5, Duration.ofSeconds(1));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,

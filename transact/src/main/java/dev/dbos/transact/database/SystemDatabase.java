@@ -982,11 +982,18 @@ public class SystemDatabase implements AutoCloseable {
       String executorId,
       String appVersion,
       String partitionKey,
-      long localRunningCount) {
+      long localRunningCount,
+      long partitionLocalRunningCount) {
     return dbRetry(
         () ->
             QueuesDAO.startQueuedWorkflows(
-                ctx, queue, executorId, appVersion, partitionKey, localRunningCount));
+                ctx,
+                queue,
+                executorId,
+                appVersion,
+                partitionKey,
+                localRunningCount,
+                partitionLocalRunningCount));
   }
 
   public void recordChildWorkflow(

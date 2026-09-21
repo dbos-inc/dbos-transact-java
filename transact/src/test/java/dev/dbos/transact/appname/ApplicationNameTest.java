@@ -512,7 +512,7 @@ public class ApplicationNameTest {
     var appVersion = DBOSTestAccess.getDbosExecutor(dbosA).appVersion();
     var dequeued =
         DBOSTestAccess.getSystemDatabase(dbosA)
-            .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0);
+            .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0, 0);
 
     assertEquals(List.of(unclaimedId), dequeued);
     assertEquals(APP_A, workflowAppName(unclaimedId));
