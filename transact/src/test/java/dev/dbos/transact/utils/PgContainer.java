@@ -75,6 +75,9 @@ public class PgContainer implements AutoCloseable {
    * <p>The user has to be {@code postgres} for the same reason: {@code POSTGRES_USER} only takes
    * effect during initdb, so an image that skips it has whatever roles it was built with.
    */
+  // The container is returned to be owned and closed by a PgContainer; the IDE cannot follow a
+  // closeable through the builder chain and reports it leaked.
+  @SuppressWarnings("resource")
   private static PostgreSQLContainer prebakedPG() {
     return new PostgreSQLContainer(
             DockerImageName.parse(PG_PREBAKED_IMAGE).asCompatibleSubstituteFor("postgres"))
@@ -97,6 +100,9 @@ public class PgContainer implements AutoCloseable {
    * replaces the command with a bare {@code start-single-node} when a password is present, which
    * would drop both the store path and {@code --insecure}.
    */
+  // The container is returned to be owned and closed by a PgContainer; the IDE cannot follow a
+  // closeable through the builder chain and reports it leaked.
+  @SuppressWarnings("resource")
   private static CockroachContainer prebakedCRDB() {
     return new CockroachContainer(
             DockerImageName.parse(CRDB_PREBAKED_IMAGE)

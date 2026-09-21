@@ -496,7 +496,6 @@ public class PartitionedQueuesTest {
    * per-partition limit is set.
    */
   @Test
-  @SuppressWarnings("removal") // exercises the deprecated partitionQueue flag
   public void testPartitionQueueAlongsidePartitionLimitsResolves() throws Exception {
     String queue = "redundant-flag-queue";
     dbos.launch();
@@ -574,7 +573,6 @@ public class PartitionedQueuesTest {
    * queue between them.
    */
   @Test
-  @SuppressWarnings("removal") // exercises the deprecated partitionQueue flag
   public void aLegacyQueueKeepsItsPartitionedMeaning() throws Exception {
     String queue = "legacy-flag-sync-queue";
     dbos.launch();
