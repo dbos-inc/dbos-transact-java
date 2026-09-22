@@ -202,8 +202,8 @@ public final class Debouncer<R> {
   /**
    * Set a deduplication ID to be forwarded to the user workflow.
    *
-   * @deprecated Ignored from the next release, where the debouncer uses the workflow's
-   *     deduplication ID for itself. Removed in 2.0.
+   * @deprecated Ignored from the next release, where the debouncer sets the deduplication ID to one
+   *     it generates itself. Removed in 2.0.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
