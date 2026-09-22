@@ -676,6 +676,9 @@ public class WorkflowDAO {
    * caller can decide whether to start fresh, coordinate with an older holder, or surface a
    * conflict.
    *
+   * <p>The new inputs are {@code args} serialized in {@code serializationFormat}, the workflow's
+   * registered format (null for the default), with this database's serializer.
+   *
    * <p>With a {@code caller}, the bounce is that caller's step: if the step already ran, what it
    * recorded is returned and nothing is touched; otherwise the bounce and its checkpoint commit
    * together, so a crash can never leave the row extended but the step unrecorded, which on replay
@@ -691,11 +694,17 @@ public class WorkflowDAO {
       String queueName,
       String deduplicationId,
       long delayUntilEpochMs,
-      String inputs,
-      @Nullable String serialization,
+      Object[] args,
+      @Nullable String serializationFormat,
       @Nullable DebounceCaller caller)
       throws SQLException {
     long startTime = System.currentTimeMillis();
+    // Serialized as a fresh start of the workflow would serialize them -- its registered format,
+    // with this database's serializer -- so a bounce stays consistent with the initial enqueue.
+    var serializedArgs =
+        SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
+    String inputs = serializedArgs.serializedValue();
+    String serialization = serializedArgs.serialization();
     try (var conn = ctx.getConnection()) {
       return SqlTransaction.call(
           conn,

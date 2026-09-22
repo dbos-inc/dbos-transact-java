@@ -72,7 +72,6 @@ public class DebounceDelayedWorkflowTest {
   }
 
   private DebounceResult bounce(long delayUntil, String name, String instanceName) {
-    var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
     return (DebounceResult)
         sysdb.debounceDelayedWorkflow(
             name,
@@ -81,8 +80,8 @@ public class DebounceDelayedWorkflowTest {
             QUEUE,
             DEDUP,
             delayUntil,
-            fresh.serializedValue(),
-            fresh.serialization(),
+            new Object[] {"fresh"},
+            null,
             null);
   }
 

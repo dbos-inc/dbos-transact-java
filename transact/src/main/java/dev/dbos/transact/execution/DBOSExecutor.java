@@ -443,9 +443,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs, or
-   * reports who holds the pair instead. The inputs are serialized the way a fresh start of that
-   * workflow would serialize them, so a bounce stays consistent with the initial enqueue.
+   * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs with
+   * {@code args} in the workflow's registered format, or reports who holds the pair instead.
    *
    * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
    * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
@@ -464,7 +463,6 @@ public class DBOSExecutor implements AutoCloseable {
       Object[] args,
       @Nullable String stepName,
       @Nullable DebounceIds ids) {
-    var serialized = serializeBouncedArgs(workflow, args);
     var ctx = DBOSContextHolder.get();
     DebounceCaller caller = null;
     if (stepName != null && ctx.isInWorkflow() && !ctx.isInStep()) {
@@ -483,21 +481,12 @@ public class DBOSExecutor implements AutoCloseable {
             queueName,
             deduplicationId,
             delayUntilEpochMs,
-            serialized.serializedValue(),
-            serialized.serialization(),
+            args,
+            workflow.serializationStrategy() != null
+                ? workflow.serializationStrategy().formatName()
+                : null,
             caller);
     return caller == null && ids != null ? ids.withBounced((DebounceResult) out) : out;
-  }
-
-  private SerializationUtil.SerializedResult serializeBouncedArgs(
-      RegisteredWorkflow workflow, Object[] args) {
-    return SerializationUtil.serializeArgs(
-        args,
-        null,
-        workflow.serializationStrategy() != null
-            ? workflow.serializationStrategy().formatName()
-            : null,
-        systemDatabase.serializer());
   }
 
   QueueService getQueueService() {

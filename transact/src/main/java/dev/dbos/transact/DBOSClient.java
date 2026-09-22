@@ -1268,12 +1268,6 @@ public class DBOSClient implements AutoCloseable {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable SerializationStrategy serialization) {
-    var serialized =
-        SerializationUtil.serializeArgs(
-            args,
-            null,
-            serialization != null ? serialization.formatName() : null,
-            systemDatabase.serializer());
     return (DebounceResult)
         systemDatabase.debounceDelayedWorkflow(
             workflowName,
@@ -1282,8 +1276,8 @@ public class DBOSClient implements AutoCloseable {
             queueName,
             deduplicationId,
             delayUntilEpochMs,
-            serialized.serializedValue(),
-            serialized.serialization(),
+            args,
+            serialization != null ? serialization.formatName() : null,
             null);
   }
 

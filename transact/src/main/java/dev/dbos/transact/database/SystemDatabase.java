@@ -889,8 +889,8 @@ public class SystemDatabase implements AutoCloseable {
       String queueName,
       String deduplicationId,
       long delayUntilEpochMs,
-      String inputs,
-      @Nullable String serialization,
+      Object[] args,
+      @Nullable String serializationFormat,
       @Nullable DebounceCaller caller) {
     return dbRetry(
         () ->
@@ -902,8 +902,8 @@ public class SystemDatabase implements AutoCloseable {
                 queueName,
                 deduplicationId,
                 delayUntilEpochMs,
-                inputs,
-                serialization,
+                args,
+                serializationFormat,
                 caller));
   }
 
