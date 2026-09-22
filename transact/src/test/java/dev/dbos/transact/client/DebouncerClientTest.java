@@ -14,6 +14,7 @@ import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -166,8 +167,14 @@ public class DebouncerClientTest {
   // start a service workflow beside it.
 
   private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
+    return debouncedRow(queue, workflowName, delayUntil, null);
+  }
+
+  private DebouncedRows.Spec debouncedRow(
+      String queue, String workflowName, long delayUntil, String serializationFormat) {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var stale = SerializationUtil.serializeArgs(new Object[] {"stale"}, null, null, null);
+    var stale =
+        SerializationUtil.serializeArgs(new Object[] {"stale"}, null, serializationFormat, null);
     return new DebouncedRows.Spec(
         workflowName,
         ClientTargetServiceImpl.class.getName(),
@@ -211,6 +218,29 @@ public class DebouncerClientTest {
     assertEquals(waiting, handle.workflowId());
     assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
     assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  @Test
+  void bouncesAPortableRowInItsOwnFormat() throws Exception {
+    // A workflow whose row holds portable arguments -- one another language enqueued, or a
+    // portable workflow here. withSerialization is what lets a bounce replace those arguments in
+    // the format the row is read back in; the default would write java_jackson over them.
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(USER_QUEUE, "process", planted, SerializationUtil.PORTABLE));
+
+    var handle =
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .withSerialization(SerializationStrategy.PORTABLE)
+            .debounce("mixed", Duration.ofMillis(500), "fresh");
+
+    assertEquals(waiting, handle.workflowId());
+    var row = DebouncedRows.read(dataSource, waiting);
+    assertEquals(SerializationUtil.PORTABLE, row.serialization());
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
   }

@@ -1,5 +1,6 @@
 package dev.dbos.transact.workflow;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -72,6 +73,11 @@ public class DebounceDelayedWorkflowTest {
   }
 
   private DebounceResult bounce(long delayUntil, String name, String instanceName) {
+    return bounce(delayUntil, name, instanceName, null);
+  }
+
+  private DebounceResult bounce(
+      long delayUntil, String name, String instanceName, String serializationFormat) {
     return (DebounceResult)
         sysdb.debounceDelayedWorkflow(
             name,
@@ -81,7 +87,7 @@ public class DebounceDelayedWorkflowTest {
             DEDUP,
             delayUntil,
             new Object[] {"fresh"},
-            null,
+            serializationFormat,
             null);
   }
 
@@ -102,6 +108,45 @@ public class DebounceDelayedWorkflowTest {
     var fresh = SerializationUtil.serializeArgs(new Object[] {"fresh"}, null, null, null);
     assertEquals(fresh.serializedValue(), row.inputs());
     assertEquals(fresh.serialization(), row.serialization());
+  }
+
+  @Test
+  void writesTheInputsInTheRequestedFormat() throws Exception {
+    // A portable workflow's row holds portable arguments. A bounce that wrote this SDK's native
+    // format over them would leave a row no reader of that workflow can deserialize.
+    long now = System.currentTimeMillis();
+    var portableStale =
+        SerializationUtil.serializeArgs(
+            new Object[] {"stale"}, null, SerializationUtil.PORTABLE, null);
+    var id =
+        DebouncedRows.insert(
+            dataSource,
+            new DebouncedRows.Spec(
+                NAME,
+                CLASS,
+                null,
+                QUEUE,
+                DEDUP,
+                now + 1_000,
+                null,
+                portableStale.serializedValue(),
+                portableStale.serialization(),
+                null,
+                "app-a"));
+
+    var result = bounce(now + 5_000, NAME, null, SerializationUtil.PORTABLE);
+
+    assertEquals(new DebounceResult.Bounced(id), result);
+    var row = DebouncedRows.read(dataSource, id);
+    var fresh =
+        SerializationUtil.serializeArgs(
+            new Object[] {"fresh"}, null, SerializationUtil.PORTABLE, null);
+    assertEquals(fresh.serializedValue(), row.inputs());
+    assertEquals(SerializationUtil.PORTABLE, row.serialization());
+    // And it really is the portable encoding, not the native one under a portable label.
+    assertArrayEquals(
+        new Object[] {"fresh"},
+        SerializationUtil.deserializePositionalArgs(row.inputs(), row.serialization(), null));
   }
 
   @Test
