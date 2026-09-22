@@ -1,6 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.exceptions.DBOSDebouncerUnreachableException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.DebounceResult;
@@ -359,9 +358,6 @@ public final class DebouncerClient<R> {
                 Constants.DBOS_INTERNAL_QUEUE)
             .withDeduplicationId(deduplicationId);
 
-    // Consecutive unacknowledged sends to one service workflow; reset when the holder changes.
-    String silentHolderId = null;
-    int silentAcks = 0;
     while (true) {
       // A newer SDK version keeps its debounced workflows waiting DELAYED on the user queue. Try to
       // extend one there first, so a fleet mixing the two keeps coalescing on one key.
@@ -437,12 +433,6 @@ public final class DebouncerClient<R> {
 
         var ack = client.getEvent(existingDebouncerId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
         if (ack.isEmpty()) {
-          silentAcks = existingDebouncerId.equals(silentHolderId) ? silentAcks + 1 : 1;
-          silentHolderId = existingDebouncerId;
-          if (silentAcks >= Constants.DEBOUNCER_MAX_SILENT_ACKS) {
-            throw new DBOSDebouncerUnreachableException(
-                existingDebouncerId, Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
-          }
           logger.debug(
               "Debouncer {} did not ack message {}; retrying", existingDebouncerId, messageId);
           continue;

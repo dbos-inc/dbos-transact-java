@@ -4,7 +4,6 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.exceptions.DBOSDebouncerUnreachableException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
@@ -304,9 +303,6 @@ public final class Debouncer<R> {
         new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
-    // Consecutive unacknowledged sends to one service workflow; reset when the holder changes.
-    String silentHolderId = null;
-    int silentAcks = 0;
     while (true) {
       try {
         var startOpts =
@@ -387,12 +383,6 @@ public final class Debouncer<R> {
         // processing this message, no ack arrives — start over.
         var ack = dbos.getEvent(existingDebouncerId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
         if (ack.isEmpty()) {
-          silentAcks = existingDebouncerId.equals(silentHolderId) ? silentAcks + 1 : 1;
-          silentHolderId = existingDebouncerId;
-          if (silentAcks >= Constants.DEBOUNCER_MAX_SILENT_ACKS) {
-            throw new DBOSDebouncerUnreachableException(
-                existingDebouncerId, Constants.DBOS_INTERNAL_QUEUE, debouncerDeduplicationId);
-          }
           logger.debug(
               "Debouncer {} did not ack message {}; retrying", existingDebouncerId, messageId);
           continue;

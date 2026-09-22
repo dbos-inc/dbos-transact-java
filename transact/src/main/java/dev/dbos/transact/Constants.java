@@ -27,10 +27,6 @@ public class Constants {
   // How long a debouncer waits for the service workflow to acknowledge a forwarded call before
   // sending it again.
   public static final Duration DEBOUNCER_ACK_TIMEOUT = Duration.ofSeconds(1);
-  // How many times in a row one service workflow may fail to acknowledge before it is declared
-  // unreachable. A live one answers within milliseconds; one that holds the key and stays silent
-  // this long is stranded, and retrying forever would hang the caller.
-  public static final int DEBOUNCER_MAX_SILENT_ACKS = 5;
 
   public static final String SYSTEM_JDBC_URL_ENV_VAR = "DBOS_SYSTEM_JDBC_URL";
 

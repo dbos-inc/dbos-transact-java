@@ -13,7 +13,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.DBOSDebouncerUnreachableException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DebouncedRows;
@@ -750,33 +749,6 @@ public class DebouncerTest {
                     .debounce("prio", Duration.ofMillis(500), () -> svc.process("x")));
 
     assertTrue(e.getMessage().contains("queue"), e.getMessage());
-    assertEquals(0, serviceImpl.callCount());
-  }
-
-  // ==================== A stranded service workflow ====================
-
-  @Test
-  public void givesUpOnAServiceWorkflowThatNeverAcknowledges() throws Exception {
-    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
-    dbos.launch();
-    var dataSource = pgContainer.dataSource();
-    var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var stranded =
-        DebouncedRows.insertStrandedService(dataSource, "process-stranded", executor.appName());
-
-    long start = System.currentTimeMillis();
-    var e =
-        assertThrows(
-            DBOSDebouncerUnreachableException.class,
-            () ->
-                dbos.<String>debouncer()
-                    .debounce("stranded", Duration.ofMillis(500), () -> svc.process("lost")));
-
-    assertEquals(stranded, e.holderWorkflowId());
-    assertEquals("process-stranded", e.deduplicationId());
-    // Bounded: a few ack timeouts, not forever.
-    long waited = System.currentTimeMillis() - start;
-    assertTrue(waited < 30_000, "gave up after " + waited + "ms");
     assertEquals(0, serviceImpl.callCount());
   }
 
