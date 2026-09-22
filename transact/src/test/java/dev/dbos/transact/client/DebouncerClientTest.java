@@ -17,10 +17,14 @@ import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
+import dev.dbos.transact.workflow.internal.DebouncerMessage;
+import dev.dbos.transact.workflow.internal.DebouncerOptions;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -268,6 +272,54 @@ public class DebouncerClientTest {
             () -> debouncer().withPriority(3).debounce("prio", Duration.ofMillis(500), "x"));
 
     assertTrue(e.getMessage().contains("queue"), e.getMessage());
+    assertEquals(0, serviceImpl.callCount.get());
+  }
+
+  @Test
+  void aLegacyNegativePriorityIsClampedOnReplay() throws Exception {
+    // Before 1.1 debounce() accepted a negative priority, so a debouncer workflow enqueued then can
+    // carry one into recovery. Build that workflow directly, as debounce() now refuses to.
+    var userWorkflowId = UUID.randomUUID().toString();
+    var debouncerOpts =
+        new DebouncerOptions(
+            "process",
+            ClientTargetServiceImpl.class.getName(),
+            null,
+            USER_QUEUE,
+            null,
+            null,
+            -5,
+            null);
+    var ctx = new DebouncerContextOptions(userWorkflowId, null, null);
+    var message =
+        new DebouncerMessage(
+            UUID.randomUUID().toString(), new Object[] {"legacy"}, Duration.ofMillis(200));
+    dbosClient.enqueueWorkflow(
+        new DBOSClient.EnqueueOptions(
+                Constants.DEBOUNCER_WORKFLOW_NAME,
+                Constants.DEBOUNCER_CLASS_NAME,
+                Constants.DBOS_INTERNAL_QUEUE)
+            .withDeduplicationId("process-legacy-negative"),
+        new Object[] {debouncerOpts, ctx, message});
+
+    // The user workflow still starts, at the default priority, rather than the caller's handle
+    // waiting on a workflow that never appears.
+    assertEquals("result:legacy", dbosClient.retrieveWorkflow(userWorkflowId).getResult());
+    assertEquals(
+        0, dbosClient.getWorkflowStatus(userWorkflowId).orElseThrow().priority().intValue());
+  }
+
+  @Test
+  void rejectsANegativePriority() {
+    // Refused at the call: the user workflow's options are only built inside the debouncer
+    // workflow, where the same value would fail durably.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            debouncer()
+                .withQueue(QueueName.of(USER_QUEUE))
+                .withPriority(-1)
+                .debounce("prio-neg", Duration.ofMillis(500), "x"));
     assertEquals(0, serviceImpl.callCount.get());
   }
 }

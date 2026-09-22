@@ -121,12 +121,24 @@ public class InternalWorkflows {
     // priority and deduplicationId are only valid for queued workflows; the executor
     // throws IllegalArgumentException if they are set without a queue name.
     boolean hasQueue = options.queueName() != null;
+    // Versions before 1.1 accepted a negative priority, and a debouncer they enqueued may be
+    // recovered here. The options now refuse one, so clamp it to the default rather than failing
+    // this workflow and leaving the caller's handle polling for a user workflow that never starts.
+    Integer priority = hasQueue ? options.priority() : null;
+    if (priority != null && priority < 0) {
+      logger.warn(
+          "Debouncer clamping negative priority {} to 0 for user workflow {} (id={})",
+          priority,
+          options.workflowName(),
+          ctx.userWorkflowId());
+      priority = 0;
+    }
     var startOpts =
         new StartWorkflowOptions()
             .withWorkflowId(ctx.userWorkflowId())
             .withQueue(options.queueName())
             .withDeduplicationId(hasQueue ? options.deduplicationId() : null)
-            .withPriority(hasQueue ? options.priority() : null)
+            .withPriority(priority)
             .withAppVersion(options.appVersion())
             // Replay the attributes captured at debounce time.
             .withAttributes(ctx.workflowAttributes());

@@ -94,6 +94,23 @@ public class DebouncerTest {
   }
 
   @Test
+  public void negativePriorityIsRejectedAtTheCall() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    // The user workflow's options are only built inside the debouncer workflow, where the same
+    // value would fail durably; the debouncer refuses it up front instead.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.<String>debouncer()
+                .withQueue("any-queue")
+                .withPriority(-1)
+                .debounce("user-neg", Duration.ofSeconds(1), () -> svc.process("v1")));
+    assertEquals(0, serviceImpl.callCount());
+  }
+
+  @Test
   public void singleCallFiresOnce() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -341,7 +358,7 @@ public class DebouncerTest {
     var orch =
         dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
     dbos.launch();
-    dbos.registerQueue(q, QueueOptions.empty().andPriorityEnabled(true));
+    dbos.registerQueue(q, QueueOptions.empty());
 
     var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"));
     assertEquals("result:prio-val", h.getResult());

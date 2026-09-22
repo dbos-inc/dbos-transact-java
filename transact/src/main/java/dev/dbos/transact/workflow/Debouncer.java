@@ -269,6 +269,11 @@ public final class Debouncer<R> {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
     }
+    // Checked here as well as in the options: those are only built inside the debouncer workflow,
+    // where a bad value would fail durably rather than at this call.
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
+    }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);
     RegisteredWorkflow userWorkflow =

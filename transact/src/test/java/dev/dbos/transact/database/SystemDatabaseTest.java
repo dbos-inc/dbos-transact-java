@@ -2540,7 +2540,6 @@ public class SystemDatabaseTest {
     var options =
         QueueOptions.setConcurrency(5)
             .andWorkerConcurrency(2)
-            .andPriorityEnabled(true)
             .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
 
     boolean inserted = sysdb.upsertQueue("q-insert", options, true, null);
@@ -2552,7 +2551,6 @@ public class SystemDatabaseTest {
     assertEquals("q-insert", q.name());
     assertEquals(5, q.concurrency());
     assertEquals(2, q.workerConcurrency());
-    assertTrue(q.priorityEnabled());
     assertNotNull(q.rateLimit());
     assertEquals(10, q.rateLimit().limit());
     assertEquals(Duration.ofSeconds(60), q.rateLimit().period());
@@ -2623,9 +2621,7 @@ public class SystemDatabaseTest {
   public void testUpdateQueuePartialConcurrency() {
     sysdb.upsertQueue(
         "q-partial",
-        QueueOptions.setConcurrency(5)
-            .andPriorityEnabled(true)
-            .andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
+        QueueOptions.setConcurrency(5).andRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
         true,
         null);
 
@@ -2633,7 +2629,6 @@ public class SystemDatabaseTest {
 
     var q = sysdb.findQueue("q-partial").orElseThrow();
     assertEquals(99, q.concurrency(), "concurrency should be updated");
-    assertTrue(q.priorityEnabled(), "priorityEnabled should be unchanged");
     assertNotNull(q.rateLimit(), "rateLimit should be unchanged");
     assertEquals(10, q.rateLimit().limit());
   }
@@ -2663,6 +2658,70 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testPriorityEnabledIsAlwaysStoredTrue() throws Exception {
+    // Every queue dispatches in priority order. The column is vestigial, but other SDKs and
+    // Conductor still read it, so every write stores TRUE whatever the options ask for.
+    sysdb.upsertQueue("q-prio", QueueOptions.setPriorityEnabled(false), true, null);
+    assertTrue(storedPriorityEnabled("q-prio"));
+    var owner = sysdb.findQueue("q-prio").orElseThrow().applicationName();
+
+    // A row an earlier version stored as false is healed by the next partial update...
+    forcePriorityEnabledFalse("q-prio");
+    sysdb.updateQueue("q-prio", QueueOptions.setConcurrency(3));
+    assertTrue(storedPriorityEnabled("q-prio"));
+
+    // ...and by the next re-registration, which binds every column through the update statement.
+    forcePriorityEnabledFalse("q-prio");
+    sysdb.upsertQueue(
+        "q-prio",
+        QueueOptions.setConcurrency(10)
+            .andWorkerConcurrency(5)
+            .andRateLimit(20, Duration.ofSeconds(30))
+            .andPartitionConcurrency(4)
+            .andPartitionWorkerConcurrency(2)
+            .andPartitionRateLimit(3, Duration.ofSeconds(7))
+            .andPollingInterval(Duration.ofSeconds(5)),
+        true,
+        null);
+    assertTrue(storedPriorityEnabled("q-prio"));
+    var q = sysdb.findQueue("q-prio").orElseThrow();
+    assertEquals(10, q.concurrency());
+    assertEquals(5, q.workerConcurrency());
+    assertEquals(new Queue.RateLimit(20, Duration.ofSeconds(30)), q.rateLimit());
+    assertEquals(4, q.partitionConcurrency());
+    assertEquals(2, q.partitionWorkerConcurrency());
+    assertEquals(new Queue.RateLimit(3, Duration.ofSeconds(7)), q.partitionRateLimit());
+    assertTrue(q.isPartitioned());
+    assertEquals(Duration.ofSeconds(5), q.pollingInterval());
+    assertEquals(owner, q.applicationName());
+
+    // Options that set only the ignored flag are empty, so an update with them changes nothing.
+    assertTrue(QueueOptions.setPriorityEnabled(false).isEmpty());
+    assertEquals(QueueOptions.empty(), QueueOptions.setPriorityEnabled(false));
+  }
+
+  private void forcePriorityEnabledFalse(String name) throws Exception {
+    try (var conn = dataSource.getConnection();
+        var ps =
+            conn.prepareStatement(
+                "UPDATE dbos.queues SET priority_enabled = FALSE WHERE name = ?")) {
+      ps.setString(1, name);
+      ps.executeUpdate();
+    }
+  }
+
+  private boolean storedPriorityEnabled(String name) throws Exception {
+    try (var conn = dataSource.getConnection();
+        var ps = conn.prepareStatement("SELECT priority_enabled FROM dbos.queues WHERE name = ?")) {
+      ps.setString(1, name);
+      try (var rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        return rs.getBoolean(1);
+      }
+    }
+  }
+
+  @Test
   public void testUpdateQueueEmpty() {
     sysdb.upsertQueue("q-empty-update", QueueOptions.setConcurrency(5), true, null);
 
@@ -2680,7 +2739,6 @@ public class SystemDatabaseTest {
         "q-roundtrip",
         QueueOptions.setConcurrency(8)
             .andWorkerConcurrency(4)
-            .andPriorityEnabled(true)
             .andPartitionQueue(true)
             .andRateLimit(20, 30, java.util.concurrent.TimeUnit.SECONDS)
             .andPollingInterval(Duration.ofSeconds(5)),
@@ -2691,7 +2749,6 @@ public class SystemDatabaseTest {
     assertEquals("q-roundtrip", fetched.name());
     assertEquals(8, fetched.concurrency());
     assertEquals(4, fetched.workerConcurrency());
-    assertTrue(fetched.priorityEnabled());
     assertTrue(fetched.partitioningEnabled());
     assertNotNull(fetched.rateLimit());
     assertEquals(20, fetched.rateLimit().limit());
