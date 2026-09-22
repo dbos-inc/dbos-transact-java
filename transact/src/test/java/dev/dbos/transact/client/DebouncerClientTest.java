@@ -232,6 +232,17 @@ public class DebouncerClientTest {
   }
 
   @Test
+  void rejectsAPriorityWithoutAQueue() {
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> debouncer().withPriority(3).debounce("prio", Duration.ofMillis(500), "x"));
+
+    assertTrue(e.getMessage().contains("queue"), e.getMessage());
+    assertEquals(0, serviceImpl.callCount.get());
+  }
+
+  @Test
   void givesUpOnAServiceWorkflowThatNeverAcknowledges() throws Exception {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     var stranded =

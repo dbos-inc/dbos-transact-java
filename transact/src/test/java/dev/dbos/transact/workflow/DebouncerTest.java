@@ -744,6 +744,23 @@ public class DebouncerTest {
     assertEquals(0, serviceImpl.callCount());
   }
 
+  @Test
+  public void rejectsAPriorityWithoutAQueue() {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                dbos.<String>debouncer()
+                    .withPriority(3)
+                    .debounce("prio", Duration.ofMillis(500), () -> svc.process("x")));
+
+    assertTrue(e.getMessage().contains("queue"), e.getMessage());
+    assertEquals(0, serviceImpl.callCount());
+  }
+
   // ==================== A stranded service workflow ====================
 
   @Test

@@ -169,7 +169,10 @@ public final class Debouncer<R> {
         deduplicationId);
   }
 
-  /** Set the priority for the user workflow (only applies when a queue is configured). */
+  /**
+   * Set the priority for the user workflow. A priority only means something on a queue, so {@link
+   * #debounce} rejects one when no queue is configured.
+   */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
     return new Debouncer<>(
         dbos,
@@ -248,6 +251,9 @@ public final class Debouncer<R> {
     Objects.requireNonNull(wfLambda, "wfLambda must not be null");
     if (debouncePeriod.isNegative() || debouncePeriod.isZero()) {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
+    }
+    if (priority != null && queueName == null) {
+      throw new IllegalArgumentException("priority requires a queue; call withQueue first");
     }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);

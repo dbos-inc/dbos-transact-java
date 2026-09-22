@@ -206,7 +206,10 @@ public final class DebouncerClient<R> {
         serialization);
   }
 
-  /** Set the priority for the user workflow (only used when a queue is configured). */
+  /**
+   * Set the priority for the user workflow. A priority only means something on a queue, so {@link
+   * #debounce} rejects one when no queue is configured.
+   */
   public @NonNull DebouncerClient<R> withPriority(@Nullable Integer priority) {
     return new DebouncerClient<>(
         client,
@@ -320,6 +323,9 @@ public final class DebouncerClient<R> {
     Objects.requireNonNull(debouncePeriod, "debouncePeriod must not be null");
     if (debouncePeriod.isNegative() || debouncePeriod.isZero()) {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
+    }
+    if (priority != null && userQueueName == null) {
+      throw new IllegalArgumentException("priority requires a queue; call withQueue first");
     }
     // className is required: the debouncer workflow uses it to look up the registered workflow.
     if (className == null) {
