@@ -1,6 +1,6 @@
 package dev.dbos.transact.database;
 
-import dev.dbos.transact.workflow.Debouncer;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 
 import org.jspecify.annotations.Nullable;
 
@@ -16,4 +16,4 @@ import org.jspecify.annotations.Nullable;
  *     outcome, as that step has always recorded them. Null records the outcome alone.
  */
 public record DebounceCaller(
-    String workflowId, int stepId, String stepName, Debouncer.@Nullable DebounceIds ids) {}
+    String workflowId, int stepId, String stepName, @Nullable DebounceIds ids) {}

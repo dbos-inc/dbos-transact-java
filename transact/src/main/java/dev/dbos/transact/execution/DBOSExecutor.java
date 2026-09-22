@@ -32,7 +32,7 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.DebounceResult;
-import dev.dbos.transact.workflow.Debouncer;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -463,7 +463,7 @@ public class DBOSExecutor implements AutoCloseable {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable String stepName,
-      Debouncer.@Nullable DebounceIds ids) {
+      @Nullable DebounceIds ids) {
     var serialized = serializeBouncedArgs(workflow, args);
     var ctx = DBOSContextHolder.get();
     DebounceCaller caller = null;
