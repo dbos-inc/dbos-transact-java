@@ -68,7 +68,17 @@ public final class Debouncer<R> {
    * What the first step of a debounce records. The name and the first two components predate the
    * bounce and are kept as they are so that steps recorded by older versions still replay.
    */
-  record DebounceIds(String userWorkflowId, String messageId, @Nullable String bouncedWorkflowId) {}
+  public record DebounceIds(
+      String userWorkflowId, String messageId, @Nullable String bouncedWorkflowId) {
+
+    /** These ids, completed with what a bounce extended, if anything. */
+    public DebounceIds withBounced(DebounceResult bounce) {
+      return new DebounceIds(
+          userWorkflowId,
+          messageId,
+          bounce instanceof DebounceResult.Bounced bounced ? bounced.bouncedWorkflowId() : null);
+    }
+  }
 
   private final DBOS dbos;
   private final DBOSExecutor executor;
@@ -281,15 +291,15 @@ public final class Debouncer<R> {
     Object recordedStart =
         queueName == null
             ? executor.runDbosFunctionAsStep(
-                () -> (Object) assignDebounceIds(null), "DBOS.assignDebounceIds", null)
-            : executor.debounceDelayedWorkflowAsStep(
+                () -> (Object) freshDebounceIds(), "DBOS.assignDebounceIds", null)
+            : executor.debounceDelayedWorkflow(
                 userWorkflow,
                 queueName,
                 debouncerDeduplicationId,
                 delayUntil(debouncePeriod),
                 invocation.args(),
                 "DBOS.assignDebounceIds",
-                bounce -> assignDebounceIds(bounce));
+                freshDebounceIds());
     DebounceIds ids = toDebounceIds(recordedStart);
     if (ids.bouncedWorkflowId() != null) {
       // A debounced workflow was already waiting on the configured queue; it now carries our args.
@@ -336,14 +346,14 @@ public final class Debouncer<R> {
         // by the previous version holds a bare workflow id, and toDebounceResult adapts it. A
         // workflow recorded by this version is not expected to replay on that one.
         Object recorded =
-            executor.debounceDelayedWorkflowAsStep(
+            executor.debounceDelayedWorkflow(
                 userWorkflow,
                 Constants.DBOS_INTERNAL_QUEUE,
                 debouncerDeduplicationId,
                 delayUntil(debouncePeriod),
                 invocation.args(),
                 "DBOS.lookupDebouncer",
-                bounce -> bounce);
+                null);
         DebounceResult result = toDebounceResult(recorded);
         if (result instanceof DebounceResult.Bounced bounced) {
           return dbos.retrieveWorkflow(bounced.bouncedWorkflowId());
@@ -417,16 +427,16 @@ public final class Debouncer<R> {
   }
 
   /**
-   * What the first step records: the pre-assigned user workflow and message ids, and the workflow a
-   * bounce on the configured queue extended, if any. That is where a newer SDK version keeps its
-   * debounced workflows, so a fleet mixing the two keeps coalescing on one key.
+   * The ids the first step assigns: the pre-assigned user workflow and the message id. With a queue
+   * configured, the step also bounces on it -- that is where a newer SDK version keeps its
+   * debounced workflows, so a fleet mixing the two keeps coalescing on one key -- and records these
+   * ids completed with what the bounce extended.
    */
-  private DebounceIds assignDebounceIds(@Nullable DebounceResult bounce) {
-    String userWorkflowId = DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString());
-    String messageId = UUID.randomUUID().toString();
-    String bouncedWorkflowId =
-        bounce instanceof DebounceResult.Bounced bounced ? bounced.bouncedWorkflowId() : null;
-    return new DebounceIds(userWorkflowId, messageId, bouncedWorkflowId);
+  private DebounceIds freshDebounceIds() {
+    return new DebounceIds(
+        DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
+        UUID.randomUUID().toString(),
+        null);
   }
 
   private static long delayUntil(Duration debouncePeriod) {

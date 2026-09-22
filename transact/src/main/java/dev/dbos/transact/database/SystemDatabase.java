@@ -18,9 +18,7 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
-import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -881,9 +879,10 @@ public class SystemDatabase implements AutoCloseable {
 
   /**
    * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
-   * pair instead. See {@link WorkflowDAO#debounceDelayedWorkflow}.
+   * pair instead; as the caller's step when one is given, checkpointed in the same transaction. See
+   * {@link WorkflowDAO#debounceDelayedWorkflow}.
    */
-  public DebounceResult debounceDelayedWorkflow(
+  public Object debounceDelayedWorkflow(
       String workflowName,
       String className,
       @Nullable String instanceName,
@@ -891,7 +890,8 @@ public class SystemDatabase implements AutoCloseable {
       String deduplicationId,
       long delayUntilEpochMs,
       String inputs,
-      @Nullable String serialization) {
+      @Nullable String serialization,
+      @Nullable DebounceCaller caller) {
     return dbRetry(
         () ->
             WorkflowDAO.debounceDelayedWorkflow(
@@ -903,70 +903,8 @@ public class SystemDatabase implements AutoCloseable {
                 deduplicationId,
                 delayUntilEpochMs,
                 inputs,
-                serialization));
-  }
-
-  /** A step to record: the workflow, function id and name it replays under, and when it began. */
-  public record StepCheckpoint(
-      String workflowId, int stepId, String stepName, long startTimeEpochMs) {}
-
-  /**
-   * The bounce, recorded as a step in the same transaction: the row it extends and the checkpoint
-   * that says it ran commit together, so a crash can never leave one without the other, which on
-   * replay would bounce again. Python's {@code call_txn_as_step}, for this one operation.
-   *
-   * <p>{@code toRecorded} maps the bounce's result to the value the step records and returns; it
-   * runs inside the transaction and must not touch the database. Only a result is recorded: a
-   * failure rolls everything back and propagates, and the step runs again on replay.
-   */
-  public <T> T debounceDelayedWorkflowAsStep(
-      StepCheckpoint checkpoint,
-      String workflowName,
-      String className,
-      @Nullable String instanceName,
-      String queueName,
-      String deduplicationId,
-      long delayUntilEpochMs,
-      String inputs,
-      @Nullable String serialization,
-      Function<DebounceResult, T> toRecorded) {
-    return dbRetry(
-        () -> {
-          try (var conn = ctx.getConnection()) {
-            return SqlTransaction.call(
-                conn,
-                c -> {
-                  var result =
-                      WorkflowDAO.debounceDelayedWorkflow(
-                          ctx,
-                          c,
-                          workflowName,
-                          className,
-                          instanceName,
-                          queueName,
-                          deduplicationId,
-                          delayUntilEpochMs,
-                          inputs,
-                          serialization);
-                  T recorded = toRecorded.apply(result);
-                  var serialized = SerializationUtil.serializeValue(recorded, null, serializer());
-                  StepsDAO.recordStepResult(
-                      ctx,
-                      c,
-                      new StepResult(
-                          checkpoint.workflowId(),
-                          checkpoint.stepId(),
-                          checkpoint.stepName(),
-                          serialized.serializedValue(),
-                          null,
-                          null,
-                          serialized.serialization()),
-                      checkpoint.startTimeEpochMs(),
-                      System.currentTimeMillis());
-                  return recorded;
-                });
-          }
-        });
+                serialization,
+                caller));
   }
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {

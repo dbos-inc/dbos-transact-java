@@ -1274,15 +1274,17 @@ public class DBOSClient implements AutoCloseable {
             null,
             serialization != null ? serialization.formatName() : null,
             systemDatabase.serializer());
-    return systemDatabase.debounceDelayedWorkflow(
-        workflowName,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        delayUntilEpochMs,
-        serialized.serializedValue(),
-        serialized.serialization());
+    return (DebounceResult)
+        systemDatabase.debounceDelayedWorkflow(
+            workflowName,
+            className,
+            instanceName,
+            queueName,
+            deduplicationId,
+            delayUntilEpochMs,
+            serialized.serializedValue(),
+            serialized.serialization(),
+            null);
   }
 
   /**

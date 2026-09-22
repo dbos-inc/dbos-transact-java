@@ -2,6 +2,7 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SqlTransaction;
@@ -674,8 +675,15 @@ public class WorkflowDAO {
    * <p>If nothing matched, the result carries the current holder of the pair (or none), so the
    * caller can decide whether to start fresh, coordinate with an older holder, or surface a
    * conflict.
+   *
+   * <p>With a {@code caller}, the bounce is that caller's step: if the step already ran, what it
+   * recorded is returned and nothing is touched; otherwise the bounce and its checkpoint commit
+   * together, so a crash can never leave the row extended but the step unrecorded, which on replay
+   * would bounce again. The return is then what the step records -- the {@link DebounceResult}, or
+   * the caller's ids completed with it -- as {@code Object}, since a replay hands back whatever the
+   * serializer preserved. Without a caller, the {@link DebounceResult}.
    */
-  public static DebounceResult debounceDelayedWorkflow(
+  public static Object debounceDelayedWorkflow(
       DbContext ctx,
       String workflowName,
       String className,
@@ -684,31 +692,58 @@ public class WorkflowDAO {
       String deduplicationId,
       long delayUntilEpochMs,
       String inputs,
-      @Nullable String serialization)
+      @Nullable String serialization,
+      @Nullable DebounceCaller caller)
       throws SQLException {
+    long startTime = System.currentTimeMillis();
     try (var conn = ctx.getConnection()) {
       return SqlTransaction.call(
           conn,
-          c ->
-              debounceDelayedWorkflow(
-                  ctx,
-                  c,
-                  workflowName,
-                  className,
-                  instanceName,
-                  queueName,
-                  deduplicationId,
-                  delayUntilEpochMs,
-                  inputs,
-                  serialization));
+          c -> {
+            if (caller != null) {
+              var prev =
+                  StepsDAO.checkStepResult(
+                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+              if (prev != null) {
+                return prev.toResult(ctx.serializer());
+              }
+            }
+            var result =
+                bounce(
+                    ctx,
+                    c,
+                    workflowName,
+                    className,
+                    instanceName,
+                    queueName,
+                    deduplicationId,
+                    delayUntilEpochMs,
+                    inputs,
+                    serialization);
+            if (caller == null) {
+              return result;
+            }
+            Object recorded = caller.ids() == null ? result : caller.ids().withBounced(result);
+            var serialized = SerializationUtil.serializeValue(recorded, null, ctx.serializer());
+            StepsDAO.recordStepResult(
+                ctx,
+                c,
+                new StepResult(
+                    caller.workflowId(),
+                    caller.stepId(),
+                    caller.stepName(),
+                    serialized.serializedValue(),
+                    null,
+                    null,
+                    serialized.serialization()),
+                startTime,
+                System.currentTimeMillis());
+            return recorded;
+          });
     }
   }
 
-  /**
-   * As above, on a connection whose transaction the caller manages -- a step's, so that the bounce
-   * and its checkpoint commit together.
-   */
-  public static DebounceResult debounceDelayedWorkflow(
+  private static DebounceResult bounce(
       DbContext ctx,
       Connection conn,
       String workflowName,
