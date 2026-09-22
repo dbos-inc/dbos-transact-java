@@ -298,11 +298,18 @@ public class DBOSExecutor implements AutoCloseable {
             latest.versionName());
       }
 
-      // Before the queue runner starts, so recovered work is not racing a dequeue pass already in
-      // flight, and before launch returns, so a workflow the application starts the instant it
-      // does cannot be seen by the sweep -- such a row is PENDING under this executor's id too,
-      // and indistinguishable from an abandoned one.
-      recoverPendingWorkflows(List.of(executorId()));
+      // Conductor decides which executors are gone and issues the recovery itself, so a sweep
+      // here would race that decision.
+      //
+      // Otherwise sweep before the queue runner starts, so recovered work is not racing a dequeue
+      // pass already in flight, and before launch returns, so a workflow the application starts
+      // the instant it does cannot be seen by the sweep -- such a row is PENDING under this
+      // executor's id too, and indistinguishable from an abandoned one.
+      if (dbosCloud || config.conductorKey() != null) {
+        logger.debug("Skipping executor self recovery: recovery is managed by Conductor");
+      } else {
+        recoverPendingWorkflows(List.of(executorId()));
+      }
 
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
