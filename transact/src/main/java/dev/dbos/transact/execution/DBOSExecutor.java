@@ -446,23 +446,11 @@ public class DBOSExecutor implements AutoCloseable {
    * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs, or
    * reports who holds the pair instead. The inputs are serialized the way a fresh start of that
    * workflow would serialize them, so a bounce stays consistent with the initial enqueue.
-   */
-  public DebounceResult debounceDelayedWorkflow(
-      RegisteredWorkflow workflow,
-      String queueName,
-      String deduplicationId,
-      long delayUntilEpochMs,
-      Object[] args) {
-    return (DebounceResult)
-        debounceDelayedWorkflow(
-            workflow, queueName, deduplicationId, delayUntilEpochMs, args, null, null);
-  }
-
-  /**
-   * As above, as the step {@code stepName} when called from a workflow: replay returns what the
-   * step recorded, and a first run bounces and checkpoints in one transaction. {@code ids}, when
-   * given, are recorded with the outcome, as the debouncer's first step has always recorded them.
-   * Outside a workflow, or with no step name, it is the plain bounce.
+   *
+   * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
+   * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
+   * when given, are recorded with the outcome, as the debouncer's first step has always recorded
+   * them. Outside a workflow, or with no step name, it is the plain bounce.
    *
    * <p>Returns what the step records as {@code Object}, deliberately: a replay hands back what the
    * serializer preserved, which under a custom serializer that drops Java types is a map, and the
