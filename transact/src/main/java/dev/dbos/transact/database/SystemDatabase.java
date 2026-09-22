@@ -877,6 +877,36 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.findDeduplicationHolder(ctx, queueName, deduplicationId));
   }
 
+  /**
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
+   * pair instead; as the caller's step when one is given, checkpointed in the same transaction. See
+   * {@link WorkflowDAO#debounceDelayedWorkflow}.
+   */
+  public Object debounceDelayedWorkflow(
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable String serializationFormat,
+      @Nullable DebounceCaller caller) {
+    return dbRetry(
+        () ->
+            WorkflowDAO.debounceDelayedWorkflow(
+                ctx,
+                workflowName,
+                className,
+                instanceName,
+                queueName,
+                deduplicationId,
+                delayUntilEpochMs,
+                args,
+                serializationFormat,
+                caller));
+  }
+
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }

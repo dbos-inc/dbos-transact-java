@@ -1,5 +1,7 @@
 package dev.dbos.transact;
 
+import java.time.Duration;
+
 public class Constants {
 
   public static final String DB_SCHEMA = "dbos";
@@ -22,6 +24,9 @@ public class Constants {
   // Event key published by the debouncer-workflow so callers can retrieve the pre-assigned
   // user workflow id without relying on Jackson deserialization of workflow inputs.
   public static final String DEBOUNCER_CHILD_ID_KEY = "_dbos_debouncer_child_id";
+  // How long a debouncer waits for the service workflow to acknowledge a forwarded call before
+  // sending it again.
+  public static final Duration DEBOUNCER_ACK_TIMEOUT = Duration.ofSeconds(1);
 
   public static final String SYSTEM_JDBC_URL_ENV_VAR = "DBOS_SYSTEM_JDBC_URL";
 

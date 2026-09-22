@@ -2,6 +2,7 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SqlTransaction;
@@ -17,6 +18,7 @@ import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -615,8 +617,8 @@ public class WorkflowDAO {
 
   /**
    * The workflow currently holding a given (queue_name, deduplication_id) pair, with the
-   * application that owns it, or {@code null} if the pair is unheld. Uses the UNIQUE index on that
-   * pair for O(1) lookup.
+   * application that owns it and what kind of workflow it is, or {@code null} if the pair is
+   * unheld. Uses the UNIQUE index on that pair for O(1) lookup.
    *
    * <p>That index is global across the applications sharing the system database, so the holder is
    * not necessarily ours. The read is deliberately unscoped: a caller cannot steer around a holder
@@ -624,26 +626,219 @@ public class WorkflowDAO {
    */
   public static @Nullable DeduplicationHolder findDeduplicationHolder(
       DbContext ctx, String queueName, String deduplicationId) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId);
+    }
+  }
+
+  private static @Nullable DeduplicationHolder findDeduplicationHolder(
+      Connection conn, String schema, String queueName, String deduplicationId)
+      throws SQLException {
     var sql =
         """
-          SELECT workflow_uuid, application_name
+          SELECT workflow_uuid, application_name, name, class_name, config_name, status,
+                 is_debounced
             FROM "%s".workflow_status
            WHERE queue_name = ?
              AND deduplication_id = ?
            LIMIT 1
         """
-            .formatted(ctx.schema());
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, queueName);
       stmt.setString(2, deduplicationId);
       try (var rs = stmt.executeQuery()) {
         return rs.next()
             ? new DeduplicationHolder(
-                rs.getString("workflow_uuid"), rs.getString("application_name"))
+                rs.getString("workflow_uuid"),
+                rs.getString("application_name"),
+                rs.getString("name"),
+                rs.getString("class_name"),
+                rs.getString("config_name"),
+                WorkflowState.valueOf(rs.getString("status")),
+                rs.getBoolean("is_debounced"))
             : null;
       }
     }
+  }
+
+  /**
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, in one transaction.
+   *
+   * <p>A debounced workflow holds its debounce key as its deduplication ID while it is DELAYED;
+   * this is the bounce that keeps it waiting. The new delay is capped at the workflow's {@code
+   * debounce_deadline_epoch_ms}, if one is set. The match covers the workflow's name, class and
+   * instance so a debounce-key collision between different workflows -- {@code "a" + "b-c"} against
+   * {@code "a-b" + "c"} -- never overwrites another workflow's inputs, and is application-scoped so
+   * a peer's row is never extended.
+   *
+   * <p>If nothing matched, the result carries the current holder of the pair (or none), so the
+   * caller can decide whether to start fresh, coordinate with an older holder, or surface a
+   * conflict.
+   *
+   * <p>The new inputs are {@code args} serialized in {@code serializationFormat}, the workflow's
+   * registered format (null for the default), with this database's serializer.
+   *
+   * <p>With a {@code caller}, the bounce is that caller's step: if the step already ran, what it
+   * recorded is returned and nothing is touched; otherwise the bounce and its checkpoint commit
+   * together, so a crash can never leave the row extended but the step unrecorded, which on replay
+   * would bounce again. The return is then what the step records -- the {@link DebounceResult}, or
+   * the caller's ids completed with it -- as {@code Object}, since a replay hands back whatever the
+   * serializer preserved. Without a caller, the {@link DebounceResult}.
+   */
+  public static Object debounceDelayedWorkflow(
+      DbContext ctx,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable String serializationFormat,
+      @Nullable DebounceCaller caller)
+      throws SQLException {
+    long startTime = System.currentTimeMillis();
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn,
+          c -> {
+            if (caller != null) {
+              var prev =
+                  StepsDAO.checkStepResult(
+                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+              if (prev != null) {
+                return prev.toResult(ctx.serializer());
+              }
+            }
+            // Serialize after the replay check, so a step that already ran never serializes
+            // arguments it will not use.
+            var serializedArgs =
+                SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
+            var result =
+                bounce(
+                    ctx,
+                    c,
+                    workflowName,
+                    className,
+                    instanceName,
+                    queueName,
+                    deduplicationId,
+                    delayUntilEpochMs,
+                    serializedArgs.serializedValue(),
+                    serializedArgs.serialization());
+            if (caller == null) {
+              return result;
+            }
+            Object recorded = caller.ids() == null ? result : caller.ids().withBounced(result);
+            var serialized = SerializationUtil.serializeValue(recorded, null, ctx.serializer());
+            StepsDAO.recordStepResult(
+                ctx,
+                c,
+                new StepResult(
+                    caller.workflowId(),
+                    caller.stepId(),
+                    caller.stepName(),
+                    serialized.serializedValue(),
+                    null,
+                    null,
+                    serialized.serialization()),
+                startTime,
+                System.currentTimeMillis());
+            return recorded;
+          });
+    }
+  }
+
+  private static DebounceResult bounce(
+      DbContext ctx,
+      Connection conn,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      String inputs,
+      @Nullable String serialization)
+      throws SQLException {
+    // CASE rather than LEAST, for portability across the databases the DAO supports. An unclaimed
+    // row is claimed for this application, as its dequeue would: left unclaimed, every peer
+    // coalesces onto the one workflow and the last inputs win.
+    var claim = ctx.appName() == null ? "" : ",\n application_name = COALESCE(application_name, ?)";
+    var sql =
+        """
+          UPDATE "%s".workflow_status
+             SET delay_until_epoch_ms = CASE
+                   WHEN debounce_deadline_epoch_ms IS NOT NULL AND debounce_deadline_epoch_ms < ?
+                   THEN debounce_deadline_epoch_ms
+                   ELSE ?
+                 END,
+                 inputs = ?,
+                 serialization = ?,
+                 updated_at = ?%s
+           WHERE name = ?
+             AND class_name = ?
+             AND config_name IS NOT DISTINCT FROM ?
+             AND queue_name = ?
+             AND deduplication_id = ?
+             AND status = ?
+             AND is_debounced = TRUE
+        """
+                .formatted(ctx.schema(), claim)
+            + ctx.andAppScope()
+            + " RETURNING workflow_uuid";
+    // The inputs are read back through the payload table first, so a row that keeps them there
+    // has to have them replaced there too, in the same transaction. A row that has no payload row
+    // reads its inputs from the status row, which the bounce updates; this version does not write
+    // payload rows of its own, so none is created here.
+    //
+    // When the enqueue moves its inputs write to workflow_input (payload-table phase 2), this
+    // becomes the upsert the other SDKs use, and the status row's inputs need no longer be set
+    // above: every row a bounce can reach will keep its inputs in the payload table. The bounce
+    // writes wherever the enqueue of the same release writes. See dbos-transact-java #457.
+    var inputsSql =
+        """
+          UPDATE "%s".workflow_input SET inputs = ? WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema());
+    String workflowId = null;
+    try (var stmt = conn.prepareStatement(sql)) {
+      long now = System.currentTimeMillis();
+      int i = 1;
+      stmt.setLong(i++, delayUntilEpochMs);
+      stmt.setLong(i++, delayUntilEpochMs);
+      stmt.setString(i++, inputs);
+      stmt.setString(i++, serialization);
+      stmt.setLong(i++, now);
+      if (ctx.appName() != null) {
+        stmt.setString(i++, ctx.appName());
+      }
+      stmt.setString(i++, workflowName);
+      stmt.setString(i++, className);
+      stmt.setString(i++, instanceName);
+      stmt.setString(i++, queueName);
+      stmt.setString(i++, deduplicationId);
+      stmt.setString(i++, WorkflowState.DELAYED.name());
+      ctx.bindAppScope(stmt, i);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          workflowId = rs.getString("workflow_uuid");
+        }
+      }
+    }
+    if (workflowId != null) {
+      try (var stmt = conn.prepareStatement(inputsSql)) {
+        stmt.setString(1, inputs);
+        stmt.setString(2, workflowId);
+        stmt.executeUpdate();
+      }
+      return new DebounceResult.Bounced(workflowId);
+    }
+    // No match: the key is unheld, or held by something this bounce must not extend. Read the
+    // holder in the same transaction, so it is the holder the match failed against.
+    return new DebounceResult.NotBounced(
+        findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
   }
 
   public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
@@ -710,11 +905,21 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Transitions DELAYED workflows whose delay has expired to ENQUEUED.
+   *
+   * <p>A debounced workflow's deduplication ID is its debounce key, held only while it is DELAYED,
+   * so the same update clears it: a later debounce on that key starts a fresh workflow instead of
+   * bouncing one that is now committed to running. Every version sharing a fleet must clear it,
+   * whether or not it writes debounced rows itself -- a sweep that flips the row and leaves the key
+   * behind makes every later bounce on it retry until the workflow completes.
+   */
   public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """
           UPDATE "%s".workflow_status
-             SET status = ?
+             SET status = ?,
+                 deduplication_id = CASE WHEN is_debounced THEN NULL ELSE deduplication_id END
            WHERE status = ?
              AND delay_until_epoch_ms <= ?
         """

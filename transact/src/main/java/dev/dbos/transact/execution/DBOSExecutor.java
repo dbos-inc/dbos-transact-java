@@ -11,6 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
@@ -30,6 +31,8 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DebounceResult;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -437,6 +440,53 @@ public class DBOSExecutor implements AutoCloseable {
   public @Nullable DeduplicationHolder findDeduplicationHolder(
       String queueName, String deduplicationId) {
     return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
+  }
+
+  /**
+   * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs with
+   * {@code args} in the workflow's registered format, or reports who holds the pair instead.
+   *
+   * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
+   * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
+   * when given, are recorded with the outcome, as the debouncer's first step has always recorded
+   * them. Outside a workflow, or with no step name, it is the plain bounce.
+   *
+   * <p>Returns what the step records as {@code Object}, deliberately: a replay hands back what the
+   * serializer preserved, which under a custom serializer that drops Java types is a map, and the
+   * caller adapts it rather than casting.
+   */
+  public Object debounceDelayedWorkflow(
+      RegisteredWorkflow workflow,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable String stepName,
+      @Nullable DebounceIds ids) {
+    var ctx = DBOSContextHolder.get();
+    DebounceCaller caller = null;
+    if (stepName != null && ctx.isInWorkflow() && !ctx.isInStep()) {
+      if (HOOK_HOLDER.get() != null) {
+        throw new RuntimeException(
+            "@Step functions cannot be called from the startWorkflow lambda");
+      }
+      caller =
+          new DebounceCaller(ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName, ids);
+    }
+    Object out =
+        systemDatabase.debounceDelayedWorkflow(
+            workflow.workflowName(),
+            workflow.className(),
+            workflow.instanceName(),
+            queueName,
+            deduplicationId,
+            delayUntilEpochMs,
+            args,
+            workflow.serializationStrategy() != null
+                ? workflow.serializationStrategy().formatName()
+                : null,
+            caller);
+    return caller == null && ids != null ? ids.withBounced((DebounceResult) out) : out;
   }
 
   QueueService getQueueService() {
