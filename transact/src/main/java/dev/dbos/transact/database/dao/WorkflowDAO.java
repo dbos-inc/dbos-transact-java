@@ -699,12 +699,6 @@ public class WorkflowDAO {
       @Nullable DebounceCaller caller)
       throws SQLException {
     long startTime = System.currentTimeMillis();
-    // Serialized as a fresh start of the workflow would serialize them -- its registered format,
-    // with this database's serializer -- so a bounce stays consistent with the initial enqueue.
-    var serializedArgs =
-        SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
-    String inputs = serializedArgs.serializedValue();
-    String serialization = serializedArgs.serialization();
     try (var conn = ctx.getConnection()) {
       return SqlTransaction.call(
           conn,
@@ -717,6 +711,10 @@ public class WorkflowDAO {
                 return prev.toResult(ctx.serializer());
               }
             }
+            // Serialize after the replay check, so a step that already ran never serializes
+            // arguments it will not use.
+            var serializedArgs =
+                SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
             var result =
                 bounce(
                     ctx,
@@ -727,8 +725,8 @@ public class WorkflowDAO {
                     queueName,
                     deduplicationId,
                     delayUntilEpochMs,
-                    inputs,
-                    serialization);
+                    serializedArgs.serializedValue(),
+                    serializedArgs.serialization());
             if (caller == null) {
               return result;
             }
