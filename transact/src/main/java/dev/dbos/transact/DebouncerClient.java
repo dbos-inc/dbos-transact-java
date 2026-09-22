@@ -229,9 +229,8 @@ public final class DebouncerClient<R> {
   /**
    * Set a deduplication ID to be forwarded to the user workflow.
    *
-   * @deprecated A debounced workflow's deduplication ID is its debounce key. A caller-supplied one
-   *     cannot be honoured once the debouncer holds that key on the user workflow itself, which the
-   *     next release does. From then on the value is ignored; the method is removed in 2.0.
+   * @deprecated Ignored from the next release, where the debouncer uses the workflow's
+   *     deduplication ID for itself. Removed in 2.0.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DebouncerClient<R> withDeduplicationId(@Nullable String deduplicationId) {
