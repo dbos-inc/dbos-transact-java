@@ -325,7 +325,8 @@ public final class DebouncerClient<R> {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
     }
     if (priority != null && userQueueName == null) {
-      throw new IllegalArgumentException("priority requires a queue; call withQueue first");
+      throw new IllegalArgumentException(
+          "a queue must be configured with withQueue to specify a priority");
     }
     // className is required: the debouncer workflow uses it to look up the registered workflow.
     if (className == null) {

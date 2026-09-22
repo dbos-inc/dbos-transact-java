@@ -253,7 +253,8 @@ public final class Debouncer<R> {
       throw new IllegalArgumentException("debouncePeriod must be a positive non-zero duration");
     }
     if (priority != null && queueName == null) {
-      throw new IllegalArgumentException("priority requires a queue; call withQueue first");
+      throw new IllegalArgumentException(
+          "a queue must be configured with withQueue to specify a priority");
     }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);
