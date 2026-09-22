@@ -305,6 +305,13 @@ public final class Debouncer<R> {
       // A debounced workflow was already waiting on the configured queue; it now carries our args.
       return dbos.retrieveWorkflow(ids.bouncedWorkflowId());
     }
+    // A miss drops the holder rather than classifying it, unlike the internal-queue bounce below.
+    // This release writes no debounce key onto the user queue -- the service workflow enqueues its
+    // child with the caller's own deduplication ID, never this one -- so whoever holds the key
+    // there cannot collide with anything this call goes on to create. The cost is the mixed-fleet
+    // gap: the two shapes hold the key on different queues, so a key hit by both kinds of node
+    // within a few milliseconds runs twice. Once the enqueue puts the key on the user queue
+    // (#538), a holder found here has to be classified exactly as the one below is.
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
 
