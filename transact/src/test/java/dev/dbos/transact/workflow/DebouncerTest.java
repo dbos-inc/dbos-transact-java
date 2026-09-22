@@ -606,14 +606,9 @@ public class DebouncerTest {
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
   }
 
-  /**
-   * With a pinned application version, a workflow recorded here can be recovered by a node of the
-   * previous version, which knows the holder but not the bounce result. Joining a service workflow
-   * -- the only conflict the previous version can be part of -- must therefore record the holder
-   * alone.
-   */
+  /** Joining a service workflow records what the bounce found: the service workflow as holder. */
   @Test
-  public void recordsTheHolderAloneWhenJoiningAServiceWorkflow() throws Exception {
+  public void recordsTheHolderWhenJoiningAServiceWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
@@ -629,15 +624,12 @@ public class DebouncerTest {
 
     var recorded = lookupDebouncerStep(orchestratorId);
     assertTrue(
-        recorded.output().contains(DeduplicationHolder.class.getName()),
+        recorded.output().contains(DebounceResult.NotBounced.class.getName()),
         "recorded: " + recorded.output());
-    assertFalse(
-        recorded.output().contains(DebounceResult.class.getName()),
-        "recorded: " + recorded.output());
-    // The holder it names is the service workflow, not the user workflow the handle points at.
     assertTrue(
         recorded.output().contains(Constants.DEBOUNCER_WORKFLOW_NAME),
         "recorded: " + recorded.output());
+    // The holder it names is the service workflow, not the user workflow the handle points at.
     assertFalse(recorded.output().contains(holder.workflowId()), "recorded: " + recorded.output());
     // Only the record's components are recorded, not what is derived from them.
     assertFalse(recorded.output().contains("debouncerService"), "recorded: " + recorded.output());

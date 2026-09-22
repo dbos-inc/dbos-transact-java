@@ -324,28 +324,18 @@ public final class Debouncer<R> {
         // When called from inside a workflow, record the result as a durable step so that
         // replay returns the same holder and the subsequent send/getEvent steps stay
         // deterministic. Typed as Object so that replay does not cast the recorded value: a step
-        // recorded before this SDK bounced holds a holder, or before application names a bare
-        // workflow id, and toDebounceResult adapts both.
-        //
-        // Unless a bounce happened, what is recorded is the holder alone, the shape the previous
-        // version reads. With a pinned application version a workflow this node records can be
-        // recovered by a node of that version, and a bounce can only happen against a row a
-        // newer version wrote, which never shares a fleet with the previous one. So every step
-        // recorded in a fleet the previous version is part of stays readable by it.
+        // recorded by the previous version holds a bare workflow id, and toDebounceResult adapts
+        // it. A workflow recorded by this version is not expected to replay on that one.
         Object recorded =
             executor.runDbosFunctionAsStep(
-                () -> {
-                  var bounce =
-                      executor.debounceDelayedWorkflow(
-                          userWorkflow,
-                          Constants.DBOS_INTERNAL_QUEUE,
-                          debouncerDeduplicationId,
-                          delayUntil(debouncePeriod),
-                          invocation.args());
-                  return bounce instanceof DebounceResult.NotBounced not
-                      ? (Object) not.holder()
-                      : bounce;
-                },
+                () ->
+                    (Object)
+                        executor.debounceDelayedWorkflow(
+                            userWorkflow,
+                            Constants.DBOS_INTERNAL_QUEUE,
+                            debouncerDeduplicationId,
+                            delayUntil(debouncePeriod),
+                            invocation.args()),
                 "DBOS.lookupDebouncer",
                 null);
         DebounceResult result = toDebounceResult(recorded);
@@ -484,17 +474,16 @@ public final class Debouncer<R> {
   /**
    * Adapts a recorded {@code DBOS.lookupDebouncer} step to the shape this version expects.
    *
-   * <p>Before this SDK bounced, the step recorded the holder alone; before application names, the
-   * holder's workflow id on its own. A workflow that recorded one under those versions and replays
-   * under this one still has to resume. That replay only happens when the application version is
-   * pinned across the upgrade — patching mode does exactly that — because the SDK version is
-   * otherwise hashed into the computed application version, and recovery only claims workflows
-   * matching it.
+   * <p>Before this SDK bounced, the step recorded the holder's workflow id on its own. A workflow
+   * that recorded one under that version and replays under this one still has to resume. That
+   * replay only happens when the application version is pinned across the upgrade — patching mode
+   * does exactly that — because the SDK version is otherwise hashed into the computed application
+   * version, and recovery only claims workflows matching it.
    *
-   * <p>Either older shape means nothing was bounced, and the holder it names was a debouncer
-   * service workflow: nothing else held a debounce key then. {@link #toDeduplicationHolder} reports
-   * such a holder with no name, which {@link DeduplicationHolder#isDebouncerService} reads as
-   * exactly that.
+   * <p>That older shape means nothing was bounced, and the holder it names was a debouncer service
+   * workflow: nothing else held a debounce key then. {@link #toDeduplicationHolder} reports such a
+   * holder with no name, which {@link DeduplicationHolder#isDebouncerService} reads as exactly
+   * that.
    *
    * <p>A serializer that does not carry Java type information hands back a map rather than the
    * record it recorded, so that shape is adapted too.
