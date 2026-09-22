@@ -295,6 +295,31 @@ public class DynamicQueuesTest {
   }
 
   @Test
+  public void registrationRefusesAHalfSetRateLimit() throws Exception {
+    // Registration used to drop a half-set pair and create the queue with no limit at all.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.empty().withRateLimitMax(Field.of(5))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(5, (Duration) null)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.registerQueue(
+                "q-reg-half",
+                QueueOptions.empty()
+                    .withPartitionRateLimitPeriod(Field.of(Duration.ofSeconds(1)))));
+    assertTrue(dbos.findQueue("q-reg-half").isEmpty(), "no refused registration may be written");
+
+    // Both halves null is no limit, as it always was.
+    dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(null, (Duration) null));
+    assertNull(dbos.findQueue("q-reg-half").orElseThrow().rateLimit());
+  }
+
+  @Test
   // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
   @SuppressWarnings("removal")
   public void aLegacyPartitionedQueueKeepsItsMeaningAcrossAnUnrelatedUpdate() throws Exception {

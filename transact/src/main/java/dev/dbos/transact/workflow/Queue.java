@@ -98,9 +98,10 @@ public record Queue(
     // neither is concurrency >= workerConcurrency, though Go, Python and TypeScript check both:
     // this constructor is also the read path (QueuesDAO.queueFromResultSet builds through it),
     // so a rule added here rejects rows already in the database, and one unreadable row takes
-    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules land
-    // with the write-side guard, in the persistence slice. A per-partition column cannot appear
-    // in an existing row, so validating it has nothing to reject.
+    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules are
+    // enforced on write instead, by validateForRegistration. The per-partition rate limit can stay
+    // here: its columns are new, and every SDK that writes them validates them, so no stored row
+    // should fail this check.
     validateRateLimit("partitionRateLimit", partitionRateLimit);
     if (pollingInterval.isNegative() || pollingInterval.isZero())
       throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");

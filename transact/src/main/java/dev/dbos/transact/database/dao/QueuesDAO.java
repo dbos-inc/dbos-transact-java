@@ -841,8 +841,7 @@ public class QueuesDAO {
     if (newMax == null && newPeriod == null) return null;
     if (newMax == null || newPeriod == null) {
       throw new IllegalArgumentException(
-          ("cannot leave queue %s with half of %s: %sMax and %sPeriod are set and cleared"
-                  + " together")
+          ("queue %s cannot have half of %s: %sMax and %sPeriod are set and cleared together")
               .formatted(queue, name, name, name));
     }
     return new Queue.RateLimit(newMax, newPeriod);
@@ -926,8 +925,7 @@ public class QueuesDAO {
         rs.getString("application_name"));
   }
 
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
+  // Reads the deprecated partitionQueue option verbatim.
   @SuppressWarnings("removal")
   private static Queue queueFromOptions(String name, QueueOptions options) {
     Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
@@ -935,24 +933,17 @@ public class QueuesDAO {
         options.workerConcurrency().isPresent() ? options.workerConcurrency().get() : null;
     boolean partitionQueueVal = options.partitionQueue().orElse(false);
 
-    Queue.RateLimit rateLimit = null;
-    if (options.rateLimitMax().isPresent()
-        && options.rateLimitPeriod().isPresent()
-        && options.rateLimitMax().get() != null
-        && options.rateLimitPeriod().get() != null) {
-      rateLimit =
-          new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
-    }
-
-    Queue.RateLimit partitionRateLimit = null;
-    if (options.partitionRateLimitMax().isPresent()
-        && options.partitionRateLimitPeriod().isPresent()
-        && options.partitionRateLimitMax().get() != null
-        && options.partitionRateLimitPeriod().get() != null) {
-      partitionRateLimit =
-          new Queue.RateLimit(
-              options.partitionRateLimitMax().get(), options.partitionRateLimitPeriod().get());
-    }
+    // A new queue has no current limit, so a half-set pair is refused exactly as an update that
+    // would leave one behind is, rather than silently registering no limit at all.
+    Queue.RateLimit rateLimit =
+        rateLimitAfter(name, "rateLimit", null, options.rateLimitMax(), options.rateLimitPeriod());
+    Queue.RateLimit partitionRateLimit =
+        rateLimitAfter(
+            name,
+            "partitionRateLimit",
+            null,
+            options.partitionRateLimitMax(),
+            options.partitionRateLimitPeriod());
 
     Duration pollingIntervalVal = options.pollingInterval().orElse(Queue.DEFAULT_POLLING_INTERVAL);
 

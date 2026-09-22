@@ -22,11 +22,12 @@ import org.jspecify.annotations.Nullable;
  * <p>A queue can carry flow control at two scopes at once: the queue-wide limits bound the queue as
  * a whole, and the per-partition limits bound each partition key independently. Setting any
  * per-partition limit is what partitions the queue, so {@code partitionQueue} is redundant
- * alongside one — it is accepted, and adds nothing.
+ * alongside one: registration accepts it and it adds nothing, while an update refuses it on a queue
+ * already partitioned by its per-partition limits. A queue registered with {@code partitionQueue}
+ * alone keeps its limits frozen; re-register it with per-partition limits to move it across.
  *
- * <p><strong>The per-partition limits are not stored yet.</strong> Registering or updating a queue
- * with one throws {@link UnsupportedOperationException} until the persistence slice of #507 lands,
- * rather than accepting a limit that would never be enforced.
+ * <p>A rate limit's max and period are set and cleared together, at registration and on update
+ * alike; supplying only one of them is refused.
  *
  * @param concurrency max concurrent executions of this queue across all workers; {@link
  *     Field#absent()} means no limit on creation or leave unchanged on update; {@code
