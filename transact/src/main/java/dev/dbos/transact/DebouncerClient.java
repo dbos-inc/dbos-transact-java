@@ -310,9 +310,9 @@ public final class DebouncerClient<R> {
    * @param debounceKey key that groups concurrent calls; calls with the same key are coalesced
    * @param debouncePeriod inactivity window before the user workflow runs; each call resets it
    * @param args positional arguments to pass to the user workflow
-   * @return handle pointing to the user workflow that will run with the latest arguments; on the
-   *     deduplication path the handle ID is the child ID published by the running debouncer, not
-   *     the locally generated UUID
+   * @return handle pointing to the user workflow that will run with the latest arguments. When
+   *     another call already holds the key, that is the workflow it named: the child ID published
+   *     by a running debouncer service workflow, or a debounced workflow this call extended.
    */
   public @NonNull WorkflowHandle<R, ?> debounce(
       @NonNull String debounceKey, @NonNull Duration debouncePeriod, Object... args) {

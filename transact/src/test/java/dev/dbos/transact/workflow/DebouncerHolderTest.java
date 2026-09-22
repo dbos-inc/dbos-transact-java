@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.json.DBOSJavaSerializer;
 import dev.dbos.transact.json.DBOSPortableSerializer;
 
 import java.util.HashMap;
@@ -262,6 +263,55 @@ public class DebouncerHolderTest {
     var result = Debouncer.toDebounceResult(new HashMap<String, Object>());
 
     assertEquals(new DebounceResult.NotBounced(null), result);
+  }
+
+  // ==================== Replay of what the previous version recorded, typed ====================
+  //
+  // Steps are recorded with the application's serializer, the typed Java one by default. These
+  // are the literal shapes the previous version wrote, read back through that serializer.
+
+  @Test
+  void readsTheBareWorkflowIdThePreviousVersionRecordedForTheLookup() {
+    var serializer = DBOSJavaSerializer.INSTANCE;
+    var recorded = serializer.deserialize(serializer.serialize("holder-wf"));
+
+    var result = Debouncer.toDebounceResult(recorded);
+
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
+    assertEquals("holder-wf", holder.workflowId());
+    assertTrue(holder.isDebouncerService());
+    assertFalse(holder.isForeignTo("app-a"));
+  }
+
+  @Test
+  void readsTheTwoIdsThePreviousVersionRecordedForTheFirstStep() {
+    var recorded =
+        DBOSJavaSerializer.INSTANCE.deserialize(
+            "{\"@class\":\"dev.dbos.transact.workflow.Debouncer$DebounceIds\","
+                + "\"userWorkflowId\":\"user-1\",\"messageId\":\"msg-1\"}");
+
+    var ids = Debouncer.toDebounceIds(recorded);
+
+    assertEquals("user-1", ids.userWorkflowId());
+    assertEquals("msg-1", ids.messageId());
+    assertNull(ids.bouncedWorkflowId());
+  }
+
+  @Test
+  void roundTripsThisVersionsResultsThroughTheTypedSerializer() {
+    var serializer = DBOSJavaSerializer.INSTANCE;
+    var holder =
+        new DeduplicationHolder(
+            "wf-7", "app-b", "process", "com.example.Impl", "east", WorkflowState.DELAYED, true);
+
+    assertEquals(
+        new DebounceResult.NotBounced(holder),
+        Debouncer.toDebounceResult(
+            serializer.deserialize(serializer.serialize(new DebounceResult.NotBounced(holder)))));
+    assertEquals(
+        new DebounceResult.Bounced("wf-9"),
+        Debouncer.toDebounceResult(
+            serializer.deserialize(serializer.serialize(new DebounceResult.Bounced("wf-9")))));
   }
 
   // ==================== Replay of the first step ====================

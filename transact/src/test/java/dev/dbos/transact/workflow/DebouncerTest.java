@@ -634,6 +634,47 @@ public class DebouncerTest {
     assertFalse(recorded.output().contains("debouncerService"), "recorded: " + recorded.output());
   }
 
+  /**
+   * A bounce from inside a workflow is recorded with its checkpoint in one transaction, and a
+   * replay returns the recorded result rather than bouncing again: the extended row keeps the delay
+   * the first run gave it.
+   */
+  @Test
+  public void replaysABounceRecordedInsideAWorkflowWithoutBouncingAgain() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+
+    var orchestratorId = "wf-bounce-orchestrator";
+    String bounced;
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      bounced = orch.joinDebounce("mixed", "second");
+    }
+    assertEquals(waiting, bounced);
+    var afterBounce = DebouncedRows.read(dataSource, waiting).delayUntilEpochMs();
+    assertTrue(afterBounce < planted);
+    var recorded = lookupDebouncerStep(orchestratorId);
+    assertTrue(
+        recorded.output().contains(DebounceResult.Bounced.class.getName()),
+        "recorded: " + recorded.output());
+
+    // Replay it. The lookup step returns its recorded Bounced, so the row is not touched again.
+    flipToPending(orchestratorId);
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    assertTrue(recovered.contains(orchestratorId), "orchestrator was not recovered");
+    assertEquals(waiting, dbos.retrieveWorkflow(orchestratorId).getResult());
+
+    assertEquals(afterBounce, DebouncedRows.read(dataSource, waiting).delayUntilEpochMs());
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+  }
+
   // ==================== Coalescing into a debounced workflow ====================
   //
   // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its

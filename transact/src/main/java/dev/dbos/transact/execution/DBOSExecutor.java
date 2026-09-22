@@ -84,6 +84,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -451,14 +452,7 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       long delayUntilEpochMs,
       Object[] args) {
-    var serialized =
-        SerializationUtil.serializeArgs(
-            args,
-            null,
-            workflow.serializationStrategy() != null
-                ? workflow.serializationStrategy().formatName()
-                : null,
-            systemDatabase.serializer());
+    var serialized = serializeBouncedArgs(workflow, args);
     return systemDatabase.debounceDelayedWorkflow(
         workflow.workflowName(),
         workflow.className(),
@@ -468,6 +462,87 @@ public class DBOSExecutor implements AutoCloseable {
         delayUntilEpochMs,
         serialized.serializedValue(),
         serialized.serialization());
+  }
+
+  private SerializationUtil.SerializedResult serializeBouncedArgs(
+      RegisteredWorkflow workflow, Object[] args) {
+    return SerializationUtil.serializeArgs(
+        args,
+        null,
+        workflow.serializationStrategy() != null
+            ? workflow.serializationStrategy().formatName()
+            : null,
+        systemDatabase.serializer());
+  }
+
+  /**
+   * The bounce as a step whose checkpoint commits with it. Inside a workflow, replay returns what
+   * the step recorded; a first run bounces and records {@code toRecorded} of the result in one
+   * transaction, so a crash can never leave the row extended but the step unrecorded, which on
+   * replay would bounce again. Outside a workflow it is the plain bounce with {@code toRecorded}
+   * applied.
+   *
+   * <p>Returns the recorded value as {@code Object}, deliberately: a replay hands back what the
+   * serializer preserved, which under a custom serializer that drops Java types is a map, and the
+   * caller adapts it rather than casting.
+   */
+  public Object debounceDelayedWorkflowAsStep(
+      RegisteredWorkflow workflow,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @NonNull String stepName,
+      Function<DebounceResult, Object> toRecorded) {
+    if (Objects.requireNonNull(stepName, "DBOS step name must not be null").isEmpty()) {
+      throw new IllegalArgumentException("DBOS step name must not be empty");
+    }
+    if (!stepName.startsWith("DBOS.")) {
+      throw new IllegalArgumentException("DBOS step name must start with DBOS.");
+    }
+    var ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow() || ctx.isInStep()) {
+      return toRecorded.apply(
+          debounceDelayedWorkflow(workflow, queueName, deduplicationId, delayUntilEpochMs, args));
+    }
+    if (HOOK_HOLDER.get() != null) {
+      throw new RuntimeException("@Step functions cannot be called from the startWorkflow lambda");
+    }
+    var workflowId = ctx.getWorkflowId();
+    var stepId = ctx.getAndIncrementFunctionId();
+    logger.debug("executeStep #{} ({}) for workflow {}", stepId, stepName, workflowId);
+
+    var prevResult = systemDatabase.checkStepResult(workflowId, stepId, stepName);
+    if (prevResult != null) {
+      if (prevResult.output() == null) {
+        // A failure is never recorded: it rolls the whole transaction back, row included.
+        throw new IllegalStateException(
+            "Recorded output is null for workflow %s step %d (%s)"
+                .formatted(workflowId, stepId, stepName));
+      }
+      return SerializationUtil.deserializeValue(
+          prevResult.output(), prevResult.serialization(), this.serializer);
+    }
+
+    var serialized = serializeBouncedArgs(workflow, args);
+    var checkpoint =
+        new SystemDatabase.StepCheckpoint(workflowId, stepId, stepName, System.currentTimeMillis());
+    ctx.setStepFunctionId(stepId);
+    try {
+      return systemDatabase.debounceDelayedWorkflowAsStep(
+          checkpoint,
+          workflow.workflowName(),
+          workflow.className(),
+          workflow.instanceName(),
+          queueName,
+          deduplicationId,
+          delayUntilEpochMs,
+          serialized.serializedValue(),
+          serialized.serialization(),
+          toRecorded);
+    } finally {
+      ctx.resetStepFunctionId();
+    }
   }
 
   QueueService getQueueService() {

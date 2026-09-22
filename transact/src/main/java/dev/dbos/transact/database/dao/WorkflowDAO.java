@@ -662,7 +662,7 @@ public class WorkflowDAO {
   }
 
   /**
-   * Extends a debounced DELAYED workflow's delay and replaces its inputs, in one statement.
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, in one transaction.
    *
    * <p>A debounced workflow holds its debounce key as its deduplication ID while it is DELAYED;
    * this is the bounce that keeps it waiting. The new delay is capped at the workflow's {@code
@@ -677,6 +677,40 @@ public class WorkflowDAO {
    */
   public static DebounceResult debounceDelayedWorkflow(
       DbContext ctx,
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      String inputs,
+      @Nullable String serialization)
+      throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn,
+          c ->
+              debounceDelayedWorkflow(
+                  ctx,
+                  c,
+                  workflowName,
+                  className,
+                  instanceName,
+                  queueName,
+                  deduplicationId,
+                  delayUntilEpochMs,
+                  inputs,
+                  serialization));
+    }
+  }
+
+  /**
+   * As above, on a connection whose transaction the caller manages -- a step's, so that the bounce
+   * and its checkpoint commit together.
+   */
+  public static DebounceResult debounceDelayedWorkflow(
+      DbContext ctx,
+      Connection conn,
       String workflowName,
       String className,
       @Nullable String instanceName,
@@ -726,52 +760,43 @@ public class WorkflowDAO {
           UPDATE "%s".workflow_input SET inputs = ? WHERE workflow_uuid = ?
         """
             .formatted(ctx.schema());
-    try (var conn = ctx.getConnection()) {
-      var bounced =
-          SqlTransaction.call(
-              conn,
-              c -> {
-                String workflowId = null;
-                try (var stmt = c.prepareStatement(sql)) {
-                  long now = System.currentTimeMillis();
-                  int i = 1;
-                  stmt.setLong(i++, delayUntilEpochMs);
-                  stmt.setLong(i++, delayUntilEpochMs);
-                  stmt.setString(i++, inputs);
-                  stmt.setString(i++, serialization);
-                  stmt.setLong(i++, now);
-                  if (ctx.appName() != null) {
-                    stmt.setString(i++, ctx.appName());
-                  }
-                  stmt.setString(i++, workflowName);
-                  stmt.setString(i++, className);
-                  stmt.setString(i++, instanceName);
-                  stmt.setString(i++, queueName);
-                  stmt.setString(i++, deduplicationId);
-                  stmt.setString(i++, WorkflowState.DELAYED.name());
-                  ctx.bindAppScope(stmt, i);
-                  try (var rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                      workflowId = rs.getString("workflow_uuid");
-                    }
-                  }
-                }
-                if (workflowId != null) {
-                  try (var stmt = c.prepareStatement(inputsSql)) {
-                    stmt.setString(1, inputs);
-                    stmt.setString(2, workflowId);
-                    stmt.executeUpdate();
-                  }
-                }
-                return workflowId;
-              });
-      if (bounced != null) {
-        return new DebounceResult.Bounced(bounced);
+    String workflowId = null;
+    try (var stmt = conn.prepareStatement(sql)) {
+      long now = System.currentTimeMillis();
+      int i = 1;
+      stmt.setLong(i++, delayUntilEpochMs);
+      stmt.setLong(i++, delayUntilEpochMs);
+      stmt.setString(i++, inputs);
+      stmt.setString(i++, serialization);
+      stmt.setLong(i++, now);
+      if (ctx.appName() != null) {
+        stmt.setString(i++, ctx.appName());
       }
-      // No match: the key is unheld, or held by something this bounce must not extend.
-      return new DebounceResult.NotBounced(
-          findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
+      stmt.setString(i++, workflowName);
+      stmt.setString(i++, className);
+      stmt.setString(i++, instanceName);
+      stmt.setString(i++, queueName);
+      stmt.setString(i++, deduplicationId);
+      stmt.setString(i++, WorkflowState.DELAYED.name());
+      ctx.bindAppScope(stmt, i);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          workflowId = rs.getString("workflow_uuid");
+        }
+      }
     }
+    if (workflowId != null) {
+      try (var stmt = conn.prepareStatement(inputsSql)) {
+        stmt.setString(1, inputs);
+        stmt.setString(2, workflowId);
+        stmt.executeUpdate();
+      }
+      return new DebounceResult.Bounced(workflowId);
+    }
+    // No match: the key is unheld, or held by something this bounce must not extend. Read the
+    // holder in the same transaction, so it is the holder the match failed against.
+    return new DebounceResult.NotBounced(
+        findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
   }
 
   public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
