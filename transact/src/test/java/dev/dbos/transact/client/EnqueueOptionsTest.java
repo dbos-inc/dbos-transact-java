@@ -55,6 +55,12 @@ public class EnqueueOptionsTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDelay(Duration.ofSeconds(-1)));
+
+    // 0 is the default priority; below it is refused
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withPriority(-1));
+    assertEquals(0, new DBOSClient.EnqueueOptions("wf-name", "q-name").withPriority(0).priority());
   }
 
   /**

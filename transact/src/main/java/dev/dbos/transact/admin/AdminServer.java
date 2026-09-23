@@ -334,7 +334,7 @@ public class AdminServer implements AutoCloseable {
           q.name(),
           q.concurrency(),
           q.workerConcurrency(),
-          q.priorityEnabled(),
+          true, // every queue dispatches in priority order
           q.partitioningEnabled(),
           q.rateLimit(),
           q.pollingInterval(),

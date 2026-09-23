@@ -206,7 +206,6 @@ class AdminServerTest {
         new Queue("test-queue-2")
             .withConcurrency(10)
             .withWorkerConcurrency(5)
-            .withPriorityEnabled(true)
             .withRateLimit(2, 4, TimeUnit.SECONDS);
 
     when(mockExec.getStaticQueues()).thenReturn(List.of(queue1, queue2));
@@ -226,7 +225,7 @@ class AdminServerTest {
           .body("[0].name", equalTo("test-queue-1"))
           .body("[0].concurrency", nullValue())
           .body("[0].workerConcurrency", nullValue())
-          .body("[0].priorityEnabled", equalTo(false))
+          .body("[0].priorityEnabled", equalTo(true))
           .body("[0].rateLimit", nullValue())
           .body("[1].name", equalTo("test-queue-2"))
           .body("[1].concurrency", equalTo(10))

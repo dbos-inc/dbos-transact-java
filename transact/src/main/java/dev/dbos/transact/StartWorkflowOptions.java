@@ -40,8 +40,8 @@ import org.jspecify.annotations.Nullable;
  *     execution. May be null.
  * @param deduplicationId If {@code queueName} is specified, an optional ID used to prevent
  *     duplicate enqueued workflows. May be null.
- * @param priority If {@code queueName} is specified and refers to a queue with priority enabled,
- *     the priority to assign. May be null.
+ * @param priority If {@code queueName} is specified, the priority to assign; lower values are
+ *     dequeued first, and the default is 0. Must not be negative. May be null.
  * @param queuePartitionKey If {@code queueName} is specified, an optional partition key used to
  *     distribute workflows across queue partitions for load balancing and ordered processing. May
  *     be null.
@@ -96,6 +96,11 @@ public record StartWorkflowOptions(
 
     if (nullableIsEmpty(appVersion)) {
       throw new IllegalArgumentException("appVersion must not be empty");
+    }
+
+    // 0 is the default, so a negative priority would dequeue ahead of every workflow that set none.
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
     }
 
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
@@ -308,8 +313,9 @@ public record StartWorkflowOptions(
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified queue priority. Note: The queue must be
-   * specified and have prioritization enabled.
+   * Returns a new StartWorkflowOptions with the specified queue priority; lower values are dequeued
+   * first, and the default is 0. Note: The queue must be specified, and the priority must not be
+   * negative.
    *
    * @param priority the priority to assign
    * @return a new StartWorkflowOptions with the updated priority

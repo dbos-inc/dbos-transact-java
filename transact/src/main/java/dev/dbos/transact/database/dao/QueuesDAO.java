@@ -417,7 +417,8 @@ public class QueuesDAO {
             partition_concurrency, partition_worker_concurrency,
             partition_rate_limit_max, partition_rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        -- priority_enabled is vestigial: every queue dispatches in priority order.
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema());
@@ -432,7 +433,7 @@ public class QueuesDAO {
           partition_worker_concurrency    = ?,
           partition_rate_limit_max        = ?,
           partition_rate_limit_period_sec = ?,
-          priority_enabled                = ?,
+          priority_enabled                = TRUE,
           partition_queue                 = ?,
           polling_interval_sec            = ?,
           updated_at                      = ?,
@@ -450,26 +451,16 @@ public class QueuesDAO {
               connection, ctx.schema(), "queues", "name", queue.name(), requestedOwner, "Queue");
       boolean inserted;
       try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-        var index = bindQueueParams(ps, queue, 1);
+        ps.setString(1, queue.name());
+        var index = bindQueueParams(ps, queue, 2);
         ps.setString(index, owner);
         inserted = ps.executeUpdate() == 1;
       }
       if (!inserted && updateExisting) {
         try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
-          setNullableInt(ps, 1, queue.concurrency());
-          setNullableInt(ps, 2, queue.workerConcurrency());
-          setRateLimit(ps, 3, queue.rateLimit());
-          setNullableInt(ps, 5, queue.partitionConcurrency());
-          setNullableInt(ps, 6, queue.partitionWorkerConcurrency());
-          setRateLimit(ps, 7, queue.partitionRateLimit());
-          ps.setBoolean(9, queue.priorityEnabled());
-          // Derived, not copied: the column follows the per-partition limits, and other SDKs
-          // read it to decide whether to dequeue per partition.
-          ps.setBoolean(10, queue.isPartitioned());
-          ps.setDouble(11, queue.pollingInterval().toMillis() / 1000.0);
-          ps.setLong(12, System.currentTimeMillis());
-          ps.setString(13, owner);
-          ps.setString(14, queue.name());
+          var index = bindQueueParams(ps, queue, 1);
+          ps.setString(index, owner);
+          ps.setString(index + 1, queue.name());
           ps.executeUpdate();
         }
       }
@@ -548,23 +539,25 @@ public class QueuesDAO {
     }
   }
 
-  /** Binds a queue row's columns from {@code offset}, returning the next free index. */
+  /**
+   * Binds a queue row's columns, from {@code concurrency} through {@code updated_at}, starting at
+   * {@code offset}, and returns the next free index. The insert and the update list those columns
+   * in the same order, with {@code priority_enabled} written as a literal in both.
+   */
   private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
-    ps.setString(offset, queue.name());
-    setNullableInt(ps, offset + 1, queue.concurrency());
-    setNullableInt(ps, offset + 2, queue.workerConcurrency());
-    setRateLimit(ps, offset + 3, queue.rateLimit());
-    setNullableInt(ps, offset + 5, queue.partitionConcurrency());
-    setNullableInt(ps, offset + 6, queue.partitionWorkerConcurrency());
-    setRateLimit(ps, offset + 7, queue.partitionRateLimit());
-    ps.setBoolean(offset + 9, queue.priorityEnabled());
+    setNullableInt(ps, offset, queue.concurrency());
+    setNullableInt(ps, offset + 1, queue.workerConcurrency());
+    setRateLimit(ps, offset + 2, queue.rateLimit());
+    setNullableInt(ps, offset + 4, queue.partitionConcurrency());
+    setNullableInt(ps, offset + 5, queue.partitionWorkerConcurrency());
+    setRateLimit(ps, offset + 6, queue.partitionRateLimit());
     // Derived, not copied: the column follows the per-partition limits, and other SDKs read it
     // to decide whether to dequeue per partition.
-    ps.setBoolean(offset + 10, queue.isPartitioned());
-    ps.setDouble(offset + 11, queue.pollingInterval().toMillis() / 1000.0);
-    ps.setLong(offset + 12, System.currentTimeMillis());
-    return offset + 13;
+    ps.setBoolean(offset + 8, queue.isPartitioned());
+    ps.setDouble(offset + 9, queue.pollingInterval().toMillis() / 1000.0);
+    ps.setLong(offset + 10, System.currentTimeMillis());
+    return offset + 11;
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
@@ -587,7 +580,7 @@ public class QueuesDAO {
           rate_limit_max, rate_limit_period_sec,
           partition_concurrency, partition_worker_concurrency,
           partition_rate_limit_max, partition_rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec, application_name
+          partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         WHERE name = ?
         """
@@ -624,7 +617,7 @@ public class QueuesDAO {
           rate_limit_max, rate_limit_period_sec,
           partition_concurrency, partition_worker_concurrency,
           partition_rate_limit_max, partition_rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec, application_name
+          partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         """
                 .formatted(ctx.schema())
@@ -696,7 +689,9 @@ public class QueuesDAO {
             params,
             "partition_rate_limit_period_sec",
             durationToSec(update.partitionRateLimitPeriod()));
-        collectOptional(setClauses, params, "priority_enabled", update.priorityEnabled());
+        // Vestigial, but other SDKs still read it; every write heals a row an earlier version
+        // stored as false.
+        setClauses.add("\"priority_enabled\" = TRUE");
         // Partitioning is inferred from the per-partition limits, so the stored flag follows them
         // on every write. Left alone it would go stale in both directions: unset on a queue that
         // just gained its first partition limit, and still set on one that just lost its last.
@@ -795,7 +790,7 @@ public class QueuesDAO {
             current.name(),
             intAfter(current.concurrency(), update.concurrency()),
             intAfter(current.workerConcurrency(), update.workerConcurrency()),
-            update.priorityEnabled().orElse(current.priorityEnabled()),
+            true, // every queue dispatches in priority order
             // Carry the legacy flag's meaning, not the stored column: the column is derived, so
             // on a queue partitioned by its limits it is already true and would read back as a
             // request for legacy partitioning that the caller never made.
@@ -846,8 +841,7 @@ public class QueuesDAO {
     if (newMax == null && newPeriod == null) return null;
     if (newMax == null || newPeriod == null) {
       throw new IllegalArgumentException(
-          ("cannot leave queue %s with half of %s: %sMax and %sPeriod are set and cleared"
-                  + " together")
+          ("queue %s cannot have half of %s: %sMax and %sPeriod are set and cleared together")
               .formatted(queue, name, name, name));
     }
     return new Queue.RateLimit(newMax, newPeriod);
@@ -905,7 +899,6 @@ public class QueuesDAO {
     Integer workerConcurrency = rs.getObject("worker_concurrency", Integer.class);
     Integer rateLimitMax = rs.getObject("rate_limit_max", Integer.class);
     Double rateLimitPeriodSec = rs.getObject("rate_limit_period_sec", Double.class);
-    boolean priorityEnabled = rs.getBoolean("priority_enabled");
     boolean partitioningEnabled = rs.getBoolean("partition_queue");
     Double pollingIntervalSec = rs.getObject("polling_interval_sec", Double.class);
 
@@ -922,7 +915,7 @@ public class QueuesDAO {
         name,
         concurrency,
         workerConcurrency,
-        priorityEnabled,
+        true, // every queue dispatches in priority order, whatever the vestigial column says
         partitioningEnabled,
         rateLimit,
         rs.getObject("partition_concurrency", Integer.class),
@@ -932,34 +925,25 @@ public class QueuesDAO {
         rs.getString("application_name"));
   }
 
-  // Reads the stored partitioning surface directly; moves to the resolved limits in #507's
-  // persistence and dequeue slices, which is where these call sites change.
+  // Reads the deprecated partitionQueue option verbatim.
   @SuppressWarnings("removal")
   private static Queue queueFromOptions(String name, QueueOptions options) {
     Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
     Integer workerConcurrencyVal =
         options.workerConcurrency().isPresent() ? options.workerConcurrency().get() : null;
-    boolean priorityEnabledVal = options.priorityEnabled().orElse(false);
     boolean partitionQueueVal = options.partitionQueue().orElse(false);
 
-    Queue.RateLimit rateLimit = null;
-    if (options.rateLimitMax().isPresent()
-        && options.rateLimitPeriod().isPresent()
-        && options.rateLimitMax().get() != null
-        && options.rateLimitPeriod().get() != null) {
-      rateLimit =
-          new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
-    }
-
-    Queue.RateLimit partitionRateLimit = null;
-    if (options.partitionRateLimitMax().isPresent()
-        && options.partitionRateLimitPeriod().isPresent()
-        && options.partitionRateLimitMax().get() != null
-        && options.partitionRateLimitPeriod().get() != null) {
-      partitionRateLimit =
-          new Queue.RateLimit(
-              options.partitionRateLimitMax().get(), options.partitionRateLimitPeriod().get());
-    }
+    // A new queue has no current limit, so a half-set pair is refused exactly as an update that
+    // would leave one behind is, rather than silently registering no limit at all.
+    Queue.RateLimit rateLimit =
+        rateLimitAfter(name, "rateLimit", null, options.rateLimitMax(), options.rateLimitPeriod());
+    Queue.RateLimit partitionRateLimit =
+        rateLimitAfter(
+            name,
+            "partitionRateLimit",
+            null,
+            options.partitionRateLimitMax(),
+            options.partitionRateLimitPeriod());
 
     Duration pollingIntervalVal = options.pollingInterval().orElse(Queue.DEFAULT_POLLING_INTERVAL);
 
@@ -967,7 +951,7 @@ public class QueuesDAO {
         name,
         concurrencyVal,
         workerConcurrencyVal,
-        priorityEnabledVal,
+        true, // every queue dispatches in priority order
         partitionQueueVal,
         rateLimit,
         options.partitionConcurrency().isPresent() ? options.partitionConcurrency().get() : null,

@@ -295,6 +295,31 @@ public class DynamicQueuesTest {
   }
 
   @Test
+  public void registrationRefusesAHalfSetRateLimit() throws Exception {
+    // Registration used to drop a half-set pair and create the queue with no limit at all.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.empty().withRateLimitMax(Field.of(5))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(5, (Duration) null)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.registerQueue(
+                "q-reg-half",
+                QueueOptions.empty()
+                    .withPartitionRateLimitPeriod(Field.of(Duration.ofSeconds(1)))));
+    assertTrue(dbos.findQueue("q-reg-half").isEmpty(), "no refused registration may be written");
+
+    // Both halves null is no limit, as it always was.
+    dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(null, (Duration) null));
+    assertNull(dbos.findQueue("q-reg-half").orElseThrow().rateLimit());
+  }
+
+  @Test
   // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
   @SuppressWarnings("removal")
   public void aLegacyPartitionedQueueKeepsItsMeaningAcrossAnUnrelatedUpdate() throws Exception {
@@ -306,7 +331,7 @@ public class DynamicQueuesTest {
     dbos.registerQueue("q-legacy", QueueOptions.setConcurrency(4).andPartitionQueue(true));
     assertTrue(dbos.findQueue("q-legacy").orElseThrow().isLegacyPartitioned());
 
-    dbos.updateQueue("q-legacy", QueueOptions.setPriorityEnabled(true));
+    dbos.updateQueue("q-legacy", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
 
     var after = dbos.findQueue("q-legacy").orElseThrow();
     assertTrue(after.isLegacyPartitioned(), "still legacy, not promoted by its own stored flag");
@@ -337,8 +362,9 @@ public class DynamicQueuesTest {
     assertEquals(4, after.resolveLimits().partitionConcurrency());
 
     // Only its limits are frozen; everything else still updates.
-    dbos.updateQueue("q-legacy-lock", QueueOptions.setPriorityEnabled(true));
-    assertTrue(dbos.findQueue("q-legacy-lock").orElseThrow().priorityEnabled());
+    dbos.updateQueue("q-legacy-lock", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
+    assertEquals(
+        Duration.ofSeconds(2), dbos.findQueue("q-legacy-lock").orElseThrow().pollingInterval());
   }
 
   @Test
@@ -703,9 +729,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue(
-        "firstQueue",
-        QueueOptions.setPriorityEnabled(true).andConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
 
     qs.pause();
 
@@ -728,6 +752,22 @@ public class DynamicQueuesTest {
     assertEquals(10, impl.queue.remove());
     assertEquals(50, impl.queue.remove());
     assertEquals(100, impl.queue.remove());
+  }
+
+  @Test
+  public void negativePriorityIsRejected() throws Exception {
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    dbos.registerQueue("prioQueue", QueueOptions.empty());
+
+    // 0 is the default, so a negative priority would jump ahead of every workflow that set none.
+    // The options refuse it as they are built, before anything can be enqueued.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new StartWorkflowOptions("wf-negative").withQueue("prioQueue").withPriority(-1));
+
+    var zero = new StartWorkflowOptions("wf-zero").withQueue("prioQueue").withPriority(0);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(0), zero).getResult();
   }
 
   @Test

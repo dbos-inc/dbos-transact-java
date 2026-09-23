@@ -331,7 +331,8 @@ public class DBOSClient implements AutoCloseable {
    * @param timeout The maximum duration the workflow may run before being canceled. Optional.
    * @param deadline The absolute time by which the workflow must start or complete. Optional.
    * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
-   * @param priority The priority to assign if the queue supports prioritization. Optional.
+   * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
+   *     Must not be negative. Optional.
    * @param queuePartitionKey The partition key for distributing workflows across queue partitions.
    *     Optional.
    * @param delay The delay before the workflow starts executing. Optional.
@@ -405,6 +406,12 @@ public class DBOSClient implements AutoCloseable {
 
       if (nullableIsEmpty(applicationName)) {
         throw new IllegalArgumentException("applicationName must not be empty");
+      }
+
+      // 0 is the default, so a negative priority would dequeue ahead of every workflow that set
+      // none.
+      if (priority != null && priority < 0) {
+        throw new IllegalArgumentException("priority must not be negative");
       }
 
       authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
@@ -704,9 +711,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify priority. Priority must be enabled on the queue for this to be effective.
+     * Specify priority. Lower values are dequeued first; every queue dispatches in priority order.
      *
-     * @param priority Queue priority; if `null`, priority '0' will be used.
+     * @param priority Queue priority; must not be negative. If `null`, priority '0' will be used.
      * @return New `EnqueueOptions` with the priority set
      */
     public @NonNull EnqueueOptions withPriority(@Nullable Integer priority) {

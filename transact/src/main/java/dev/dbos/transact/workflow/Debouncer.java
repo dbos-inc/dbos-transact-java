@@ -184,8 +184,9 @@ public final class Debouncer<R> {
   }
 
   /**
-   * Set the priority for the user workflow. A priority only means something on a queue, so {@link
-   * #debounce} rejects one when no queue is configured.
+   * Set the priority for the user workflow; lower values are dequeued first. A priority only means
+   * something on a queue, so {@link #debounce} rejects one when no queue is configured, and it
+   * rejects a negative one.
    */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
     return new Debouncer<>(
@@ -268,6 +269,11 @@ public final class Debouncer<R> {
     if (priority != null && queueName == null) {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
+    }
+    // Checked here as well as in the options: those are only built inside the debouncer workflow,
+    // where a bad value would fail durably rather than at this call.
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
     }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);

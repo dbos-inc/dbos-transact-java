@@ -70,6 +70,11 @@ public record ExecutionOptions(
       throw new IllegalArgumentException("serialization must not be empty");
     }
 
+    // 0 is the default, so a negative priority would dequeue ahead of every workflow that set none.
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
+    }
+
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
@@ -227,26 +232,6 @@ public record ExecutionOptions(
         this.scheduleName);
   }
 
-  public ExecutionOptions withPriority(Integer priority) {
-    return new ExecutionOptions(
-        this.workflowId,
-        this.timeout,
-        this.deadline,
-        this.queueName,
-        this.deduplicationId,
-        priority,
-        this.queuePartitionKey,
-        this.delay,
-        this.appVersion,
-        this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles,
-        this.attributes,
-        this.claimedStatus,
-        this.scheduleName);
-  }
-
   public ExecutionOptions withAppVersion(String appVersion) {
     return new ExecutionOptions(
         this.workflowId,
@@ -371,26 +356,6 @@ public record ExecutionOptions(
     return new ExecutionOptions(
         this.workflowId,
         Timeout.of(timeout),
-        this.deadline,
-        this.queueName,
-        this.deduplicationId,
-        this.priority,
-        this.queuePartitionKey,
-        this.delay,
-        this.appVersion,
-        this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles,
-        this.attributes,
-        this.claimedStatus,
-        this.scheduleName);
-  }
-
-  public ExecutionOptions withTimeout(Timeout timeout) {
-    return new ExecutionOptions(
-        this.workflowId,
-        timeout,
         this.deadline,
         this.queueName,
         this.deduplicationId,

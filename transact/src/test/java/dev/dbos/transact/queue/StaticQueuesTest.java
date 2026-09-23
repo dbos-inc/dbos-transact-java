@@ -272,11 +272,7 @@ public class StaticQueuesTest {
   @Test
   public void testPriority() throws Exception {
 
-    Queue firstQ =
-        new Queue("firstQueue")
-            .withPriorityEnabled(true)
-            .withConcurrency(1)
-            .withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueue(firstQ);
 
     ServiceQImpl impl = new ServiceQImpl();

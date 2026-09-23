@@ -30,7 +30,7 @@ public record QueueOutput(
         q.partitionWorkerConcurrency(),
         prl != null ? prl.limit() : null,
         prl != null ? prl.period().toMillis() / 1000.0 : null,
-        q.priorityEnabled(),
+        true, // every queue dispatches in priority order
         // Conductor reads partition_queue to tell whether a queue dequeues per partition, which
         // per-partition limits decide just as much as the legacy flag does.
         q.isPartitioned(),

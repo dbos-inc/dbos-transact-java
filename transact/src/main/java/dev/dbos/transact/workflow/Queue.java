@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Property definition for a DBOS workflow queue. Provides options for a name, concurrency and rate
- * limits, prioritization behavior and partitioned behavior.
+ * limits, and partitioned behavior. Every queue dispatches in priority order.
  *
  * <p>A queue carries flow control at two scopes at once. The queue-wide limits ({@code
  * concurrency}, {@code workerConcurrency}, {@code rateLimit}) bound the queue as a whole, while the
@@ -58,6 +58,9 @@ public record Queue(
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
+    // Every queue dispatches in priority order, so the flag carries no information. Normalizing it
+    // here also covers rows written as false by earlier versions.
+    priorityEnabled = true;
     Objects.requireNonNull(pollingInterval, "Queue pollingInterval must not be null");
     if (concurrency != null && concurrency <= 0)
       throw new IllegalArgumentException(
@@ -95,9 +98,10 @@ public record Queue(
     // neither is concurrency >= workerConcurrency, though Go, Python and TypeScript check both:
     // this constructor is also the read path (QueuesDAO.queueFromResultSet builds through it),
     // so a rule added here rejects rows already in the database, and one unreadable row takes
-    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules land
-    // with the write-side guard, in the persistence slice. A per-partition column cannot appear
-    // in an existing row, so validating it has nothing to reject.
+    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules are
+    // enforced on write instead, by validateForRegistration. The per-partition rate limit can stay
+    // here: its columns are new, and every SDK that writes them validates them, so no stored row
+    // should fail this check.
     validateRateLimit("partitionRateLimit", partitionRateLimit);
     if (pollingInterval.isNegative() || pollingInterval.isZero())
       throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
@@ -184,6 +188,16 @@ public record Queue(
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue(@NonNull String name) {
     this(name, null, null, false, false, null, DEFAULT_POLLING_INTERVAL, null);
+  }
+
+  /**
+   * Always {@code true}: every queue dispatches in priority order.
+   *
+   * @deprecated Priority ordering is no longer optional, so there is nothing to ask.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public boolean priorityEnabled() {
+    return priorityEnabled;
   }
 
   /**
@@ -321,9 +335,9 @@ public record Queue(
   }
 
   /**
-   * Produces a new Queue with the prioritization enabled/disabled.
+   * Returns this queue unchanged: every queue dispatches in priority order.
    *
-   * @deprecated Configure a queue with {@link QueueOptions} at registration.
+   * @deprecated Priority ordering is no longer optional; remove the call.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public Queue withPriorityEnabled(boolean priorityEnabled) {

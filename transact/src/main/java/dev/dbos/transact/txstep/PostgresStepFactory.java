@@ -74,14 +74,12 @@ public abstract class PostgresStepFactory {
    * Whether a failure is a transaction conflict: SQLSTATE 40001 serialization_failure or 40P01
    * deadlock_detected.
    *
-   * @deprecated since 1.1, use {@link SystemDatabase#isSerializationError(Throwable)}, which this
-   *     delegates to. The two matched the same codes by the same cause walk, and two copies of one
-   *     predicate drift. Kept so that anything compiled against it keeps linking; it is removed in
-   *     2.0.
+   * <p>This is the public entry point for the predicate; it delegates to the internal one the
+   * system database retries by, so the two cannot drift.
+   *
    * @param e the failure to classify, at any depth in its cause chain
    * @return whether the database rolled the transaction back for a conflict
    */
-  @Deprecated(since = "1.1", forRemoval = true)
   public static boolean isSerializationFailure(Exception e) {
     return SystemDatabase.isSerializationError(e);
   }

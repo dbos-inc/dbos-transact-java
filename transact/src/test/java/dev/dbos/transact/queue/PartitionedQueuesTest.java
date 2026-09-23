@@ -579,7 +579,7 @@ public class PartitionedQueuesTest {
     dbos.registerQueue(queue, QueueOptions.empty().andConcurrency(4).andPartitionQueue(true));
 
     // An update that touches no limit leaves the queue legacy, and its concurrency per partition.
-    dbos.updateQueue(queue, QueueOptions.empty().andPriorityEnabled(true));
+    dbos.updateQueue(queue, QueueOptions.empty().andPollingInterval(Duration.ofSeconds(2)));
     var updated = dbos.findQueue(queue).orElseThrow();
     assertTrue(updated.isLegacyPartitioned());
     assertEquals(4, updated.resolveLimits().partitionConcurrency());

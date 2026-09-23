@@ -15,18 +15,19 @@ import org.jspecify.annotations.Nullable;
  * limit / use default). When used for updates, absent fields are left unchanged in the database
  * while null-valued fields clear the column.
  *
- * <p>The non-nullable queue properties ({@code priorityEnabled}, {@code partitionQueue}, {@code
- * pollingInterval}) use {@link Optional} — {@link Optional#empty()} means use the default on
- * creation or leave unchanged on update; a present value sets the column.
+ * <p>The non-nullable queue properties ({@code partitionQueue}, {@code pollingInterval}) use {@link
+ * Optional} — {@link Optional#empty()} means use the default on creation or leave unchanged on
+ * update; a present value sets the column.
  *
  * <p>A queue can carry flow control at two scopes at once: the queue-wide limits bound the queue as
  * a whole, and the per-partition limits bound each partition key independently. Setting any
  * per-partition limit is what partitions the queue, so {@code partitionQueue} is redundant
- * alongside one — it is accepted, and adds nothing.
+ * alongside one: registration accepts it and it adds nothing, while an update refuses it on a queue
+ * already partitioned by its per-partition limits. A queue registered with {@code partitionQueue}
+ * alone keeps its limits frozen; re-register it with per-partition limits to move it across.
  *
- * <p><strong>The per-partition limits are not stored yet.</strong> Registering or updating a queue
- * with one throws {@link UnsupportedOperationException} until the persistence slice of #507 lands,
- * rather than accepting a limit that would never be enforced.
+ * <p>A rate limit's max and period are set and cleared together, at registration and on update
+ * alike; supplying only one of them is refused.
  *
  * @param concurrency max concurrent executions of this queue across all workers; {@link
  *     Field#absent()} means no limit on creation or leave unchanged on update; {@code
@@ -46,8 +47,7 @@ import org.jspecify.annotations.Nullable;
  *     window; must be paired with {@code partitionRateLimitPeriod}; setting it partitions the queue
  * @param partitionRateLimitPeriod duration of the rolling per-partition rate-limit window; must be
  *     paired with {@code partitionRateLimitMax}
- * @param priorityEnabled whether priority-based ordering is enabled for this queue; {@link
- *     Optional#empty()} means use the default on creation or leave unchanged on update
+ * @param priorityEnabled ignored: every queue dispatches in priority order
  * @param partitionQueue whether to partition queue entries so each partition key gets its own
  *     concurrency slot, with the queue-wide limits applied per partition; {@link Optional#empty()}
  *     means use the default or leave unchanged
@@ -80,6 +80,12 @@ public record QueueOptions(
           Optional.empty(),
           Optional.empty(),
           Optional.empty());
+
+  public QueueOptions {
+    // Every queue dispatches in priority order, so the flag carries no information. Dropping it
+    // here keeps options that set only it equal to, and as empty as, empty().
+    priorityEnabled = Optional.empty();
+  }
 
   /**
    * Constructs options with no per-partition limits.
@@ -122,6 +128,18 @@ public record QueueOptions(
     return partitionQueue;
   }
 
+  /**
+   * Always empty: the deprecated priority flag is dropped when the options are built, since every
+   * queue dispatches in priority order.
+   *
+   * @deprecated Priority ordering is no longer optional.
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  @Override
+  public @NonNull Optional<Boolean> priorityEnabled() {
+    return priorityEnabled;
+  }
+
   /** Returns the shared all-absent instance; no queue property will be set or changed. */
   public static @NonNull QueueOptions empty() {
     return EMPTY;
@@ -137,7 +155,6 @@ public record QueueOptions(
         && !partitionWorkerConcurrency.isPresent()
         && !partitionRateLimitMax.isPresent()
         && !partitionRateLimitPeriod.isPresent()
-        && priorityEnabled.isEmpty()
         && partitionQueue.isEmpty()
         && pollingInterval.isEmpty();
   }
@@ -233,8 +250,10 @@ public record QueueOptions(
   /**
    * Creates options that set only {@code priorityEnabled}; all other fields are absent.
    *
-   * @param value {@code true} to enable priority ordering, {@code false} to disable
+   * @param value ignored
+   * @deprecated Every queue dispatches in priority order; remove the call.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public static @NonNull QueueOptions setPriorityEnabled(boolean value) {
     return EMPTY.withPriorityEnabled(Optional.of(value));
   }
@@ -437,8 +456,10 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code priorityEnabled} replaced.
    *
-   * @param priorityEnabled the new value; use {@link Optional#empty()} to leave unchanged
+   * @param priorityEnabled ignored
+   * @deprecated Every queue dispatches in priority order; remove the call.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull QueueOptions withPriorityEnabled(@NonNull Optional<Boolean> priorityEnabled) {
     return new QueueOptions(
         concurrency,
@@ -584,8 +605,10 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code priorityEnabled} set to the given value.
    *
-   * @param value {@code true} to enable priority ordering, {@code false} to disable
+   * @param value ignored
+   * @deprecated Every queue dispatches in priority order; remove the call.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull QueueOptions andPriorityEnabled(boolean value) {
     return withPriorityEnabled(Optional.of(value));
   }

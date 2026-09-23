@@ -27,8 +27,11 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
  * Spring application context.
  *
  * <p>The {@link DBOS} instance is started (via {@link DBOS#launch()}) after all other beans have
- * been initialized, so workflows and queues may be registered in {@code @PostConstruct} methods
- * before launch occurs.
+ * been initialized, so workflows may be registered in {@code @PostConstruct} methods before launch
+ * occurs. Database-backed queues and schedules are the opposite: {@link DBOS#registerQueue(String,
+ * dev.dbos.transact.workflow.QueueOptions)} and {@link DBOS#applySchedules(java.util.List)} require
+ * a launched instance, so register them from an {@code ApplicationListener<ContextRefreshedEvent>}
+ * (or an {@code @EventListener} for that event), which runs after the lifecycle has started DBOS.
  *
  * <p>To customize the auto-configured {@link DBOSConfig} without replacing it, declare one or more
  * {@link DBOSConfigCustomizer} beans. To replace it entirely, declare your own {@code @Bean

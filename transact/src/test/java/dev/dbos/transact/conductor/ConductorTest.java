@@ -3915,7 +3915,6 @@ public class ConductorTest {
             .withConcurrency(5)
             .withWorkerConcurrency(2)
             .withRateLimit(10, Duration.ofSeconds(60))
-            .withPriorityEnabled(true)
             .withPartitioningEnabled(true)
             .withPollingInterval(Duration.ofMillis(500));
     dev.dbos.transact.workflow.Queue q2 = new dev.dbos.transact.workflow.Queue("queue-2");
@@ -3956,7 +3955,7 @@ public class ConductorTest {
       assertTrue(second.get("worker_concurrency").isNull());
       assertTrue(second.get("rate_limit_max").isNull());
       assertTrue(second.get("rate_limit_period_sec").isNull());
-      assertFalse(second.get("priority_enabled").asBoolean());
+      assertTrue(second.get("priority_enabled").asBoolean());
       assertFalse(second.get("partition_queue").asBoolean());
       assertEquals(1.0, second.get("polling_interval_sec").asDouble(), 0.001);
     }
