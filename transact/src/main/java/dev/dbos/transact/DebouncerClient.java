@@ -206,8 +206,9 @@ public final class DebouncerClient<R> {
   }
 
   /**
-   * Set the priority for the user workflow. A priority only means something on a queue, so {@link
-   * #debounce} rejects one when no queue is configured.
+   * Set the priority for the user workflow; lower values are dequeued first. A priority only means
+   * something on a queue, so {@link #debounce} rejects one when no queue is configured, and it
+   * rejects a negative one.
    */
   public @NonNull DebouncerClient<R> withPriority(@Nullable Integer priority) {
     return new DebouncerClient<>(

@@ -711,9 +711,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify priority. Priority must be enabled on the queue for this to be effective.
+     * Specify priority. Lower values are dequeued first; every queue dispatches in priority order.
      *
-     * @param priority Queue priority; if `null`, priority '0' will be used.
+     * @param priority Queue priority; must not be negative. If `null`, priority '0' will be used.
      * @return New `EnqueueOptions` with the priority set
      */
     public @NonNull EnqueueOptions withPriority(@Nullable Integer priority) {
