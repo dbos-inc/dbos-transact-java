@@ -3,7 +3,7 @@ import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 plugins {
   pmd
   id("com.diffplug.spotless")
-  id("com.github.ben-manes.versions")
+  id("io.github.ben-manes.versions")
 }
 
 val libs = the<org.gradle.accessors.dm.LibrariesForLibs>()
