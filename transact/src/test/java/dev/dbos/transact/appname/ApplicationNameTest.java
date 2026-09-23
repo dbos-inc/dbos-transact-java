@@ -42,6 +42,12 @@ interface AppNameService {
 
   String enqueueGreet(
       String workflowName, String className, String queueName, String childId, String arg);
+
+  String awaitMessage(String topic);
+
+  void sendTo(String destinationId, String topic, String message);
+
+  void publish(String key, String value);
 }
 
 class AppNameServiceImpl implements AppNameService {
@@ -66,6 +72,24 @@ class AppNameServiceImpl implements AppNameService {
             .withWorkflowId(childId),
         new Object[] {arg});
     return childId;
+  }
+
+  @Override
+  @Workflow
+  public String awaitMessage(String topic) {
+    return dbos.<String>recv(topic, Duration.ofSeconds(30)).orElse(null);
+  }
+
+  @Override
+  @Workflow
+  public void sendTo(String destinationId, String topic, String message) {
+    dbos.send(destinationId, message, topic);
+  }
+
+  @Override
+  @Workflow
+  public void publish(String key, String value) {
+    dbos.setEvent(key, value);
   }
 }
 
@@ -692,6 +716,66 @@ public class ApplicationNameTest {
         new Object[] {"own"});
 
     assertEquals(APP_A, workflowAppName(childId));
+  }
+
+  // ==================== ID-addressed operations ====================
+
+  /**
+   * Unlike an enqueue, a send names no application: its destination already exists, and a workflow
+   * ID is global, so the message reaches the workflow wherever it is owned. The receiver reads it
+   * on its own application's account; the sender's step stays the sender's.
+   */
+  @Test
+  void aWorkflowSendsToAWorkflowOwnedByAPeer() throws Exception {
+    var receiverId = UUID.randomUUID().toString();
+    WorkflowHandle<String, RuntimeException> receiver =
+        dbosB.startWorkflow(
+            () -> serviceB.awaitMessage("greeting"),
+            new dev.dbos.transact.StartWorkflowOptions(receiverId));
+
+    var senderId = UUID.randomUUID().toString();
+    try (var o = new WorkflowOptions(senderId).setContext()) {
+      serviceA.sendTo(receiverId, "greeting", "hello from a");
+    }
+
+    assertEquals("hello from a", receiver.getResult());
+    assertEquals(APP_B, workflowAppName(receiverId));
+    assertEquals(APP_A, workflowAppName(senderId));
+    assertEquals(APP_A, stepAppName(senderId));
+  }
+
+  @Test
+  void aClientSendsToAWorkflowOwnedByAnotherApplication() throws Exception {
+    var receiverId = UUID.randomUUID().toString();
+    WorkflowHandle<String, RuntimeException> receiver =
+        dbosB.startWorkflow(
+            () -> serviceB.awaitMessage("greeting"),
+            new dev.dbos.transact.StartWorkflowOptions(receiverId));
+
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      client.send(receiverId, "hello from a's client", "greeting", null);
+    }
+
+    assertEquals("hello from a's client", receiver.getResult());
+    assertEquals(APP_B, workflowAppName(receiverId));
+  }
+
+  /** Events are read by workflow ID too, so a peer, or a client named for one, can read them. */
+  @Test
+  void eventsAreReadableAcrossApplications() throws Exception {
+    var publisherId = UUID.randomUUID().toString();
+    try (var o = new WorkflowOptions(publisherId).setContext()) {
+      serviceB.publish("status", "ready");
+    }
+    assertEquals(APP_B, workflowAppName(publisherId));
+
+    assertEquals(
+        "ready",
+        dbosA.<String>getEvent(publisherId, "status", Duration.ofSeconds(5)).orElseThrow());
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      assertEquals(
+          "ready", client.getEvent(publisherId, "status", Duration.ofSeconds(5)).orElseThrow());
+    }
   }
 
   // ==================== Rename ====================
