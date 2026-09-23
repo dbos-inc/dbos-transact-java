@@ -19,12 +19,14 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SendMessage;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -60,8 +62,10 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new EnqueueOptions("enqueueTest", "testQueue");
-      var handle = client.enqueuePortableWorkflow(options, new Object[] {42, "spam"}, null);
+      var options =
+          new EnqueueOptions("enqueueTest", "testQueue")
+              .withSerialization(SerializationStrategy.PORTABLE);
+      var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
 
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
       assertEquals("enqueueTest", row.workflowName());
@@ -153,6 +157,32 @@ public class ClientTest {
                       .withDeduplicationId("dedupe")
                       .withQueuePartitionKey("qpk"),
                   new Object[] {42, "spam"}));
+    }
+  }
+
+  /**
+   * Only portable serialization carries named arguments. Asking for them under any other format is
+   * refused before the row is written, rather than quietly switching the format.
+   */
+  @Test
+  public void namedArgsRequirePortableSerialization() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      var namedArgs = Map.<String, Object>of("name", "spam");
+      for (var serialization :
+          new SerializationStrategy[] {
+            null, SerializationStrategy.DEFAULT, SerializationStrategy.NATIVE
+          }) {
+        var options =
+            new EnqueueOptions("enqueueTest", "testQueue")
+                .withClassName("ClientServiceImpl")
+                .withSerialization(serialization);
+        var e =
+            assertThrows(
+                IllegalArgumentException.class,
+                () -> client.enqueueWorkflow(options, new Object[] {}, namedArgs));
+        assertTrue(e.getMessage().contains("PORTABLE"), e.getMessage());
+      }
+      assertTrue(DBUtils.getWorkflowRows(dataSource).isEmpty());
     }
   }
 

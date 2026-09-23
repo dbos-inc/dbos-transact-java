@@ -21,6 +21,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -467,8 +468,9 @@ public class ApplicationNameTest {
             null,
             true,
             APP_B)) {
-      var options = new EnqueueOptions("greet", "queue-a");
-      foreignId = client.enqueuePortableWorkflow(options, new Object[] {"peer"}, null).workflowId();
+      var options =
+          new EnqueueOptions("greet", "queue-a").withSerialization(SerializationStrategy.PORTABLE);
+      foreignId = client.enqueueWorkflow(options, new Object[] {"peer"}).workflowId();
     }
 
     var ownId = UUID.randomUUID().toString();
@@ -504,8 +506,10 @@ public class ApplicationNameTest {
     try (var client = pgContainer.dbosClient()) {
       unclaimedId =
           client
-              .enqueuePortableWorkflow(
-                  new EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
+              .enqueueWorkflow(
+                  new EnqueueOptions("greet", queueName)
+                      .withSerialization(SerializationStrategy.PORTABLE),
+                  new Object[] {"nobody"})
               .workflowId();
     }
     assertNull(workflowAppName(unclaimedId));
@@ -530,8 +534,9 @@ public class ApplicationNameTest {
       assertTrue(seen.contains(idA));
       assertTrue(seen.contains(idB));
 
-      var options = new EnqueueOptions("greet", "queue-b");
-      var handle = client.enqueuePortableWorkflow(options, new Object[] {"nameless"}, null);
+      var options =
+          new EnqueueOptions("greet", "queue-b").withSerialization(SerializationStrategy.PORTABLE);
+      var handle = client.enqueueWorkflow(options, new Object[] {"nameless"});
       assertNull(workflowAppName(handle.workflowId()));
     }
   }

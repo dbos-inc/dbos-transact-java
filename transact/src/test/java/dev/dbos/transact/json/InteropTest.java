@@ -337,7 +337,7 @@ public class InteropTest {
               .withSerialization(SerializationStrategy.PORTABLE);
 
       WorkflowHandle<String, ?> handle =
-          client.enqueuePortableWorkflow(
+          client.enqueueWorkflow(
               options,
               new Object[] {
                 CANONICAL_TEXT,
@@ -462,9 +462,10 @@ public class InteropTest {
       var options =
           new EnqueueOptions("namedArgsWorkflow", "interopq")
               .withClassName("interop")
-              .withWorkflowId(workflowId);
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
 
-      client.<String>enqueuePortableWorkflow(options, new Object[] {}, namedArgs);
+      client.<String, RuntimeException>enqueueWorkflow(options, new Object[] {}, namedArgs);
 
       // Java doesn't use named args but can pass them to Python.
       // For this test, let's verify the stored format matches what Python produces.

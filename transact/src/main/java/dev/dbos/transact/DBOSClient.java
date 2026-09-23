@@ -12,7 +12,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
-import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DebounceResult;
@@ -1015,19 +1014,49 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Enqueue a workflow with explicit serialization format and support for both positional and named
-   * arguments.
+   * Enqueue a workflow. Arguments are serialized as {@link
+   * dev.dbos.transact.EnqueueOptions#serialization} says.
    *
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
-   * @param options {@link dev.dbos.transact.EnqueueOptions} for configuring the workflow enqueue
+   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
+   * @param args Arguments to pass to the workflow function
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      dev.dbos.transact.@NonNull EnqueueOptions options, @Nullable Object[] args) {
+    return enqueueWorkflow(options, args, null);
+  }
+
+  /**
+   * Enqueue a workflow with named as well as positional arguments, for targets that take them — a
+   * Python workflow with keyword arguments, say.
+   *
+   * <p>Only portable serialization carries named arguments, so passing any requires {@link
+   * dev.dbos.transact.EnqueueOptions#withSerialization} set to {@link
+   * SerializationStrategy#PORTABLE}; otherwise this throws {@link IllegalArgumentException}.
+   *
+   * @param <T> Return type of workflow function
+   * @param <E> Exception thrown by workflow function
+   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Named arguments to pass to the workflow function (e.g., for Python kwargs)
-   * @param serializationFormat Serialization format string to use (null for default)
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       dev.dbos.transact.@NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs) {
+    Objects.requireNonNull(options, "options must not be null");
+    var serializationFormat =
+        options.serialization() != null ? options.serialization().formatName() : null;
+    return enqueueWithFormat(options, positionalArgs, namedArgs, serializationFormat);
+  }
+
+  // The deprecated overloads name the format directly rather than through the options, so the
+  // format is a parameter here instead of being read from them.
+  private <T, E extends Exception> WorkflowHandle<T, E> enqueueWithFormat(
+      dev.dbos.transact.EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs,
       @Nullable String serializationFormat) {
@@ -1065,47 +1094,12 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Enqueue a workflow.
-   *
-   * @param <T> Return type of workflow function
-   * @param <E> Exception thrown by workflow function
-   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
-   * @param args Arguments to pass to the workflow function
-   * @return WorkflowHandle for retrieving workflow ID, status, and results
-   */
-  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
-      dev.dbos.transact.@NonNull EnqueueOptions options, @Nullable Object[] args) {
-    Objects.requireNonNull(options, "options must not be null");
-    var serializationFormat =
-        options.serialization() != null ? options.serialization().formatName() : null;
-    return enqueueWorkflow(options, args, null, serializationFormat);
-  }
-
-  /**
-   * Enqueue a workflow using portable JSON serialization. This method is intended for
-   * cross-language workflow initiation where the workflow function definition may not be available
-   * in Java.
-   *
-   * @param <T> Return type of workflow function
-   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
-   * @param positionalArgs Positional arguments to pass to the workflow function
-   * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
-   *     kwargs)
-   * @return WorkflowHandle for retrieving workflow ID, status, and results
-   */
-  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
-      dev.dbos.transact.@NonNull EnqueueOptions options,
-      @Nullable Object[] positionalArgs,
-      @Nullable Map<String, Object> namedArgs) {
-    return enqueueWorkflow(options, positionalArgs, namedArgs, SerializationUtil.PORTABLE);
-  }
-
-  /**
    * Enqueue a workflow with explicit serialization format and support for both positional and named
    * arguments.
    *
-   * @deprecated Use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map,
-   *     String)}. This overload will be removed in 2.0.
+   * @deprecated Set the format with {@link dev.dbos.transact.EnqueueOptions#withSerialization} and
+   *     use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map)}. This
+   *     overload will be removed in 2.0.
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
    * @param options {@link EnqueueOptions} for configuring the workflow enqueue
@@ -1121,7 +1115,7 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Map<String, Object> namedArgs,
       @Nullable String serializationFormat) {
     Objects.requireNonNull(options, "options must not be null");
-    return enqueueWorkflow(
+    return enqueueWithFormat(
         options.toEnqueueOptions(), positionalArgs, namedArgs, serializationFormat);
   }
 
@@ -1146,8 +1140,10 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Enqueue a workflow using portable JSON serialization.
    *
-   * @deprecated Use {@link #enqueuePortableWorkflow(dev.dbos.transact.EnqueueOptions, Object[],
-   *     Map)}. This overload will be removed in 2.0.
+   * @deprecated Set {@link SerializationStrategy#PORTABLE} with {@link
+   *     dev.dbos.transact.EnqueueOptions#withSerialization} and use {@link
+   *     #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map)}. This method will be
+   *     removed in 2.0.
    * @param <T> Return type of workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function
@@ -1161,7 +1157,10 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
     Objects.requireNonNull(options, "options must not be null");
-    return enqueuePortableWorkflow(options.toEnqueueOptions(), positionalArgs, namedArgs);
+    return enqueueWorkflow(
+        options.toEnqueueOptions().withSerialization(SerializationStrategy.PORTABLE),
+        positionalArgs,
+        namedArgs);
   }
 
   /** Options for sending a message. */

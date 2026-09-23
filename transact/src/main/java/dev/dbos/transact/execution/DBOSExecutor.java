@@ -1678,10 +1678,7 @@ public class DBOSExecutor implements AutoCloseable {
    * application's latest registered version.
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
-      EnqueueOptions options,
-      Object[] positionalArgs,
-      Map<String, Object> namedArgs,
-      String serializationFormat) {
+      EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
     Objects.requireNonNull(options, "options must not be null");
     if (options.timeout() != null && options.deadline() != null) {
@@ -1720,7 +1717,8 @@ public class DBOSExecutor implements AutoCloseable {
             .withOptions(options)
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
-            .withSerialization(serializationFormat)
+            .withSerialization(
+                options.serialization() != null ? options.serialization().formatName() : null)
             .withAuthenticatedUser(
                 options.authenticatedUser() != null
                     ? options.authenticatedUser()

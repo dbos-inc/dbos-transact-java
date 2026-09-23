@@ -221,8 +221,8 @@ public class PortableSerializationTest {
   }
 
   /**
-   * Tests that a workflow can be enqueued using DBOSClient.enqueuePortableWorkflow which uses
-   * portable JSON serialization by default without validation.
+   * Tests that a workflow can be enqueued through DBOSClient with portable JSON serialization set
+   * on the options, without validation.
    */
   @Test
   public void testClientEnqueuePortableWorkflow() throws Exception {
@@ -238,15 +238,15 @@ public class PortableSerializationTest {
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
 
-      // Enqueue workflow using enqueuePortableWorkflow
       var options =
           new EnqueueOptions("recvWorkflow", "testq")
               .withClassName("PortableTestService")
-              .withWorkflowId(workflowId);
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
 
-      // Use enqueuePortableWorkflow which defaults to portable serialization
       var handle =
-          client.<String>enqueuePortableWorkflow(options, new Object[] {"incoming", 30000L}, null);
+          client.<String, RuntimeException>enqueueWorkflow(
+              options, new Object[] {"incoming", 30000L});
 
       // Send a message using portable serialization
       client.send(
