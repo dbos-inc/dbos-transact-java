@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -151,8 +152,8 @@ public class MultiClassInstanceTest {
   public void enqueueForSpecificInstance() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new dev.dbos.transact.DBOSClient.EnqueueOptions(
-                  "stepWorkflow", "dev.dbos.transact.invocation.BearServiceImpl", "testQueue")
+          new EnqueueOptions("stepWorkflow", "testQueue")
+              .withClassName("dev.dbos.transact.invocation.BearServiceImpl")
               .withInstanceName("A");
       var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
 

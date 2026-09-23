@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DebouncerClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
@@ -295,10 +296,8 @@ public class DebouncerClientTest {
         new DebouncerMessage(
             UUID.randomUUID().toString(), new Object[] {"legacy"}, Duration.ofMillis(200));
     dbosClient.enqueueWorkflow(
-        new DBOSClient.EnqueueOptions(
-                Constants.DEBOUNCER_WORKFLOW_NAME,
-                Constants.DEBOUNCER_CLASS_NAME,
-                Constants.DBOS_INTERNAL_QUEUE)
+        new EnqueueOptions(Constants.DEBOUNCER_WORKFLOW_NAME, Constants.DBOS_INTERNAL_QUEUE)
+            .withClassName(Constants.DEBOUNCER_CLASS_NAME)
             .withDeduplicationId("process-legacy-negative"),
         new Object[] {debouncerOpts, ctx, message});
 

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -190,7 +191,8 @@ public class PortableSerializationTest {
 
       // Enqueue workflow using client with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("recvWorkflow", "PortableTestService", "testq")
+          new EnqueueOptions("recvWorkflow", "testq")
+              .withClassName("PortableTestService")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -238,7 +240,8 @@ public class PortableSerializationTest {
 
       // Enqueue workflow using enqueuePortableWorkflow
       var options =
-          new DBOSClient.EnqueueOptions("recvWorkflow", "PortableTestService", "testq")
+          new EnqueueOptions("recvWorkflow", "testq")
+              .withClassName("PortableTestService")
               .withWorkflowId(workflowId);
 
       // Use enqueuePortableWorkflow which defaults to portable serialization
@@ -447,14 +450,16 @@ public class PortableSerializationTest {
 
         if (sertype.equals("defq")) {
           var options =
-              new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+              new EnqueueOptions("eventWorkflow", "testq")
+                  .withClassName("ExplicitSerService")
                   .withWorkflowId(workflowId);
 
           handle = client.enqueueWorkflow(options, new Object[] {});
         }
         if (sertype.equals("portq")) {
           var options =
-              new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+              new EnqueueOptions("eventWorkflow", "testq")
+                  .withClassName("ExplicitSerService")
                   .withWorkflowId(workflowId)
                   .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -566,7 +571,8 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("senderWorkflow", "ExplicitSerService", "testq")
+          new EnqueueOptions("senderWorkflow", "testq")
+              .withClassName("ExplicitSerService")
               .withWorkflowId(workflowId);
 
       WorkflowHandle<Void, ?> handle = client.enqueueWorkflow(options, new Object[] {targetId});
@@ -710,7 +716,8 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+          new EnqueueOptions("setEventWorkflow", "testq")
+              .withClassName("EventSetterService")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -750,7 +757,8 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("errorWorkflow", "ErrorService", "testq")
+          new EnqueueOptions("errorWorkflow", "testq")
+              .withClassName("ErrorService")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -796,7 +804,8 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+          new EnqueueOptions("eventWorkflow", "testq")
+              .withClassName("ExplicitSerService")
               .withWorkflowId(workflowId);
 
       WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
@@ -849,7 +858,8 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("checkWorkflow", "SerializedTypesService", "testq")
+          new EnqueueOptions("checkWorkflow", "testq")
+              .withClassName("SerializedTypesService")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -1022,7 +1032,8 @@ public class PortableSerializationTest {
       // Start the workflow via queue
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("customSerWorkflow", "CustomSerService", "testq")
+            new EnqueueOptions("customSerWorkflow", "testq")
+                .withClassName("CustomSerService")
                 .withWorkflowId(workflowId);
 
         WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {"hello"});
@@ -1068,7 +1079,8 @@ public class PortableSerializationTest {
     String wfId1 = UUID.randomUUID().toString();
     try (DBOSClient client = new DBOSClient(dataSource)) {
       var options =
-          new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+          new EnqueueOptions("setEventWorkflow", "testq")
+              .withClassName("EventSetterService")
               .withWorkflowId(wfId1);
       var handle = client.enqueueWorkflow(options, new Object[] {});
       assertEquals("eventSet", handle.getResult());
@@ -1091,7 +1103,8 @@ public class PortableSerializationTest {
       String wfId2 = UUID.randomUUID().toString();
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+            new EnqueueOptions("setEventWorkflow", "testq")
+                .withClassName("EventSetterService")
                 .withWorkflowId(wfId2);
         var handle = client.enqueueWorkflow(options, new Object[] {});
         assertEquals("eventSet", handle.getResult());
@@ -1148,7 +1161,8 @@ public class PortableSerializationTest {
       wfId = UUID.randomUUID().toString();
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+            new EnqueueOptions("setEventWorkflow", "testq")
+                .withClassName("EventSetterService")
                 .withWorkflowId(wfId);
         var handle = client.enqueueWorkflow(options, new Object[] {});
         assertEquals("eventSet", handle.getResult());
@@ -1779,7 +1793,8 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("dateWorkflow", "DateTimeService", "testq")
+          new EnqueueOptions("dateWorkflow", "testq")
+              .withClassName("DateTimeService")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -1816,7 +1831,8 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("dateWorkflow", "DateTimeService", "testq")
+          new EnqueueOptions("dateWorkflow", "testq")
+              .withClassName("DateTimeService")
               .withWorkflowId(workflowId);
 
       WorkflowHandle<String, ?> handle =

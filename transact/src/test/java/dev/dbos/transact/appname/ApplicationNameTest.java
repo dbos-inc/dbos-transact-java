@@ -11,6 +11,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSApplicationNameConflictException;
@@ -59,7 +60,7 @@ class AppNameServiceImpl implements AppNameService {
   public String enqueueGreet(
       String workflowName, String className, String queueName, String childId, String arg) {
     dbos.enqueueWorkflow(
-        new DBOSClient.EnqueueOptions(workflowName, queueName)
+        new EnqueueOptions(workflowName, queueName)
             .withClassName(className)
             .withWorkflowId(childId),
         new Object[] {arg});
@@ -466,7 +467,7 @@ public class ApplicationNameTest {
             null,
             true,
             APP_B)) {
-      var options = new DBOSClient.EnqueueOptions("greet", "queue-a");
+      var options = new EnqueueOptions("greet", "queue-a");
       foreignId = client.enqueuePortableWorkflow(options, new Object[] {"peer"}, null).workflowId();
     }
 
@@ -504,7 +505,7 @@ public class ApplicationNameTest {
       unclaimedId =
           client
               .enqueuePortableWorkflow(
-                  new DBOSClient.EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
+                  new EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
               .workflowId();
     }
     assertNull(workflowAppName(unclaimedId));
@@ -529,7 +530,7 @@ public class ApplicationNameTest {
       assertTrue(seen.contains(idA));
       assertTrue(seen.contains(idB));
 
-      var options = new DBOSClient.EnqueueOptions("greet", "queue-b");
+      var options = new EnqueueOptions("greet", "queue-b");
       var handle = client.enqueuePortableWorkflow(options, new Object[] {"nameless"}, null);
       assertNull(workflowAppName(handle.workflowId()));
     }
@@ -549,7 +550,7 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new DBOSClient.EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
+          new EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
               .withClassName(AppNameServiceImpl.class.getName())
               .withWorkflowId("wf-db-holder")
               .withDeduplicationId(dedupId),
@@ -572,7 +573,7 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new DBOSClient.EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
+          new EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
               .withClassName(AppNameServiceImpl.class.getName())
               .withWorkflowId("wf-db-client-holder")
               .withDeduplicationId(dedupId),
@@ -657,7 +658,7 @@ public class ApplicationNameTest {
 
     WorkflowHandle<String, RuntimeException> handle =
         dbosA.enqueueWorkflow(
-            new DBOSClient.EnqueueOptions("greet", "queue-b")
+            new EnqueueOptions("greet", "queue-b")
                 .withClassName(AppNameServiceImpl.class.getName())
                 .withWorkflowId(childId)
                 .withApplicationName(APP_B),
@@ -680,7 +681,7 @@ public class ApplicationNameTest {
     var childId = UUID.randomUUID().toString();
 
     dbosA.enqueueWorkflow(
-        new DBOSClient.EnqueueOptions("greet", "queue-a")
+        new EnqueueOptions("greet", "queue-a")
             .withClassName(AppNameServiceImpl.class.getName())
             .withWorkflowId(childId),
         new Object[] {"own"});

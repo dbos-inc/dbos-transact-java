@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 
 import java.time.Duration;
@@ -18,49 +18,46 @@ public class EnqueueOptionsTest {
   @Test
   public void enqueueOptionsValidation() throws Exception {
     // empty strings not allowed
-    assertThrows(
-        IllegalArgumentException.class, () -> new DBOSClient.EnqueueOptions("", "queue-name"));
-    assertThrows(
-        IllegalArgumentException.class, () -> new DBOSClient.EnqueueOptions("wf-name", ""));
+    assertThrows(IllegalArgumentException.class, () -> new EnqueueOptions("", "queue-name"));
+    assertThrows(IllegalArgumentException.class, () -> new EnqueueOptions("wf-name", ""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withClassName(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withClassName(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withInstanceName(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withInstanceName(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withWorkflowId(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withWorkflowId(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withAppVersion(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withAppVersion(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDeduplicationId(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withDeduplicationId(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withQueuePartitionKey(""));
+        () -> new EnqueueOptions("wf-name", "q-name").withQueuePartitionKey(""));
 
     // zero or negative durations not allowed
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ZERO));
+        () -> new EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ZERO));
     assertThrows(
         IllegalArgumentException.class,
-        () ->
-            new DBOSClient.EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ofSeconds(-1)));
+        () -> new EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ofSeconds(-1)));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDelay(Duration.ZERO));
+        () -> new EnqueueOptions("wf-name", "q-name").withDelay(Duration.ZERO));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDelay(Duration.ofSeconds(-1)));
+        () -> new EnqueueOptions("wf-name", "q-name").withDelay(Duration.ofSeconds(-1)));
 
     // 0 is the default priority; below it is refused
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withPriority(-1));
-    assertEquals(0, new DBOSClient.EnqueueOptions("wf-name", "q-name").withPriority(0).priority());
+        () -> new EnqueueOptions("wf-name", "q-name").withPriority(-1));
+    assertEquals(0, new EnqueueOptions("wf-name", "q-name").withPriority(0).priority());
   }
 
   /**
@@ -74,7 +71,7 @@ public class EnqueueOptionsTest {
     var roles = List.of("role");
 
     var actual =
-        new DBOSClient.EnqueueOptions(
+        new EnqueueOptions(
             "workflow-name",
             "class-name",
             "instance-name",
@@ -91,10 +88,11 @@ public class EnqueueOptionsTest {
             "authenticated-user",
             "assumed-role",
             roles,
-            attributes);
+            attributes,
+            null);
 
     var expected =
-        new DBOSClient.EnqueueOptions(
+        new EnqueueOptions(
             "workflow-name",
             "class-name",
             "instance-name",

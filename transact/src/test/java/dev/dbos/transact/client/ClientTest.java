@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -18,6 +19,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SendMessage;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
@@ -58,7 +60,7 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var options = new EnqueueOptions("enqueueTest", "testQueue");
       var handle = client.enqueuePortableWorkflow(options, new Object[] {42, "spam"}, null);
 
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
@@ -69,6 +71,29 @@ public class ClientTest {
     }
   }
 
+  /** The pre-1.1 options type still enqueues through the deprecated overloads until 2.0. */
+  @Test
+  @SuppressWarnings("removal")
+  public void clientEnqueueWithDeprecatedOptions() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withWorkflowId("wf-deprecated-options");
+      WorkflowHandle<String, RuntimeException> handle =
+          client.enqueueWorkflow(options, new Object[] {42, "spam"});
+      assertEquals("wf-deprecated-options", handle.workflowId());
+      assertEquals("42-spam", handle.getResult());
+
+      var portable =
+          client.enqueuePortableWorkflow(
+              options.withWorkflowId("wf-deprecated-portable"), new Object[] {17, "eggs"}, null);
+      assertEquals("17-eggs", portable.getResult());
+      assertEquals(
+          "portable_json",
+          DBUtils.getWorkflowRow(dataSource, "wf-deprecated-portable").serialization());
+    }
+  }
+
   @Test
   public void clientEnqueue() throws Exception {
 
@@ -76,7 +101,8 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue");
+      var options =
+          new EnqueueOptions("enqueueTest", "testQueue").withClassName("ClientServiceImpl");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -104,22 +130,18 @@ public class ClientTest {
     try (var client = pgContainer.dbosClient()) {
       assertThrows(
           NullPointerException.class,
-          () -> client.enqueueWorkflow(null, new Object[] {42, "spam"}));
+          () -> client.enqueueWorkflow((EnqueueOptions) null, new Object[] {42, "spam"}));
       assertThrows(
           NullPointerException.class,
-          () ->
-              client.enqueueWorkflow(
-                  new DBOSClient.EnqueueOptions(null, "q"), new Object[] {42, "spam"}));
+          () -> client.enqueueWorkflow(new EnqueueOptions(null, "q"), new Object[] {42, "spam"}));
       assertThrows(
           NullPointerException.class,
-          () ->
-              client.enqueueWorkflow(
-                  new DBOSClient.EnqueueOptions("wf", null), new Object[] {42, "spam"}));
+          () -> client.enqueueWorkflow(new EnqueueOptions("wf", null), new Object[] {42, "spam"}));
       assertThrows(
           IllegalArgumentException.class,
           () ->
               client.enqueueWorkflow(
-                  new DBOSClient.EnqueueOptions("wf", "q")
+                  new EnqueueOptions("wf", "q")
                       .withTimeout(Duration.ofSeconds(1))
                       .withDeadline(Instant.now()),
                   new Object[] {42, "spam"}));
@@ -127,7 +149,7 @@ public class ClientTest {
           IllegalArgumentException.class,
           () ->
               client.enqueueWorkflow(
-                  new DBOSClient.EnqueueOptions("wf", "q")
+                  new EnqueueOptions("wf", "q")
                       .withDeduplicationId("dedupe")
                       .withQueuePartitionKey("qpk"),
                   new Object[] {42, "spam"}));
@@ -141,7 +163,8 @@ public class ClientTest {
 
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue")
+          new EnqueueOptions("ClientServiceImpl", "testQueue")
+              .withClassName("enqueueTest")
               .withDeduplicationId("plugh!");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       assertNotNull(handle);
@@ -168,7 +191,7 @@ public class ClientTest {
   @RetryingTest(3)
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("sleep", "ClientServiceImpl", "testQueue");
+      var options = new EnqueueOptions("sleep", "testQueue").withClassName("ClientServiceImpl");
 
       var handle1 =
           client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
@@ -284,7 +307,8 @@ public class ClientTest {
     try (var client = pgContainer.dbosClient()) {
       var delay = Duration.ofSeconds(60);
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+          new EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("ClientServiceImpl")
               .withDelay(delay);
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var wfId = handle.workflowId();
@@ -320,7 +344,8 @@ public class ClientTest {
     try (var client = pgContainer.dbosClient()) {
       var delay = Duration.ofSeconds(60);
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+          new EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("ClientServiceImpl")
               .withDelay(delay);
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var wfId = handle.workflowId();
@@ -447,7 +472,7 @@ public class ClientTest {
 
     try (var client = pgContainer.dbosClient()) {
       var timeout = Duration.ofSeconds(30);
-      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withTimeout(timeout);
+      var options = new EnqueueOptions("enqueueTest", "testQueue").withTimeout(timeout);
       var handle = client.enqueueWorkflow(options, new Object[0]);
 
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
@@ -463,8 +488,7 @@ public class ClientTest {
 
     try (var client = pgContainer.dbosClient()) {
       var deadline = Instant.now().plus(Duration.ofMinutes(5));
-      var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue").withDeadline(deadline);
+      var options = new EnqueueOptions("enqueueTest", "testQueue").withDeadline(deadline);
       var handle = client.enqueueWorkflow(options, new Object[0]);
 
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
@@ -480,7 +504,8 @@ public class ClientTest {
 
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+          new EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("ClientServiceImpl")
               .withAuthentication("alice", "admin", "editor");
       var handle = client.enqueueWorkflow(options, new Object[] {1, "test"});
 
@@ -495,7 +520,8 @@ public class ClientTest {
   public void authFlowsFromEnqueuedParentToChild() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("parentWorkflow", "ClientServiceImpl", "testQueue")
+          new EnqueueOptions("parentWorkflow", "testQueue")
+              .withClassName("ClientServiceImpl")
               .withAuthentication("bob", "viewer");
       var handle = client.enqueueWorkflow(options, new Object[0]);
       handle.getResult();
@@ -527,7 +553,8 @@ public class ClientTest {
     String versionlessId = "versionless-" + UUID.randomUUID();
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+          new EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("ClientServiceImpl")
               .withWorkflowId(versionlessId);
       client.enqueueWorkflow(options, new Object[] {1, "versionless"});
     }
@@ -567,7 +594,7 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var options = new EnqueueOptions("enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[0]);
 
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());

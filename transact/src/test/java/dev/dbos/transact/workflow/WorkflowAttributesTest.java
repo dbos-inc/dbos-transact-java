@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -197,7 +198,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE)
+          new EnqueueOptions("client_workflow", ATTR_QUEUE)
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(
@@ -311,7 +312,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new DBOSClient.EnqueueOptions("client_workflow", ATTR_QUEUE)
+          new EnqueueOptions("client_workflow", ATTR_QUEUE)
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(

@@ -3,7 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
@@ -1678,7 +1678,7 @@ public class DBOSExecutor implements AutoCloseable {
    * application's latest registered version.
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
-      DBOSClient.EnqueueOptions options,
+      EnqueueOptions options,
       Object[] positionalArgs,
       Map<String, Object> namedArgs,
       String serializationFormat) {

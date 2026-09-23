@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -330,7 +331,8 @@ public class InteropTest {
 
       // Enqueue the canonical workflow with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("canonicalWorkflow", "interop", "interopq")
+          new EnqueueOptions("canonicalWorkflow", "interopq")
+              .withClassName("interop")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -458,7 +460,8 @@ public class InteropTest {
       namedArgs.put("tags", Arrays.asList("a", "b"));
 
       var options =
-          new DBOSClient.EnqueueOptions("interop", "namedArgsWorkflow", "interopq")
+          new EnqueueOptions("namedArgsWorkflow", "interopq")
+              .withClassName("interop")
               .withWorkflowId(workflowId);
 
       client.<String>enqueuePortableWorkflow(options, new Object[] {}, namedArgs);

@@ -1,6 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.DBOSClient.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -514,7 +513,7 @@ public class DBOS implements AutoCloseable {
    * version.
    *
    * <p>The enqueued workflow is owned by this application unless {@link
-   * DBOSClient.EnqueueOptions#applicationName} names another one.
+   * EnqueueOptions#applicationName} names another one.
    *
    * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any

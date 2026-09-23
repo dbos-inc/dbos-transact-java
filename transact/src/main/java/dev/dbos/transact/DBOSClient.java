@@ -308,41 +308,29 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Options for enqueuing a workflow instance for execution.
    *
-   * <p>This record encapsulates all configuration required to enqueue a workflow, including:
-   *
-   * <ul>
-   *   <li>Workflow name and (optionally) class and instance name
-   *   <li>Target queue and queue-related options (priority, partitioning, deduplication, delay)
-   *   <li>Workflow idempotency and versioning
-   *   <li>Timeout and deadline management
-   *   <li>Serialization strategy for workflow arguments
-   * </ul>
-   *
-   * <p>Required fields: {@code workflowName}, {@code queueName}. All other fields are optional and
-   * can be set using the provided {@code with} methods.
-   *
+   * @deprecated Use the top-level {@link dev.dbos.transact.EnqueueOptions}, which {@link
+   *     DBOS#enqueueWorkflow} also takes. This nested record will be removed in 2.0.
    * @param workflowName The name of the workflow function to enqueue. Required.
    * @param className The Java class containing the workflow function. Optional.
    * @param instanceName The instance name for object-based workflows. Optional.
    * @param queueName The name of the queue to enqueue the workflow to. Required.
-   * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
-   *     UUID will be generated.
+   * @param workflowId The idempotency key for the workflow instance. Optional.
    * @param appVersion The application version to target for execution. Optional.
    * @param timeout The maximum duration the workflow may run before being canceled. Optional.
    * @param deadline The absolute time by which the workflow must start or complete. Optional.
    * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
-   * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
-   *     Must not be negative. Optional.
+   * @param priority The priority to assign; lower values are dequeued first. Optional.
    * @param queuePartitionKey The partition key for distributing workflows across queue partitions.
    *     Optional.
    * @param delay The delay before the workflow starts executing. Optional.
    * @param serialization The serialization strategy for workflow arguments. Optional.
-   * @param attributes Custom JSON-serializable attributes to attach to the workflow at creation.
-   *     Optional.
-   * @param applicationName The application that owns the enqueued workflow, and whose executors
-   *     therefore dequeue and run it. Optional; defaults to the enqueueing application. Set it to
-   *     enqueue work for a peer sharing this system database.
+   * @param authenticatedUser The authenticated user to associate with the workflow. Optional.
+   * @param assumedRole The assumed role to associate with the workflow. Optional.
+   * @param authenticatedRoles The authenticated roles to associate with the workflow. Optional.
+   * @param attributes Custom JSON-serializable attributes to attach to the workflow. Optional.
+   * @param applicationName The application that owns the enqueued workflow. Optional.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public record EnqueueOptions(
       @NonNull String workflowName,
       @Nullable String className,
@@ -1002,6 +990,28 @@ public class DBOSClient implements AutoCloseable {
           this.attributes,
           applicationName);
     }
+
+    dev.dbos.transact.EnqueueOptions toEnqueueOptions() {
+      return new dev.dbos.transact.EnqueueOptions(
+          workflowName,
+          className,
+          instanceName,
+          queueName,
+          workflowId,
+          appVersion,
+          timeout,
+          deadline,
+          deduplicationId,
+          priority,
+          queuePartitionKey,
+          delay,
+          serialization,
+          authenticatedUser,
+          assumedRole,
+          authenticatedRoles,
+          attributes,
+          applicationName);
+    }
   }
 
   /**
@@ -1010,23 +1020,23 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
-   * @param options {@link EnqueueOptions} for configuring the workflow enqueue
+   * @param options {@link dev.dbos.transact.EnqueueOptions} for configuring the workflow enqueue
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Named arguments to pass to the workflow function (e.g., for Python kwargs)
    * @param serializationFormat Serialization format string to use (null for default)
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
-      @NonNull EnqueueOptions options,
+      dev.dbos.transact.@NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs,
       @Nullable String serializationFormat) {
 
     Objects.requireNonNull(options, "options must not be null");
-    Objects.requireNonNull(options.workflowName, "EnqueueOptions workflowName must not be null");
-    Objects.requireNonNull(options.queueName, "EnqueueOptions queueName must not be null");
+    Objects.requireNonNull(options.workflowName(), "EnqueueOptions workflowName must not be null");
+    Objects.requireNonNull(options.queueName(), "EnqueueOptions queueName must not be null");
 
-    if (options.timeout != null && options.deadline != null) {
+    if (options.timeout() != null && options.deadline() != null) {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
     }
 
@@ -1059,12 +1069,13 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
-   * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
+   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
    * @param args Arguments to pass to the workflow function
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
-      @NonNull EnqueueOptions options, @Nullable Object[] args) {
+      dev.dbos.transact.@NonNull EnqueueOptions options, @Nullable Object[] args) {
+    Objects.requireNonNull(options, "options must not be null");
     var serializationFormat =
         options.serialization() != null ? options.serialization().formatName() : null;
     return enqueueWorkflow(options, args, null, serializationFormat);
@@ -1076,17 +1087,81 @@ public class DBOSClient implements AutoCloseable {
    * in Java.
    *
    * @param <T> Return type of workflow function
-   * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
+   * @param options {@link dev.dbos.transact.EnqueueOptions} for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
    *     kwargs)
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
-      @NonNull EnqueueOptions options,
+      dev.dbos.transact.@NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
     return enqueueWorkflow(options, positionalArgs, namedArgs, SerializationUtil.PORTABLE);
+  }
+
+  /**
+   * Enqueue a workflow with explicit serialization format and support for both positional and named
+   * arguments.
+   *
+   * @deprecated Use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map,
+   *     String)}. This overload will be removed in 2.0.
+   * @param <T> Return type of workflow function
+   * @param <E> Exception thrown by workflow function
+   * @param options {@link EnqueueOptions} for configuring the workflow enqueue
+   * @param positionalArgs Positional arguments to pass to the workflow function
+   * @param namedArgs Named arguments to pass to the workflow function (e.g., for Python kwargs)
+   * @param serializationFormat Serialization format string to use (null for default)
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      @NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs,
+      @Nullable String serializationFormat) {
+    Objects.requireNonNull(options, "options must not be null");
+    return enqueueWorkflow(
+        options.toEnqueueOptions(), positionalArgs, namedArgs, serializationFormat);
+  }
+
+  /**
+   * Enqueue a workflow.
+   *
+   * @deprecated Use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[])}. This
+   *     overload will be removed in 2.0.
+   * @param <T> Return type of workflow function
+   * @param <E> Exception thrown by workflow function
+   * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
+   * @param args Arguments to pass to the workflow function
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      @NonNull EnqueueOptions options, @Nullable Object[] args) {
+    Objects.requireNonNull(options, "options must not be null");
+    return enqueueWorkflow(options.toEnqueueOptions(), args);
+  }
+
+  /**
+   * Enqueue a workflow using portable JSON serialization.
+   *
+   * @deprecated Use {@link #enqueuePortableWorkflow(dev.dbos.transact.EnqueueOptions, Object[],
+   *     Map)}. This overload will be removed in 2.0.
+   * @param <T> Return type of workflow function
+   * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
+   * @param positionalArgs Positional arguments to pass to the workflow function
+   * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
+   *     kwargs)
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
+  @Deprecated(since = "1.1", forRemoval = true)
+  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
+      @NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs) {
+    Objects.requireNonNull(options, "options must not be null");
+    return enqueuePortableWorkflow(options.toEnqueueOptions(), positionalArgs, namedArgs);
   }
 
   /** Options for sending a message. */
