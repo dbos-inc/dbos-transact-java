@@ -500,8 +500,8 @@ public class DBOS implements AutoCloseable {
    * Enqueue a workflow by name, without a reference to its function.
    *
    * <p>Takes the same {@link EnqueueOptions} as {@link DBOSClient#enqueueWorkflow} and writes the
-   * same row, so the workflow may be implemented by another process — or in another language — as
-   * long as it shares this system database. Safe to call from inside a workflow: the enqueued
+   * same row, so the workflow may be implemented by another application — or in another language —
+   * as long as it shares this system database. Safe to call from inside a workflow: the enqueued
    * workflow is recorded as a child, so a replay after a crash returns a handle to the original
    * rather than enqueueing a second one.
    *

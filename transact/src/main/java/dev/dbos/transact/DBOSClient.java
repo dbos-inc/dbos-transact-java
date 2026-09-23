@@ -12,6 +12,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.DebounceResult;
@@ -1025,7 +1026,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       dev.dbos.transact.@NonNull EnqueueOptions options, @Nullable Object[] args) {
-    return enqueueWorkflow(options, args, null);
+    return enqueueWorkflowInternal(options, args, null, null);
   }
 
   /**
@@ -1047,15 +1048,15 @@ public class DBOSClient implements AutoCloseable {
       dev.dbos.transact.@NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
-    Objects.requireNonNull(options, "options must not be null");
-    var serializationFormat =
-        options.serialization() != null ? options.serialization().formatName() : null;
-    return enqueueWithFormat(options, positionalArgs, namedArgs, serializationFormat);
+    return enqueueWorkflowInternal(options, positionalArgs, namedArgs, null);
   }
 
-  // The deprecated overloads name the format directly rather than through the options, so the
-  // format is a parameter here instead of being read from them.
-  private <T, E extends Exception> WorkflowHandle<T, E> enqueueWithFormat(
+  /**
+   * Every public enqueue lands here. {@code serializationFormat} is for the deprecated overloads,
+   * which name a format directly; when it is null the format comes from {@code
+   * options.serialization()}.
+   */
+  private <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowInternal(
       dev.dbos.transact.EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs,
@@ -1067,6 +1068,10 @@ public class DBOSClient implements AutoCloseable {
 
     if (options.timeout() != null && options.deadline() != null) {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
+    }
+
+    if (serializationFormat == null && options.serialization() != null) {
+      serializationFormat = options.serialization().formatName();
     }
 
     var workflowId =
@@ -1105,7 +1110,8 @@ public class DBOSClient implements AutoCloseable {
    * @param options {@link EnqueueOptions} for configuring the workflow enqueue
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Named arguments to pass to the workflow function (e.g., for Python kwargs)
-   * @param serializationFormat Serialization format string to use (null for default)
+   * @param serializationFormat Serialization format string to use; null uses the options'
+   *     serialization
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   @Deprecated(since = "1.1", forRemoval = true)
@@ -1115,7 +1121,7 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Map<String, Object> namedArgs,
       @Nullable String serializationFormat) {
     Objects.requireNonNull(options, "options must not be null");
-    return enqueueWithFormat(
+    return enqueueWorkflowInternal(
         options.toEnqueueOptions(), positionalArgs, namedArgs, serializationFormat);
   }
 
@@ -1134,7 +1140,7 @@ public class DBOSClient implements AutoCloseable {
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options, @Nullable Object[] args) {
     Objects.requireNonNull(options, "options must not be null");
-    return enqueueWorkflow(options.toEnqueueOptions(), args);
+    return enqueueWorkflowInternal(options.toEnqueueOptions(), args, null, null);
   }
 
   /**
@@ -1157,10 +1163,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
     Objects.requireNonNull(options, "options must not be null");
-    return enqueueWorkflow(
-        options.toEnqueueOptions().withSerialization(SerializationStrategy.PORTABLE),
-        positionalArgs,
-        namedArgs);
+    return enqueueWorkflowInternal(
+        options.toEnqueueOptions(), positionalArgs, namedArgs, SerializationUtil.PORTABLE);
   }
 
   /** Options for sending a message. */
