@@ -14,6 +14,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -95,6 +96,49 @@ public class ClientTest {
       assertEquals(
           "portable_json",
           DBUtils.getWorkflowRow(dataSource, "wf-deprecated-portable").serialization());
+    }
+  }
+
+  /**
+   * The deprecated overloads name a format outside the options. When the options name a different
+   * one, neither silently wins: the enqueue is refused before anything is written.
+   */
+  @Test
+  @SuppressWarnings("removal")
+  public void deprecatedFormatConflictingWithTheOptionsThrows() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      var nativeOptions =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withSerialization(SerializationStrategy.NATIVE);
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.enqueuePortableWorkflow(nativeOptions, new Object[] {42, "spam"}, null));
+
+      var portableOptions =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withSerialization(SerializationStrategy.PORTABLE);
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              client.enqueueWorkflow(
+                  portableOptions, new Object[] {42, "spam"}, null, SerializationUtil.NATIVE));
+      assertTrue(DBUtils.getWorkflowRows(dataSource).isEmpty());
+
+      // Agreeing formats, and DEFAULT, which names none, go through.
+      var agreed =
+          client.enqueuePortableWorkflow(
+              portableOptions.withWorkflowId("wf-agreed"), new Object[] {42, "spam"}, null);
+      assertEquals("42-spam", agreed.getResult());
+      var unnamed =
+          client.enqueuePortableWorkflow(
+              portableOptions
+                  .withSerialization(SerializationStrategy.DEFAULT)
+                  .withWorkflowId("wf-default"),
+              new Object[] {17, "eggs"},
+              null);
+      assertEquals("17-eggs", unnamed.getResult());
+      assertEquals(
+          "portable_json", DBUtils.getWorkflowRow(dataSource, "wf-default").serialization());
     }
   }
 

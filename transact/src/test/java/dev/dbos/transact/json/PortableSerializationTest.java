@@ -1372,6 +1372,64 @@ public class PortableSerializationTest {
     }
   }
 
+  public interface EchoService {
+    String echo(String input);
+  }
+
+  @WorkflowClassName("EchoService")
+  public static class EchoServiceImpl implements EchoService {
+    @Workflow(name = "echo")
+    @Override
+    public String echo(String input) {
+      return "echo:" + input;
+    }
+  }
+
+  /**
+   * DBOS.enqueueWorkflow takes its format from the options alone. Left unset, or DEFAULT, the row
+   * records the application's configured serializer; PORTABLE and NATIVE override it.
+   */
+  @Test
+  public void testRuntimeEnqueueByNameUsesTheOptionsSerialization() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = new DBOS(dbosConfig.withSerializer(KryoSerializer.INSTANCE))) {
+      localDbos.registerProxy(EchoService.class, new EchoServiceImpl());
+      localDbos.launch();
+      localDbos.registerQueue("echoq", QueueOptions.empty());
+
+      SerializationStrategy[] strategies = {
+        null,
+        SerializationStrategy.DEFAULT,
+        SerializationStrategy.PORTABLE,
+        SerializationStrategy.NATIVE
+      };
+      String[] recorded = {
+        KryoSerializer.NAME,
+        KryoSerializer.NAME,
+        SerializationUtil.PORTABLE,
+        DBOSJavaSerializer.NAME
+      };
+      for (int i = 0; i < strategies.length; i++) {
+        var workflowId = "echo-" + i;
+        var options =
+            new EnqueueOptions("echo", "echoq")
+                .withClassName("EchoService")
+                .withWorkflowId(workflowId)
+                .withSerialization(strategies[i]);
+
+        var handle =
+            localDbos.<String, RuntimeException>enqueueWorkflow(options, new Object[] {"x"});
+
+        assertEquals("echo:x", handle.getResult(), String.valueOf(strategies[i]));
+        assertEquals(
+            recorded[i],
+            DBUtils.getWorkflowRow(dataSource, workflowId).serialization(),
+            String.valueOf(strategies[i]));
+      }
+    }
+  }
+
   // ============ Argument Validation & Coercion Tests ============
 
   /**

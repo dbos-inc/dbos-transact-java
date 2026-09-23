@@ -180,7 +180,7 @@ public record ExecutionOptions(
         options.queuePartitionKey(),
         options.delay(),
         options.appVersion(),
-        this.serialization,
+        options.serialization() != null ? options.serialization().formatName() : null,
         options.authenticatedUser(),
         options.assumedRole(),
         options.authenticatedRoles(),

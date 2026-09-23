@@ -1054,7 +1054,9 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Every public enqueue lands here. {@code serializationFormat} is for the deprecated overloads,
    * which name a format directly; when it is null the format comes from {@code
-   * options.serialization()}.
+   * options.serialization()}. Naming a format that contradicts the options' is refused rather than
+   * letting one silently win; {@link SerializationStrategy#DEFAULT} names no format, so it
+   * contradicts nothing.
    */
   private <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowInternal(
       dev.dbos.transact.EnqueueOptions options,
@@ -1070,17 +1072,23 @@ public class DBOSClient implements AutoCloseable {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
     }
 
-    if (serializationFormat == null && options.serialization() != null) {
-      serializationFormat = options.serialization().formatName();
+    var optionsFormat =
+        options.serialization() != null ? options.serialization().formatName() : null;
+    if (serializationFormat != null
+        && optionsFormat != null
+        && !serializationFormat.equals(optionsFormat)) {
+      throw new IllegalArgumentException(
+          "EnqueueOptions serialization '%s' conflicts with serialization format '%s'"
+              .formatted(optionsFormat, serializationFormat));
     }
 
     var workflowId =
         Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
 
-    var execOptions =
-        new ExecutionOptions(workflowId)
-            .withOptions(options)
-            .withSerialization(serializationFormat);
+    var execOptions = new ExecutionOptions(workflowId).withOptions(options);
+    if (serializationFormat != null) {
+      execOptions = execOptions.withSerialization(serializationFormat);
+    }
     DBOSExecutor.enqueueWorkflow(
         options.workflowName(),
         options.className(),

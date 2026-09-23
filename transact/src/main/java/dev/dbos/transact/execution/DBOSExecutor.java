@@ -1717,8 +1717,6 @@ public class DBOSExecutor implements AutoCloseable {
             .withOptions(options)
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
-            .withSerialization(
-                options.serialization() != null ? options.serialization().formatName() : null)
             .withAuthenticatedUser(
                 options.authenticatedUser() != null
                     ? options.authenticatedUser()
