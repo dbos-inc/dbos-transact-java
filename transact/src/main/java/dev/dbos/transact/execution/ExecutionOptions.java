@@ -172,7 +172,7 @@ public record ExecutionOptions(
   public ExecutionOptions withOptions(EnqueueOptions options) {
     return new ExecutionOptions(
         this.workflowId,
-        Timeout.of(options.timeout()),
+        options.timeout(),
         options.deadline(),
         options.queueName(),
         options.deduplicationId(),

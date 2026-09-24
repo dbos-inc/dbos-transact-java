@@ -26,6 +26,7 @@ import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -999,7 +1000,7 @@ public class DBOSClient implements AutoCloseable {
           queueName,
           workflowId,
           appVersion,
-          timeout,
+          timeout != null ? Timeout.of(timeout) : null,
           deadline,
           deduplicationId,
           priority,
@@ -1066,7 +1067,7 @@ public class DBOSClient implements AutoCloseable {
 
     Objects.requireNonNull(options, "options must not be null");
 
-    if (options.timeout() != null && options.deadline() != null) {
+    if (options.timeout() instanceof Timeout.Explicit && options.deadline() != null) {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
     }
 

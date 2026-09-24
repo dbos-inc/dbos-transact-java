@@ -8,6 +8,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -87,7 +88,7 @@ public class EnqueueOptionsTest {
             "queue-name",
             "workflow-id",
             "app-version",
-            Duration.ofSeconds(1),
+            Timeout.of(Duration.ofSeconds(1)),
             Instant.ofEpochSecond(2),
             "deduplication-id",
             3,
@@ -108,7 +109,7 @@ public class EnqueueOptionsTest {
             "queue-name",
             "workflow-id",
             "app-version",
-            Duration.ofSeconds(1),
+            Timeout.of(Duration.ofSeconds(1)),
             Instant.ofEpochSecond(2),
             "deduplication-id",
             3,

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Duration;
@@ -56,7 +57,12 @@ class DeprecatedEnqueueOptionsTest {
       var value = legacyComponent.getAccessor().invoke(legacy);
       assertNotNull(value, legacyComponent.getName() + " should be set by this test");
       var accessor = EnqueueOptions.class.getMethod(legacyComponent.getName());
-      assertEquals(value, accessor.invoke(converted), legacyComponent.getName());
+      // The one component whose type changed: the legacy Duration becomes an explicit Timeout.
+      var expected =
+          value instanceof Duration d && legacyComponent.getName().equals("timeout")
+              ? Timeout.of(d)
+              : value;
+      assertEquals(expected, accessor.invoke(converted), legacyComponent.getName());
     }
   }
 

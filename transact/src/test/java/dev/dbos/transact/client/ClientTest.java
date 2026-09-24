@@ -569,6 +569,13 @@ public class ClientTest {
       var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
       assertNull(row.timeoutMs());
       assertEquals(deadline.toEpochMilli(), row.deadlineEpochMs());
+
+      // Only an explicit timeout contradicts a deadline; asking for none leaves the deadline to
+      // act.
+      var noTimeout = client.enqueueWorkflow(options.withNoTimeout(), new Object[0]);
+      var noTimeoutRow = DBUtils.getWorkflowRow(dataSource, noTimeout.workflowId());
+      assertNull(noTimeoutRow.timeoutMs());
+      assertEquals(deadline.toEpochMilli(), noTimeoutRow.deadlineEpochMs());
     }
   }
 

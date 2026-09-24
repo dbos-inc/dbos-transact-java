@@ -6,12 +6,14 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -46,7 +48,11 @@ import org.jspecify.annotations.Nullable;
  * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
  *     UUID will be generated.
  * @param appVersion The application version to target for execution. Optional.
- * @param timeout The maximum duration the workflow may run before being canceled. Optional.
+ * @param timeout How long the workflow may run, from when it is dequeued, before being canceled:
+ *     {@link Timeout#of} an explicit duration, {@link Timeout#none()}, or {@link Timeout#inherit()}
+ *     the running workflow's. Inheriting outside a workflow, or from a client, means no timeout.
+ *     Optional; unset behaves as {@code DBOS.startWorkflow} does, taking an ambient timeout set
+ *     with {@code WorkflowOptions}, else inheriting.
  * @param deadline The absolute time by which the workflow must start or complete. Optional.
  * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
  * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
@@ -71,7 +77,7 @@ public record EnqueueOptions(
     @NonNull String queueName,
     @Nullable String workflowId,
     @Nullable String appVersion,
-    @Nullable Duration timeout,
+    @Nullable Timeout timeout,
     @Nullable Instant deadline,
     @Nullable String deduplicationId,
     @Nullable Integer priority,
@@ -111,8 +117,8 @@ public record EnqueueOptions(
       throw new IllegalArgumentException("appVersion must not be empty");
     }
 
-    if (nullableIsNotPositive(timeout)) {
-      throw new IllegalArgumentException("timeout must be positive, non-zero duration");
+    if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
+      throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
 
     if (nullableIsEmpty(deduplicationId)) {
@@ -258,13 +264,14 @@ public record EnqueueOptions(
   }
 
   /**
-   * Specify a timeout for the workflow to be enqueued. Timeout begins once the workflow is running;
-   * if it exceeds this it will be canceled.
+   * Specify the workflow's timeout: {@link Timeout#of} an explicit duration, {@link
+   * Timeout#none()}, or {@link Timeout#inherit()} the running workflow's. The clock starts when the
+   * workflow is dequeued; if it runs longer it is canceled.
    *
-   * @param timeout Duration of time, from start, before the workflow is canceled.
+   * @param timeout the timeout, or null to leave it unset
    * @return New `EnqueueOptions` with the timeout set
    */
-  public @NonNull EnqueueOptions withTimeout(@Nullable Duration timeout) {
+  public @NonNull EnqueueOptions withTimeout(@Nullable Timeout timeout) {
     return new EnqueueOptions(
         this.workflowName,
         this.className,
@@ -284,6 +291,37 @@ public record EnqueueOptions(
         this.authenticatedRoles,
         this.attributes,
         this.applicationName);
+  }
+
+  /**
+   * Specify an explicit timeout for the workflow. The clock starts when the workflow is dequeued;
+   * if it runs longer it is canceled.
+   *
+   * @param timeout Duration of time, from start, before the workflow is canceled
+   * @return New `EnqueueOptions` with the timeout set
+   */
+  public @NonNull EnqueueOptions withTimeout(@NonNull Duration timeout) {
+    return withTimeout(Timeout.of(timeout));
+  }
+
+  /**
+   * Specify an explicit timeout for the workflow.
+   *
+   * @param value timeout amount
+   * @param unit unit of {@code value}
+   * @return New `EnqueueOptions` with the timeout set
+   */
+  public @NonNull EnqueueOptions withTimeout(long value, @NonNull TimeUnit unit) {
+    return withTimeout(Duration.ofNanos(unit.toNanos(value)));
+  }
+
+  /**
+   * Run the workflow with no timeout, rather than inheriting one from the enqueuing workflow.
+   *
+   * @return New `EnqueueOptions` with no timeout
+   */
+  public @NonNull EnqueueOptions withNoTimeout() {
+    return withTimeout(Timeout.none());
   }
 
   /**

@@ -1681,7 +1681,7 @@ public class DBOSExecutor implements AutoCloseable {
       EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
     Objects.requireNonNull(options, "options must not be null");
-    if (options.timeout() != null && options.deadline() != null) {
+    if (options.timeout() instanceof Timeout.Explicit && options.deadline() != null) {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
     }
 
@@ -1706,12 +1706,8 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // Without an explicit timeout, inherit an ambient one, else the parent's propagated deadline.
-    // Timeout.of(null) is Timeout.none(), which is an explicit "no timeout" that clears the
-    // parent's deadline; only a null Timeout falls through to what the context already carries.
-    var td =
-        ctx.resolveTimeoutAndDeadline(
-            options.timeout() != null ? Timeout.of(options.timeout()) : null, options.deadline());
+    // An unset timeout takes an ambient one, else inherits, as startWorkflow does.
+    var td = ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)

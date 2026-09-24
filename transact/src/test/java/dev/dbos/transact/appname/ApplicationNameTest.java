@@ -23,6 +23,7 @@ import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -49,6 +50,8 @@ interface AppNameService {
   void sendTo(String destinationId, String topic, String message);
 
   void publish(String key, String value);
+
+  String enqueueGreetWithTimeout(String queueName, String childId, String timeout);
 }
 
 class AppNameServiceImpl implements AppNameService {
@@ -90,6 +93,24 @@ class AppNameServiceImpl implements AppNameService {
   @Workflow
   public void publish(String key, String value) {
     dbos.setEvent(key, value);
+  }
+
+  /** {@code timeout} is "unset", "none", "inherit", or an explicit number of milliseconds. */
+  @Override
+  @Workflow
+  public String enqueueGreetWithTimeout(String queueName, String childId, String timeout) {
+    var options =
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of(queueName))
+            .withWorkflowId(childId);
+    options =
+        switch (timeout) {
+          case "unset" -> options;
+          case "none" -> options.withNoTimeout();
+          case "inherit" -> options.withTimeout(Timeout.inherit());
+          default -> options.withTimeout(Duration.ofMillis(Long.parseLong(timeout)));
+        };
+    dbos.enqueueWorkflow(options, new Object[] {"x"});
+    return childId;
   }
 }
 
@@ -682,6 +703,71 @@ public class ApplicationNameTest {
   }
 
   /**
+   * Inside a workflow each of the timeout's states lands on the child's row: unset and inherit take
+   * the parent's, none clears it, and an explicit one replaces it. A queued child carries a
+   * timeout, never a deadline, since its clock starts when it is dequeued.
+   */
+  @Test
+  void enqueueByNameInAWorkflowHonorsEachTimeoutState() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var modes = List.of("unset", "inherit", "none", "1234");
+    for (var mode : modes) {
+      try (var o =
+          new WorkflowOptions("wf-to-parent-" + mode)
+              .withTimeout(Duration.ofMinutes(5))
+              .setContext()) {
+        serviceA.enqueueGreetWithTimeout("queue-a", "wf-to-child-" + mode, mode);
+      }
+    }
+
+    var parentTimeout = timeoutMs("wf-to-parent-unset");
+    assertEquals(String.valueOf(Duration.ofMinutes(5).toMillis()), parentTimeout);
+    assertEquals(parentTimeout, timeoutMs("wf-to-child-unset"));
+    assertEquals(parentTimeout, timeoutMs("wf-to-child-inherit"));
+    assertNull(timeoutMs("wf-to-child-none"));
+    assertEquals("1234", timeoutMs("wf-to-child-1234"));
+    for (var mode : modes) {
+      assertNull(deadlineMs("wf-to-child-" + mode), mode);
+    }
+  }
+
+  /**
+   * Outside a workflow there is nothing to inherit, so inherit means no timeout -- from the runtime
+   * and from a client alike. An unset timeout on the runtime still takes an ambient one; inherit
+   * asks for the running workflow's, so it passes the ambient one over.
+   */
+  @Test
+  void inheritingOutsideAWorkflowMeansNoTimeout() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var target =
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"));
+
+    dbosA.enqueueWorkflow(
+        target.withWorkflowId("wf-out-inherit").withTimeout(Timeout.inherit()), new Object[] {"x"});
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      client.enqueueWorkflow(
+          target.withWorkflowId("wf-client-inherit").withTimeout(Timeout.inherit()),
+          new Object[] {"x"});
+      client.enqueueWorkflow(
+          target.withWorkflowId("wf-client-explicit").withTimeout(Duration.ofMillis(4321)),
+          new Object[] {"x"});
+    }
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofMillis(9876)).setContext()) {
+      dbosA.enqueueWorkflow(target.withWorkflowId("wf-ambient-unset"), new Object[] {"x"});
+      dbosA.enqueueWorkflow(
+          target.withWorkflowId("wf-ambient-inherit").withTimeout(Timeout.inherit()),
+          new Object[] {"x"});
+    }
+
+    for (var id : List.of("wf-out-inherit", "wf-client-inherit", "wf-ambient-inherit")) {
+      assertNull(timeoutMs(id), id);
+      assertNull(deadlineMs(id), id);
+    }
+    assertEquals("4321", timeoutMs("wf-client-explicit"));
+    assertEquals("9876", timeoutMs("wf-ambient-unset"));
+  }
+
+  /**
    * The one place applications deliberately interoperate. Naming a peer hands it the row: the
    * enqueue stamps that peer as the owner rather than the enqueuer, which is what makes the row
    * visible to the peer's dequeue predicate and invisible to this one's.
@@ -892,6 +978,12 @@ public class ApplicationNameTest {
 
     assertEquals("App-C", workflowAppName(idA));
     assertEquals("App-C", stepAppName(idA));
+  }
+
+  private String deadlineMs(String workflowId) throws SQLException {
+    return scalar(
+        "SELECT workflow_deadline_epoch_ms FROM \"dbos\".workflow_status WHERE workflow_uuid = ?",
+        workflowId);
   }
 
   private String timeoutMs(String workflowId) throws SQLException {
