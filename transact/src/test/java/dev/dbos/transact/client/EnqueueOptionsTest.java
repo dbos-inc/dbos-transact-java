@@ -89,7 +89,7 @@ public class EnqueueOptionsTest {
             "workflow-id",
             "app-version",
             Timeout.of(Duration.ofSeconds(1)),
-            Instant.ofEpochSecond(2),
+            null,
             "deduplication-id",
             3,
             "queue-partition-key",
@@ -110,7 +110,7 @@ public class EnqueueOptionsTest {
             "workflow-id",
             "app-version",
             Timeout.of(Duration.ofSeconds(1)),
-            Instant.ofEpochSecond(2),
+            null,
             "deduplication-id",
             3,
             "queue-partition-key",
@@ -173,5 +173,28 @@ public class EnqueueOptionsTest {
     var queue = new Queue("orders");
     assertEquals(QueueName.of("orders"), queue.queueName());
     assertEquals("orders", new EnqueueOptions("wf", queue.queueName()).queueName());
+  }
+
+  /** A blank name is refused whichever constructor is used, as QueueName refuses one. */
+  @Test
+  public void blankNamesAreRefused() {
+    assertThrows(IllegalArgumentException.class, () -> new EnqueueOptions("  ", QueueName.of("q")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new EnqueueOptions(
+                "wf", null, null, "  ", null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null));
+  }
+
+  /**
+   * Only an explicit timeout contradicts a deadline, and the record refuses it wherever it's built.
+   */
+  @Test
+  public void anExplicitTimeoutAndADeadlineAreRefused() {
+    var options = new EnqueueOptions("wf", QueueName.of("q")).withDeadline(Instant.now());
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(1)));
+    assertEquals(Timeout.none(), options.withNoTimeout().timeout());
+    assertEquals(Timeout.inherit(), options.withTimeout(Timeout.inherit()).timeout());
   }
 }

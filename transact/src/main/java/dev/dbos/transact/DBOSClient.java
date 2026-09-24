@@ -1067,10 +1067,6 @@ public class DBOSClient implements AutoCloseable {
 
     Objects.requireNonNull(options, "options must not be null");
 
-    if (options.timeout() instanceof Timeout.Explicit && options.deadline() != null) {
-      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
-    }
-
     var optionsFormat =
         options.serialization() != null ? options.serialization().formatName() : null;
     if (serializationFormat != null

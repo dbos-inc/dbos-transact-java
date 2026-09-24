@@ -1681,9 +1681,6 @@ public class DBOSExecutor implements AutoCloseable {
       EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
     Objects.requireNonNull(options, "options must not be null");
-    if (options.timeout() instanceof Timeout.Explicit && options.deadline() != null) {
-      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
-    }
 
     var ctx = DBOSContextHolder.get();
     // Throws if called from a step, and takes the caller's next function ID when in a workflow.

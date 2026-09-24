@@ -92,13 +92,14 @@ public record EnqueueOptions(
 
   public EnqueueOptions {
     Objects.requireNonNull(workflowName, "workflowName must not be null");
-    if (workflowName.isEmpty()) {
-      throw new IllegalArgumentException("workflowName must not be empty");
+    if (workflowName.isBlank()) {
+      throw new IllegalArgumentException("workflowName must not be blank");
     }
 
+    // The same rule QueueName applies, so every constructor accepts the same queues.
     Objects.requireNonNull(queueName, "queueName must not be null");
-    if (queueName.isEmpty()) {
-      throw new IllegalArgumentException("queueName must not be empty");
+    if (queueName.isBlank()) {
+      throw new IllegalArgumentException("queueName must not be blank");
     }
 
     if (nullableIsEmpty(className)) {
@@ -119,6 +120,12 @@ public record EnqueueOptions(
 
     if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
+    }
+
+    // Two bounds for one workflow contradict each other. No timeout, or an inherited one, does not:
+    // the deadline then acts alone.
+    if (timeout instanceof Timeout.Explicit && deadline != null) {
+      throw new IllegalArgumentException("Can't set both an explicit timeout and a deadline");
     }
 
     if (nullableIsEmpty(deduplicationId)) {

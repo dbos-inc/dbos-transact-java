@@ -39,7 +39,7 @@ class DeprecatedEnqueueOptionsTest {
             "wfid",
             "v1",
             Duration.ofSeconds(5),
-            Instant.parse("2030-01-01T00:00:00Z"),
+            null,
             "dedup",
             3,
             "part",
@@ -50,19 +50,28 @@ class DeprecatedEnqueueOptionsTest {
             List.of("r1", "r2"),
             Map.of("k", "v"),
             "peer-app");
+    // An explicit timeout and a deadline can't be set together, so the deadline is carried by a
+    // second conversion.
+    var withDeadline = legacy.withTimeout(null).withDeadline(Instant.parse("2030-01-01T00:00:00Z"));
 
+    assertCarried(legacy, "deadline");
+    assertCarried(withDeadline, "timeout");
+  }
+
+  /** Every component but {@code unset} is set on {@code legacy} and survives the conversion. */
+  private static void assertCarried(DBOSClient.EnqueueOptions legacy, String unset)
+      throws Exception {
     var converted = legacy.toEnqueueOptions();
-
     for (var legacyComponent : DBOSClient.EnqueueOptions.class.getRecordComponents()) {
+      var name = legacyComponent.getName();
+      if (name.equals(unset)) {
+        continue;
+      }
       var value = legacyComponent.getAccessor().invoke(legacy);
-      assertNotNull(value, legacyComponent.getName() + " should be set by this test");
-      var accessor = EnqueueOptions.class.getMethod(legacyComponent.getName());
+      assertNotNull(value, name + " should be set by this test");
       // The one component whose type changed: the legacy Duration becomes an explicit Timeout.
-      var expected =
-          value instanceof Duration d && legacyComponent.getName().equals("timeout")
-              ? Timeout.of(d)
-              : value;
-      assertEquals(expected, accessor.invoke(converted), legacyComponent.getName());
+      var expected = value instanceof Duration d && name.equals("timeout") ? Timeout.of(d) : value;
+      assertEquals(expected, EnqueueOptions.class.getMethod(name).invoke(converted), name);
     }
   }
 
