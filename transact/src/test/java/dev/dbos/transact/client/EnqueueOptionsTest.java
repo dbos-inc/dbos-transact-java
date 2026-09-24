@@ -7,13 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
-import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -68,62 +65,6 @@ public class EnqueueOptionsTest {
         () -> new EnqueueOptions("wf-name", QueueName.of("q-name")).withPriority(-1));
     assertEquals(
         0, new EnqueueOptions("wf-name", QueueName.of("q-name")).withPriority(0).priority());
-  }
-
-  /**
-   * The constructor omitting the application name exists so callers that predate system database
-   * sharing keep compiling. It delegates positionally, so it is compared against the canonical
-   * constructor to catch a mis-ordered delegation, which would otherwise compile cleanly.
-   */
-  @Test
-  public void constructorWithoutAnApplicationNameEnqueuesForTheEnqueueingApplication() {
-    var attributes = Map.<String, Object>of("key", "value");
-    var roles = List.of("role");
-
-    var actual =
-        new EnqueueOptions(
-            "workflow-name",
-            "class-name",
-            "instance-name",
-            "queue-name",
-            "workflow-id",
-            "app-version",
-            Timeout.of(Duration.ofSeconds(1)),
-            null,
-            "deduplication-id",
-            3,
-            "queue-partition-key",
-            Duration.ofSeconds(4),
-            SerializationStrategy.PORTABLE,
-            "authenticated-user",
-            "assumed-role",
-            roles,
-            attributes,
-            null);
-
-    var expected =
-        new EnqueueOptions(
-            "workflow-name",
-            "class-name",
-            "instance-name",
-            "queue-name",
-            "workflow-id",
-            "app-version",
-            Timeout.of(Duration.ofSeconds(1)),
-            null,
-            "deduplication-id",
-            3,
-            "queue-partition-key",
-            Duration.ofSeconds(4),
-            SerializationStrategy.PORTABLE,
-            "authenticated-user",
-            "assumed-role",
-            roles,
-            attributes,
-            null);
-
-    assertNull(actual.applicationName());
-    assertEquals(expected, actual);
   }
 
   /**

@@ -243,7 +243,9 @@ public record EnqueueOptions(
 
   /**
    * Specify the app version for the workflow to be enqueued. The workflow will be executed by an
-   * executor with this app version. If not specified, the current app version will be used.
+   * executor with this app version. If not specified, the workflow is left without one and is
+   * dequeued only by an executor running the owning application's latest registered version -- not
+   * the enqueuer's version, which means nothing to a peer application.
    *
    * @param appVersion Application version to use for executing the workflow
    * @return New `EnqueueOptions` with the app version set
@@ -656,7 +658,8 @@ public record EnqueueOptions(
    * system database. Left unset, the workflow belongs to the enqueueing application — or to no
    * application at all, when the enqueuer has no name of its own.
    *
-   * @param applicationName the owning application, or null for the enqueueing application's
+   * @param applicationName the owning application, or null to leave the workflow with the
+   *     enqueueing application
    * @return New `EnqueueOptions` with the application name set
    */
   public @NonNull EnqueueOptions withApplicationName(@Nullable String applicationName) {
