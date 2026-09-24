@@ -84,7 +84,7 @@ class WorkflowScheduleTest {
     dbos.registerProxy(ScheduledWorkflowService.class, new ScheduledWorkflowImpl());
     dbos.launch();
     dbos.registerQueue(
-        "sched-q", dev.dbos.transact.workflow.QueueOptions.empty().andConcurrency(1));
+        "sched-q", dev.dbos.transact.workflow.QueueOptions.empty().withConcurrency(1));
 
     dbos.createSchedule(
         new WorkflowSchedule("full-sched", workflowName(), className(), "0 0 * * * *")

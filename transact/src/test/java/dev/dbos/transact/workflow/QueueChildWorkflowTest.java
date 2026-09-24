@@ -36,7 +36,7 @@ public class QueueChildWorkflowTest {
     impl.setSelf(simpleService);
 
     dbos.launch();
-    dbos.registerQueue(childQ, QueueOptions.empty().andConcurrency(5).andWorkerConcurrency(5));
+    dbos.registerQueue(childQ, QueueOptions.empty().withConcurrency(5).withWorkerConcurrency(5));
 
     var handle =
         dbos.startWorkflow(
@@ -88,7 +88,7 @@ public class QueueChildWorkflowTest {
     impl.setSelf(simpleService);
 
     dbos.launch();
-    dbos.registerQueue(childQ, QueueOptions.empty().andConcurrency(5).andWorkerConcurrency(5));
+    dbos.registerQueue(childQ, QueueOptions.empty().withConcurrency(5).withWorkerConcurrency(5));
 
     dbos.startWorkflow(
         () -> simpleService.grandParent("123"),

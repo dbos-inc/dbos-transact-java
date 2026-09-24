@@ -89,7 +89,7 @@ public class DynamicQueuesTest {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
 
-    dbos.registerQueue("concQ", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue("concQ", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
 
     for (int i = 0; i < 3; i++) {
       String id = "dynwf" + i;
@@ -109,8 +109,8 @@ public class DynamicQueuesTest {
   public void testListQueues() throws Exception {
     dbos.launch();
 
-    dbos.registerQueue("q-list-1", QueueOptions.setConcurrency(1));
-    dbos.registerQueue("q-list-2", QueueOptions.setConcurrency(2));
+    dbos.registerQueue("q-list-1", QueueOptions.empty().withConcurrency(1));
+    dbos.registerQueue("q-list-2", QueueOptions.empty().withConcurrency(2));
     dbos.registerQueue("q-list-3", QueueOptions.empty());
 
     var queues = dbos.listQueues();
@@ -125,7 +125,7 @@ public class DynamicQueuesTest {
   public void testDeleteQueue() throws Exception {
     dbos.launch();
 
-    dbos.registerQueue("q-del", QueueOptions.setConcurrency(1));
+    dbos.registerQueue("q-del", QueueOptions.empty().withConcurrency(1));
     assertTrue(dbos.listQueues().stream().anyMatch(q -> q.name().equals("q-del")));
 
     boolean deleted = dbos.deleteQueue("q-del");
@@ -144,9 +144,10 @@ public class DynamicQueuesTest {
 
     dbos.registerQueue(
         "q-pp",
-        QueueOptions.setPartitionConcurrency(4)
-            .andPartitionWorkerConcurrency(2)
-            .andPartitionRateLimit(5, Duration.ofSeconds(30)));
+        QueueOptions.empty()
+            .withPartitionConcurrency(4)
+            .withPartitionWorkerConcurrency(2)
+            .withPartitionRateLimit(5, Duration.ofSeconds(30)));
 
     var q = dbos.findQueue("q-pp").orElseThrow();
     assertEquals(4, q.partitionConcurrency());
@@ -165,15 +166,15 @@ public class DynamicQueuesTest {
     // to decide whether to dequeue per partition, so a stale value is visible across languages.
     dbos.launch();
 
-    dbos.registerQueue("q-derived", QueueOptions.setConcurrency(4));
+    dbos.registerQueue("q-derived", QueueOptions.empty().withConcurrency(4));
     assertFalse(dbos.findQueue("q-derived").orElseThrow().partitioningEnabled());
 
-    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(2));
+    dbos.updateQueue("q-derived", QueueOptions.empty().withPartitionConcurrency(2));
     assertTrue(
         dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
         "gaining a partition limit sets the flag");
 
-    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(null));
+    dbos.updateQueue("q-derived", QueueOptions.empty().withPartitionConcurrency((Integer) null));
     assertFalse(
         dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
         "losing the last partition limit clears it again");
@@ -185,18 +186,18 @@ public class DynamicQueuesTest {
     // applied to the current row and the result is validated before anything is written.
     dbos.launch();
 
-    dbos.registerQueue("q-cross", QueueOptions.setConcurrency(2));
+    dbos.registerQueue("q-cross", QueueOptions.empty().withConcurrency(2));
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-cross", QueueOptions.setWorkerConcurrency(5)));
+        () -> dbos.updateQueue("q-cross", QueueOptions.empty().withWorkerConcurrency(5)));
 
     var unchanged = dbos.findQueue("q-cross").orElseThrow();
     assertEquals(2, unchanged.concurrency());
     assertNull(unchanged.workerConcurrency(), "the rejected update must not have been written");
 
     // The same field is fine once the row it lands on allows it.
-    dbos.updateQueue("q-cross", QueueOptions.setConcurrency(8).andWorkerConcurrency(5));
+    dbos.updateQueue("q-cross", QueueOptions.empty().withConcurrency(8).withWorkerConcurrency(5));
     var widened = dbos.findQueue("q-cross").orElseThrow();
     assertEquals(8, widened.concurrency());
     assertEquals(5, widened.workerConcurrency());
@@ -211,10 +212,12 @@ public class DynamicQueuesTest {
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-reg", QueueOptions.setConcurrency(2).andWorkerConcurrency(5)));
+        () ->
+            dbos.registerQueue(
+                "q-reg", QueueOptions.empty().withConcurrency(2).withWorkerConcurrency(5)));
     assertTrue(dbos.findQueue("q-reg").isEmpty(), "the rejected queue must not have been written");
 
-    dbos.registerQueue("q-reg", QueueOptions.setConcurrency(5).andWorkerConcurrency(2));
+    dbos.registerQueue("q-reg", QueueOptions.empty().withConcurrency(5).withWorkerConcurrency(2));
     assertEquals(2, dbos.findQueue("q-reg").orElseThrow().workerConcurrency());
   }
 
@@ -227,16 +230,19 @@ public class DynamicQueuesTest {
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+        () ->
+            dbos.registerQueue(
+                "q-rl", QueueOptions.empty().withRateLimit(0, Duration.ofSeconds(1))));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ZERO)));
+        () -> dbos.registerQueue("q-rl", QueueOptions.empty().withRateLimit(5, Duration.ZERO)));
     assertTrue(dbos.findQueue("q-rl").isEmpty(), "neither rejected queue may have been written");
 
-    dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    dbos.registerQueue("q-rl", QueueOptions.empty().withRateLimit(5, Duration.ofSeconds(1)));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+        () ->
+            dbos.updateQueue("q-rl", QueueOptions.empty().withRateLimit(0, Duration.ofSeconds(1))));
     assertEquals(
         5,
         dbos.findQueue("q-rl").orElseThrow().rateLimit().limit(),
@@ -249,7 +255,7 @@ public class DynamicQueuesTest {
     // as no limit: that would validate an unlimited queue and store one column of a limit, and a
     // later update supplying the other half would complete a live limit neither update checked.
     dbos.launch();
-    dbos.registerQueue("q-half", QueueOptions.empty().andConcurrency(4));
+    dbos.registerQueue("q-half", QueueOptions.empty().withConcurrency(4));
 
     assertThrows(
         IllegalArgumentException.class,
@@ -278,7 +284,7 @@ public class DynamicQueuesTest {
 
     // Both halves together are the supported way in, and one half of an existing limit may still
     // be changed on its own: the other half carries over from the row, so the pair stays whole.
-    dbos.updateQueue("q-half", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    dbos.updateQueue("q-half", QueueOptions.empty().withRateLimit(5, Duration.ofSeconds(1)));
     dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(7)));
     var updated = dbos.findQueue("q-half").orElseThrow();
     assertEquals(7, updated.rateLimit().limit());
@@ -290,7 +296,7 @@ public class DynamicQueuesTest {
         () -> dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(null))));
     assertEquals(7, dbos.findQueue("q-half").orElseThrow().rateLimit().limit());
 
-    dbos.updateQueue("q-half", QueueOptions.empty().andRateLimit(null, null));
+    dbos.updateQueue("q-half", QueueOptions.empty().withRateLimit(null, null));
     assertNull(dbos.findQueue("q-half").orElseThrow().rateLimit());
   }
 
@@ -304,7 +310,9 @@ public class DynamicQueuesTest {
         () -> dbos.registerQueue("q-reg-half", QueueOptions.empty().withRateLimitMax(Field.of(5))));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(5, (Duration) null)));
+        () ->
+            dbos.registerQueue(
+                "q-reg-half", QueueOptions.empty().withRateLimit(5, (Duration) null)));
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -315,7 +323,7 @@ public class DynamicQueuesTest {
     assertTrue(dbos.findQueue("q-reg-half").isEmpty(), "no refused registration may be written");
 
     // Both halves null is no limit, as it always was.
-    dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(null, (Duration) null));
+    dbos.registerQueue("q-reg-half", QueueOptions.empty().withRateLimit(null, (Duration) null));
     assertNull(dbos.findQueue("q-reg-half").orElseThrow().rateLimit());
   }
 
@@ -328,10 +336,10 @@ public class DynamicQueuesTest {
     // which is why applyUpdate carries isLegacyPartitioned() rather than the stored column.
     dbos.launch();
 
-    dbos.registerQueue("q-legacy", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+    dbos.registerQueue("q-legacy", QueueOptions.empty().withConcurrency(4).andPartitionQueue(true));
     assertTrue(dbos.findQueue("q-legacy").orElseThrow().isLegacyPartitioned());
 
-    dbos.updateQueue("q-legacy", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
+    dbos.updateQueue("q-legacy", QueueOptions.empty().withPollingInterval(Duration.ofSeconds(2)));
 
     var after = dbos.findQueue("q-legacy").orElseThrow();
     assertTrue(after.isLegacyPartitioned(), "still legacy, not promoted by its own stored flag");
@@ -348,21 +356,23 @@ public class DynamicQueuesTest {
     // it again would come back unpartitioned, and every enqueue with a partition key would fail.
     dbos.launch();
 
-    dbos.registerQueue("q-legacy-lock", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+    dbos.registerQueue(
+        "q-legacy-lock", QueueOptions.empty().withConcurrency(4).andPartitionQueue(true));
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setPartitionConcurrency(2)));
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.empty().withPartitionConcurrency(2)));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setConcurrency(9)));
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.empty().withConcurrency(9)));
 
     var after = dbos.findQueue("q-legacy-lock").orElseThrow();
     assertTrue(after.isLegacyPartitioned(), "neither rejected update may have been written");
     assertEquals(4, after.resolveLimits().partitionConcurrency());
 
     // Only its limits are frozen; everything else still updates.
-    dbos.updateQueue("q-legacy-lock", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
+    dbos.updateQueue(
+        "q-legacy-lock", QueueOptions.empty().withPollingInterval(Duration.ofSeconds(2)));
     assertEquals(
         Duration.ofSeconds(2), dbos.findQueue("q-legacy-lock").orElseThrow().pollingInterval());
   }
@@ -375,7 +385,7 @@ public class DynamicQueuesTest {
     // by its limits could only mean a demotion to legacy enforcement the caller cannot have meant.
     dbos.launch();
 
-    dbos.registerQueue("q-limits", QueueOptions.setPartitionConcurrency(2));
+    dbos.registerQueue("q-limits", QueueOptions.empty().withPartitionConcurrency(2));
 
     assertThrows(
         IllegalArgumentException.class,
@@ -390,7 +400,7 @@ public class DynamicQueuesTest {
   public void testUpdateQueue() throws Exception {
     dbos.launch();
 
-    dbos.registerQueue("q-update", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-update", QueueOptions.empty().withConcurrency(5));
 
     var before =
         dbos.listQueues().stream()
@@ -399,7 +409,7 @@ public class DynamicQueuesTest {
             .orElseThrow();
     assertEquals(5, before.concurrency());
 
-    dbos.updateQueue("q-update", QueueOptions.setConcurrency(10));
+    dbos.updateQueue("q-update", QueueOptions.empty().withConcurrency(10));
 
     var after =
         dbos.listQueues().stream()
@@ -413,11 +423,13 @@ public class DynamicQueuesTest {
   public void testRegisterQueueNeverUpdate() throws Exception {
     dbos.launch();
 
-    dbos.registerQueue("q-conflict", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-conflict", QueueOptions.empty().withConcurrency(5));
 
     // NEVER_UPDATE: second call should not overwrite
     dbos.registerQueue(
-        "q-conflict", QueueOptions.setConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
+        "q-conflict",
+        QueueOptions.empty().withConcurrency(99),
+        QueueConflictResolution.NEVER_UPDATE);
 
     var q =
         dbos.listQueues().stream()
@@ -431,11 +443,13 @@ public class DynamicQueuesTest {
   public void testRegisterQueueAlwaysUpdate() throws Exception {
     dbos.launch();
 
-    dbos.registerQueue("q-always", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-always", QueueOptions.empty().withConcurrency(5));
 
     // ALWAYS_UPDATE: second call should overwrite
     dbos.registerQueue(
-        "q-always", QueueOptions.setConcurrency(99), QueueConflictResolution.ALWAYS_UPDATE);
+        "q-always",
+        QueueOptions.empty().withConcurrency(99),
+        QueueConflictResolution.ALWAYS_UPDATE);
 
     var q =
         dbos.listQueues().stream()
@@ -450,7 +464,7 @@ public class DynamicQueuesTest {
     dbos.launch();
 
     var interval = Duration.ofSeconds(3);
-    dbos.registerQueue("q-poll", QueueOptions.setPollingInterval(interval));
+    dbos.registerQueue("q-poll", QueueOptions.empty().withPollingInterval(interval));
 
     var q =
         dbos.listQueues().stream().filter(x -> x.name().equals("q-poll")).findFirst().orElseThrow();
@@ -474,7 +488,7 @@ public class DynamicQueuesTest {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
 
-    dbos.registerQueue("q-lifecycle", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-lifecycle", QueueOptions.empty().withConcurrency(5));
 
     var h1 =
         dbos.startWorkflow(
@@ -491,7 +505,7 @@ public class DynamicQueuesTest {
     Thread.sleep(500);
 
     // Recreate with different config.
-    dbos.registerQueue("q-lifecycle", QueueOptions.setConcurrency(2));
+    dbos.registerQueue("q-lifecycle", QueueOptions.empty().withConcurrency(2));
     var recreated =
         dbos.listQueues().stream()
             .filter(x -> x.name().equals("q-lifecycle"))
@@ -516,7 +530,7 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
 
     // Start with concurrency=1 so only one workflow dequeues at a time.
-    dbos.registerQueue("dyn-update-q", QueueOptions.setConcurrency(1));
+    dbos.registerQueue("dyn-update-q", QueueOptions.empty().withConcurrency(1));
 
     // Enqueue the first workflow and wait until it is running, so it deterministically occupies the
     // single concurrency slot before the others are enqueued. Otherwise any of the three could win
@@ -545,7 +559,7 @@ public class DynamicQueuesTest {
 
     // Bump concurrency. The runner reloads queue settings on its next poll and
     // should immediately dequeue the remaining two workflows.
-    dbos.updateQueue("dyn-update-q", QueueOptions.setConcurrency(3));
+    dbos.updateQueue("dyn-update-q", QueueOptions.empty().withConcurrency(3));
     impl.wfSemaphore.acquire(2);
 
     // Release all blocked workflows and verify they complete successfully.
@@ -562,7 +576,7 @@ public class DynamicQueuesTest {
 
     assertFalse(qs.findDynamicQueue("q-map-reg").isPresent());
 
-    dbos.registerQueue("q-map-reg", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-map-reg", QueueOptions.empty().withConcurrency(5));
     awaitCondition(() -> qs.findDynamicQueue("q-map-reg").isPresent());
 
     assertEquals(5, qs.findDynamicQueue("q-map-reg").get().concurrency());
@@ -573,10 +587,10 @@ public class DynamicQueuesTest {
     dbos.launch();
     var qs = DBOSTestAccess.getQueueService(dbos);
 
-    dbos.registerQueue("q-map-upd", QueueOptions.setConcurrency(5));
+    dbos.registerQueue("q-map-upd", QueueOptions.empty().withConcurrency(5));
     awaitCondition(() -> qs.findDynamicQueue("q-map-upd").isPresent());
 
-    dbos.updateQueue("q-map-upd", QueueOptions.setConcurrency(10));
+    dbos.updateQueue("q-map-upd", QueueOptions.empty().withConcurrency(10));
     awaitCondition(
         () ->
             qs.findDynamicQueue("q-map-upd")
@@ -607,15 +621,17 @@ public class DynamicQueuesTest {
         IllegalArgumentException.class,
         () ->
             dbos.registerQueue(
-                "q-bad-poll", QueueOptions.setPollingInterval(Duration.ofSeconds(-1))));
+                "q-bad-poll", QueueOptions.empty().withPollingInterval(Duration.ofSeconds(-1))));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-bad-poll", QueueOptions.setPollingInterval(Duration.ZERO)));
+        () ->
+            dbos.registerQueue(
+                "q-bad-poll", QueueOptions.empty().withPollingInterval(Duration.ZERO)));
 
     // Zero or negative concurrency should fail.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-bad-conc", QueueOptions.setConcurrency(0)));
+        () -> dbos.registerQueue("q-bad-conc", QueueOptions.empty().withConcurrency(0)));
   }
 
   @Test
@@ -729,7 +745,8 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue(
+        "firstQueue", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
 
     qs.pause();
 
@@ -778,7 +795,8 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue(
+        "firstQueue", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
 
     qs.pause();
     Thread.sleep(2000);
@@ -822,7 +840,8 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue(
+        "firstQueue", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
 
     qs.pause();
 
@@ -868,8 +887,10 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
-    dbos.registerQueue("secondQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue(
+        "firstQueue", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
+    dbos.registerQueue(
+        "secondQueue", QueueOptions.empty().withConcurrency(1).withWorkerConcurrency(1));
 
     String id1 = "firstQ1234";
     String id2 = "second1234";
@@ -908,7 +929,10 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue(
         "limitQueue",
-        QueueOptions.setRateLimit(limit, period).andConcurrency(1).andWorkerConcurrency(1));
+        QueueOptions.empty()
+            .withRateLimit(limit, period)
+            .withConcurrency(1)
+            .withWorkerConcurrency(1));
     Thread.sleep(1000);
 
     int numWaves = 3;
@@ -976,7 +1000,8 @@ public class DynamicQueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    dbos.registerQueue("QwithWCLimit", QueueOptions.setConcurrency(3).andWorkerConcurrency(2));
+    dbos.registerQueue(
+        "QwithWCLimit", QueueOptions.empty().withConcurrency(3).withWorkerConcurrency(2));
     Queue qwithWCLimit = dbos.findQueue("QwithWCLimit").get();
 
     String executorId = dbosExecutor.executorId();
@@ -1051,7 +1076,8 @@ public class DynamicQueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    dbos.registerQueue("QwithWCLimit", QueueOptions.setConcurrency(3).andWorkerConcurrency(2));
+    dbos.registerQueue(
+        "QwithWCLimit", QueueOptions.empty().withConcurrency(3).withWorkerConcurrency(2));
     Queue qwithWCLimit = dbos.findQueue("QwithWCLimit").get();
 
     String executorId = dbosExecutor.executorId();
@@ -1146,7 +1172,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(2));
+    dbos.registerQueue("test_queue", QueueOptions.empty().withConcurrency(2));
 
     // Enqueue the two blocking workflows first and wait until both are running, so they
     // deterministically occupy the two concurrency slots before the noop workflow is enqueued.
@@ -1251,7 +1277,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+    dbos.registerQueue("test_queue", QueueOptions.empty().withConcurrency(1));
 
     // Enqueue the blocking workflow first and confirm it is running so it holds the single slot
     // before the regular workflow is enqueued; otherwise the regular one could be dispatched first.
@@ -1285,7 +1311,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+    dbos.registerQueue("test_queue", QueueOptions.empty().withConcurrency(1));
 
     // Enqueue the blocking workflow first and confirm it is running so it holds the single slot
     // before the regular workflow is enqueued; otherwise the regular one could be dispatched first.
@@ -1318,7 +1344,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setWorkerConcurrency(1));
+    dbos.registerQueue("test_queue", QueueOptions.empty().withWorkerConcurrency(1));
 
     // Enqueue the blocking workflow first and wait until it is actually running, so it
     // deterministically occupies the single worker slot before h2 exists. Otherwise the dispatcher
@@ -1351,7 +1377,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("test_queue", QueueOptions.setConcurrency(1));
+    dbos.registerQueue("test_queue", QueueOptions.empty().withConcurrency(1));
 
     var h1 =
         dbos.startWorkflow(
@@ -1389,7 +1415,9 @@ public class DynamicQueuesTest {
     qs.setSpeedupForTest();
     dbos.registerQueue(
         "multi_exec_queue",
-        QueueOptions.setWorkerConcurrency(workerConcurrency).andConcurrency(globalConcurrency));
+        QueueOptions.empty()
+            .withWorkerConcurrency(workerConcurrency)
+            .withConcurrency(globalConcurrency));
 
     for (int i = 0; i < workerConcurrency; i++) {
       final int fi = i;
@@ -1408,7 +1436,9 @@ public class DynamicQueuesTest {
       qs2.setSpeedupForTest();
       dbos2.registerQueue(
           "multi_exec_queue",
-          QueueOptions.setWorkerConcurrency(workerConcurrency).andConcurrency(globalConcurrency));
+          QueueOptions.empty()
+              .withWorkerConcurrency(workerConcurrency)
+              .withConcurrency(globalConcurrency));
 
       List<WorkflowHandle<Integer, ?>> handles2 = new ArrayList<>();
       for (int i = 0; i < workerConcurrency; i++) {
@@ -1452,7 +1482,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue("child_queue", QueueOptions.setConcurrency(3));
+    dbos.registerQueue("child_queue", QueueOptions.empty().withConcurrency(3));
 
     var handle =
         dbos.startWorkflow(() -> service.parentWorkflow("a", "b"), new StartWorkflowOptions());

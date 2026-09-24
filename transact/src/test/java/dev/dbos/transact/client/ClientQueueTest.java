@@ -20,7 +20,7 @@ public class ClientQueueTest {
   @Test
   public void testClientRegisterAndFindQueue() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-find", QueueOptions.setConcurrency(7));
+      client.registerQueue("cq-find", QueueOptions.empty().withConcurrency(7));
 
       var q = client.findQueue("cq-find").orElseThrow();
       assertEquals("cq-find", q.name());
@@ -33,8 +33,8 @@ public class ClientQueueTest {
   @Test
   public void testClientListQueues() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-list-1", QueueOptions.setConcurrency(1));
-      client.registerQueue("cq-list-2", QueueOptions.setConcurrency(2));
+      client.registerQueue("cq-list-1", QueueOptions.empty().withConcurrency(1));
+      client.registerQueue("cq-list-2", QueueOptions.empty().withConcurrency(2));
       client.registerQueue("cq-list-3", QueueOptions.empty());
 
       var names = client.listQueues().stream().map(Queue::name).toList();
@@ -60,10 +60,10 @@ public class ClientQueueTest {
   @Test
   public void testClientUpdateQueue() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-update", QueueOptions.setConcurrency(5));
+      client.registerQueue("cq-update", QueueOptions.empty().withConcurrency(5));
       assertEquals(5, client.findQueue("cq-update").orElseThrow().concurrency());
 
-      client.updateQueue("cq-update", QueueOptions.setConcurrency(10));
+      client.updateQueue("cq-update", QueueOptions.empty().withConcurrency(10));
       assertEquals(10, client.findQueue("cq-update").orElseThrow().concurrency());
     }
   }
@@ -71,9 +71,11 @@ public class ClientQueueTest {
   @Test
   public void testClientNeverUpdate() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-never", QueueOptions.setConcurrency(5));
+      client.registerQueue("cq-never", QueueOptions.empty().withConcurrency(5));
       client.registerQueue(
-          "cq-never", QueueOptions.setConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
+          "cq-never",
+          QueueOptions.empty().withConcurrency(99),
+          QueueConflictResolution.NEVER_UPDATE);
 
       assertEquals(5, client.findQueue("cq-never").orElseThrow().concurrency());
     }
@@ -82,9 +84,11 @@ public class ClientQueueTest {
   @Test
   public void testClientAlwaysUpdate() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-always", QueueOptions.setConcurrency(5));
+      client.registerQueue("cq-always", QueueOptions.empty().withConcurrency(5));
       client.registerQueue(
-          "cq-always", QueueOptions.setConcurrency(99), QueueConflictResolution.ALWAYS_UPDATE);
+          "cq-always",
+          QueueOptions.empty().withConcurrency(99),
+          QueueConflictResolution.ALWAYS_UPDATE);
 
       assertEquals(99, client.findQueue("cq-always").orElseThrow().concurrency());
     }
