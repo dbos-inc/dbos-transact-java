@@ -208,6 +208,10 @@ public class DBOSContext {
     Duration resolvedTimeout = this.timeout;
     Instant resolvedDeadline = this.deadline;
     if (nextDeadline != null) {
+      // A given deadline is the child's bound. Keeping an inherited timeout beside it would make a
+      // queued child drop the deadline, since a queued workflow with a timeout takes its deadline
+      // from the timeout when it is dequeued.
+      resolvedTimeout = null;
       resolvedDeadline = nextDeadline;
     } else if (nextTimeout instanceof Timeout.None) {
       resolvedTimeout = null;

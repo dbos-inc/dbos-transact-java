@@ -31,6 +31,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -51,7 +52,8 @@ interface AppNameService {
 
   void publish(String key, String value);
 
-  String enqueueGreetWithTimeout(String queueName, String childId, String timeout);
+  String enqueueGreetWithTimeout(
+      String queueName, String childId, String timeout, Long deadlineEpochMs);
 }
 
 class AppNameServiceImpl implements AppNameService {
@@ -95,13 +97,20 @@ class AppNameServiceImpl implements AppNameService {
     dbos.setEvent(key, value);
   }
 
-  /** {@code timeout} is "unset", "none", "inherit", or an explicit number of milliseconds. */
+  /**
+   * {@code timeout} is "unset", "none", "inherit", or an explicit number of milliseconds; a
+   * non-null {@code deadlineEpochMs} is also set as the child's deadline.
+   */
   @Override
   @Workflow
-  public String enqueueGreetWithTimeout(String queueName, String childId, String timeout) {
+  public String enqueueGreetWithTimeout(
+      String queueName, String childId, String timeout, Long deadlineEpochMs) {
     var options =
         new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of(queueName))
             .withWorkflowId(childId);
+    if (deadlineEpochMs != null) {
+      options = options.withDeadline(Instant.ofEpochMilli(deadlineEpochMs));
+    }
     options =
         switch (timeout) {
           case "unset" -> options;
@@ -716,7 +725,7 @@ public class ApplicationNameTest {
           new WorkflowOptions("wf-to-parent-" + mode)
               .withTimeout(Duration.ofMinutes(5))
               .setContext()) {
-        serviceA.enqueueGreetWithTimeout("queue-a", "wf-to-child-" + mode, mode);
+        serviceA.enqueueGreetWithTimeout("queue-a", "wf-to-child-" + mode, mode, null);
       }
     }
 
@@ -728,6 +737,33 @@ public class ApplicationNameTest {
     assertEquals("1234", timeoutMs("wf-to-child-1234"));
     for (var mode : modes) {
       assertNull(deadlineMs("wf-to-child-" + mode), mode);
+    }
+  }
+
+  /**
+   * A deadline the caller gives is the child's bound, whatever the parent's timeout. Unless the
+   * caller also asks for an explicit timeout -- which contradicts it and is refused -- the child
+   * carries that deadline and no timeout, rather than inheriting the parent's timeout and losing
+   * the deadline.
+   */
+  @Test
+  void enqueueByNameInAWorkflowKeepsAGivenDeadline() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var deadline = Instant.now().plus(Duration.ofHours(1)).toEpochMilli();
+    var modes = List.of("unset", "inherit", "none");
+    for (var mode : modes) {
+      try (var o =
+          new WorkflowOptions("wf-dl-given-parent-" + mode)
+              .withTimeout(Duration.ofMinutes(5))
+              .setContext()) {
+        serviceA.enqueueGreetWithTimeout("queue-a", "wf-dl-given-" + mode, mode, deadline);
+      }
+    }
+
+    for (var mode : modes) {
+      var childId = "wf-dl-given-" + mode;
+      assertEquals(String.valueOf(deadline), deadlineMs(childId), mode);
+      assertNull(timeoutMs(childId), mode);
     }
   }
 
