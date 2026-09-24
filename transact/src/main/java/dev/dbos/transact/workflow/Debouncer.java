@@ -331,7 +331,10 @@ public final class Debouncer<R> {
             appVersion,
             priority,
             deduplicationId);
-    Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
+    // Only a timeout the caller set for this call carries over, as in Python and TypeScript. The
+    // running workflow's own timeout is its budget, not the debounced workflow's (#561).
+    Duration workflowTimeout =
+        DBOSContextHolder.get().getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
     var workflowAttributes = DBOSContextHolder.get().resolveNextAttributes();
     DebouncerContextOptions ctx =
         new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
@@ -339,10 +342,13 @@ public final class Debouncer<R> {
 
     while (true) {
       try {
+        // No timeout: the debouncer waits out the debounce period, which can outlast the caller's
+        // deadline or timeout. The user workflow gets the caller's timeout through ctx instead.
         var startOpts =
             new StartWorkflowOptions()
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
-                .withDeduplicationId(debouncerDeduplicationId);
+                .withDeduplicationId(debouncerDeduplicationId)
+                .withNoTimeout();
         executor.startRegisteredWorkflow(
             debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
         // Successfully enqueued a fresh debouncer for this key.

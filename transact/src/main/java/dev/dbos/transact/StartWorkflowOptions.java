@@ -35,7 +35,8 @@ import org.jspecify.annotations.Nullable;
  * @param timeout The timeout configuration specifying how long the workflow may run before
  *     expiring. Promoted to a deadline at execution time. May be null.
  * @param deadline The absolute time by which the workflow must start or complete before being
- *     canceled. If both timeout and deadline are set, the earlier is used. May be null.
+ *     canceled. A deadline replaces an inherited timeout; it can't be combined with an explicit
+ *     one. May be null.
  * @param queueName Optional name of the queue to which the workflow should be enqueued for
  *     execution. May be null.
  * @param deduplicationId If {@code queueName} is specified, an optional ID used to prevent

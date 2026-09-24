@@ -703,7 +703,7 @@ public class ApplicationNameTest {
   // ==================== Enqueue by name ====================
 
   @Test
-  void enqueueByNameWithNoTimeoutInheritsTheParentsTimeout() throws Exception {
+  void enqueueByNameWithNoTimeoutInheritsTheParentsDeadline() throws Exception {
     dbosA.registerQueue("queue-a", QueueOptions.empty());
     try (var o =
         new WorkflowOptions("wf-dl-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
@@ -711,18 +711,19 @@ public class ApplicationNameTest {
           "greet", AppNameServiceImpl.class.getName(), "queue-a", "wf-dl-child", "x");
     }
 
-    // An unset timeout must fall through to what the parent propagates. Treating it as an explicit
-    // "no timeout" instead would leave the child unbounded. A queued workflow carries the timeout
-    // rather than a deadline, since its clock only starts when it is dequeued.
-    var parentTimeout = timeoutMs("wf-dl-parent");
-    assertNotNull(parentTimeout);
-    assertEquals(parentTimeout, timeoutMs("wf-dl-child"));
+    // An unset timeout must fall through to what the parent propagates: its deadline. Treating it
+    // as "no timeout" would leave the child unbounded; copying the parent's timeout would restart
+    // that budget when the child is dequeued, letting it outlive the parent (#561).
+    var parentDeadline = deadlineMs("wf-dl-parent");
+    assertNotNull(parentDeadline);
+    assertEquals(parentDeadline, deadlineMs("wf-dl-child"));
+    assertNull(timeoutMs("wf-dl-child"));
   }
 
   /**
    * Inside a workflow each of the timeout's states lands on the child's row: unset and inherit take
-   * the parent's, none clears it, and an explicit one replaces it. A queued child carries a
-   * timeout, never a deadline, since its clock starts when it is dequeued.
+   * the parent's deadline, none clears it, and an explicit one replaces it. A child never takes the
+   * parent's timeout, which would restart the parent's budget when the child is dequeued (#561).
    */
   @Test
   void enqueueByNameInAWorkflowHonorsEachTimeoutState() throws Exception {
@@ -737,15 +738,17 @@ public class ApplicationNameTest {
       }
     }
 
-    var parentTimeout = timeoutMs("wf-to-parent-unset");
-    assertEquals(String.valueOf(Duration.ofMinutes(5).toMillis()), parentTimeout);
-    assertEquals(parentTimeout, timeoutMs("wf-to-child-unset"));
-    assertEquals(parentTimeout, timeoutMs("wf-to-child-inherit"));
-    assertNull(timeoutMs("wf-to-child-none"));
-    assertEquals("1234", timeoutMs("wf-to-child-1234"));
-    for (var mode : modes) {
-      assertNull(deadlineMs("wf-to-child-" + mode), mode);
+    for (var mode : List.of("unset", "inherit")) {
+      var parentDeadline = deadlineMs("wf-to-parent-" + mode);
+      assertNotNull(parentDeadline, mode);
+      assertEquals(parentDeadline, deadlineMs("wf-to-child-" + mode), mode);
+      assertNull(timeoutMs("wf-to-child-" + mode), mode);
     }
+    assertNull(timeoutMs("wf-to-child-none"));
+    assertNull(deadlineMs("wf-to-child-none"));
+    // A queued child with a timeout of its own gets its deadline when it is dequeued, which may
+    // already have happened, so its deadline isn't checked here.
+    assertEquals("1234", timeoutMs("wf-to-child-1234"));
   }
 
   /**
@@ -809,6 +812,34 @@ public class ApplicationNameTest {
     }
     assertEquals("4321", timeoutMs("wf-client-explicit"));
     assertEquals("9876", timeoutMs("wf-ambient-unset"));
+  }
+
+  /**
+   * An ambient deadline applies only when the call sets no bound of its own. A timeout, or none,
+   * given for the call replaces it rather than losing to it.
+   */
+  @Test
+  void aTimeoutGivenForTheCallBeatsAnAmbientDeadline() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var target =
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"));
+    var ambient = Instant.now().plus(Duration.ofHours(1)).toEpochMilli();
+
+    try (var o = new WorkflowOptions().withDeadline(Instant.ofEpochMilli(ambient)).setContext()) {
+      dbosA.enqueueWorkflow(target.withWorkflowId("wf-amb-dl-unset"), new Object[] {"x"});
+      dbosA.enqueueWorkflow(
+          target.withWorkflowId("wf-amb-dl-explicit").withTimeout(Duration.ofMillis(4321)),
+          new Object[] {"x"});
+      dbosA.enqueueWorkflow(
+          target.withWorkflowId("wf-amb-dl-none").withTimeout(Timeout.none()), new Object[] {"x"});
+    }
+
+    assertEquals(String.valueOf(ambient), deadlineMs("wf-amb-dl-unset"));
+    assertNull(timeoutMs("wf-amb-dl-unset"));
+    // A queued workflow with a timeout gets its deadline when it is dequeued.
+    assertEquals("4321", timeoutMs("wf-amb-dl-explicit"));
+    assertNull(timeoutMs("wf-amb-dl-none"));
+    assertNull(deadlineMs("wf-amb-dl-none"));
   }
 
   /**

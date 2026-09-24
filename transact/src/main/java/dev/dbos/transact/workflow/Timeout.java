@@ -15,6 +15,9 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
     }
   }
 
+  /**
+   * Bound the workflow by the running workflow's deadline, if any. Outside a workflow, no timeout.
+   */
   static Timeout inherit() {
     return new Inherit();
   }

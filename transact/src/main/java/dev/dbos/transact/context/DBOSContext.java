@@ -29,7 +29,6 @@ public class DBOSContext {
   private int functionId;
   private Integer stepFunctionId;
   private final WorkflowInfo parent;
-  private final Duration timeout;
   private final Instant deadline;
   private final String authenticatedUser;
   private final String assumedRole;
@@ -42,7 +41,6 @@ public class DBOSContext {
     workflowId = null;
     functionId = -1;
     parent = null;
-    timeout = null;
     deadline = null;
     authenticatedUser = null;
     assumedRole = null;
@@ -53,7 +51,6 @@ public class DBOSContext {
   public DBOSContext(
       String workflowId,
       WorkflowInfo parent,
-      Duration timeout,
       Instant deadline,
       String authenticatedUser,
       String assumedRole,
@@ -62,7 +59,6 @@ public class DBOSContext {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
-    this.timeout = timeout;
     this.deadline = deadline;
     this.authenticatedUser = authenticatedUser;
     this.assumedRole = assumedRole;
@@ -86,7 +82,6 @@ public class DBOSContext {
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
     this.parent = other.parent;
-    this.timeout = other.timeout;
     this.deadline = other.deadline;
     this.authenticatedUser = other.authenticatedUser;
     this.assumedRole = other.assumedRole;
@@ -148,10 +143,6 @@ public class DBOSContext {
     return nextTimeout;
   }
 
-  public Duration getTimeout() {
-    return timeout;
-  }
-
   public Instant getNextDeadline() {
     return nextDeadline;
   }
@@ -203,24 +194,26 @@ public class DBOSContext {
   }
 
   public TimeoutAndDeadline resolveTimeoutAndDeadline(Timeout nextTimeout, Instant nextDeadline) {
-    if (nextTimeout == null) nextTimeout = this.nextTimeout;
-    if (nextDeadline == null) nextDeadline = this.nextDeadline;
-    Duration resolvedTimeout = this.timeout;
-    Instant resolvedDeadline = this.deadline;
-    if (nextDeadline != null) {
-      // A given deadline is the child's bound. Keeping an inherited timeout beside it would make a
-      // queued child drop the deadline, since a queued workflow with a timeout takes its deadline
-      // from the timeout when it is dequeued.
-      resolvedTimeout = null;
-      resolvedDeadline = nextDeadline;
-    } else if (nextTimeout instanceof Timeout.None) {
-      resolvedTimeout = null;
-      resolvedDeadline = null;
-    } else if (nextTimeout instanceof Timeout.Explicit e) {
-      resolvedTimeout = e.value();
-      resolvedDeadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    // The ambient options apply only when the call sets neither. Taken field by field, an ambient
+    // deadline would override a timeout, or none, given for this one call.
+    if (nextTimeout == null && nextDeadline == null) {
+      nextTimeout = this.nextTimeout;
+      nextDeadline = this.nextDeadline;
     }
-    return new TimeoutAndDeadline(resolvedTimeout, resolvedDeadline);
+    if (nextDeadline != null) {
+      return new TimeoutAndDeadline(null, nextDeadline);
+    }
+    if (nextTimeout instanceof Timeout.Explicit e) {
+      var deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+      return new TimeoutAndDeadline(e.value(), deadline);
+    }
+    if (nextTimeout instanceof Timeout.None) {
+      return new TimeoutAndDeadline(null, null);
+    }
+    // Unset or inherit: the running workflow's deadline, never its timeout. The timeout is the
+    // parent's own budget, already spent down to that deadline; a queued child handed it would
+    // start a fresh copy on dequeue and outlive its parent (#561).
+    return new TimeoutAndDeadline(null, this.deadline);
   }
 
   public String getAuthenticatedUser() {

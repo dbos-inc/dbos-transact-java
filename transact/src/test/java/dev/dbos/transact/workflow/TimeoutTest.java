@@ -14,6 +14,7 @@ import dev.dbos.transact.utils.PgContainer;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -378,6 +379,35 @@ public class TimeoutTest {
         dbos.startWorkflow(() -> simpleService.longParent("12345", 10, 0), options);
 
     assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> handle.getResult());
+  }
+
+  /**
+   * A queued child of a timed parent carries the parent's deadline and no timeout of its own. With
+   * the parent's timeout it would start a fresh copy of that budget on dequeue and could outlive
+   * the parent (#561).
+   */
+  @Test
+  public void queuedChildInheritsTheParentsDeadlineNotItsTimeout() throws Exception {
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+    dbos.registerQueue("childQ", QueueOptions.empty());
+
+    var parentId = "wf-queued-parent";
+    try (var o = new WorkflowOptions(parentId).withTimeout(Duration.ofMinutes(5)).setContext()) {
+      assertEquals("QueuedChildren", simpleService.syncWithQueued());
+    }
+
+    var parent = DBUtils.getWorkflowRow(dataSource, parentId);
+    assertEquals(Duration.ofMinutes(5).toMillis(), parent.timeoutMs());
+    assertNotNull(parent.deadlineEpochMs());
+    for (var childId : List.of("child0", "child1", "child2")) {
+      dbos.retrieveWorkflow(childId).getResult();
+      var child = DBUtils.getWorkflowRow(dataSource, childId);
+      assertNull(child.timeoutMs(), childId);
+      assertEquals(parent.deadlineEpochMs(), child.deadlineEpochMs(), childId);
+    }
   }
 
   private void setWorkflowDeadlinePassed(DataSource ds, String workflowId) throws SQLException {

@@ -49,11 +49,12 @@ import org.jspecify.annotations.Nullable;
  * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
  *     UUID will be generated.
  * @param appVersion The application version to target for execution. Optional.
- * @param timeout How long the workflow may run, from when it is dequeued, before being canceled:
- *     {@link Timeout#of} an explicit duration, {@link Timeout#none()}, or {@link Timeout#inherit()}
- *     the running workflow's. Inheriting outside a workflow, or from a client, means no timeout.
- *     Optional; unset behaves as {@code DBOS.startWorkflow} does, taking an ambient timeout set
- *     with {@code WorkflowOptions}, else inheriting.
+ * @param timeout How long the workflow may run before being canceled: {@link Timeout#of} an
+ *     explicit duration, timed from when the workflow is dequeued; {@link Timeout#none()}; or
+ *     {@link Timeout#inherit()}, which bounds it by the running workflow's deadline instead.
+ *     Inheriting outside a workflow, or from a client, means no timeout. Optional; unset behaves as
+ *     {@code DBOS.startWorkflow} does, taking an ambient timeout set with {@code WorkflowOptions},
+ *     else inheriting.
  * @param deadline The absolute time by which the workflow must start or complete. Optional.
  * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
  * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
@@ -285,9 +286,9 @@ public record EnqueueOptions(
   }
 
   /**
-   * Specify the workflow's timeout: {@link Timeout#of} an explicit duration, {@link
-   * Timeout#none()}, or {@link Timeout#inherit()} the running workflow's. The clock starts when the
-   * workflow is dequeued; if it runs longer it is canceled.
+   * Specify the workflow's timeout: {@link Timeout#of} an explicit duration, timed from when the
+   * workflow is dequeued; {@link Timeout#none()}; or {@link Timeout#inherit()}, which bounds it by
+   * the running workflow's deadline. If the workflow runs past its bound, it is canceled.
    *
    * @param timeout the timeout, or null to leave it unset
    * @return New `EnqueueOptions` with the timeout set

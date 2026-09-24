@@ -2077,7 +2077,6 @@ public class DBOSExecutor implements AutoCloseable {
                 new DBOSContext(
                     workflowId,
                     parent,
-                    finalOptions.timeoutDuration(),
                     finalOptions.deadline(),
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),

@@ -373,6 +373,128 @@ public class DebouncerTest {
     assertEquals(Integer.valueOf(42), userWfStatus.priority());
   }
 
+  public interface TimedOrchestrator {
+    String debounceWithInheritedTimeout(String arg);
+
+    String debounceWithOwnTimeout(String arg);
+  }
+
+  public static class TimedOrchestratorImpl implements TimedOrchestrator {
+    private final DBOS dbos;
+    private final DebouncedService svc;
+
+    public TimedOrchestratorImpl(DBOS dbos, DebouncedService svc) {
+      this.dbos = dbos;
+      this.svc = svc;
+    }
+
+    // Both return the debounced workflow's ID, once it has finished.
+
+    @Override
+    @Workflow
+    public String debounceWithInheritedTimeout(String arg) {
+      var h =
+          dbos.<String>debouncer()
+              .debounce("timed-inherited", Duration.ofMillis(200), () -> svc.process(arg));
+      h.getResult();
+      return h.workflowId();
+    }
+
+    @Override
+    @Workflow
+    public String debounceWithOwnTimeout(String arg) {
+      try (var o = new WorkflowOptions().withTimeout(Duration.ofMinutes(2)).setContext()) {
+        var h =
+            dbos.<String>debouncer()
+                .debounce("timed-own", Duration.ofMillis(200), () -> svc.process(arg));
+        h.getResult();
+        return h.workflowId();
+      }
+    }
+  }
+
+  /**
+   * A debounce inside a timed workflow hands on neither that workflow's timeout nor its deadline.
+   * The debouncer has to outlast a debounce period that may be longer than either, and the parent's
+   * timeout is its own budget, not the debounced workflow's (#561). A timeout the caller sets for
+   * the call still reaches the debounced workflow.
+   */
+  @Test
+  public void debounceInATimedWorkflowPassesOnOnlyTheTimeoutSetForTheCall() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch = dbos.registerProxy(TimedOrchestrator.class, new TimedOrchestratorImpl(dbos, svc));
+    dbos.launch();
+
+    String inheritedId;
+    try (var o =
+        new WorkflowOptions("timed-parent-1").withTimeout(Duration.ofMinutes(5)).setContext()) {
+      inheritedId = orch.debounceWithInheritedTimeout("a");
+    }
+    String ownId;
+    try (var o =
+        new WorkflowOptions("timed-parent-2").withTimeout(Duration.ofMinutes(5)).setContext()) {
+      ownId = orch.debounceWithOwnTimeout("b");
+    }
+
+    var debouncers =
+        dbos.listWorkflows(new ListWorkflowsInput().withQueueName(Constants.DBOS_INTERNAL_QUEUE));
+    assertEquals(2, debouncers.size());
+    for (var d : debouncers) {
+      assertNull(d.timeoutMs(), d.workflowId());
+      assertNull(d.deadlineEpochMs(), d.workflowId());
+    }
+
+    var inherited = dbos.retrieveWorkflow(inheritedId).getStatus();
+    assertNull(inherited.timeoutMs());
+    assertNull(inherited.deadlineEpochMs());
+
+    var own = dbos.retrieveWorkflow(ownId).getStatus();
+    assertEquals(Duration.ofMinutes(2).toMillis(), own.timeoutMs());
+    assertNotNull(own.deadlineEpochMs());
+  }
+
+  /**
+   * Outside a workflow, an ambient timeout or deadline around a debounce never bounds the
+   * debouncer, which must be free to wait out the debounce period. An ambient timeout goes to the
+   * debounced workflow instead.
+   */
+  @Test
+  public void debounceOutsideAWorkflowBoundsOnlyTheDebouncedWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    WorkflowHandle<String, RuntimeException> withTimeout;
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofMinutes(2)).setContext()) {
+      withTimeout =
+          dbos.<String>debouncer()
+              .debounce("ambient-timeout", Duration.ofMillis(200), () -> svc.process("a"));
+    }
+    WorkflowHandle<String, RuntimeException> withDeadline;
+    try (var o =
+        new WorkflowOptions().withDeadline(Instant.now().plus(Duration.ofHours(1))).setContext()) {
+      withDeadline =
+          dbos.<String>debouncer()
+              .debounce("ambient-deadline", Duration.ofMillis(200), () -> svc.process("b"));
+    }
+    assertEquals("result:a", withTimeout.getResult());
+    assertEquals("result:b", withDeadline.getResult());
+
+    var debouncers =
+        dbos.listWorkflows(new ListWorkflowsInput().withQueueName(Constants.DBOS_INTERNAL_QUEUE));
+    assertEquals(2, debouncers.size());
+    for (var d : debouncers) {
+      assertNull(d.timeoutMs(), d.workflowId());
+      assertNull(d.deadlineEpochMs(), d.workflowId());
+    }
+
+    var timed = withTimeout.getStatus();
+    assertEquals(Duration.ofMinutes(2).toMillis(), timed.timeoutMs());
+    assertNotNull(timed.deadlineEpochMs());
+    var deadlined = withDeadline.getStatus();
+    assertNull(deadlined.timeoutMs());
+    assertNull(deadlined.deadlineEpochMs());
+  }
+
   public interface PortableOrchestratorService {
     String debounceTwice(String arg);
   }
