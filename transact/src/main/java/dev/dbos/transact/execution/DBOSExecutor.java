@@ -535,7 +535,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      String workflowName, String className, @Nullable String instanceName) {
+      String workflowName, @Nullable String className, @Nullable String instanceName) {
+    // Java workflows are always registered under a class, so a row enqueued without one (for a
+    // target that looks workflows up by name alone, such as Python) can never match here.
+    if (className == null) {
+      return Optional.empty();
+    }
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var wf = this.workflowMap.get(fqName);
     if (wf == null) {
@@ -1805,15 +1810,27 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     Object[] inputs = status.input();
-    var wfName =
-        RegisteredWorkflow.fullyQualifiedName(
-            status.workflowName(), status.className(), status.instanceName());
     RegisteredWorkflow workflow =
         getRegisteredWorkflow(status.workflowName(), status.className(), status.instanceName())
             .orElse(null);
 
+    if (workflow == null && status.className() == null) {
+      // No Java executor can ever run a row without a class name, so fail it rather than leave it
+      // PENDING under this executor, where handles awaiting it would poll until recovery gave up.
+      var e =
+          new DBOSWorkflowFunctionNotFoundException(
+              workflowId,
+              status.workflowName(),
+              "it was enqueued without a class name, and Java workflows are registered by class");
+      logger.error("No class name for workflow {}", workflowId, e);
+      persistWorkflowError(workflowId, e, status.serialization());
+      throw e;
+    }
     if (workflow == null) {
-      throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
+      throw new DBOSWorkflowFunctionNotFoundException(
+          workflowId,
+          RegisteredWorkflow.fullyQualifiedName(
+              status.workflowName(), status.className(), status.instanceName()));
     }
 
     // Coerce deserialized arguments to match the method's expected parameter types.

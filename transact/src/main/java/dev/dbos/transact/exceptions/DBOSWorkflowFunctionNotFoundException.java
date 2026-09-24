@@ -17,6 +17,19 @@ public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
     this.workflowId = id;
   }
 
+  /**
+   * @param id the ID of the workflow that could not be run
+   * @param name the workflow function name that does not exist in the registry
+   * @param reason why no registered function can match, appended to the message
+   */
+  public DBOSWorkflowFunctionNotFoundException(String id, String name, String reason) {
+    super(
+        String.format(
+            "Workflow function %s does not exist for workflow id %s: %s.", name, id, reason));
+    this.workflowName = name;
+    this.workflowId = id;
+  }
+
   /** The workflow function name that does not exist in the registry */
   public String workflowName() {
     return workflowName;

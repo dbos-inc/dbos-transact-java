@@ -14,6 +14,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -75,6 +76,30 @@ public class ClientTest {
       assertNull(row.className());
       assertNull(row.instanceName());
     }
+  }
+
+  /**
+   * A row enqueued without a class name targets a by-name runtime such as Python. When a Java
+   * executor dequeues it anyway, the queue's dispatch must fail it as an unregistered workflow --
+   * not throw an NPE building the lookup key, and not leave it PENDING for handles to poll forever.
+   */
+  @Test
+  public void dequeueNullClassNameIsNotFound() throws Exception {
+    String workflowId;
+    try (var client = pgContainer.dbosClient()) {
+      var options = new EnqueueOptions("enqueueTest", QueueName.of("testQueue"));
+      workflowId = client.enqueueWorkflow(options, new Object[] {42, "spam"}).workflowId();
+    }
+
+    var handle = dbos.retrieveWorkflow(workflowId);
+    var e = assertThrows(DBOSWorkflowFunctionNotFoundException.class, handle::getResult);
+    assertEquals(workflowId, e.workflowId());
+    assertEquals("enqueueTest", e.workflowName());
+    assertTrue(e.getMessage().contains("without a class name"), e.getMessage());
+
+    var status = handle.getStatus();
+    assertEquals(WorkflowState.ERROR, status.status());
+    assertTrue(status.error().message().contains("without a class name"), status.error().message());
   }
 
   /** The pre-1.1 options type still enqueues through the deprecated overloads until 2.0. */
