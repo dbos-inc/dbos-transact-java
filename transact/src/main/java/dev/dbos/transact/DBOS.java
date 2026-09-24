@@ -1,6 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.DBOSClient.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -12,8 +11,6 @@ import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
-import dev.dbos.transact.json.PortableWorkflowException;
-import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.Debouncer;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -503,8 +500,8 @@ public class DBOS implements AutoCloseable {
    * Enqueue a workflow by name, without a reference to its function.
    *
    * <p>Takes the same {@link EnqueueOptions} as {@link DBOSClient#enqueueWorkflow} and writes the
-   * same row, so the workflow may be implemented by another process — or in another language — as
-   * long as it shares this system database. Safe to call from inside a workflow: the enqueued
+   * same row, so the workflow may be implemented by another application — or in another language —
+   * as long as it shares this system database. Safe to call from inside a workflow: the enqueued
    * workflow is recorded as a child, so a replay after a crash returns a handle to the original
    * rather than enqueueing a second one.
    *
@@ -514,7 +511,8 @@ public class DBOS implements AutoCloseable {
    * version.
    *
    * <p>The enqueued workflow is owned by this application unless {@link
-   * DBOSClient.EnqueueOptions#applicationName} names another one.
+   * EnqueueOptions#applicationName} names another one. Arguments are serialized as {@link
+   * EnqueueOptions#serialization} says.
    *
    * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any
@@ -524,30 +522,31 @@ public class DBOS implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options, @Nullable Object[] args) {
-    var serializationFormat =
-        options.serialization() != null ? options.serialization().formatName() : null;
-    return ensureLaunched("enqueueWorkflow")
-        .enqueueWorkflowByName(options, args, null, serializationFormat);
+    return enqueueWorkflow(options, args, null);
   }
 
   /**
-   * Enqueue a workflow by name using portable JSON serialization, for targets that take named
-   * arguments — a Python workflow with keyword arguments, say.
+   * Enqueue a workflow by name with named as well as positional arguments, for targets that take
+   * them — a Python workflow with keyword arguments, say.
    *
-   * <p>See {@link #enqueueWorkflow(EnqueueOptions, Object[])} for the semantics.
+   * <p>Only portable serialization carries named arguments, so passing any requires {@link
+   * EnqueueOptions#withSerialization} set to {@link SerializationStrategy#PORTABLE}; otherwise this
+   * throws {@link IllegalArgumentException}. See {@link #enqueueWorkflow(EnqueueOptions, Object[])}
+   * for the rest of the semantics.
    *
    * @param <T> Return type of the workflow
+   * @param <E> Type of checked exception thrown by the workflow, if any
    * @param options Options describing the workflow to enqueue
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Named arguments to pass to the workflow function (e.g. Python kwargs)
    * @return A handle to the enqueued workflow
    */
-  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
-    return ensureLaunched("enqueuePortableWorkflow")
-        .enqueueWorkflowByName(options, positionalArgs, namedArgs, SerializationUtil.PORTABLE);
+    return ensureLaunched("enqueueWorkflow")
+        .enqueueWorkflowByName(options, positionalArgs, namedArgs);
   }
 
   /**

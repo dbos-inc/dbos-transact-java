@@ -191,6 +191,15 @@ public record Queue(
   }
 
   /**
+   * This queue's name as a {@link QueueName}, for the APIs that address a queue by one.
+   *
+   * @return the queue's name
+   */
+  public @NonNull QueueName queueName() {
+    return QueueName.of(name);
+  }
+
+  /**
    * Always {@code true}: every queue dispatches in priority order.
    *
    * @deprecated Priority ordering is no longer optional, so there is nothing to ask.

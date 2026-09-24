@@ -128,7 +128,8 @@ public final class SerializationUtil {
 
     if (namedArgs != null && !namedArgs.isEmpty()) {
       throw new IllegalArgumentException(
-          "Serialization format '" + serialization + "' does not support named arguments");
+          "Named arguments require portable serialization (SerializationStrategy.PORTABLE), not "
+              + (serialization != null ? "'" + serialization + "'" : "the default format"));
     }
 
     if (NATIVE.equals(serialization)) {

@@ -11,6 +11,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSApplicationNameConflictException;
@@ -19,7 +20,10 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -27,6 +31,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +45,15 @@ interface AppNameService {
 
   String enqueueGreet(
       String workflowName, String className, String queueName, String childId, String arg);
+
+  String awaitMessage(String topic);
+
+  void sendTo(String destinationId, String topic, String message);
+
+  void publish(String key, String value);
+
+  String enqueueGreetWithTimeout(
+      String queueName, String childId, String timeout, Long deadlineEpochMs);
 }
 
 class AppNameServiceImpl implements AppNameService {
@@ -59,10 +73,52 @@ class AppNameServiceImpl implements AppNameService {
   public String enqueueGreet(
       String workflowName, String className, String queueName, String childId, String arg) {
     dbos.enqueueWorkflow(
-        new DBOSClient.EnqueueOptions(workflowName, queueName)
-            .withClassName(className)
+        new EnqueueOptions(workflowName, className, QueueName.of(queueName))
             .withWorkflowId(childId),
         new Object[] {arg});
+    return childId;
+  }
+
+  @Override
+  @Workflow
+  public String awaitMessage(String topic) {
+    return dbos.<String>recv(topic, Duration.ofSeconds(30)).orElse(null);
+  }
+
+  @Override
+  @Workflow
+  public void sendTo(String destinationId, String topic, String message) {
+    dbos.send(destinationId, message, topic);
+  }
+
+  @Override
+  @Workflow
+  public void publish(String key, String value) {
+    dbos.setEvent(key, value);
+  }
+
+  /**
+   * {@code timeout} is "unset", "none", "inherit", or an explicit number of milliseconds; a
+   * non-null {@code deadlineEpochMs} is also set as the child's deadline.
+   */
+  @Override
+  @Workflow
+  public String enqueueGreetWithTimeout(
+      String queueName, String childId, String timeout, Long deadlineEpochMs) {
+    var options =
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of(queueName))
+            .withWorkflowId(childId);
+    if (deadlineEpochMs != null) {
+      options = options.withDeadline(Instant.ofEpochMilli(deadlineEpochMs));
+    }
+    options =
+        switch (timeout) {
+          case "unset" -> options;
+          case "none" -> options.withNoTimeout();
+          case "inherit" -> options.withTimeout(Timeout.inherit());
+          default -> options.withTimeout(Duration.ofMillis(Long.parseLong(timeout)));
+        };
+    dbos.enqueueWorkflow(options, new Object[] {"x"});
     return childId;
   }
 }
@@ -466,8 +522,10 @@ public class ApplicationNameTest {
             null,
             true,
             APP_B)) {
-      var options = new DBOSClient.EnqueueOptions("greet", "queue-a");
-      foreignId = client.enqueuePortableWorkflow(options, new Object[] {"peer"}, null).workflowId();
+      var options =
+          new EnqueueOptions("greet", QueueName.of("queue-a"))
+              .withSerialization(SerializationStrategy.PORTABLE);
+      foreignId = client.enqueueWorkflow(options, new Object[] {"peer"}).workflowId();
     }
 
     var ownId = UUID.randomUUID().toString();
@@ -503,8 +561,10 @@ public class ApplicationNameTest {
     try (var client = pgContainer.dbosClient()) {
       unclaimedId =
           client
-              .enqueuePortableWorkflow(
-                  new DBOSClient.EnqueueOptions("greet", queueName), new Object[] {"nobody"}, null)
+              .enqueueWorkflow(
+                  new EnqueueOptions("greet", QueueName.of(queueName))
+                      .withSerialization(SerializationStrategy.PORTABLE),
+                  new Object[] {"nobody"})
               .workflowId();
     }
     assertNull(workflowAppName(unclaimedId));
@@ -529,8 +589,10 @@ public class ApplicationNameTest {
       assertTrue(seen.contains(idA));
       assertTrue(seen.contains(idB));
 
-      var options = new DBOSClient.EnqueueOptions("greet", "queue-b");
-      var handle = client.enqueuePortableWorkflow(options, new Object[] {"nameless"}, null);
+      var options =
+          new EnqueueOptions("greet", QueueName.of("queue-b"))
+              .withSerialization(SerializationStrategy.PORTABLE);
+      var handle = client.enqueueWorkflow(options, new Object[] {"nameless"});
       assertNull(workflowAppName(handle.workflowId()));
     }
   }
@@ -549,8 +611,10 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new DBOSClient.EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
-              .withClassName(AppNameServiceImpl.class.getName())
+          new EnqueueOptions(
+                  "greet",
+                  AppNameServiceImpl.class.getName(),
+                  QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
               .withWorkflowId("wf-db-holder")
               .withDeduplicationId(dedupId),
           new Object[] {"theirs"});
@@ -572,8 +636,10 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new DBOSClient.EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
-              .withClassName(AppNameServiceImpl.class.getName())
+          new EnqueueOptions(
+                  "greet",
+                  AppNameServiceImpl.class.getName(),
+                  QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
               .withWorkflowId("wf-db-client-holder")
               .withDeduplicationId(dedupId),
           new Object[] {"theirs"});
@@ -646,6 +712,98 @@ public class ApplicationNameTest {
   }
 
   /**
+   * Inside a workflow each of the timeout's states lands on the child's row: unset and inherit take
+   * the parent's, none clears it, and an explicit one replaces it. A queued child carries a
+   * timeout, never a deadline, since its clock starts when it is dequeued.
+   */
+  @Test
+  void enqueueByNameInAWorkflowHonorsEachTimeoutState() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var modes = List.of("unset", "inherit", "none", "1234");
+    for (var mode : modes) {
+      try (var o =
+          new WorkflowOptions("wf-to-parent-" + mode)
+              .withTimeout(Duration.ofMinutes(5))
+              .setContext()) {
+        serviceA.enqueueGreetWithTimeout("queue-a", "wf-to-child-" + mode, mode, null);
+      }
+    }
+
+    var parentTimeout = timeoutMs("wf-to-parent-unset");
+    assertEquals(String.valueOf(Duration.ofMinutes(5).toMillis()), parentTimeout);
+    assertEquals(parentTimeout, timeoutMs("wf-to-child-unset"));
+    assertEquals(parentTimeout, timeoutMs("wf-to-child-inherit"));
+    assertNull(timeoutMs("wf-to-child-none"));
+    assertEquals("1234", timeoutMs("wf-to-child-1234"));
+    for (var mode : modes) {
+      assertNull(deadlineMs("wf-to-child-" + mode), mode);
+    }
+  }
+
+  /**
+   * A deadline the caller gives is the child's bound, whatever the parent's timeout. Unless the
+   * caller also asks for an explicit timeout -- which contradicts it and is refused -- the child
+   * carries that deadline and no timeout, rather than inheriting the parent's timeout and losing
+   * the deadline.
+   */
+  @Test
+  void enqueueByNameInAWorkflowKeepsAGivenDeadline() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var deadline = Instant.now().plus(Duration.ofHours(1)).toEpochMilli();
+    var modes = List.of("unset", "inherit", "none");
+    for (var mode : modes) {
+      try (var o =
+          new WorkflowOptions("wf-dl-given-parent-" + mode)
+              .withTimeout(Duration.ofMinutes(5))
+              .setContext()) {
+        serviceA.enqueueGreetWithTimeout("queue-a", "wf-dl-given-" + mode, mode, deadline);
+      }
+    }
+
+    for (var mode : modes) {
+      var childId = "wf-dl-given-" + mode;
+      assertEquals(String.valueOf(deadline), deadlineMs(childId), mode);
+      assertNull(timeoutMs(childId), mode);
+    }
+  }
+
+  /**
+   * Outside a workflow there is nothing to inherit, so inherit means no timeout -- from the runtime
+   * and from a client alike. An unset timeout on the runtime still takes an ambient one; inherit
+   * asks for the running workflow's, so it passes the ambient one over.
+   */
+  @Test
+  void inheritingOutsideAWorkflowMeansNoTimeout() throws Exception {
+    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    var target =
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"));
+
+    dbosA.enqueueWorkflow(
+        target.withWorkflowId("wf-out-inherit").withTimeout(Timeout.inherit()), new Object[] {"x"});
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      client.enqueueWorkflow(
+          target.withWorkflowId("wf-client-inherit").withTimeout(Timeout.inherit()),
+          new Object[] {"x"});
+      client.enqueueWorkflow(
+          target.withWorkflowId("wf-client-explicit").withTimeout(Duration.ofMillis(4321)),
+          new Object[] {"x"});
+    }
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofMillis(9876)).setContext()) {
+      dbosA.enqueueWorkflow(target.withWorkflowId("wf-ambient-unset"), new Object[] {"x"});
+      dbosA.enqueueWorkflow(
+          target.withWorkflowId("wf-ambient-inherit").withTimeout(Timeout.inherit()),
+          new Object[] {"x"});
+    }
+
+    for (var id : List.of("wf-out-inherit", "wf-client-inherit", "wf-ambient-inherit")) {
+      assertNull(timeoutMs(id), id);
+      assertNull(deadlineMs(id), id);
+    }
+    assertEquals("4321", timeoutMs("wf-client-explicit"));
+    assertEquals("9876", timeoutMs("wf-ambient-unset"));
+  }
+
+  /**
    * The one place applications deliberately interoperate. Naming a peer hands it the row: the
    * enqueue stamps that peer as the owner rather than the enqueuer, which is what makes the row
    * visible to the peer's dequeue predicate and invisible to this one's.
@@ -657,8 +815,7 @@ public class ApplicationNameTest {
 
     WorkflowHandle<String, RuntimeException> handle =
         dbosA.enqueueWorkflow(
-            new DBOSClient.EnqueueOptions("greet", "queue-b")
-                .withClassName(AppNameServiceImpl.class.getName())
+            new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-b"))
                 .withWorkflowId(childId)
                 .withApplicationName(APP_B),
             new Object[] {"peer"});
@@ -680,12 +837,71 @@ public class ApplicationNameTest {
     var childId = UUID.randomUUID().toString();
 
     dbosA.enqueueWorkflow(
-        new DBOSClient.EnqueueOptions("greet", "queue-a")
-            .withClassName(AppNameServiceImpl.class.getName())
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"))
             .withWorkflowId(childId),
         new Object[] {"own"});
 
     assertEquals(APP_A, workflowAppName(childId));
+  }
+
+  // ==================== ID-addressed operations ====================
+
+  /**
+   * Unlike an enqueue, a send names no application: its destination already exists, and a workflow
+   * ID is global, so the message reaches the workflow wherever it is owned. The receiver reads it
+   * on its own application's account; the sender's step stays the sender's.
+   */
+  @Test
+  void aWorkflowSendsToAWorkflowOwnedByAPeer() throws Exception {
+    var receiverId = UUID.randomUUID().toString();
+    WorkflowHandle<String, RuntimeException> receiver =
+        dbosB.startWorkflow(
+            () -> serviceB.awaitMessage("greeting"),
+            new dev.dbos.transact.StartWorkflowOptions(receiverId));
+
+    var senderId = UUID.randomUUID().toString();
+    try (var o = new WorkflowOptions(senderId).setContext()) {
+      serviceA.sendTo(receiverId, "greeting", "hello from a");
+    }
+
+    assertEquals("hello from a", receiver.getResult());
+    assertEquals(APP_B, workflowAppName(receiverId));
+    assertEquals(APP_A, workflowAppName(senderId));
+    assertEquals(APP_A, stepAppName(senderId));
+  }
+
+  @Test
+  void aClientSendsToAWorkflowOwnedByAnotherApplication() throws Exception {
+    var receiverId = UUID.randomUUID().toString();
+    WorkflowHandle<String, RuntimeException> receiver =
+        dbosB.startWorkflow(
+            () -> serviceB.awaitMessage("greeting"),
+            new dev.dbos.transact.StartWorkflowOptions(receiverId));
+
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      client.send(receiverId, "hello from a's client", "greeting", null);
+    }
+
+    assertEquals("hello from a's client", receiver.getResult());
+    assertEquals(APP_B, workflowAppName(receiverId));
+  }
+
+  /** Events are read by workflow ID too, so a peer, or a client named for one, can read them. */
+  @Test
+  void eventsAreReadableAcrossApplications() throws Exception {
+    var publisherId = UUID.randomUUID().toString();
+    try (var o = new WorkflowOptions(publisherId).setContext()) {
+      serviceB.publish("status", "ready");
+    }
+    assertEquals(APP_B, workflowAppName(publisherId));
+
+    assertEquals(
+        "ready",
+        dbosA.<String>getEvent(publisherId, "status", Duration.ofSeconds(5)).orElseThrow());
+    try (var client = new DBOSClient(dataSource, null, null, APP_A)) {
+      assertEquals(
+          "ready", client.getEvent(publisherId, "status", Duration.ofSeconds(5)).orElseThrow());
+    }
   }
 
   // ==================== Rename ====================
@@ -798,6 +1014,12 @@ public class ApplicationNameTest {
 
     assertEquals("App-C", workflowAppName(idA));
     assertEquals("App-C", stepAppName(idA));
+  }
+
+  private String deadlineMs(String workflowId) throws SQLException {
+    return scalar(
+        "SELECT workflow_deadline_epoch_ms FROM \"dbos\".workflow_status WHERE workflow_uuid = ?",
+        workflowId);
   }
 
   private String timeoutMs(String workflowId) throws SQLException {

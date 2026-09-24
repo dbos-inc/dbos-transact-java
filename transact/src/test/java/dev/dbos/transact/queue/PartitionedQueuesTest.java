@@ -8,13 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -198,7 +199,7 @@ public class PartitionedQueuesTest {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =
-          new DBOSClient.EnqueueOptions(wfName, className, queue)
+          new EnqueueOptions(wfName, className, QueueName.of(queue))
               .withQueuePartitionKey(blockedPartitionKey);
       var clientHandle = client.enqueueWorkflow(nqOptions, null);
       assertEquals(clientHandle.workflowId(), clientHandle.getResult());

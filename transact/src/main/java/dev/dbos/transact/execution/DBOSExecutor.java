@@ -3,7 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
@@ -1678,15 +1678,9 @@ public class DBOSExecutor implements AutoCloseable {
    * application's latest registered version.
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
-      DBOSClient.EnqueueOptions options,
-      Object[] positionalArgs,
-      Map<String, Object> namedArgs,
-      String serializationFormat) {
+      EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
     Objects.requireNonNull(options, "options must not be null");
-    if (options.timeout() != null && options.deadline() != null) {
-      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
-    }
 
     var ctx = DBOSContextHolder.get();
     // Throws if called from a step, and takes the caller's next function ID when in a workflow.
@@ -1709,18 +1703,13 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // Without an explicit timeout, inherit an ambient one, else the parent's propagated deadline.
-    // Timeout.of(null) is Timeout.none(), which is an explicit "no timeout" that clears the
-    // parent's deadline; only a null Timeout falls through to what the context already carries.
-    var td =
-        ctx.resolveTimeoutAndDeadline(
-            options.timeout() != null ? Timeout.of(options.timeout()) : null, options.deadline());
+    // An unset timeout takes an ambient one, else inherits, as startWorkflow does.
+    var td = ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
-            .withSerialization(serializationFormat)
             .withAuthenticatedUser(
                 options.authenticatedUser() != null
                     ? options.authenticatedUser()

@@ -3,7 +3,7 @@ package dev.dbos.transact.execution;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
-import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 // Internal execution options record. External API specific records such as StartWorkflowOptions,
-// WorkflowOptions and DBOSClient.EnqueueOptions are converted to ExecutionOptions before execution.
+// WorkflowOptions and EnqueueOptions are converted to ExecutionOptions before execution.
 
 public record ExecutionOptions(
     String workflowId,
@@ -169,10 +169,10 @@ public record ExecutionOptions(
         this.scheduleName);
   }
 
-  public ExecutionOptions withOptions(DBOSClient.EnqueueOptions options) {
+  public ExecutionOptions withOptions(EnqueueOptions options) {
     return new ExecutionOptions(
         this.workflowId,
-        Timeout.of(options.timeout()),
+        options.timeout(),
         options.deadline(),
         options.queueName(),
         options.deduplicationId(),
@@ -180,7 +180,7 @@ public record ExecutionOptions(
         options.queuePartitionKey(),
         options.delay(),
         options.appVersion(),
-        this.serialization,
+        options.serialization() != null ? options.serialization().formatName() : null,
         options.authenticatedUser(),
         options.assumedRole(),
         options.authenticatedRoles(),
