@@ -28,7 +28,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -440,9 +439,6 @@ public class StaticQueuesTest {
             .withWorkerConcurrency(1);
     dbos.registerQueue(limitQ);
 
-    Queue baselineQ = new Queue("baselineQueue").withConcurrency(1).withWorkerConcurrency(1);
-    dbos.registerQueue(baselineQ);
-
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
 
     dbos.launch();
@@ -452,39 +448,6 @@ public class StaticQueuesTest {
 
     int numWaves = 3;
     int numTasks = numWaves * limit;
-
-    // Measure what the tasks cost with no limiter in the way, on an otherwise identical queue.
-    // This runs first so that both phases see the same set of queue listeners polling; running it
-    // second leaves the baseline with an extra listener the rate-limited run never had.
-    //
-    // The baseline then absorbs the warmup the rate-limited run below avoids -- pool ramp,
-    // statement caches, and on CockroachDB range leases -- so taskCost is if anything overstated.
-    // The span bound is insensitive to that, because the cost term appears on both sides of the
-    // comparison it has to win and cancels. Only the regime check is sensitive, and it has a
-    // factor of a few in hand. Measuring the baseline second biases it the other way instead,
-    // understating a cost the rate-limited run had already paid.
-    List<WorkflowHandle<Double, ?>> baselineHandles = new ArrayList<>();
-    for (int i = 0; i < limit; i++) {
-      var baselineOptions = new StartWorkflowOptions("baseline" + i).withQueue(baselineQ);
-      baselineHandles.add(
-          dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), baselineOptions));
-    }
-    List<Double> baselineTimes = new ArrayList<>();
-    for (WorkflowHandle<Double, ?> h : baselineHandles) {
-      h.getResult();
-      Long startedAt = h.getStatus().startedAtEpochMs();
-      assertNotNull(startedAt, "workflow " + h.workflowId() + " has no start time");
-      baselineTimes.add(startedAt / 1000.0);
-    }
-    // Take the extremes of the observed starts rather than the first and last handle: dequeue
-    // orders by created_at, which has millisecond resolution, so two workflows enqueued in the
-    // same millisecond may start in either order. The gap between the first and last start
-    // excludes the queue's initial dispatch latency, which the rate-limited run has already paid
-    // by the time its first task starts.
-    double taskCost =
-        (Collections.max(baselineTimes) - Collections.min(baselineTimes)) / (limit - 1);
-    logger.info(String.format("Unthrottled per-task cost: %.3f", taskCost));
-
     List<WorkflowHandle<Double, ?>> handles = new ArrayList<>();
     List<Double> times = new ArrayList<>();
 
@@ -523,50 +486,18 @@ public class StaticQueuesTest {
     }
     logger.info("Verified rate limit spacing.");
 
-    // ... and the limiter must not throttle harder than it is configured to. That is an upper
-    // bound on wall-clock start times, so it has to account for what the tasks cost without a
-    // limiter: concurrency(1) and workerConcurrency(1) run them strictly one at a time, and on a
-    // slow database that per-workflow round trip is comparable to the period. A fixed bound
-    // fails on CockroachDB for that reason.
-    //
-    // Execution contributes to the span only within a wave: while the limiter waits out a
-    // period, the previous wave's tasks have already run. The last start therefore comes
-    // numWaves - 1 periods after the first, plus the serial cost of a single wave. Scaling the
-    // bound by the whole run's cost instead would grow the allowance far faster than the signal
-    // it is meant to catch, until on a slow enough database it caught nothing at all.
-    double waveCost = (limit - 1) * taskCost;
+    // ... and the limiter must not throttle harder than it is configured to. Each wave after the
+    // first costs a period, so the starts span numWaves - 1 periods, plus however long it takes
+    // to dispatch and run the tasks within a wave. Two further periods of allowance for that
+    // still catches a limiter releasing half its configured rate.
+    double maxSpan = (numWaves + 1) * periodSec;
     double span = times.get(numTasks - 1) - times.get(0);
-
-    if (limit * taskCost >= periodSec) {
-      // A wave costs more than a period, so the queue never catches up to the limiter: the starts
-      // are paced by the database rather than by the limiter, and no upper bound on the span can
-      // tell a throttling regression from a slow round trip. Say so rather than assert a bound
-      // that would pass whatever the limiter did. The lower-bound spacing check above is
-      // unaffected and still covers the limiter here.
-      logger.warn(
-          String.format(
-              "Tasks cost %.3fs each, so a wave of %d exceeds the %.3fs period: the limiter is not"
-                  + " the bottleneck and the span bound would not be meaningful. Span: %.3f",
-              taskCost, limit, periodSec, span));
-    } else {
-      // Each wave gap runs a little long — the limiter only reconsiders the window when a
-      // listener polls — so allow each the same periodTolerance the lower bound above does, and
-      // one further period on top for run-to-run jitter. A limiter releasing half its configured
-      // rate would spend 2 * (numWaves - 1) periods, which still exceeds this bound, and does so
-      // whatever the tasks cost, because the cost term appears on both sides and cancels.
-      double expectedSpan = (numWaves - 1) * periodSec + waveCost;
-      double maxSpan = (numWaves - 1) * (periodSec + periodTolerance) + waveCost + periodSec;
-      logger.info(
-          String.format(
-              "Span of all %d starts: %.3f (expected %.3f, bound %.3f)",
-              numTasks, span, expectedSpan, maxSpan));
-      assertTrue(
-          span < maxSpan,
-          String.format(
-              "%d tasks at %d per %.3fs, costing %.3fs each unthrottled, should all start within"
-                  + " %.3fs. Actual: %.3f",
-              numTasks, limit, periodSec, taskCost, maxSpan, span));
-    }
+    logger.info(String.format("Span of all %d starts: %.3f", numTasks, span));
+    assertTrue(
+        span < maxSpan,
+        String.format(
+            "%d tasks at %d per %.3fs should all start within %.3fs. Actual: %.3f",
+            numTasks, limit, periodSec, maxSpan, span));
     for (WorkflowHandle<Double, ?> h : handles) {
       assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
     }
