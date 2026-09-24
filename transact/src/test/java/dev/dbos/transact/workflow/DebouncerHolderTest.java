@@ -2,11 +2,14 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.Constants;
+import dev.dbos.transact.json.DBOSJavaSerializer;
 import dev.dbos.transact.json.DBOSPortableSerializer;
 
 import java.util.HashMap;
@@ -25,7 +28,7 @@ public class DebouncerHolderTest {
 
   @Test
   void aPeersHolderIsForeign() {
-    var holder = new DeduplicationHolder("wf-1", "app-b");
+    var holder = new DeduplicationHolder("wf-1", "app-b", null, null, null, null, false);
 
     assertTrue(holder.isForeignTo("app-a"));
     assertFalse(holder.isForeignTo("app-b"));
@@ -33,14 +36,14 @@ public class DebouncerHolderTest {
 
   @Test
   void anUnclaimedHolderBelongsToEveryone() {
-    var holder = new DeduplicationHolder("wf-1", null);
+    var holder = new DeduplicationHolder("wf-1", null, null, null, null, null, false);
 
     assertFalse(holder.isForeignTo("app-a"));
   }
 
   @Test
   void aNamelessCallerIsShutOutOfNothing() {
-    var holder = new DeduplicationHolder("wf-1", "app-b");
+    var holder = new DeduplicationHolder("wf-1", "app-b", null, null, null, null, false);
 
     assertFalse(holder.isForeignTo(null));
   }
@@ -66,7 +69,7 @@ public class DebouncerHolderTest {
 
   @Test
   void passesThroughAHolderRecordedByThisVersion() {
-    var recorded = new DeduplicationHolder("wf-456", "app-a");
+    var recorded = new DeduplicationHolder("wf-456", "app-a", null, null, null, null, false);
 
     assertSame(recorded, Debouncer.toDeduplicationHolder(recorded));
   }
@@ -86,7 +89,9 @@ public class DebouncerHolderTest {
   void adaptsAHolderRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
     var recorded =
-        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-7", "app-b")));
+        serializer.deserialize(
+            serializer.serialize(
+                new DeduplicationHolder("wf-7", "app-b", null, null, null, null, false)));
 
     var holder = Debouncer.toDeduplicationHolder(recorded);
 
@@ -99,7 +104,9 @@ public class DebouncerHolderTest {
   void adaptsAnUnclaimedHolderRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
     var recorded =
-        serializer.deserialize(serializer.serialize(new DeduplicationHolder("wf-8", null)));
+        serializer.deserialize(
+            serializer.serialize(
+                new DeduplicationHolder("wf-8", null, null, null, null, null, false)));
 
     var holder = Debouncer.toDeduplicationHolder(recorded);
 
@@ -120,5 +127,224 @@ public class DebouncerHolderTest {
     var e = assertThrows(IllegalStateException.class, () -> Debouncer.toDeduplicationHolder(42));
 
     assertTrue(e.getMessage().contains("java.lang.Integer"));
+  }
+
+  // ==================== Telling the two kinds of holder apart ====================
+
+  @Test
+  void aServiceWorkflowHolderIsAService() {
+    var holder =
+        new DeduplicationHolder(
+            "wf-1",
+            "app-a",
+            Constants.DEBOUNCER_WORKFLOW_NAME,
+            Constants.DEBOUNCER_CLASS_NAME,
+            null,
+            WorkflowState.PENDING,
+            false);
+
+    assertTrue(holder.isDebouncerService());
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
+  }
+
+  @Test
+  void aUserWorkflowSharingTheServicesNameIsNotAService() {
+    var holder =
+        new DeduplicationHolder(
+            "wf-1",
+            "app-a",
+            Constants.DEBOUNCER_WORKFLOW_NAME,
+            "com.example.Impl",
+            null,
+            WorkflowState.ENQUEUED,
+            false);
+
+    assertFalse(holder.isDebouncerService());
+  }
+
+  @Test
+  void aHolderOfUnknownNameCountsAsAService() {
+    // Recorded before debounced workflows existed, when nothing else held a debounce key.
+    assertTrue(
+        new DeduplicationHolder("wf-1", "app-a", null, null, null, null, false)
+            .isDebouncerService());
+  }
+
+  @Test
+  void aDebouncedHolderMatchesItsOwnWorkflowOnly() {
+    var holder =
+        new DeduplicationHolder(
+            "wf-1", "app-a", "process", "com.example.Impl", null, WorkflowState.DELAYED, true);
+
+    assertFalse(holder.isDebouncerService());
+    assertTrue(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
+    // No instance is null, as the row spells it; an empty string is a different instance.
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", ""));
+    assertFalse(holder.isDebouncedInstanceOf("other", "com.example.Impl", null));
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Other", null));
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", "east"));
+  }
+
+  @Test
+  void aWorkflowDeduplicatedOnItsOwnAccountIsNeither() {
+    var holder =
+        new DeduplicationHolder(
+            "wf-1", "app-a", "process", "com.example.Impl", null, WorkflowState.ENQUEUED, false);
+
+    assertFalse(holder.isDebouncerService());
+    assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
+  }
+
+  // ==================== Replay of a lookup step recorded before the bounce ====================
+
+  @Test
+  void aRecordedWorkflowIdMeansNothingWasBounced() {
+    var result = Debouncer.toDebounceResult("wf-123");
+
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
+    assertEquals("wf-123", holder.workflowId());
+    assertTrue(holder.isDebouncerService());
+  }
+
+  @Test
+  void aRecordedHolderMeansNothingWasBounced() {
+    var result =
+        Debouncer.toDebounceResult(
+            new DeduplicationHolder("wf-456", "app-a", null, null, null, null, false));
+
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
+    assertEquals("wf-456", holder.workflowId());
+    assertTrue(holder.isForeignTo("app-b"));
+    assertTrue(holder.isDebouncerService());
+  }
+
+  @Test
+  void aRecordedNullMeansTheKeyWasUnheld() {
+    var result = Debouncer.toDebounceResult(null);
+
+    assertEquals(new DebounceResult.NotBounced(null), result);
+  }
+
+  @Test
+  void passesThroughAResultRecordedByThisVersion() {
+    var recorded = new DebounceResult.Bounced("wf-9");
+
+    assertSame(recorded, Debouncer.toDebounceResult(recorded));
+  }
+
+  @Test
+  void adaptsAResultRoundTrippedThroughThePortableSerializer() {
+    var serializer = DBOSPortableSerializer.INSTANCE;
+    var holder =
+        new DeduplicationHolder(
+            "wf-7", "app-b", "process", "com.example.Impl", "east", WorkflowState.DELAYED, true);
+    var recorded =
+        serializer.deserialize(serializer.serialize(new DebounceResult.NotBounced(holder)));
+
+    var result = Debouncer.toDebounceResult(recorded);
+
+    assertEquals(new DebounceResult.NotBounced(holder), result);
+  }
+
+  @Test
+  void adaptsABouncedResultRoundTrippedThroughThePortableSerializer() {
+    var serializer = DBOSPortableSerializer.INSTANCE;
+    var recorded =
+        serializer.deserialize(serializer.serialize(new DebounceResult.Bounced("wf-10")));
+
+    var result = Debouncer.toDebounceResult(recorded);
+
+    assertEquals(new DebounceResult.Bounced("wf-10"), result);
+  }
+
+  @Test
+  void anEmptyMapMeansTheKeyWasUnheld() {
+    // A serializer that drops nulls records an unheld result as nothing at all.
+    var result = Debouncer.toDebounceResult(new HashMap<String, Object>());
+
+    assertEquals(new DebounceResult.NotBounced(null), result);
+  }
+
+  // ==================== Replay of what the previous version recorded, typed ====================
+  //
+  // Steps are recorded with the application's serializer, the typed Java one by default. These
+  // are the literal shapes the previous version wrote, read back through that serializer.
+
+  @Test
+  void readsTheBareWorkflowIdThePreviousVersionRecordedForTheLookup() {
+    var serializer = DBOSJavaSerializer.INSTANCE;
+    var recorded = serializer.deserialize(serializer.serialize("holder-wf"));
+
+    var result = Debouncer.toDebounceResult(recorded);
+
+    var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
+    assertEquals("holder-wf", holder.workflowId());
+    assertTrue(holder.isDebouncerService());
+    assertFalse(holder.isForeignTo("app-a"));
+  }
+
+  @Test
+  void readsTheTwoIdsThePreviousVersionRecordedForTheFirstStep() {
+    var recorded =
+        DBOSJavaSerializer.INSTANCE.deserialize(
+            "{\"@class\":\"dev.dbos.transact.workflow.Debouncer$DebounceIds\","
+                + "\"userWorkflowId\":\"user-1\",\"messageId\":\"msg-1\"}");
+
+    var ids = Debouncer.toDebounceIds(recorded);
+
+    assertEquals("user-1", ids.userWorkflowId());
+    assertEquals("msg-1", ids.messageId());
+    assertNull(ids.bouncedWorkflowId());
+  }
+
+  @Test
+  void roundTripsThisVersionsResultsThroughTheTypedSerializer() {
+    var serializer = DBOSJavaSerializer.INSTANCE;
+    var holder =
+        new DeduplicationHolder(
+            "wf-7", "app-b", "process", "com.example.Impl", "east", WorkflowState.DELAYED, true);
+
+    assertEquals(
+        new DebounceResult.NotBounced(holder),
+        Debouncer.toDebounceResult(
+            serializer.deserialize(serializer.serialize(new DebounceResult.NotBounced(holder)))));
+    assertEquals(
+        new DebounceResult.Bounced("wf-9"),
+        Debouncer.toDebounceResult(
+            serializer.deserialize(serializer.serialize(new DebounceResult.Bounced("wf-9")))));
+  }
+
+  // ==================== Replay of the first step ====================
+
+  @Test
+  void adaptsIdsRecordedBeforeTheBounce() {
+    // That version recorded only the two ids; nothing was extended then.
+    var recorded = new HashMap<String, Object>();
+    recorded.put("userWorkflowId", "user-1");
+    recorded.put("messageId", "msg-1");
+
+    var ids = Debouncer.toDebounceIds(recorded);
+
+    assertEquals("user-1", ids.userWorkflowId());
+    assertEquals("msg-1", ids.messageId());
+    assertNull(ids.bouncedWorkflowId());
+  }
+
+  @Test
+  void adaptsIdsRoundTrippedThroughThePortableSerializer() {
+    var serializer = DBOSPortableSerializer.INSTANCE;
+    var recorded =
+        serializer.deserialize(
+            serializer.serialize(new Debouncer.DebounceIds("user-2", "msg-2", "wf-2")));
+
+    var ids = Debouncer.toDebounceIds(recorded);
+
+    assertEquals("user-2", ids.userWorkflowId());
+    assertEquals("wf-2", ids.bouncedWorkflowId());
+  }
+
+  @Test
+  void rejectsIdsItCannotAdapt() {
+    assertThrows(IllegalStateException.class, () -> Debouncer.toDebounceIds("just-a-string"));
   }
 }

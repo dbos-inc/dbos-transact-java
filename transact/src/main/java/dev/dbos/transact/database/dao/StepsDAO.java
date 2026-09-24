@@ -46,7 +46,7 @@ public class StepsDAO {
     recordStepResult(ctx, conn, result, startTimeEpochMs, System.currentTimeMillis());
   }
 
-  static void recordStepResult(
+  public static void recordStepResult(
       DbContext ctx, Connection conn, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
       throws SQLException {
 

@@ -486,7 +486,7 @@ public class DirectInvocationTest {
 
     DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.PENDING.name());
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    executor.executeWorkflowById(workflowId, true, false).getResult();
+    executor.executeWorkflowById(workflowId).getResult();
 
     var status = dbos.retrieveWorkflow(workflowId).getStatus();
     assertEquals("alice", status.authenticatedUser());

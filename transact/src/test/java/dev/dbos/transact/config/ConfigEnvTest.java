@@ -11,9 +11,11 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.conductor.TestWebSocketServer;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.Set;
 import java.util.UUID;
@@ -178,6 +180,58 @@ public class ConfigEnvTest {
             dbos.shutdown();
           }
         });
+  }
+
+  @Test
+  public void aConductorManagedExecutorDoesNotSelfRecoverAtLaunch() throws Exception {
+    // Conductor decides which executors are gone and issues the recovery itself, so an executor
+    // it manages must not sweep at launch (#536). On DBOS Cloud the executor id comes from the
+    // environment and survives a restart, which is where a self sweep would actually move rows:
+    // it would recover work the process it replaced may still be running.
+    var executorId = UUID.randomUUID().toString();
+    var appVersion = UUID.randomUUID().toString();
+    var config = pgContainer.dbosConfig().withAppVersion(appVersion).withExecutorId(executorId);
+
+    String workflowId;
+    try (var dataSource = pgContainer.dataSource()) {
+      try (var dbos = new DBOS(config)) {
+        var proxy =
+            dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+        dbos.launch();
+        var handle = dbos.startWorkflow(() -> proxy.workflow());
+        handle.getResult();
+        workflowId = handle.workflowId();
+      }
+
+      // The row an abandoned executor leaves behind: PENDING, under that executor's id.
+      DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.PENDING.name());
+
+      var envVars =
+          new EnvironmentVariables("DBOS__CLOUD", "true")
+              .and("DBOS__VMID", executorId)
+              .and("DBOS__APPVERSION", appVersion)
+              .and("DBOS_APP_NAME", "transact-java-test");
+
+      envVars.execute(
+          () -> {
+            try (var dbos = new DBOS(pgContainer.dbosConfig())) {
+              dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+              dbos.launch();
+
+              // Launch is the only thing that could have moved it: recovery runs synchronously
+              // within it, and a PENDING row is on no queue for the dequeue pass to find.
+              var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+              assertEquals(WorkflowState.PENDING.name(), row.status());
+            }
+          });
+
+      // The row is not stranded -- a self-managed executor on the same id still recovers it.
+      try (var dbos = new DBOS(config)) {
+        dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+        dbos.launch();
+        assertEquals(6, dbos.retrieveWorkflow(workflowId).getResult());
+      }
+    }
   }
 
   @Test

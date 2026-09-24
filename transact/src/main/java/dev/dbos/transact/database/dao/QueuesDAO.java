@@ -33,125 +33,119 @@ public class QueuesDAO {
       String executorId,
       String appVersion,
       String partitionKey,
-      long localRunningCount)
+      long localRunningCount,
+      long partitionLocalRunningCount)
       throws SQLException {
 
     if (partitionKey != null && partitionKey.isEmpty()) {
       partitionKey = null;
     }
+    final String partition = partitionKey;
+
+    // Read every limit at the scope it is enforced at, not off the queue's raw columns: a legacy
+    // partitioned queue records its limits queue-wide but enforces them per partition.
+    var limits = queue.resolveLimits();
+
+    // A queue-wide concurrency limit or limiter is a budget shared with every other executor.
+    boolean queueWideBudget = limits.concurrency() != null || limits.rateLimit() != null;
+    // Spending a queue-wide budget while sweeping one partition at a time is a write skew: each
+    // partition's sweep reads the same budget and claims against its own snapshot, so the
+    // partitions together can overshoot it. Only serializability rules that out.
+    boolean crossPartitionBudget = queueWideBudget && partition != null;
+    boolean sharedBudget =
+        queueWideBudget
+            || limits.partitionConcurrency() != null
+            || limits.partitionRateLimit() != null;
 
     try (Connection connection = ctx.getConnection()) {
       connection.setAutoCommit(false);
-      // Use REPEATABLE READ only when global flow control (concurrency or rate limit) is active.
-      // Local worker concurrency is tracked in-memory and does not need a consistent DB snapshot.
-      if (queue.concurrency() != null || queue.rateLimit() != null) {
+      // Worker-scoped concurrency is tracked in memory and needs no consistent DB snapshot, so a
+      // dequeue bounded only by that stays at READ COMMITTED.
+      if (crossPartitionBudget) {
+        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+      } else if (sharedBudget) {
         connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
       }
 
       try {
         long maxTasks = Integer.MAX_VALUE;
 
-        // Worker concurrency uses the caller-supplied in-memory count — no DB round trip needed.
-        if (queue.workerConcurrency() != null) {
-          maxTasks = Math.max(0, queue.workerConcurrency() - localRunningCount);
-          if (maxTasks == 0) {
-            // Nothing claimable. End the transaction here rather than leaving it open for
-            // the pool to roll back on return.
-            connection.rollback();
-            return List.of();
+        // Both worker-scoped limits use the caller-supplied in-memory counts — no DB round trip.
+        if (limits.workerConcurrency() != null) {
+          if (localRunningCount > limits.workerConcurrency()) {
+            logger.warn(
+                "Local running workflows ({}) on queue {} exceeds the worker concurrency limit ({})",
+                localRunningCount,
+                queue.name(),
+                limits.workerConcurrency());
           }
+          maxTasks =
+              Math.min(maxTasks, Math.max(0, limits.workerConcurrency() - localRunningCount));
+        }
+        if (limits.partitionWorkerConcurrency() != null) {
+          maxTasks =
+              Math.min(
+                  maxTasks,
+                  Math.max(0, limits.partitionWorkerConcurrency() - partitionLocalRunningCount));
+        }
+        if (maxTasks == 0) {
+          // Nothing claimable. End the transaction here rather than leaving it open for
+          // the pool to roll back on return.
+          connection.rollback();
+          return List.of();
         }
 
-        // If there is a rate limit, compute how many functions have started in its period.
-        if (queue.rateLimit() != null) {
-          var rateLimit = queue.rateLimit();
-
-          var limiterQuery =
-              """
-              SELECT COUNT(*)
-              FROM "%s".workflow_status
-              WHERE queue_name = ?
-              AND rate_limited = true
-              AND status NOT IN (?, ?)
-              AND started_at_epoch_ms > ?
-            """
-                      .formatted(ctx.schema())
-                  + ctx.andAppScope();
-          if (partitionKey != null) {
-            limiterQuery += " AND queue_partition_key = ?";
-          }
-
-          try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
-            ps.setString(1, queue.name());
-            ps.setString(2, WorkflowState.ENQUEUED.name());
-            ps.setString(3, WorkflowState.DELAYED.name());
-            ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
-            var index = ctx.bindAppScope(ps, 5);
-            if (partitionKey != null) {
-              ps.setString(index, partitionKey);
-            }
-
-            int numRecentQueries = 0;
-            try (ResultSet rs = ps.executeQuery()) {
-              if (rs.next()) {
-                numRecentQueries = rs.getInt(1);
-              }
-            }
-
-            // Bound the claim by the limiter's remaining slots, so a backlogged queue locks
-            // and starts only as many workflows as the rate limit still allows this period.
-            maxTasks = Math.min(maxTasks, Math.max(0, rateLimit.limit() - numRecentQueries));
-          }
-
-          if (maxTasks == 0) {
-            // Nothing claimable. End the transaction here rather than leaving it open for the pool
-            // to roll back, so the candidate SELECT's row locks are released at the return.
-            connection.rollback();
-            return List.of();
-          }
+        // Bound the claim by each limiter's remaining slots, so a backlogged queue locks and
+        // starts only as many workflows as the rate limit still allows this period.
+        if (limits.rateLimit() != null) {
+          maxTasks =
+              Math.min(
+                  maxTasks,
+                  rateLimitRemaining(ctx, connection, queue.name(), limits.rateLimit(), null));
+        }
+        if (limits.partitionRateLimit() != null) {
+          maxTasks =
+              Math.min(
+                  maxTasks,
+                  rateLimitRemaining(
+                      ctx, connection, queue.name(), limits.partitionRateLimit(), partition));
+        }
+        if (maxTasks == 0) {
+          // Nothing claimable. End the transaction here rather than leaving it open for the pool
+          // to roll back, so the candidate SELECT's row locks are released at the return.
+          connection.rollback();
+          return List.of();
         }
 
-        // Global concurrency still requires a DB query — other workers may be running workflows
-        // too.
-        if (queue.concurrency() != null) {
-          String globalPendingQuery =
-              """
-              SELECT COUNT(*)
-              FROM "%s".workflow_status
-              WHERE queue_name = ? AND status = ?
-            """
-                      .formatted(ctx.schema())
-                  + ctx.andAppScope();
-          if (partitionKey != null) {
-            globalPendingQuery += " AND queue_partition_key = ?";
-          }
-
-          int globalPendingWorkflows = 0;
-          try (PreparedStatement ps = connection.prepareStatement(globalPendingQuery)) {
-            ps.setString(1, queue.name());
-            ps.setString(2, WorkflowState.PENDING.name());
-            var index = ctx.bindAppScope(ps, 3);
-            if (partitionKey != null) {
-              ps.setString(index, partitionKey);
-            }
-
-            try (ResultSet rs = ps.executeQuery()) {
-              if (rs.next()) {
-                globalPendingWorkflows = rs.getInt(1);
-              }
-            }
-          }
-
-          if (globalPendingWorkflows > queue.concurrency()) {
+        // Concurrency at either shared scope still requires a DB query — other workers may be
+        // running workflows too.
+        if (limits.concurrency() != null) {
+          int pending = pendingCount(ctx, connection, queue.name(), null);
+          if (pending > limits.concurrency()) {
             logger.warn(
                 "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
-                globalPendingWorkflows,
+                pending,
                 queue.name(),
-                queue.concurrency());
+                limits.concurrency());
           }
-
-          int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
-          maxTasks = Math.min(maxTasks, availableTasks);
+          maxTasks = Math.min(maxTasks, Math.max(0, limits.concurrency() - pending));
+        }
+        if (limits.partitionConcurrency() != null) {
+          int pending = pendingCount(ctx, connection, queue.name(), partition);
+          if (pending > limits.partitionConcurrency()) {
+            logger.warn(
+                "Total pending workflows ({}) on partition {} of queue {} exceeds the partition"
+                    + " concurrency limit ({})",
+                pending,
+                partition,
+                queue.name(),
+                limits.partitionConcurrency());
+          }
+          maxTasks = Math.min(maxTasks, Math.max(0, limits.partitionConcurrency() - pending));
+        }
+        if (maxTasks == 0) {
+          connection.rollback();
+          return List.of();
         }
 
         // Version-less workflows (application_version IS NULL) are only dequeued
@@ -188,17 +182,17 @@ public class QueuesDAO {
           """
                     .formatted(ctx.schema(), versionClause)
                 + ctx.andAppScope();
-        if (partitionKey != null) {
+        if (partition != null) {
           query += " AND queue_partition_key = ?";
         }
 
         query += " ORDER BY priority ASC, created_at ASC";
 
-        // Without a global budget, use SKIP LOCKED to only select rows that can be locked. With
-        // one, use NOWAIT so all processes see a consistent table: a rate limit is a global budget
+        // Without a shared budget, use SKIP LOCKED to only select rows that can be locked. With
+        // one, use NOWAIT so all processes see a consistent table: a rate limit is a shared budget
         // like concurrency, and SKIP LOCKED would hand a peer disjoint rows, letting it spend the
         // same budget against its own pre-claim snapshot.
-        if (queue.concurrency() == null && queue.rateLimit() == null) {
+        if (!sharedBudget) {
           query += " FOR UPDATE SKIP LOCKED";
         } else {
           query += " FOR UPDATE NOWAIT";
@@ -214,8 +208,8 @@ public class QueuesDAO {
           ps.setString(2, WorkflowState.ENQUEUED.name());
           ps.setString(3, appVersion);
           var index = ctx.bindAppScope(ps, 4);
-          if (partitionKey != null) {
-            ps.setString(index, partitionKey);
+          if (partition != null) {
+            ps.setString(index, partition);
           }
 
           try (ResultSet rs = ps.executeQuery()) {
@@ -239,7 +233,10 @@ public class QueuesDAO {
                 application_version = ?,
                 executor_id = ?,
                 started_at_epoch_ms = ?,
+                updated_at = ?,
                 rate_limited = ?,
+                -- Count this dispatch against the dead-letter budget; no later write does it.
+                recovery_attempts = recovery_attempts + 1,
                 -- Claim it as it is taken, so the unclaimed backlog drains as workflows run.
                 -- Left unclaimed, the row is PENDING and still visible to every peer's
                 -- recovery and global-timeout sweeps until it starts executing here.
@@ -267,12 +264,16 @@ public class QueuesDAO {
             ps.setString(2, appVersion);
             ps.setString(3, executorId);
             ps.setLong(4, now);
-            ps.setBoolean(5, queue.rateLimit() != null);
-            ps.setString(6, ctx.appName());
-            ps.setLong(7, now);
-            ps.setString(8, id);
-            ps.setString(9, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 10);
+            ps.setLong(5, now);
+            // Whichever scope the limiter is at: rateLimitRemaining counts only rows marked
+            // here, so a queue limited solely per partition would otherwise count none of its
+            // own claims and hand back the full limit every poll.
+            ps.setBoolean(6, limits.rateLimit() != null || limits.partitionRateLimit() != null);
+            ps.setString(7, ctx.appName());
+            ps.setLong(8, now);
+            ps.setString(9, id);
+            ps.setString(10, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 11);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
@@ -303,23 +304,60 @@ public class QueuesDAO {
     }
   }
 
-  public static boolean clearQueueAssignment(DbContext ctx, String workflowId) throws SQLException {
+  /**
+   * Returns the given executors' PENDING workflows to their queues, and reports which rows moved.
+   *
+   * <p>This is the whole of recovery. A workflow whose executor is gone goes back to ENQUEUED -- on
+   * the internal queue if it never had one of its own -- and whichever executor next polls that
+   * queue runs it. Two things follow. The fleet shares the backlog, rather than one executor
+   * working through all of it alone. And a repeat costs nothing: the queue's atomic ENQUEUED ->
+   * PENDING claim admits exactly one runner, and once a live executor has taken a row, its
+   * executor_id no longer matches the dead one this sweep names.
+   *
+   * <p>The internal queue has no concurrency limit, here as in every other SDK, so a workflow that
+   * was never queued stays unthrottled by choice rather than by oversight.
+   */
+  public static List<String> reenqueueForRecovery(
+      DbContext ctx, List<String> executorIds, String appVersion, String recoveryQueueName)
+      throws SQLException {
+
+    if (executorIds.isEmpty()) {
+      return List.of();
+    }
 
     final String sql =
         """
           UPDATE "%s".workflow_status
-          SET started_at_epoch_ms = NULL, status = ?
-          WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
+          SET status = ?,
+              started_at_epoch_ms = NULL,
+              updated_at = ?,
+              queue_name = COALESCE(NULLIF(queue_name, ''), ?)
+          WHERE status = ?
+            AND executor_id = ANY(?)
+            AND application_version = ?
         """
-            .formatted(ctx.schema());
+                .formatted(ctx.schema())
+            + ctx.andAppScope()
+            + " RETURNING workflow_uuid";
+
     try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
+      Array executorIdArray = connection.createArrayOf("text", executorIds.toArray());
       stmt.setString(1, WorkflowState.ENQUEUED.name());
-      stmt.setString(2, workflowId);
-      stmt.setString(3, WorkflowState.PENDING.name());
+      stmt.setLong(2, System.currentTimeMillis());
+      stmt.setString(3, recoveryQueueName);
+      stmt.setString(4, WorkflowState.PENDING.name());
+      stmt.setArray(5, executorIdArray);
+      stmt.setString(6, appVersion);
+      ctx.bindAppScope(stmt, 7);
 
-      int affectedRows = stmt.executeUpdate();
-      return affectedRows > 0;
+      var workflowIds = new ArrayList<String>();
+      try (ResultSet rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          workflowIds.add(rs.getString("workflow_uuid"));
+        }
+      }
+      return workflowIds;
     }
   }
 
@@ -369,30 +407,39 @@ public class QueuesDAO {
       @Nullable String applicationName)
       throws SQLException {
     Queue queue = queueFromOptions(name, options);
+    // The rules the constructor cannot apply, because it is also the read path.
+    queue.validateForRegistration();
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
         """
         INSERT INTO "%s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
+            partition_concurrency, partition_worker_concurrency,
+            partition_rate_limit_max, partition_rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        -- priority_enabled is vestigial: every queue dispatches in priority order.
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema());
     final String updateSql =
         """
         UPDATE "%s".queues SET
-          concurrency           = ?,
-          worker_concurrency    = ?,
-          rate_limit_max        = ?,
-          rate_limit_period_sec = ?,
-          priority_enabled      = ?,
-          partition_queue       = ?,
-          polling_interval_sec  = ?,
-          updated_at            = ?,
+          concurrency                     = ?,
+          worker_concurrency              = ?,
+          rate_limit_max                  = ?,
+          rate_limit_period_sec           = ?,
+          partition_concurrency           = ?,
+          partition_worker_concurrency    = ?,
+          partition_rate_limit_max        = ?,
+          partition_rate_limit_period_sec = ?,
+          priority_enabled                = TRUE,
+          partition_queue                 = ?,
+          polling_interval_sec            = ?,
+          updated_at                      = ?,
           -- Claim only an unclaimed row, so a registration landing between the ownership
           -- check above and this write keeps the name it just took.
-          application_name      = COALESCE(application_name, ?)
+          application_name                = COALESCE(application_name, ?)
         WHERE name = ?
         """
             .formatted(ctx.schema());
@@ -404,28 +451,16 @@ public class QueuesDAO {
               connection, ctx.schema(), "queues", "name", queue.name(), requestedOwner, "Queue");
       boolean inserted;
       try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-        var index = bindQueueParams(ps, queue, 1);
+        ps.setString(1, queue.name());
+        var index = bindQueueParams(ps, queue, 2);
         ps.setString(index, owner);
         inserted = ps.executeUpdate() == 1;
       }
       if (!inserted && updateExisting) {
         try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
-          setNullableInt(ps, 1, queue.concurrency());
-          setNullableInt(ps, 2, queue.workerConcurrency());
-          var rateLimit = queue.rateLimit();
-          if (rateLimit != null) {
-            ps.setInt(3, rateLimit.limit());
-            ps.setDouble(4, rateLimit.period().toMillis() / 1000.0);
-          } else {
-            ps.setNull(3, java.sql.Types.INTEGER);
-            ps.setNull(4, java.sql.Types.DOUBLE);
-          }
-          ps.setBoolean(5, queue.priorityEnabled());
-          ps.setBoolean(6, queue.partitioningEnabled());
-          ps.setDouble(7, queue.pollingInterval().toMillis() / 1000.0);
-          ps.setLong(8, System.currentTimeMillis());
-          ps.setString(9, owner);
-          ps.setString(10, queue.name());
+          var index = bindQueueParams(ps, queue, 1);
+          ps.setString(index, owner);
+          ps.setString(index + 1, queue.name());
           ps.executeUpdate();
         }
       }
@@ -433,40 +468,126 @@ public class QueuesDAO {
     }
   }
 
-  /** Binds a queue row's columns from {@code offset}, returning the next free index. */
+  private static int rateLimitRemaining(
+      DbContext ctx,
+      Connection connection,
+      String queueName,
+      Queue.RateLimit rateLimit,
+      @Nullable String partitionKey)
+      throws SQLException {
+    var sql =
+        """
+        SELECT COUNT(*)
+        FROM "%s".workflow_status
+        WHERE queue_name = ?
+        AND rate_limited = true
+        AND status NOT IN (?, ?)
+        AND started_at_epoch_ms > ?
+      """
+                .formatted(ctx.schema())
+            + ctx.andAppScope();
+    if (partitionKey != null) {
+      sql += " AND queue_partition_key = ?";
+    }
+
+    try (PreparedStatement ps = connection.prepareStatement(sql)) {
+      ps.setString(1, queueName);
+      ps.setString(2, WorkflowState.ENQUEUED.name());
+      ps.setString(3, WorkflowState.DELAYED.name());
+      ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
+      var index = ctx.bindAppScope(ps, 5);
+      if (partitionKey != null) {
+        ps.setString(index, partitionKey);
+      }
+
+      int recent = 0;
+      try (ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          recent = rs.getInt(1);
+        }
+      }
+      return Math.max(0, rateLimit.limit() - recent);
+    }
+  }
+
+  private static int pendingCount(
+      DbContext ctx, Connection connection, String queueName, @Nullable String partitionKey)
+      throws SQLException {
+    var sql =
+        """
+        SELECT COUNT(*)
+        FROM "%s".workflow_status
+        WHERE queue_name = ? AND status = ?
+      """
+                .formatted(ctx.schema())
+            + ctx.andAppScope();
+    if (partitionKey != null) {
+      sql += " AND queue_partition_key = ?";
+    }
+
+    try (PreparedStatement ps = connection.prepareStatement(sql)) {
+      ps.setString(1, queueName);
+      ps.setString(2, WorkflowState.PENDING.name());
+      var index = ctx.bindAppScope(ps, 3);
+      if (partitionKey != null) {
+        ps.setString(index, partitionKey);
+      }
+
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next() ? rs.getInt(1) : 0;
+      }
+    }
+  }
+
+  /**
+   * Binds a queue row's columns, from {@code concurrency} through {@code updated_at}, starting at
+   * {@code offset}, and returns the next free index. The insert and the update list those columns
+   * in the same order, with {@code priority_enabled} written as a literal in both.
+   */
   private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
-    ps.setString(offset, queue.name());
-    setNullableInt(ps, offset + 1, queue.concurrency());
-    setNullableInt(ps, offset + 2, queue.workerConcurrency());
-    var rateLimit = queue.rateLimit();
-    if (rateLimit != null) {
-      ps.setInt(offset + 3, rateLimit.limit());
-      ps.setDouble(offset + 4, rateLimit.period().toMillis() / 1000.0);
-    } else {
-      ps.setNull(offset + 3, java.sql.Types.INTEGER);
-      ps.setNull(offset + 4, java.sql.Types.DOUBLE);
-    }
-    ps.setBoolean(offset + 5, queue.priorityEnabled());
-    ps.setBoolean(offset + 6, queue.partitioningEnabled());
-    ps.setDouble(offset + 7, queue.pollingInterval().toMillis() / 1000.0);
-    ps.setLong(offset + 8, System.currentTimeMillis());
-    return offset + 9;
+    setNullableInt(ps, offset, queue.concurrency());
+    setNullableInt(ps, offset + 1, queue.workerConcurrency());
+    setRateLimit(ps, offset + 2, queue.rateLimit());
+    setNullableInt(ps, offset + 4, queue.partitionConcurrency());
+    setNullableInt(ps, offset + 5, queue.partitionWorkerConcurrency());
+    setRateLimit(ps, offset + 6, queue.partitionRateLimit());
+    // Derived, not copied: the column follows the per-partition limits, and other SDKs read it
+    // to decide whether to dequeue per partition.
+    ps.setBoolean(offset + 8, queue.isPartitioned());
+    ps.setDouble(offset + 9, queue.pollingInterval().toMillis() / 1000.0);
+    ps.setLong(offset + 10, System.currentTimeMillis());
+    return offset + 11;
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
+    try (Connection connection = ctx.getConnection()) {
+      return findQueue(connection, ctx.schema(), name, false);
+    }
+  }
+
+  /**
+   * Reads one queue on a caller-supplied connection.
+   *
+   * @param forUpdate locks the row for the rest of the caller's transaction, so a read-modify-write
+   *     cannot lose a concurrent registration
+   */
+  private static Optional<Queue> findQueue(
+      Connection connection, String schema, String name, boolean forUpdate) throws SQLException {
     final String sql =
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec, application_name
+          partition_concurrency, partition_worker_concurrency,
+          partition_rate_limit_max, partition_rate_limit_period_sec,
+          partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         WHERE name = ?
         """
-            .formatted(ctx.schema());
+                .formatted(schema)
+            + (forUpdate ? " FOR UPDATE" : "");
 
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, name);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -494,7 +615,9 @@ public class QueuesDAO {
         """
         SELECT name, concurrency, worker_concurrency,
           rate_limit_max, rate_limit_period_sec,
-          priority_enabled, partition_queue, polling_interval_sec, application_name
+          partition_concurrency, partition_worker_concurrency,
+          partition_rate_limit_max, partition_rate_limit_period_sec,
+          partition_queue, polling_interval_sec, application_name
         FROM "%s".queues
         """
                 .formatted(ctx.schema())
@@ -526,34 +649,202 @@ public class QueuesDAO {
       throws SQLException {
     if (update.isEmpty()) return;
 
-    List<String> setClauses = new ArrayList<>();
-    List<Object> params = new ArrayList<>();
+    // Read, apply, validate, write -- all on one connection in one transaction. Validating the
+    // row an update would produce, rather than the update on its own, is the only way to check a
+    // rule that spans fields the caller did not all supply. Sharing the transaction is what makes
+    // the check mean anything: read and write on separate connections would let a concurrent
+    // registration land in between, and this write would then silently discard it.
+    try (Connection connection = ctx.getConnection()) {
+      connection.setAutoCommit(false);
+      boolean committed = false;
+      try {
+        var current = findQueue(connection, ctx.schema(), name, true);
+        // No row to update: the statement below would match nothing anyway.
+        if (current.isEmpty()) {
+          connection.rollback();
+          return;
+        }
+        requireNotLegacyPartitioned(current.get(), update);
+        var updated = applyUpdate(current.get(), update);
+        updated.validateForRegistration();
 
-    collectField(setClauses, params, "concurrency", update.concurrency());
-    collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
-    collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
-    collectField(
-        setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
-    collectOptional(setClauses, params, "priority_enabled", update.priorityEnabled());
-    collectOptional(setClauses, params, "partition_queue", update.partitionQueue());
-    collectOptional(
-        setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
+        List<String> setClauses = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
 
-    setClauses.add("\"updated_at\" = ?");
-    params.add(System.currentTimeMillis());
-    params.add(name);
+        collectField(setClauses, params, "concurrency", update.concurrency());
+        collectField(setClauses, params, "worker_concurrency", update.workerConcurrency());
+        collectField(setClauses, params, "rate_limit_max", update.rateLimitMax());
+        collectField(
+            setClauses, params, "rate_limit_period_sec", durationToSec(update.rateLimitPeriod()));
+        collectField(setClauses, params, "partition_concurrency", update.partitionConcurrency());
+        collectField(
+            setClauses,
+            params,
+            "partition_worker_concurrency",
+            update.partitionWorkerConcurrency());
+        collectField(
+            setClauses, params, "partition_rate_limit_max", update.partitionRateLimitMax());
+        collectField(
+            setClauses,
+            params,
+            "partition_rate_limit_period_sec",
+            durationToSec(update.partitionRateLimitPeriod()));
+        // Vestigial, but other SDKs still read it; every write heals a row an earlier version
+        // stored as false.
+        setClauses.add("\"priority_enabled\" = TRUE");
+        // Partitioning is inferred from the per-partition limits, so the stored flag follows them
+        // on every write. Left alone it would go stale in both directions: unset on a queue that
+        // just gained its first partition limit, and still set on one that just lost its last.
+        setClauses.add("\"partition_queue\" = ?");
+        params.add(updated.isPartitioned());
+        collectOptional(
+            setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
-    String sql =
-        "UPDATE \"%s\".queues SET %s WHERE name = ?"
-            .formatted(ctx.schema(), String.join(", ", setClauses));
+        setClauses.add("\"updated_at\" = ?");
+        params.add(System.currentTimeMillis());
+        params.add(name);
 
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement ps = connection.prepareStatement(sql)) {
-      for (int i = 0; i < params.size(); i++) {
-        ps.setObject(i + 1, params.get(i));
+        String sql =
+            "UPDATE \"%s\".queues SET %s WHERE name = ?"
+                .formatted(ctx.schema(), String.join(", ", setClauses));
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+          for (int i = 0; i < params.size(); i++) {
+            ps.setObject(i + 1, params.get(i));
+          }
+          ps.executeUpdate();
+        }
+        connection.commit();
+        committed = true;
+
+        // Partitioning an existing queue strands whatever is already on it: those rows were
+        // enqueued without a partition key -- enqueue refused one while the queue was
+        // unpartitioned -- and a partitioned queue only dequeues from its partitions, which
+        // getQueuePartitions reads from the keys present. Go warns at the same transition.
+        if (!current.get().isPartitioned() && updated.isPartitioned()) {
+          logger.warn(
+              "Queue {} is now partitioned by its per-partition limits. Workflows already"
+                  + " enqueued on it have no partition key and will never be dequeued; drain the"
+                  + " queue before partitioning it, or re-enqueue them with a partition key.",
+              name);
+        }
+      } finally {
+        if (!committed) {
+          connection.rollback();
+        }
       }
-      ps.executeUpdate();
     }
+  }
+
+  /**
+   * Refuses to carry a queue between the two partitioning modes by an update to its limits.
+   *
+   * <p>Under the deprecated {@code partitionQueue} flag the queue-wide limits are enforced per
+   * partition, so the two modes disagree about what {@code concurrency} means. A legacy queue that
+   * gained its first per-partition limit would silently rescope every limit the update did not
+   * mention, and one that then lost it again would come back unpartitioned, after which every
+   * enqueue carrying a partition key fails. Re-registration is the supported way across, which is
+   * what the message points at; this is Go's {@code requireNotLegacyPartitioned}.
+   */
+  @SuppressWarnings("removal") // reads the legacy partitionQueue option
+  private static void requireNotLegacyPartitioned(Queue current, QueueOptions update) {
+    if (current.isLegacyPartitioned()) {
+      var field = firstLimitSet(update);
+      if (field != null) {
+        throw new IllegalArgumentException(
+            ("cannot set %s on queue %s: it is registered with the deprecated partitionQueue"
+                    + " option, under which concurrency, workerConcurrency and rateLimit apply per"
+                    + " partition; re-register the queue with the partition limits instead")
+                .formatted(field, current.name()));
+      }
+    } else if (current.hasPartitionLimits() && update.partitionQueue().isPresent()) {
+      throw new IllegalArgumentException(
+          ("cannot set partitionQueue on queue %s: it is partitioned by its partition limits;"
+                  + " clear those instead")
+              .formatted(current.name()));
+    }
+  }
+
+  /** The first limit this update sets, named as the caller named it, or null if it sets none. */
+  private static @Nullable String firstLimitSet(QueueOptions update) {
+    if (update.concurrency().isPresent()) return "concurrency";
+    if (update.workerConcurrency().isPresent()) return "workerConcurrency";
+    if (update.rateLimitMax().isPresent() || update.rateLimitPeriod().isPresent()) {
+      return "rateLimit";
+    }
+    if (update.partitionConcurrency().isPresent()) return "partitionConcurrency";
+    if (update.partitionWorkerConcurrency().isPresent()) return "partitionWorkerConcurrency";
+    if (update.partitionRateLimitMax().isPresent() || update.partitionRateLimitPeriod().isPresent())
+      return "partitionRateLimit";
+    return null;
+  }
+
+  /**
+   * The queue a partial update would produce, built through the {@link Queue} constructor so it is
+   * checked by the same rules that reading the row back would apply.
+   */
+  @SuppressWarnings("removal") // reads the legacy partitionQueue option verbatim
+  private static Queue applyUpdate(Queue current, QueueOptions update) {
+    var updated =
+        new Queue(
+            current.name(),
+            intAfter(current.concurrency(), update.concurrency()),
+            intAfter(current.workerConcurrency(), update.workerConcurrency()),
+            true, // every queue dispatches in priority order
+            // Carry the legacy flag's meaning, not the stored column: the column is derived, so
+            // on a queue partitioned by its limits it is already true and would read back as a
+            // request for legacy partitioning that the caller never made.
+            update.partitionQueue().orElse(current.isLegacyPartitioned()),
+            rateLimitAfter(
+                current.name(),
+                "rateLimit",
+                current.rateLimit(),
+                update.rateLimitMax(),
+                update.rateLimitPeriod()),
+            intAfter(current.partitionConcurrency(), update.partitionConcurrency()),
+            intAfter(current.partitionWorkerConcurrency(), update.partitionWorkerConcurrency()),
+            rateLimitAfter(
+                current.name(),
+                "partitionRateLimit",
+                current.partitionRateLimit(),
+                update.partitionRateLimitMax(),
+                update.partitionRateLimitPeriod()),
+            update.pollingInterval().orElse(current.pollingInterval()),
+            current.applicationName());
+    return updated;
+  }
+
+  /** The value a partial update leaves in a nullable integer column. */
+  private static @Nullable Integer intAfter(@Nullable Integer current, Field<Integer> update) {
+    return update.isPresent() ? update.get() : current;
+  }
+
+  /**
+   * The rate limit a partial update leaves, where either half may be set, cleared or untouched.
+   *
+   * <p>A result with exactly one half set is refused rather than read as no limit. The UPDATE
+   * writes only the columns the caller supplied, so collapsing such a result to null would validate
+   * a queue with no limit while storing one half of one: {@code rateLimitMax = 0} alone passes as
+   * null here and lands in the row, and a later update supplying only the period then completes a
+   * live limit that neither update ever validated as a pair. For the partition limits the derived
+   * {@code partition_queue} flag would go out with it, computed from a limit this saw as absent.
+   */
+  private static Queue.@Nullable RateLimit rateLimitAfter(
+      String queue,
+      String name,
+      Queue.@Nullable RateLimit current,
+      Field<Integer> max,
+      Field<Duration> period) {
+    Integer newMax = max.isPresent() ? max.get() : (current != null ? current.limit() : null);
+    Duration newPeriod =
+        period.isPresent() ? period.get() : (current != null ? current.period() : null);
+    if (newMax == null && newPeriod == null) return null;
+    if (newMax == null || newPeriod == null) {
+      throw new IllegalArgumentException(
+          ("queue %s cannot have half of %s: %sMax and %sPeriod are set and cleared together")
+              .formatted(queue, name, name, name));
+    }
+    return new Queue.RateLimit(newMax, newPeriod);
   }
 
   private static <T> void collectField(
@@ -593,13 +884,21 @@ public class QueuesDAO {
     }
   }
 
+  /** A rate limit from its two columns, or null when either is unset. */
+  private static Queue.@Nullable RateLimit rateLimitFromResultSet(
+      ResultSet rs, String maxColumn, String periodColumn) throws SQLException {
+    Integer max = rs.getObject(maxColumn, Integer.class);
+    Double periodSec = rs.getObject(periodColumn, Double.class);
+    if (max == null || periodSec == null) return null;
+    return new Queue.RateLimit(max, Duration.ofMillis((long) (periodSec * 1000)));
+  }
+
   private static Queue queueFromResultSet(ResultSet rs) throws SQLException {
     String name = rs.getString("name");
     Integer concurrency = rs.getObject("concurrency", Integer.class);
     Integer workerConcurrency = rs.getObject("worker_concurrency", Integer.class);
     Integer rateLimitMax = rs.getObject("rate_limit_max", Integer.class);
     Double rateLimitPeriodSec = rs.getObject("rate_limit_period_sec", Double.class);
-    boolean priorityEnabled = rs.getBoolean("priority_enabled");
     boolean partitioningEnabled = rs.getBoolean("partition_queue");
     Double pollingIntervalSec = rs.getObject("polling_interval_sec", Double.class);
 
@@ -616,28 +915,35 @@ public class QueuesDAO {
         name,
         concurrency,
         workerConcurrency,
-        priorityEnabled,
+        true, // every queue dispatches in priority order, whatever the vestigial column says
         partitioningEnabled,
         rateLimit,
+        rs.getObject("partition_concurrency", Integer.class),
+        rs.getObject("partition_worker_concurrency", Integer.class),
+        rateLimitFromResultSet(rs, "partition_rate_limit_max", "partition_rate_limit_period_sec"),
         pollingInterval,
         rs.getString("application_name"));
   }
 
+  // Reads the deprecated partitionQueue option verbatim.
+  @SuppressWarnings("removal")
   private static Queue queueFromOptions(String name, QueueOptions options) {
     Integer concurrencyVal = options.concurrency().isPresent() ? options.concurrency().get() : null;
     Integer workerConcurrencyVal =
         options.workerConcurrency().isPresent() ? options.workerConcurrency().get() : null;
-    boolean priorityEnabledVal = options.priorityEnabled().orElse(false);
     boolean partitionQueueVal = options.partitionQueue().orElse(false);
 
-    Queue.RateLimit rateLimit = null;
-    if (options.rateLimitMax().isPresent()
-        && options.rateLimitPeriod().isPresent()
-        && options.rateLimitMax().get() != null
-        && options.rateLimitPeriod().get() != null) {
-      rateLimit =
-          new Queue.RateLimit(options.rateLimitMax().get(), options.rateLimitPeriod().get());
-    }
+    // A new queue has no current limit, so a half-set pair is refused exactly as an update that
+    // would leave one behind is, rather than silently registering no limit at all.
+    Queue.RateLimit rateLimit =
+        rateLimitAfter(name, "rateLimit", null, options.rateLimitMax(), options.rateLimitPeriod());
+    Queue.RateLimit partitionRateLimit =
+        rateLimitAfter(
+            name,
+            "partitionRateLimit",
+            null,
+            options.partitionRateLimitMax(),
+            options.partitionRateLimitPeriod());
 
     Duration pollingIntervalVal = options.pollingInterval().orElse(Queue.DEFAULT_POLLING_INTERVAL);
 
@@ -645,11 +951,28 @@ public class QueuesDAO {
         name,
         concurrencyVal,
         workerConcurrencyVal,
-        priorityEnabledVal,
+        true, // every queue dispatches in priority order
         partitionQueueVal,
         rateLimit,
+        options.partitionConcurrency().isPresent() ? options.partitionConcurrency().get() : null,
+        options.partitionWorkerConcurrency().isPresent()
+            ? options.partitionWorkerConcurrency().get()
+            : null,
+        partitionRateLimit,
         pollingIntervalVal,
         null); // the owner is resolved and written separately by upsertQueue
+  }
+
+  /** Binds a rate limit's two columns, or two nulls, at {@code index} and {@code index + 1}. */
+  private static void setRateLimit(
+      PreparedStatement stmt, int index, Queue.@Nullable RateLimit rateLimit) throws SQLException {
+    if (rateLimit != null) {
+      stmt.setInt(index, rateLimit.limit());
+      stmt.setDouble(index + 1, rateLimit.period().toMillis() / 1000.0);
+    } else {
+      stmt.setNull(index, java.sql.Types.INTEGER);
+      stmt.setNull(index + 1, java.sql.Types.DOUBLE);
+    }
   }
 
   private static void setNullableInt(PreparedStatement stmt, int index, Integer value)

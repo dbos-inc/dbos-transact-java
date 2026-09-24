@@ -61,6 +61,95 @@ public class StaticQueuesTest {
   }
 
   @Test
+  public void aPerPartitionLimitIsRefusedByStaticRegistrationToo() throws Exception {
+    // Per-partition limits are a database-backed feature. An in-memory queue is never written, so
+    // the flag other executors read is never stored for it and its limits could not be shared
+    // with them. The refusal is permanent, not a stand-in for enforcement that has yet to land.
+    var queue =
+        new Queue(
+            "static-pp",
+            null,
+            null,
+            false,
+            false,
+            null,
+            2,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(queue));
+  }
+
+  @Test
+  public void staticRegistrationAppliesTheWriteTimeRules() throws Exception {
+    // The Queue constructor deliberately accepts these, because it is also the row-reading path,
+    // so a queue built by hand reaches this registry unchecked. Registering after launch refuses
+    // them; registering in memory has to refuse the same configurations, or which registration
+    // path a queue took would decide whether its limits were checked at all.
+    var zeroLimit =
+        new Queue(
+            "static-rl-max",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(0, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroLimit));
+
+    var zeroPeriod =
+        new Queue(
+            "static-rl-period",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ZERO),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(zeroPeriod));
+
+    var workerOverQueue =
+        new Queue(
+            "static-wc",
+            2,
+            5,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(workerOverQueue));
+
+    var valid =
+        new Queue(
+            "static-ok",
+            5,
+            2,
+            false,
+            false,
+            new Queue.RateLimit(5, Duration.ofSeconds(1)),
+            null,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    dbos.registerQueue(valid);
+  }
+
+  @Test
   public void testQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
@@ -184,11 +273,7 @@ public class StaticQueuesTest {
   @Test
   public void testPriority() throws Exception {
 
-    Queue firstQ =
-        new Queue("firstQueue")
-            .withPriorityEnabled(true)
-            .withConcurrency(1)
-            .withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueue(firstQ);
 
     ServiceQImpl impl = new ServiceQImpl();
@@ -490,8 +575,7 @@ public class StaticQueuesTest {
   @Test
   public void testWorkerConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
 
     dbos.launch();
@@ -529,20 +613,21 @@ public class StaticQueuesTest {
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
     assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
 
     assertEquals(2, idsToRun.size());
 
     // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2);
+    idsToRun =
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2, 2);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -550,22 +635,22 @@ public class StaticQueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+    idsToRun =
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0, 0);
     assertEquals(0, idsToRun.size());
   }
 
   @Test
   public void testGlobalConcurrency() throws Exception {
 
-    Queue qwithWCLimit =
-        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+    Queue qwithWCLimit = new Queue("QwithWCLimit").withConcurrency(3).withWorkerConcurrency(2);
     dbos.registerQueue(qwithWCLimit);
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -602,7 +687,7 @@ public class StaticQueuesTest {
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     // executor2
@@ -611,13 +696,13 @@ public class StaticQueuesTest {
       String wfid = "id" + i;
       var status =
           builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
@@ -630,6 +715,7 @@ public class StaticQueuesTest {
             executor2,
             appVersion,
             null,
+            0,
             0);
     assertEquals(2, idsToRun.size());
   }
@@ -699,25 +785,14 @@ public class StaticQueuesTest {
       assertEquals(1, rowsAffected);
     }
 
+    // Recovering the executor wf3 now claims to belong to returns it to the queue, and leaves the
+    // two workflows this executor is still running alone -- they are PENDING under "local", which
+    // this sweep does not name, so they keep the two concurrency slots they are actually using.
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    List<WorkflowHandle<?, ?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
-    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
-    assertEquals(1, otherHandles.size());
-    assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
-    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
-
-    List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
-    assertEquals(2, localHandles.size());
-    List<String> expectedWorkflowIds = List.of(handle1.workflowId(), handle2.workflowId());
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
+    List<String> recovered = executor.recoverPendingWorkflows(List.of("other"));
+    assertEquals(List.of(handle3.workflowId()), recovered);
 
     assertEquals(2, impl.counter.get());
-    // wf1 and wf2 are still running here, so recovery leaves them alone: their rows stay PENDING
-    // and keep the two concurrency slots they are actually using. Releasing those assignments
-    // would re-enqueue live workflows, admit a second runner for each, and discard the outcome of
-    // the run already in flight.
     assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());

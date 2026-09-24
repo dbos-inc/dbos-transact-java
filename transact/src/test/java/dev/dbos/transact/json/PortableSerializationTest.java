@@ -4,17 +4,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusRow;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.nio.charset.StandardCharsets;
@@ -187,7 +192,7 @@ public class PortableSerializationTest {
 
       // Enqueue workflow using client with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("recvWorkflow", "PortableTestService", "testq")
+          new EnqueueOptions("recvWorkflow", "PortableTestService", QueueName.of("testq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -216,8 +221,8 @@ public class PortableSerializationTest {
   }
 
   /**
-   * Tests that a workflow can be enqueued using DBOSClient.enqueuePortableWorkflow which uses
-   * portable JSON serialization by default without validation.
+   * Tests that a workflow can be enqueued through DBOSClient with portable JSON serialization set
+   * on the options, without validation.
    */
   @Test
   public void testClientEnqueuePortableWorkflow() throws Exception {
@@ -233,14 +238,14 @@ public class PortableSerializationTest {
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
 
-      // Enqueue workflow using enqueuePortableWorkflow
       var options =
-          new DBOSClient.EnqueueOptions("recvWorkflow", "PortableTestService", "testq")
-              .withWorkflowId(workflowId);
+          new EnqueueOptions("recvWorkflow", "PortableTestService", QueueName.of("testq"))
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
 
-      // Use enqueuePortableWorkflow which defaults to portable serialization
       var handle =
-          client.<String>enqueuePortableWorkflow(options, new Object[] {"incoming", 30000L}, null);
+          client.<String, RuntimeException>enqueueWorkflow(
+              options, new Object[] {"incoming", 30000L});
 
       // Send a message using portable serialization
       client.send(
@@ -324,13 +329,86 @@ public class PortableSerializationTest {
       return "done";
     }
 
-    @Workflow(name = "senderWorkflow")
+    @Workflow(name = "senderWorkflow", serializationStrategy = SerializationStrategy.PORTABLE)
     @Override
     public void senderWorkflow(String targetId) {
       // Send messages with different serialization types
       dbos.send(targetId, "defaultMsg", "defaultTopic");
       dbos.send(targetId, "nativeMsg", "nativeTopic", null, SerializationStrategy.NATIVE);
       dbos.send(targetId, "portableMsg", "portableTopic", null, SerializationStrategy.PORTABLE);
+    }
+  }
+
+  /** A workflow declared NATIVE, in an application whose configured serializer is not native. */
+  public interface NativeSerService {
+    String eventAndSendWorkflow(String targetId);
+  }
+
+  @WorkflowClassName("NativeSerService")
+  public static class NativeSerServiceImpl implements NativeSerService {
+    private final DBOS dbos;
+
+    public NativeSerServiceImpl(DBOS dbos) {
+      this.dbos = dbos;
+    }
+
+    @Workflow(name = "eventAndSendWorkflow", serializationStrategy = SerializationStrategy.NATIVE)
+    @Override
+    public String eventAndSendWorkflow(String targetId) {
+      dbos.setEvent("nativeEvent", "eventValue");
+      dbos.send(targetId, "nativeMsg", "nativeTopic");
+      return "done";
+    }
+  }
+
+  /**
+   * A workflow writes in the format its own row records, which for a NATIVE declaration is
+   * java_jackson even where the application configures something else. Without that, a workflow
+   * whose arguments and result are deliberately native would set events and send messages the
+   * custom serializer had to read back.
+   */
+  @Test
+  public void testNativeWorkflowWritesNativeUnderACustomSerializer() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = new DBOS(dbosConfig.withSerializer(new TestBase64Serializer()))) {
+      var svc =
+          localDbos.registerProxy(NativeSerService.class, new NativeSerServiceImpl(localDbos));
+      localDbos.launch();
+
+      // A target workflow for the message to land on (so the FK constraint is satisfied)
+      String targetId = UUID.randomUUID().toString();
+      try (Connection conn = dataSource.getConnection()) {
+        String insertSql =
+            """
+            INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
+            VALUES (?, 'dummy', 'Dummy', '', 'PENDING', ?)
+            """;
+        try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+          stmt.setString(1, targetId);
+          stmt.setLong(2, System.currentTimeMillis());
+          stmt.executeUpdate();
+        }
+      }
+
+      String workflowId = UUID.randomUUID().toString();
+      var handle =
+          localDbos.startWorkflow(
+              () -> svc.eventAndSendWorkflow(targetId), new StartWorkflowOptions(workflowId));
+      assertEquals("done", handle.getResult());
+
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals(SerializationUtil.NATIVE, row.serialization());
+
+      // The event and the message follow the row, not the application's own serializer.
+      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+      assertEquals(1, events.size());
+      assertEquals(SerializationUtil.NATIVE, events.get(0).serialization());
+
+      var notifications = DBUtils.getNotifications(dataSource, targetId);
+      assertEquals(1, notifications.size());
+      assertEquals(SerializationUtil.NATIVE, notifications.get(0).serialization());
     }
   }
 
@@ -371,14 +449,14 @@ public class PortableSerializationTest {
 
         if (sertype.equals("defq")) {
           var options =
-              new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+              new EnqueueOptions("eventWorkflow", "ExplicitSerService", QueueName.of("testq"))
                   .withWorkflowId(workflowId);
 
           handle = client.enqueueWorkflow(options, new Object[] {});
         }
         if (sertype.equals("portq")) {
           var options =
-              new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+              new EnqueueOptions("eventWorkflow", "ExplicitSerService", QueueName.of("testq"))
                   .withWorkflowId(workflowId)
                   .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -490,7 +568,7 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("senderWorkflow", "ExplicitSerService", "testq")
+          new EnqueueOptions("senderWorkflow", "ExplicitSerService", QueueName.of("testq"))
               .withWorkflowId(workflowId);
 
       WorkflowHandle<Void, ?> handle = client.enqueueWorkflow(options, new Object[] {targetId});
@@ -521,6 +599,73 @@ public class PortableSerializationTest {
       // Also verify the message format
       // Portable format wraps strings in quotes
       assertEquals("\"portableMsg\"", portableNotif.get().message());
+    }
+  }
+
+  /**
+   * A message is read back in the format its row records, so a workflow running under a portable
+   * row must send under it too. Default send inherits the workflow's format, as default setEvent
+   * does.
+   */
+  @Test
+  public void testSendInheritsPortableWorkflowSerialization() throws Exception {
+    var portsvc =
+        dbos.registerProxy(ExplicitSerService.class, new ExplicitSerServicePortableImpl(dbos));
+
+    dbos.launch();
+
+    // Create a target workflow to receive messages
+    String targetId = UUID.randomUUID().toString();
+
+    // Insert a dummy workflow to be the target (so FK constraint is satisfied)
+    try (Connection conn = dataSource.getConnection()) {
+      String insertSql =
+          """
+          INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
+          VALUES (?, 'dummy', 'Dummy', '', 'PENDING', ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+        stmt.setString(1, targetId);
+        stmt.setLong(2, System.currentTimeMillis());
+        stmt.executeUpdate();
+      }
+    }
+
+    {
+      String workflowId = UUID.randomUUID().toString();
+
+      // Started in process, so the registration's PORTABLE strategy decides the row's format.
+      var handle =
+          dbos.startWorkflow(
+              () -> portsvc.senderWorkflow(targetId), new StartWorkflowOptions(workflowId));
+      handle.getResult();
+
+      var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(wfRow);
+      assertEquals("portable_json", wfRow.serialization());
+
+      var notifications = DBUtils.getNotifications(dataSource, targetId);
+      assertEquals(3, notifications.size());
+
+      var defaultNotif =
+          notifications.stream().filter(n -> n.topic().equals("defaultTopic")).findFirst();
+      var nativeNotif =
+          notifications.stream().filter(n -> n.topic().equals("nativeTopic")).findFirst();
+      var portableNotif =
+          notifications.stream().filter(n -> n.topic().equals("portableTopic")).findFirst();
+
+      assertTrue(defaultNotif.isPresent());
+      assertTrue(nativeNotif.isPresent());
+      assertTrue(portableNotif.isPresent());
+
+      // Default send inherits the workflow's portable format
+      assertEquals("portable_json", defaultNotif.get().serialization());
+      // An explicit strategy still wins over the inherited one
+      assertEquals("java_jackson", nativeNotif.get().serialization());
+      assertEquals("portable_json", portableNotif.get().serialization());
+
+      // Portable format wraps strings in quotes
+      assertEquals("\"defaultMsg\"", defaultNotif.get().message());
     }
   }
 
@@ -567,7 +712,7 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+          new EnqueueOptions("setEventWorkflow", "EventSetterService", QueueName.of("testq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -607,7 +752,7 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("errorWorkflow", "ErrorService", "testq")
+          new EnqueueOptions("errorWorkflow", "ErrorService", QueueName.of("testq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -653,7 +798,7 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("eventWorkflow", "ExplicitSerService", "testq")
+          new EnqueueOptions("eventWorkflow", "ExplicitSerService", QueueName.of("testq"))
               .withWorkflowId(workflowId);
 
       WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
@@ -706,7 +851,7 @@ public class PortableSerializationTest {
 
       // Enqueue with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("checkWorkflow", "SerializedTypesService", "testq")
+          new EnqueueOptions("checkWorkflow", "SerializedTypesService", QueueName.of("testq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -879,7 +1024,7 @@ public class PortableSerializationTest {
       // Start the workflow via queue
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("customSerWorkflow", "CustomSerService", "testq")
+            new EnqueueOptions("customSerWorkflow", "CustomSerService", QueueName.of("testq"))
                 .withWorkflowId(workflowId);
 
         WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {"hello"});
@@ -925,7 +1070,7 @@ public class PortableSerializationTest {
     String wfId1 = UUID.randomUUID().toString();
     try (DBOSClient client = new DBOSClient(dataSource)) {
       var options =
-          new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+          new EnqueueOptions("setEventWorkflow", "EventSetterService", QueueName.of("testq"))
               .withWorkflowId(wfId1);
       var handle = client.enqueueWorkflow(options, new Object[] {});
       assertEquals("eventSet", handle.getResult());
@@ -948,7 +1093,7 @@ public class PortableSerializationTest {
       String wfId2 = UUID.randomUUID().toString();
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+            new EnqueueOptions("setEventWorkflow", "EventSetterService", QueueName.of("testq"))
                 .withWorkflowId(wfId2);
         var handle = client.enqueueWorkflow(options, new Object[] {});
         assertEquals("eventSet", handle.getResult());
@@ -1005,7 +1150,7 @@ public class PortableSerializationTest {
       wfId = UUID.randomUUID().toString();
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
         var options =
-            new DBOSClient.EnqueueOptions("setEventWorkflow", "EventSetterService", "testq")
+            new EnqueueOptions("setEventWorkflow", "EventSetterService", QueueName.of("testq"))
                 .withWorkflowId(wfId);
         var handle = client.enqueueWorkflow(options, new Object[] {});
         assertEquals("eventSet", handle.getResult());
@@ -1029,6 +1174,245 @@ public class PortableSerializationTest {
             IllegalArgumentException.class,
             () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)).orElseThrow(),
             "Serialization is not available");
+      }
+    }
+  }
+
+  // ============ Custom Serializer: Schedules ============
+
+  /**
+   * A value only the custom serializer carries whole: {@code hidden} has no accessor, so Jackson
+   * writes the object without it and reads it back null. A scheduled run persisted under the wrong
+   * serializer does not merely record the wrong name, it gives back the wrong result.
+   */
+  public static final class Payload {
+    public String tag;
+    private String hidden;
+
+    public Payload() {}
+
+    Payload(String tag, String hidden) {
+      this.tag = tag;
+      this.hidden = hidden;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof Payload p
+          && java.util.Objects.equals(tag, p.tag)
+          && java.util.Objects.equals(hidden, p.hidden);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(tag, hidden);
+    }
+
+    @Override
+    public String toString() {
+      return "Payload[" + tag + ", " + hidden + "]";
+    }
+  }
+
+  public interface PayloadScheduleService {
+    Payload scheduledPayload(Instant scheduled, Object context);
+  }
+
+  public static class PayloadScheduleServiceImpl implements PayloadScheduleService {
+    @Override
+    @Workflow
+    public Payload scheduledPayload(Instant scheduled, Object context) {
+      return new Payload("ran-at-" + scheduled, "hidden-" + scheduled);
+    }
+  }
+
+  private static final String SCHEDULED_WORKFLOW = "scheduledPayload";
+  private static final String SCHEDULED_CLASS = PayloadScheduleServiceImpl.class.getName();
+
+  /** The long polling interval keeps the cron from firing: every run observed is asked for. */
+  private DBOS launchWithKryo() {
+    var localDbos =
+        new DBOS(
+            dbosConfig
+                .withSerializer(KryoSerializer.INSTANCE)
+                .withSchedulerPollingInterval(Duration.ofSeconds(30)));
+    localDbos.registerProxy(PayloadScheduleService.class, new PayloadScheduleServiceImpl());
+    localDbos.launch();
+    return localDbos;
+  }
+
+  private void createPayloadSchedule(DBOS localDbos, String name, String cron) {
+    localDbos.createSchedule(new WorkflowSchedule(name, SCHEDULED_WORKFLOW, SCHEDULED_CLASS, cron));
+  }
+
+  /** The row records the configured serializer, and the run's result reads back through it. */
+  private void assertScheduledRunUsedTheConfiguredSerializer(DBOS localDbos, String workflowId)
+      throws Exception {
+    // The consequence first, so a failure reads as the symptom rather than as metadata.
+    var status = localDbos.retrieveWorkflow(workflowId).getStatus();
+    var scheduledAt = status.input()[0];
+    assertEquals(new Payload("ran-at-" + scheduledAt, "hidden-" + scheduledAt), status.output());
+
+    // Then the cause.
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(row, "no workflow row for " + workflowId);
+    assertEquals(KryoSerializer.NAME, row.serialization());
+    assertNotEquals(DBOSJavaSerializer.NAME, row.serialization());
+  }
+
+  /** A triggered schedule is persisted with the application's configured serializer. */
+  @Test
+  public void testCustomSerializerTriggerSchedule() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      // Jan 1st only, so the poller never fires it during the test.
+      createPayloadSchedule(localDbos, "trigger-ser", "0 0 0 1 1 *");
+
+      var handle = localDbos.<Payload, RuntimeException>triggerSchedule("trigger-ser");
+      assertInstanceOf(Payload.class, handle.getResult());
+      assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+    }
+  }
+
+  /** Every run a backfill enqueues is persisted with the application's configured serializer. */
+  @Test
+  public void testCustomSerializerBackfillSchedule() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "backfill-ser", "0 * * * * *");
+
+      // Every minute over a three minute window, in the past: three runs.
+      var handles =
+          localDbos.backfillSchedule(
+              "backfill-ser",
+              Instant.parse("2024-01-01T10:00:30Z"),
+              Instant.parse("2024-01-01T10:03:30Z"));
+
+      assertEquals(3, handles.size());
+      for (var handle : handles) {
+        assertInstanceOf(Payload.class, handle.getResult());
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+      }
+    }
+  }
+
+  /**
+   * The entry points the Conductor's handlers call. They take the serializer from the system
+   * database they write through, so a caller holding none of its own -- the Conductor's position,
+   * and the bug in #523 -- still records the configured one.
+   */
+  @Test
+  public void testCustomSerializerScheduleStaticEntryPoints() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "static-ser", "0 0 0 1 1 *");
+      createPayloadSchedule(localDbos, "static-ser-min", "0 * * * * *");
+
+      var systemDatabase = DBOSTestAccess.getSystemDatabase(localDbos);
+      assertEquals(KryoSerializer.NAME, systemDatabase.serializer().name());
+
+      var workflowIds = new ArrayList<String>();
+      workflowIds.add(DBOSExecutor.triggerSchedule("static-ser", systemDatabase));
+      var backfilled =
+          DBOSExecutor.backfillSchedule(
+              "static-ser-min",
+              Instant.parse("2024-01-01T10:00:30Z"),
+              Instant.parse("2024-01-01T10:03:30Z"),
+              systemDatabase);
+      assertEquals(3, backfilled.size());
+      workflowIds.addAll(backfilled);
+
+      for (var workflowId : workflowIds) {
+        localDbos.retrieveWorkflow(workflowId).getResult();
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, workflowId);
+      }
+    }
+  }
+
+  /** The client hands its own serializer to the system database it opens, and schedules use it. */
+  @Test
+  public void testCustomSerializerClientSchedules() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = launchWithKryo()) {
+      createPayloadSchedule(localDbos, "client-ser", "0 0 0 1 1 *");
+      createPayloadSchedule(localDbos, "client-ser-min", "0 * * * * *");
+
+      try (var client = new DBOSClient(dataSource, null, KryoSerializer.INSTANCE)) {
+        var triggered = client.<Payload, RuntimeException>triggerSchedule("client-ser");
+        assertInstanceOf(Payload.class, triggered.getResult());
+        assertScheduledRunUsedTheConfiguredSerializer(localDbos, triggered.workflowId());
+
+        var handles =
+            client.backfillSchedule(
+                "client-ser-min",
+                Instant.parse("2024-01-01T10:00:30Z"),
+                Instant.parse("2024-01-01T10:03:30Z"));
+        assertEquals(3, handles.size());
+        for (var handle : handles) {
+          handle.getResult();
+          assertScheduledRunUsedTheConfiguredSerializer(localDbos, handle.workflowId());
+        }
+      }
+    }
+  }
+
+  public interface EchoService {
+    String echo(String input);
+  }
+
+  @WorkflowClassName("EchoService")
+  public static class EchoServiceImpl implements EchoService {
+    @Workflow(name = "echo")
+    @Override
+    public String echo(String input) {
+      return "echo:" + input;
+    }
+  }
+
+  /**
+   * DBOS.enqueueWorkflow takes its format from the options alone. Left unset, or DEFAULT, the row
+   * records the application's configured serializer; PORTABLE and NATIVE override it.
+   */
+  @Test
+  public void testRuntimeEnqueueByNameUsesTheOptionsSerialization() throws Exception {
+    dbos.shutdown();
+
+    try (var localDbos = new DBOS(dbosConfig.withSerializer(KryoSerializer.INSTANCE))) {
+      localDbos.registerProxy(EchoService.class, new EchoServiceImpl());
+      localDbos.launch();
+      localDbos.registerQueue("echoq", QueueOptions.empty());
+
+      SerializationStrategy[] strategies = {
+        null,
+        SerializationStrategy.DEFAULT,
+        SerializationStrategy.PORTABLE,
+        SerializationStrategy.NATIVE
+      };
+      String[] recorded = {
+        KryoSerializer.NAME,
+        KryoSerializer.NAME,
+        SerializationUtil.PORTABLE,
+        DBOSJavaSerializer.NAME
+      };
+      for (int i = 0; i < strategies.length; i++) {
+        var workflowId = "echo-" + i;
+        var options =
+            new EnqueueOptions("echo", "EchoService", QueueName.of("echoq"))
+                .withWorkflowId(workflowId)
+                .withSerialization(strategies[i]);
+
+        var handle =
+            localDbos.<String, RuntimeException>enqueueWorkflow(options, new Object[] {"x"});
+
+        assertEquals("echo:x", handle.getResult(), String.valueOf(strategies[i]));
+        assertEquals(
+            recorded[i],
+            DBUtils.getWorkflowRow(dataSource, workflowId).serialization(),
+            String.valueOf(strategies[i]));
       }
     }
   }
@@ -1454,7 +1838,7 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("dateWorkflow", "DateTimeService", "testq")
+          new EnqueueOptions("dateWorkflow", "DateTimeService", QueueName.of("testq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -1491,7 +1875,7 @@ public class PortableSerializationTest {
       String workflowId = UUID.randomUUID().toString();
 
       var options =
-          new DBOSClient.EnqueueOptions("dateWorkflow", "DateTimeService", "testq")
+          new EnqueueOptions("dateWorkflow", "DateTimeService", QueueName.of("testq"))
               .withWorkflowId(workflowId);
 
       WorkflowHandle<String, ?> handle =

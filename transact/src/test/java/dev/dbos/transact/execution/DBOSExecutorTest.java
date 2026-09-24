@@ -60,6 +60,33 @@ class DBOSExecutorTest {
     assertEquals(expected, dbos.listWorkflowSteps(wfid).size());
   }
 
+  /**
+   * The default configuration has no custom serializer, so nothing may name one directly. The
+   * debouncer records a terminal ERROR through here when it cannot start the user workflow, and
+   * throwing instead leaves the caller's handle polling a row that never appears.
+   */
+  @Test
+  public void recordsErrorForUnstartedWorkflowWithoutACustomSerializer() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      dbos.launch();
+      assertNull(dbosConfig.serializer());
+
+      var workflowId = UUID.randomUUID().toString();
+      DBOSTestAccess.getDbosExecutor(dbos)
+          .recordErrorForUnstartedWorkflow(
+              workflowId,
+              "missingWorkflow",
+              "MissingService",
+              null,
+              new Object[] {"arg"},
+              new DBOSWorkflowFunctionNotFoundException(workflowId, "missingWorkflow"));
+
+      var status = dbos.retrieveWorkflow(workflowId).getStatus();
+      assertEquals(WorkflowState.ERROR, status.status());
+      assertEquals(SerializationUtil.NATIVE, status.serialization());
+    }
+  }
+
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {
@@ -120,7 +147,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-      var handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      var handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = (String) handle.getResult();
       assertEquals("test-itemtest-item", result);
@@ -141,7 +168,7 @@ class DBOSExecutorTest {
 
       boolean error = false;
       try {
-        dbosExecutor.executeWorkflowById("wf-124", false, false);
+        dbosExecutor.executeWorkflowById("wf-124");
       } catch (Exception e) {
         error = true;
         assertTrue(
@@ -178,7 +205,7 @@ class DBOSExecutorTest {
 
       boolean error = false;
       try {
-        dbosExecutor.executeWorkflowById(wfid, false, false);
+        dbosExecutor.executeWorkflowById(wfid);
       } catch (Exception e) {
         error = true;
         assertTrue(
@@ -215,7 +242,7 @@ class DBOSExecutorTest {
       DBUtils.deleteAllStepOutputs(dataSource, wfid);
       awaitStepCount(dbos, wfid, 0, 2000);
 
-      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = handle.getResult();
       assertEquals("test-itemstepOnestepTwo", result);
@@ -258,7 +285,7 @@ class DBOSExecutorTest {
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
       awaitStepCount(dbos, wfid, 1, 2000);
 
-      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
+      WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
       result = handle.getResult();
       assertEquals("test-itemstepOnestepTwo", result);
@@ -325,7 +352,7 @@ class DBOSExecutorTest {
       DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 
       long starttime = System.currentTimeMillis();
-      var h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      var h = dbosExecutor.executeWorkflowById(wfid);
       h.getResult();
 
       long duration = System.currentTimeMillis() - starttime;

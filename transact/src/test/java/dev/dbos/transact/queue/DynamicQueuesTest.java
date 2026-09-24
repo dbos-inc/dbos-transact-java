@@ -17,6 +17,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
+import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
@@ -134,6 +135,256 @@ public class DynamicQueuesTest {
 
     // deleting a non-existent queue returns false
     assertFalse(dbos.deleteQueue("q-never-existed"));
+  }
+
+  @Test
+  public void aPerPartitionLimitRoundTrips() throws Exception {
+    // The refusal 7a shipped is gone: the columns exist now, so the limits are stored and read
+    // back rather than dropped.
+    dbos.launch();
+
+    dbos.registerQueue(
+        "q-pp",
+        QueueOptions.setPartitionConcurrency(4)
+            .andPartitionWorkerConcurrency(2)
+            .andPartitionRateLimit(5, Duration.ofSeconds(30)));
+
+    var q = dbos.findQueue("q-pp").orElseThrow();
+    assertEquals(4, q.partitionConcurrency());
+    assertEquals(2, q.partitionWorkerConcurrency());
+    assertEquals(5, q.partitionRateLimit().limit());
+    assertEquals(Duration.ofSeconds(30), q.partitionRateLimit().period());
+    assertTrue(q.isPartitioned(), "a per-partition limit partitions the queue");
+    assertFalse(q.isLegacyPartitioned());
+  }
+
+  @Test
+  // Reads the deprecated stored flag on purpose: it is the column under test.
+  @SuppressWarnings("removal")
+  public void thePartitionQueueColumnFollowsTheLimits() throws Exception {
+    // The stored flag is derived on every write, in both directions. Other SDKs read this column
+    // to decide whether to dequeue per partition, so a stale value is visible across languages.
+    dbos.launch();
+
+    dbos.registerQueue("q-derived", QueueOptions.setConcurrency(4));
+    assertFalse(dbos.findQueue("q-derived").orElseThrow().partitioningEnabled());
+
+    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(2));
+    assertTrue(
+        dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
+        "gaining a partition limit sets the flag");
+
+    dbos.updateQueue("q-derived", QueueOptions.setPartitionConcurrency(null));
+    assertFalse(
+        dbos.findQueue("q-derived").orElseThrow().partitioningEnabled(),
+        "losing the last partition limit clears it again");
+  }
+
+  @Test
+  public void anUpdateIsValidatedAgainstTheRowItWouldProduce() throws Exception {
+    // A cross-field rule can only be checked against the values already stored, so the update is
+    // applied to the current row and the result is validated before anything is written.
+    dbos.launch();
+
+    dbos.registerQueue("q-cross", QueueOptions.setConcurrency(2));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-cross", QueueOptions.setWorkerConcurrency(5)));
+
+    var unchanged = dbos.findQueue("q-cross").orElseThrow();
+    assertEquals(2, unchanged.concurrency());
+    assertNull(unchanged.workerConcurrency(), "the rejected update must not have been written");
+
+    // The same field is fine once the row it lands on allows it.
+    dbos.updateQueue("q-cross", QueueOptions.setConcurrency(8).andWorkerConcurrency(5));
+    var widened = dbos.findQueue("q-cross").orElseThrow();
+    assertEquals(8, widened.concurrency());
+    assertEquals(5, widened.workerConcurrency());
+  }
+
+  @Test
+  public void registrationIsValidatedAgainstTheSameRules() throws Exception {
+    // The cross-field rule guards both write paths, from call sites a few lines apart in
+    // QueuesDAO. anUpdateIsValidatedAgainstTheRowItWouldProduce covers the update; this covers
+    // the insert, so dropping either call fails a test rather than only one of them.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg", QueueOptions.setConcurrency(2).andWorkerConcurrency(5)));
+    assertTrue(dbos.findQueue("q-reg").isEmpty(), "the rejected queue must not have been written");
+
+    dbos.registerQueue("q-reg", QueueOptions.setConcurrency(5).andWorkerConcurrency(2));
+    assertEquals(2, dbos.findQueue("q-reg").orElseThrow().workerConcurrency());
+  }
+
+  @Test
+  public void aQueueWideRateLimitMustBeWhole() throws Exception {
+    // The other half of what the constructor cannot check. A stored row with a zero limit has to
+    // stay loadable -- the constructor is the read path -- so the write paths are the only place
+    // this rule is ever applied, on both of them.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ZERO)));
+    assertTrue(dbos.findQueue("q-rl").isEmpty(), "neither rejected queue may have been written");
+
+    dbos.registerQueue("q-rl", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-rl", QueueOptions.setRateLimit(0, Duration.ofSeconds(1))));
+    assertEquals(
+        5,
+        dbos.findQueue("q-rl").orElseThrow().rateLimit().limit(),
+        "the rejected update must not have been written");
+  }
+
+  @Test
+  public void aRateLimitIsUpdatedAsAPairOrNotAtAll() throws Exception {
+    // The UPDATE writes only the columns the caller supplied, so a half-set result cannot be read
+    // as no limit: that would validate an unlimited queue and store one column of a limit, and a
+    // later update supplying the other half would complete a live limit neither update checked.
+    dbos.launch();
+    dbos.registerQueue("q-half", QueueOptions.empty().andConcurrency(4));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(0))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.updateQueue(
+                "q-half", QueueOptions.empty().withRateLimitPeriod(Field.of(Duration.ZERO))));
+    assertNull(
+        dbos.findQueue("q-half").orElseThrow().rateLimit(),
+        "no half of a rate limit may have been written");
+
+    // The same for the partition limits, where the derived partitioning flag would have gone out
+    // with the half-written column, computed from a limit this saw as absent.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.updateQueue(
+                "q-half", QueueOptions.empty().withPartitionRateLimitMax(Field.of(2))));
+    var afterPartitionHalf = dbos.findQueue("q-half").orElseThrow();
+    assertNull(afterPartitionHalf.partitionRateLimit());
+    assertFalse(
+        afterPartitionHalf.isPartitioned(),
+        "a refused partition limit may not have partitioned the queue");
+
+    // Both halves together are the supported way in, and one half of an existing limit may still
+    // be changed on its own: the other half carries over from the row, so the pair stays whole.
+    dbos.updateQueue("q-half", QueueOptions.setRateLimit(5, Duration.ofSeconds(1)));
+    dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(7)));
+    var updated = dbos.findQueue("q-half").orElseThrow();
+    assertEquals(7, updated.rateLimit().limit());
+    assertEquals(Duration.ofSeconds(1), updated.rateLimit().period());
+
+    // Clearing is a pair too: dropping only the max would leave the period behind in the row.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-half", QueueOptions.empty().withRateLimitMax(Field.of(null))));
+    assertEquals(7, dbos.findQueue("q-half").orElseThrow().rateLimit().limit());
+
+    dbos.updateQueue("q-half", QueueOptions.empty().andRateLimit(null, null));
+    assertNull(dbos.findQueue("q-half").orElseThrow().rateLimit());
+  }
+
+  @Test
+  public void registrationRefusesAHalfSetRateLimit() throws Exception {
+    // Registration used to drop a half-set pair and create the queue with no limit at all.
+    dbos.launch();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.empty().withRateLimitMax(Field.of(5))));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(5, (Duration) null)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.registerQueue(
+                "q-reg-half",
+                QueueOptions.empty()
+                    .withPartitionRateLimitPeriod(Field.of(Duration.ofSeconds(1)))));
+    assertTrue(dbos.findQueue("q-reg-half").isEmpty(), "no refused registration may be written");
+
+    // Both halves null is no limit, as it always was.
+    dbos.registerQueue("q-reg-half", QueueOptions.setRateLimit(null, (Duration) null));
+    assertNull(dbos.findQueue("q-reg-half").orElseThrow().rateLimit());
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
+  @SuppressWarnings("removal")
+  public void aLegacyPartitionedQueueKeepsItsMeaningAcrossAnUnrelatedUpdate() throws Exception {
+    // partition_queue is derived, so a legacy queue reads back with the flag set. Feeding that
+    // back in as-is would be indistinguishable from the caller asking for legacy partitioning,
+    // which is why applyUpdate carries isLegacyPartitioned() rather than the stored column.
+    dbos.launch();
+
+    dbos.registerQueue("q-legacy", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+    assertTrue(dbos.findQueue("q-legacy").orElseThrow().isLegacyPartitioned());
+
+    dbos.updateQueue("q-legacy", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
+
+    var after = dbos.findQueue("q-legacy").orElseThrow();
+    assertTrue(after.isLegacyPartitioned(), "still legacy, not promoted by its own stored flag");
+    assertEquals(4, after.resolveLimits().partitionConcurrency());
+    assertNull(after.resolveLimits().concurrency());
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: legacy partitioning is what this covers.
+  @SuppressWarnings("removal")
+  public void aLegacyPartitionedQueueRefusesLimitUpdates() throws Exception {
+    // The two modes disagree about what concurrency means, so an update may not carry a queue
+    // between them. Without this, a legacy queue that gained a per-partition limit and then lost
+    // it again would come back unpartitioned, and every enqueue with a partition key would fail.
+    dbos.launch();
+
+    dbos.registerQueue("q-legacy-lock", QueueOptions.setConcurrency(4).andPartitionQueue(true));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setPartitionConcurrency(2)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-legacy-lock", QueueOptions.setConcurrency(9)));
+
+    var after = dbos.findQueue("q-legacy-lock").orElseThrow();
+    assertTrue(after.isLegacyPartitioned(), "neither rejected update may have been written");
+    assertEquals(4, after.resolveLimits().partitionConcurrency());
+
+    // Only its limits are frozen; everything else still updates.
+    dbos.updateQueue("q-legacy-lock", QueueOptions.setPollingInterval(Duration.ofSeconds(2)));
+    assertEquals(
+        Duration.ofSeconds(2), dbos.findQueue("q-legacy-lock").orElseThrow().pollingInterval());
+  }
+
+  @Test
+  // Sets the deprecated flag on purpose: refusing to set it is what this covers.
+  @SuppressWarnings("removal")
+  public void aQueuePartitionedByItsLimitsRefusesTheLegacyFlag() throws Exception {
+    // The other direction. The flag is derived, so setting it on a queue that already partitions
+    // by its limits could only mean a demotion to legacy enforcement the caller cannot have meant.
+    dbos.launch();
+
+    dbos.registerQueue("q-limits", QueueOptions.setPartitionConcurrency(2));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-limits", QueueOptions.setPartitionQueue(true)));
+
+    var after = dbos.findQueue("q-limits").orElseThrow();
+    assertFalse(after.isLegacyPartitioned());
+    assertEquals(2, after.resolveLimits().partitionConcurrency());
   }
 
   @Test
@@ -479,9 +730,7 @@ public class DynamicQueuesTest {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
-    dbos.registerQueue(
-        "firstQueue",
-        QueueOptions.setPriorityEnabled(true).andConcurrency(1).andWorkerConcurrency(1));
+    dbos.registerQueue("firstQueue", QueueOptions.setConcurrency(1).andWorkerConcurrency(1));
 
     qs.pause();
 
@@ -504,6 +753,22 @@ public class DynamicQueuesTest {
     assertEquals(10, impl.queue.remove());
     assertEquals(50, impl.queue.remove());
     assertEquals(100, impl.queue.remove());
+  }
+
+  @Test
+  public void negativePriorityIsRejected() throws Exception {
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    dbos.registerQueue("prioQueue", QueueOptions.empty());
+
+    // 0 is the default, so a negative priority would jump ahead of every workflow that set none.
+    // The options refuse it as they are built, before anything can be enqueued.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new StartWorkflowOptions("wf-negative").withQueue("prioQueue").withPriority(-1));
+
+    var zero = new StartWorkflowOptions("wf-zero").withQueue("prioQueue").withPriority(0);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(0), zero).getResult();
   }
 
   @Test
@@ -811,20 +1076,21 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
     assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
 
     assertEquals(2, idsToRun.size());
 
     // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2);
+    idsToRun =
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2, 2);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -832,14 +1098,15 @@ public class DynamicQueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun = systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+    idsToRun =
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0);
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0, 0);
     assertEquals(0, idsToRun.size());
   }
 
@@ -884,7 +1151,7 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     // executor2
@@ -893,13 +1160,13 @@ public class DynamicQueuesTest {
       String wfid = "id" + i;
       var status =
           builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
-      systemDatabase.initWorkflowStatus(status, null, false, false);
+      systemDatabase.initWorkflowStatus(status, null);
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0);
+        systemDatabase.startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
@@ -912,6 +1179,7 @@ public class DynamicQueuesTest {
             executor2,
             appVersion,
             null,
+            0,
             0);
     assertEquals(2, idsToRun.size());
   }
@@ -986,27 +1254,17 @@ public class DynamicQueuesTest {
       assertEquals(1, rowsAffected);
     }
 
-    var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    List<WorkflowHandle<?, ?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
-    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
-    assertEquals(1, otherHandles.size());
-    assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
-    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
-
     // Pause the listener before recovery so it can't race the ENQUEUED status checks below.
     qs.pause();
-    List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
-    assertEquals(2, localHandles.size());
-    List<String> expectedWorkflowIds = List.of(handle1.workflowId(), handle2.workflowId());
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
+
+    // Recovering the executor wf3 now claims to belong to returns it to the queue, and leaves the
+    // two workflows this executor is still running alone -- they are PENDING under "local", which
+    // this sweep does not name, so they keep the two concurrency slots they are actually using.
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    List<String> recovered = executor.recoverPendingWorkflows(List.of("other"));
+    assertEquals(List.of(handle3.workflowId()), recovered);
 
     assertEquals(2, impl.counter.get());
-    // wf1 and wf2 are still running here, so recovery leaves them alone: their rows stay PENDING
-    // and keep the two concurrency slots they are actually using. Releasing those assignments
-    // would re-enqueue live workflows, admit a second runner for each, and discard the outcome of
-    // the run already in flight.
     assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());

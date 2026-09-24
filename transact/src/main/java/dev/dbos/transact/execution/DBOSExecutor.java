@@ -3,7 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
@@ -11,6 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
@@ -18,6 +19,7 @@ import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
@@ -29,6 +31,8 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.DebounceResult;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -237,11 +241,6 @@ public class DBOSExecutor implements AutoCloseable {
       List<Queue> queues,
       AlertHandler alertHandler) {
 
-    // Recovery may only adopt workflows orphaned by a previous process, never one running in
-    // this one. Read before start() does anything, and stepped back a millisecond because the
-    // filter is created_at <= endTime on a millisecond-granular column.
-    var recoveryCutoff = Instant.now().minusMillis(1);
-
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
 
@@ -299,6 +298,19 @@ public class DBOSExecutor implements AutoCloseable {
             latest.versionName());
       }
 
+      // Conductor decides which executors are gone and issues the recovery itself, so a sweep
+      // here would race that decision.
+      //
+      // Otherwise sweep before the queue runner starts, so recovered work is not racing a dequeue
+      // pass already in flight, and before launch returns, so a workflow the application starts
+      // the instant it does cannot be seen by the sweep -- such a row is PENDING under this
+      // executor's id too, and indistinguishable from an abandoned one.
+      if (dbosCloud || config.conductorKey() != null) {
+        logger.debug("Skipping executor self recovery: recovery is managed by Conductor");
+      } else {
+        recoverPendingWorkflows(List.of(executorId()));
+      }
+
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
 
@@ -311,26 +323,6 @@ public class DBOSExecutor implements AutoCloseable {
       for (var listener : listeners) {
         listener.dbosLaunched(dbos);
       }
-
-      var recoveryQuery =
-          new ListWorkflowsInput()
-              .withStatus(WorkflowState.PENDING)
-              .withExecutorIds(List.of(executorId()))
-              .withApplicationVersion(appVersion)
-              .withEndTime(recoveryCutoff);
-      Runnable recoveryTask =
-          () -> {
-            try {
-              var workflows = systemDatabase.listWorkflows(recoveryQuery);
-              for (var wf : workflows) {
-                recoverWorkflow(wf.workflowId(), wf.queueName());
-              }
-            } catch (Throwable t) {
-              logger.error("Recovery task failed", t);
-            }
-          };
-
-      executorService.submit(recoveryTask);
 
       if (dbosCloud) {
         String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
@@ -457,6 +449,53 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
   }
 
+  /**
+   * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs with
+   * {@code args} in the workflow's registered format, or reports who holds the pair instead.
+   *
+   * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
+   * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
+   * when given, are recorded with the outcome, as the debouncer's first step has always recorded
+   * them. Outside a workflow, or with no step name, it is the plain bounce.
+   *
+   * <p>Returns what the step records as {@code Object}, deliberately: a replay hands back what the
+   * serializer preserved, which under a custom serializer that drops Java types is a map, and the
+   * caller adapts it rather than casting.
+   */
+  public Object debounceDelayedWorkflow(
+      RegisteredWorkflow workflow,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable String stepName,
+      @Nullable DebounceIds ids) {
+    var ctx = DBOSContextHolder.get();
+    DebounceCaller caller = null;
+    if (stepName != null && ctx.isInWorkflow() && !ctx.isInStep()) {
+      if (HOOK_HOLDER.get() != null) {
+        throw new RuntimeException(
+            "@Step functions cannot be called from the startWorkflow lambda");
+      }
+      caller =
+          new DebounceCaller(ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName, ids);
+    }
+    Object out =
+        systemDatabase.debounceDelayedWorkflow(
+            workflow.workflowName(),
+            workflow.className(),
+            workflow.instanceName(),
+            queueName,
+            deduplicationId,
+            delayUntilEpochMs,
+            args,
+            workflow.serializationStrategy() != null
+                ? workflow.serializationStrategy().formatName()
+                : null,
+            caller);
+    return caller == null && ids != null ? ids.withBounced((DebounceResult) out) : out;
+  }
+
   QueueService getQueueService() {
     return queueService;
   }
@@ -569,6 +608,13 @@ public class DBOSExecutor implements AutoCloseable {
     return activeWorkflows.values().stream().filter(target::equals).count();
   }
 
+  /** Workflows this executor is running from {@code queueName}, across every partition of it. */
+  public long queueActiveCount(String queueName) {
+    return activeWorkflows.values().stream()
+        .filter(bucket -> queueName.equals(bucket.queueName()))
+        .count();
+  }
+
   // DBOS / DBOSClient API methods
 
   private void sendBulkInternal(
@@ -577,20 +623,51 @@ public class DBOSExecutor implements AutoCloseable {
       SerializationStrategy serialization,
       String functionName) {
 
+    // The row is authoritative: a workflow running under a portable row writes its messages in
+    // that format too, so a peer in another language can read them. setEvent and writeStream
+    // already inherit it.
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      serialization =
+          Objects.requireNonNullElse(
+              DBOSContextHolder.get().getSerialization(), SerializationStrategy.DEFAULT);
+    }
+
+    sendBulkAs(messages, sendToForks, serialization.formatName(), functionName);
+  }
+
+  /**
+   * Send with a resolved serialization format, where null means the application's configured
+   * serializer.
+   */
+  private void sendBulkAs(
+      List<SendMessage> messages,
+      boolean sendToForks,
+      @Nullable String serializationFormat,
+      String functionName) {
+
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepId = ctx.getAndIncrementFunctionId();
       systemDatabase.sendBulk(
-          messages,
-          ctx.getWorkflowId(),
-          stepId,
-          functionName,
-          sendToForks,
-          serialization.formatName());
+          messages, ctx.getWorkflowId(), stepId, functionName, sendToForks, serializationFormat);
     } else {
-      systemDatabase.sendBulk(
-          messages, null, -1, functionName, sendToForks, serialization.formatName());
+      systemDatabase.sendBulk(messages, null, -1, functionName, sendToForks, serializationFormat);
     }
+  }
+
+  /**
+   * Send a message that DBOS itself reads back, such as the debouncer's control messages. It
+   * carries a Java value to a Java workflow, so it takes the application's own serializer whatever
+   * format the calling workflow runs under: inherit a portable one and the receiver is handed a Map
+   * where it expects its own type.
+   */
+  public void sendInternal(
+      String destinationId, Object message, String topic, String idempotencyKey) {
+    sendBulkAs(
+        List.of(new SendMessage(destinationId, message, topic, idempotencyKey)),
+        false,
+        null,
+        "DBOS.send");
   }
 
   public void sendBulk(
@@ -971,8 +1048,7 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOS.backfillSchedule cannot be called from within a workflow");
     }
 
-    var workflowIds =
-        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    var workflowIds = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
@@ -980,8 +1056,7 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String scheduleName,
       @NonNull Instant start,
       @NonNull Instant end,
-      @NonNull SystemDatabase systemDatabase,
-      @Nullable DBOSSerializer serializer) {
+      @NonNull SystemDatabase systemDatabase) {
 
     var schedule =
         Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
@@ -1014,8 +1089,7 @@ public class DBOSExecutor implements AutoCloseable {
           schedule.queueName(),
           next.toInstant(),
           schedule.scheduleName(),
-          systemDatabase,
-          serializer);
+          systemDatabase);
 
       workflowIds.add(workflowId);
     }
@@ -1029,12 +1103,12 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOS.triggerSchedule cannot be called from within a workflow");
     }
 
-    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    var workflowId = triggerSchedule(scheduleName, systemDatabase);
     return retrieveWorkflow(workflowId);
   }
 
   public static String triggerSchedule(
-      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+      @NonNull String scheduleName, @NonNull SystemDatabase systemDatabase) {
     var schedule =
         Objects.requireNonNull(systemDatabase)
             .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
@@ -1053,9 +1127,18 @@ public class DBOSExecutor implements AutoCloseable {
         schedule.queueName(),
         now,
         schedule.scheduleName(),
-        systemDatabase,
-        serializer);
+        systemDatabase);
     return workflowId;
+  }
+
+  /**
+   * The format a schedule's runs are recorded in: the application's own serializer, named
+   * explicitly so that no path promotes the workflow's declared one over it. A schedule fires
+   * inside one application, never across the enqueue or message boundary where interop happens, so
+   * its runs take this whatever the workflow declares -- as in Python, TypeScript and Go.
+   */
+  private static String scheduledSerialization(@Nullable DBOSSerializer serializer) {
+    return serializer != null ? serializer.name() : SerializationUtil.NATIVE;
   }
 
   private static void enqueueScheduledWorkflow(
@@ -1066,8 +1149,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       @NonNull Instant scheduledAt,
       String scheduleName,
-      SystemDatabase systemDatabase,
-      DBOSSerializer serializer) {
+      SystemDatabase systemDatabase) {
     var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
     queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
     var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
@@ -1076,7 +1158,8 @@ public class DBOSExecutor implements AutoCloseable {
         new ExecutionOptions(workflowId)
             .withQueueName(queueName)
             .withAppVersion(latestAppVersion)
-            .withScheduleName(scheduleName);
+            .withScheduleName(scheduleName)
+            .withSerialization(scheduledSerialization(systemDatabase.serializer()));
     enqueueWorkflow(
         workflowName,
         className,
@@ -1089,8 +1172,7 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         null, // applicationName: this executor's own
-        systemDatabase,
-        serializer);
+        systemDatabase);
   }
 
   @SuppressWarnings("removal") // implements the deprecated ExternalState API
@@ -1195,43 +1277,28 @@ public class DBOSExecutor implements AutoCloseable {
 
   // AdminServer / Conductor methods
 
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+  /**
+   * Returns the given executors' abandoned workflows to their queues, and reports which moved.
+   *
+   * <p>Recovery re-enqueues rather than executing in this process, so every recovered workflow
+   * starts through the queue's atomic ENQUEUED -> PENDING claim. That handoff admits exactly one
+   * runner, which is what makes a duplicate recovery request cost nothing, and it lets the whole
+   * fleet share a backlog instead of leaving it to the one executor that found it.
+   *
+   * <p>Workflow IDs rather than handles, because this process may run none of them.
+   */
+  public List<String> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
 
-    var input =
-        new ListWorkflowsInput()
-            .withStatus(WorkflowState.PENDING)
-            .withExecutorIds(executorIds)
-            .withApplicationVersion(appVersion);
-    var workflows = systemDatabase.listWorkflows(input);
-    return workflows.stream()
-        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
-        .collect(Collectors.toList());
-  }
-
-  WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
-    Objects.requireNonNull(workflowId, "workflowId must not be null");
-
-    // A workflow running here is not orphaned, so recovery leaves its row alone -- queue
-    // assignment included. Releasing that hands away a slot a live execution is still using: the
-    // next dequeue admits a second runner, and the first run's outcome write then finds the row
-    // no longer PENDING and is discarded. failIfMissing because an active entry means this
-    // executor inserted the row, so a row deleted since is gone for good.
-    if (activeWorkflows.containsKey(workflowId)) {
-      logger.debug("recoverWorkflow skip active {}", workflowId);
-      return new WorkflowHandleDBPoll<>(this, workflowId, true);
+    var recovered =
+        systemDatabase.reenqueueForRecovery(executorIds, appVersion, Constants.DBOS_INTERNAL_QUEUE);
+    if (recovered.isEmpty()) {
+      logger.info("No workflows to recover from application version {}", appVersion);
+    } else {
+      logger.info(
+          "Recovering {} workflow(s) from application version {}", recovered.size(), appVersion);
     }
-
-    if (queueName != null) {
-      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-      if (cleared) {
-        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
-        return retrieveWorkflow(workflowId);
-      }
-    }
-
-    logger.debug("recoverWorkflow execute {}", workflowId);
-    return executeWorkflowById(workflowId, true, false);
+    return recovered;
   }
 
   public void globalTimeout(Instant endTime) {
@@ -1592,7 +1659,9 @@ public class DBOSExecutor implements AutoCloseable {
                 options != null && options.attributes() != null
                     ? options.attributes()
                     : ctx.resolveNextAttributes())
-            .withScheduleName(scheduleName);
+            .withScheduleName(scheduleName)
+            .withSerialization(
+                scheduleName == null ? null : scheduledSerialization(this.serializer));
     return executeWorkflow(workflow, args, execOptions, parent);
   }
 
@@ -1609,15 +1678,9 @@ public class DBOSExecutor implements AutoCloseable {
    * application's latest registered version.
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
-      DBOSClient.EnqueueOptions options,
-      Object[] positionalArgs,
-      Map<String, Object> namedArgs,
-      String serializationFormat) {
+      EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
     Objects.requireNonNull(options, "options must not be null");
-    if (options.timeout() != null && options.deadline() != null) {
-      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
-    }
 
     var ctx = DBOSContextHolder.get();
     // Throws if called from a step, and takes the caller's next function ID when in a workflow.
@@ -1640,18 +1703,13 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // Without an explicit timeout, inherit an ambient one, else the parent's propagated deadline.
-    // Timeout.of(null) is Timeout.none(), which is an explicit "no timeout" that clears the
-    // parent's deadline; only a null Timeout falls through to what the context already carries.
-    var td =
-        ctx.resolveTimeoutAndDeadline(
-            options.timeout() != null ? Timeout.of(options.timeout()) : null, options.deadline());
+    // An unset timeout takes an ambient one, else inherits, as startWorkflow does.
+    var td = ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
-            .withSerialization(serializationFormat)
             .withAuthenticatedUser(
                 options.authenticatedUser() != null
                     ? options.authenticatedUser()
@@ -1677,15 +1735,19 @@ public class DBOSExecutor implements AutoCloseable {
         executorId(),
         appId(),
         options.applicationName(),
-        systemDatabase,
-        this.serializer);
+        systemDatabase);
 
     return new WorkflowHandleDBPoll<>(this, workflowId);
   }
 
-  // run an existing workflow via its workflow ID
-  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
-      String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
+  /**
+   * Runs the workflow described by an already-claimed row.
+   *
+   * <p>The claim -- the queue's ENQUEUED -> PENDING transition -- wrote this workflow's status,
+   * executor, deadline and attempt count, so the run reads them back rather than writing them
+   * again, and nothing here inserts a status row.
+   */
+  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
     logger.debug("executeWorkflowById {}", workflowId);
 
     WorkflowStatus status;
@@ -1711,6 +1773,19 @@ public class DBOSExecutor implements AutoCloseable {
     if (status == null) {
       logger.error("Workflow not found {}", workflowId);
       throw new DBOSNonExistentWorkflowException(workflowId);
+    }
+
+    // The claim wrote this executor's id. A row naming another has been re-enqueued and taken by a
+    // peer since -- a recovery request naming a live executor does that -- so this dispatch no
+    // longer owns it. Checked before the error paths below, which would otherwise record a failure
+    // on a row the peer is actively running.
+    if (!executorId().equals(status.executorId())) {
+      logger.warn(
+          "Workflow {} is claimed by executor {}, not {}; not running it here",
+          workflowId,
+          status.executorId(),
+          executorId());
+      return new WorkflowHandleDBPoll<>(this, workflowId, true);
     }
 
     // Reading the row reports an unreadable payload as null, so running the workflow refuses for
@@ -1759,13 +1834,7 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(status.authenticatedUser())
             .withAssumedRole(status.assumedRole())
             .withAuthenticatedRoles(status.authenticatedRoles());
-    if (isRecoveryRequest) {
-      options = options.asRecoveryRequest();
-    }
-    if (isDequeuedRequest) {
-      options = options.asDequeuedRequest(status.queueName(), status.queuePartitionKey());
-    }
-    return executeWorkflow(workflow, inputs, options, null);
+    return executeWorkflow(workflow, inputs, options.asClaimed(status), null);
   }
 
   // helper workflow execution methods
@@ -1811,13 +1880,13 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       var queue = findQueue(queueName);
       if (queue.isPresent()) {
-        if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
+        if (queue.get().isPartitioned() && queuePartitionKey == null) {
           throw new IllegalArgumentException(
               "queue %s partitions enabled, but no partition key was provided"
                   .formatted(queueName));
         }
 
-        if (!queue.get().partitioningEnabled() && queuePartitionKey != null) {
+        if (!queue.get().isPartitioned() && queuePartitionKey != null) {
           throw new IllegalArgumentException(
               "queue %s is not a partitioned queue, but a partition key was provided"
                   .formatted(queueName));
@@ -1845,6 +1914,7 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
+    // Failing an explicit choice, the registration's declared format applies.
     if (options.serialization() == null) {
       if (workflow.serializationStrategy() != null) {
         options = options.withSerialization(workflow.serializationStrategy().formatName());
@@ -1853,7 +1923,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    if (options.queueName() != null && !options.isDequeuedRequest()) {
+    if (options.queueName() != null && options.claimedStatus() == null) {
       // enqueue with the current app version if it's not explicitly set
       if (options.appVersion() == null) {
         options = options.withAppVersion(appVersion());
@@ -1873,15 +1943,14 @@ public class DBOSExecutor implements AutoCloseable {
           executorId(),
           appId(),
           null, // applicationName: this executor's own
-          systemDatabase,
-          this.serializer);
+          systemDatabase);
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
     // executing workflows always use the current app version.
     options = options.withAppVersion(appVersion());
 
-    if (!options.isDequeuedRequest()) {
+    if (options.claimedStatus() == null) {
       var badOptionList = new ArrayList<String>();
       if (options.deduplicationId() != null) {
         badOptionList.add("deduplicationId");
@@ -1905,21 +1974,49 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
-    WorkflowInitResult initResult =
-        persistWorkflow(
-            systemDatabase,
-            workflow.workflowName(),
-            workflow.className(),
-            workflow.instanceName(),
-            maxRetries,
-            args,
-            null,
-            executorId(),
-            appId(),
-            parent,
-            options,
-            null, // applicationName: this executor's own
-            this.serializer);
+    var claimed = options.claimedStatus();
+    WorkflowInitResult initResult;
+    if (claimed != null) {
+      // The claim counted this dispatch; dead-letter the workflow if that exhausted its attempts.
+      // The unannotated default applies here as it did when the status upsert made this decision.
+      int attempts = Objects.requireNonNullElse(claimed.recoveryAttempts(), 0);
+      int retries = Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS);
+      if (!claimed.status().equals(WorkflowState.SUCCESS)
+          && !claimed.status().equals(WorkflowState.ERROR)
+          && attempts > retries + 1) {
+        systemDatabase.deadLetterWorkflows(List.of(workflowId), attempts);
+        throw new DBOSMaxRecoveryAttemptsExceededException(workflowId, retries);
+      }
+      // Only a PENDING row owns its outcome. A row that moved on since the claim -- cancelled, or
+      // finished by whoever held it before -- has nothing left for this run to do, and running it
+      // would enter the workflow body, which no step guard stands in front of. The row was just
+      // read, so failIfMissing: one deleted in the meantime raises rather than polling forever.
+      if (!claimed.status().equals(WorkflowState.PENDING)) {
+        return new WorkflowHandleDBPoll<>(this, workflowId, true);
+      }
+      // Deliberately no persistWorkflow: the claim already wrote the status, executor, deadline
+      // and attempt count, and this row was read back from it, so re-upserting would only rewrite
+      // what it just read. The claim is this run's title to the workflow, and the row is still
+      // PENDING, so it executes.
+      initResult =
+          new WorkflowInitResult(
+              claimed.status(), claimed.deadline(), true, claimed.serialization());
+    } else {
+      initResult =
+          persistWorkflow(
+              systemDatabase,
+              workflow.workflowName(),
+              workflow.className(),
+              workflow.instanceName(),
+              maxRetries,
+              args,
+              null,
+              executorId(),
+              appId(),
+              parent,
+              options,
+              null); // applicationName: this executor's own
+    }
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
@@ -1943,7 +2040,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           DBOSContextHolder.clear();
           var bucket =
-              finalOptions.isDequeuedRequest()
+              finalOptions.claimedStatus() != null
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
           // The warning to park under, set by whichever site found that this run does not
@@ -1956,6 +2053,16 @@ public class DBOSExecutor implements AutoCloseable {
                 args,
                 finalOptions);
 
+            // A workflow's own writes inherit the format its row records. Only the two
+            // built-in formats need naming: a custom serializer's name falls to DEFAULT,
+            // which resolves to that same serializer.
+            var serializationStrategy =
+                SerializationUtil.PORTABLE.equals(initResult.serialization())
+                    ? SerializationStrategy.PORTABLE
+                    : SerializationUtil.NATIVE.equals(initResult.serialization())
+                        ? SerializationStrategy.NATIVE
+                        : SerializationStrategy.DEFAULT;
+
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId,
@@ -1965,9 +2072,7 @@ public class DBOSExecutor implements AutoCloseable {
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),
                     finalOptions.authenticatedRoles(),
-                    SerializationUtil.PORTABLE.equals(initResult.serialization())
-                        ? SerializationStrategy.PORTABLE
-                        : SerializationStrategy.DEFAULT));
+                    serializationStrategy));
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
@@ -2079,8 +2184,7 @@ public class DBOSExecutor implements AutoCloseable {
       String executorId,
       String appId,
       @Nullable String applicationName,
-      SystemDatabase systemDatabase,
-      DBOSSerializer serializer) {
+      SystemDatabase systemDatabase) {
 
     if (Objects.requireNonNull(options.workflowId(), "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
@@ -2113,8 +2217,7 @@ public class DBOSExecutor implements AutoCloseable {
           appId,
           parent,
           options,
-          applicationName,
-          serializer);
+          applicationName);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
     } catch (DBOSQueueDuplicatedException e) {
@@ -2143,8 +2246,12 @@ public class DBOSExecutor implements AutoCloseable {
       String appId,
       WorkflowInfo parentWorkflow,
       ExecutionOptions options,
-      @Nullable String applicationName,
-      DBOSSerializer serializer) {
+      @Nullable String applicationName) {
+
+    // The row is read back with the format it records, so the serializer is the one the system
+    // database being written to was configured with -- never a second one passed in alongside it,
+    // which could only match or be a bug.
+    var serializer = systemDatabase.serializer();
 
     // Serialize inputs using the specified serialization format
     var serializedArgs =
@@ -2189,13 +2296,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.scheduleName(),
             applicationName);
 
-    WorkflowInitResult[] initResult = {null};
-    initResult[0] =
-        systemDatabase.initWorkflowStatus(
-            workflowStatusInternal,
-            retries,
-            options.isRecoveryRequest(),
-            options.isDequeuedRequest());
+    var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
@@ -2206,7 +2307,7 @@ public class DBOSExecutor implements AutoCloseable {
           startTime);
     }
 
-    return initResult[0];
+    return initResult;
   }
 
   private boolean persistWorkflowOutput(String workflowId, Object result, String serialization) {
@@ -2232,13 +2333,12 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String instanceName,
       @Nullable Object[] args,
       Throwable error) {
-    String serialization = this.serializer.name();
+    // No configured serializer means the built-in one, which only SerializationUtil knows:
+    // naming it here dereferences null on the default configuration.
     var serializedArgs =
         SerializationUtil.serializeArgs(
-            Objects.requireNonNullElseGet(args, () -> new Object[0]),
-            null,
-            serialization,
-            this.serializer);
+            Objects.requireNonNullElseGet(args, () -> new Object[0]), null, null, this.serializer);
+    String serialization = serializedArgs.serialization();
     var serializedError = SerializationUtil.serializeError(error, serialization, this.serializer);
     var initStatus =
         new WorkflowStatusInternal(

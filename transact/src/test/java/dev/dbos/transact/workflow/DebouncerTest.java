@@ -1,8 +1,11 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -10,7 +13,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
@@ -86,6 +91,23 @@ public class DebouncerTest {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
     serviceImpl = new DebouncedServiceImpl();
+  }
+
+  @Test
+  public void negativePriorityIsRejectedAtTheCall() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    // The user workflow's options are only built inside the debouncer workflow, where the same
+    // value would fail durably; the debouncer refuses it up front instead.
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.<String>debouncer()
+                .withQueue("any-queue")
+                .withPriority(-1)
+                .debounce("user-neg", Duration.ofSeconds(1), () -> svc.process("v1")));
+    assertEquals(0, serviceImpl.callCount());
   }
 
   @Test
@@ -336,7 +358,7 @@ public class DebouncerTest {
     var orch =
         dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
     dbos.launch();
-    dbos.registerQueue(q, QueueOptions.empty().andPriorityEnabled(true));
+    dbos.registerQueue(q, QueueOptions.empty());
 
     var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"));
     assertEquals("result:prio-val", h.getResult());
@@ -349,6 +371,59 @@ public class DebouncerTest {
             .orElse(null);
     assertNotNull(userWfStatus, "user workflow 'process' not found on queue " + q);
     assertEquals(Integer.valueOf(42), userWfStatus.priority());
+  }
+
+  public interface PortableOrchestratorService {
+    String debounceTwice(String arg);
+  }
+
+  public static class PortableOrchestratorServiceImpl implements PortableOrchestratorService {
+    private final DBOS dbos;
+    private final DebouncedService svc;
+
+    public PortableOrchestratorServiceImpl(DBOS dbos, DebouncedService svc) {
+      this.dbos = dbos;
+      this.svc = svc;
+    }
+
+    @Override
+    @Workflow(serializationStrategy = SerializationStrategy.PORTABLE)
+    public String debounceTwice(String arg) {
+      var debouncer = dbos.<String>debouncer();
+      // The first call creates the debouncer workflow; the second sends it a DebouncerMessage.
+      debouncer.debounce("portable-debounce", Duration.ofMillis(800), () -> svc.process("first"));
+      return debouncer
+          .debounce("portable-debounce", Duration.ofMillis(800), () -> svc.process(arg))
+          .getResult();
+    }
+  }
+
+  // The debouncer's own control message is a Java record read back by a Java workflow, whatever
+  // format the caller runs under.
+  @Test
+  public void debounceFromAPortableWorkflowDeliversItsControlMessage() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(
+            PortableOrchestratorService.class, new PortableOrchestratorServiceImpl(dbos, svc));
+    dbos.launch();
+
+    var h = dbos.startWorkflow(() -> orch.debounceTwice("second"));
+    assertEquals("result:second", h.getResult());
+    assertEquals(1, serviceImpl.callCount());
+
+    // A message it cannot read kills the debouncer workflow. The caller's retry loop papers over
+    // that by starting a fresh one, so the errored run is the only durable trace.
+    var debouncers =
+        dbos.listWorkflows(
+            new ListWorkflowsInput().withWorkflowName(Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertTrue(
+        debouncers.stream().noneMatch(w -> w.status() == WorkflowState.ERROR),
+        "a debouncer workflow failed: "
+            + debouncers.stream()
+                .filter(w -> w.status() == WorkflowState.ERROR)
+                .map(w -> w.workflowId() + " " + w.error())
+                .toList());
   }
 
   // Verify that a second debounce call after the first window closes starts a fresh window.
@@ -399,10 +474,11 @@ public class DebouncerTest {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     awaitDebouncerFlippedToPending(Duration.ofSeconds(30));
 
+    // Recovery re-enqueues rather than running the workflow here, so wait on the queue's dispatch.
     var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
     assertEquals(1, recovered.size());
-    for (var h : recovered) {
-      h.getResult();
+    for (var id : recovered) {
+      dbos.retrieveWorkflow(id).getResult();
     }
 
     // Replay reused the same user workflow id and did not run the user workflow again. The count
@@ -430,6 +506,7 @@ public class DebouncerTest {
 
   // withDeduplicationId must forward the id to the queued user workflow.
   @Test
+  @SuppressWarnings("removal")
   public void deduplicationIdForwardedToQueuedUserWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     String userQueue = "dedup-user-queue";
@@ -536,22 +613,208 @@ public class DebouncerTest {
     // needs nothing further from this test -- only the doctored row is in question.
     flipToPending(orchestratorId);
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var recoveredHandles = executor.recoverPendingWorkflows(List.of(executor.executorId()));
-    var replayed =
-        recoveredHandles.stream().filter(h -> orchestratorId.equals(h.workflowId())).findFirst();
-    assertTrue(replayed.isPresent(), "orchestrator was not recovered");
+    var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    assertTrue(recovered.contains(orchestratorId), "orchestrator was not recovered");
 
     // Without the adapter this throws ClassCastException instead of resuming: the recorded String
-    // cannot be assigned to DeduplicationHolder.
-    assertEquals(userWorkflowId, replayed.get().getResult());
+    // cannot be assigned to DeduplicationHolder. The queue runs the replay, so this polls for it.
+    assertEquals(userWorkflowId, dbos.retrieveWorkflow(orchestratorId).getResult());
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(orchestratorId).getStatus().status());
   }
 
-  private record RecordedStep(int functionId, String serialization) {}
+  /** Joining a service workflow records what the bounce found: the service workflow as holder. */
+  @Test
+  public void recordsTheHolderWhenJoiningAServiceWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+
+    var holder =
+        dbos.<String>debouncer()
+            .debounce("shape-key", Duration.ofSeconds(5), () -> svc.process("first"));
+    var orchestratorId = "wf-shape-orchestrator";
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      orch.joinDebounce("shape-key", "second");
+    }
+
+    var recorded = lookupDebouncerStep(orchestratorId);
+    assertTrue(
+        recorded.output().contains(DebounceResult.NotBounced.class.getName()),
+        "recorded: " + recorded.output());
+    assertTrue(
+        recorded.output().contains(Constants.DEBOUNCER_WORKFLOW_NAME),
+        "recorded: " + recorded.output());
+    // The holder it names is the service workflow, not the user workflow the handle points at.
+    assertFalse(recorded.output().contains(holder.workflowId()), "recorded: " + recorded.output());
+    // Only the record's components are recorded, not what is derived from them.
+    assertFalse(recorded.output().contains("debouncerService"), "recorded: " + recorded.output());
+  }
+
+  /**
+   * A bounce from inside a workflow is recorded with its checkpoint in one transaction, and a
+   * replay returns the recorded result rather than bouncing again: the extended row keeps the delay
+   * the first run gave it.
+   */
+  @Test
+  public void replaysABounceRecordedInsideAWorkflowWithoutBouncingAgain() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+
+    var orchestratorId = "wf-bounce-orchestrator";
+    String bounced;
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      bounced = orch.joinDebounce("mixed", "second");
+    }
+    assertEquals(waiting, bounced);
+    var afterBounce = DebouncedRows.read(dataSource, waiting).delayUntilEpochMs();
+    assertTrue(afterBounce < planted);
+    var recorded = lookupDebouncerStep(orchestratorId);
+    assertTrue(
+        recorded.output().contains(DebounceResult.Bounced.class.getName()),
+        "recorded: " + recorded.output());
+
+    // Replay it. The lookup step returns its recorded Bounced, so the row is not touched again.
+    flipToPending(orchestratorId);
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var recovered = executor.recoverPendingWorkflows(List.of(executor.executorId()));
+    assertTrue(recovered.contains(orchestratorId), "orchestrator was not recovered");
+    assertEquals(waiting, dbos.retrieveWorkflow(orchestratorId).getResult());
+
+    assertEquals(afterBounce, DebouncedRows.read(dataSource, waiting).delayUntilEpochMs());
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+  }
+
+  // ==================== Coalescing into a debounced workflow ====================
+  //
+  // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its
+  // debounce key as its deduplication ID, and coalesces by extending that row. In a fleet mixing
+  // that version with this one, this debouncer has to coalesce into such a row rather than start
+  // a service workflow beside it.
+
+  private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
+    var stale = SerializationUtil.serializeArgs(new Object[] {"stale"}, null, null, serializer);
+    return new DebouncedRows.Spec(
+        workflowName,
+        DebouncedServiceImpl.class.getName(),
+        null,
+        queue,
+        "process-mixed",
+        delayUntil,
+        null,
+        stale.serializedValue(),
+        stale.serialization(),
+        executor.appVersion(),
+        executor.appName());
+  }
+
+  @Test
+  public void coalescesIntoADebouncedWorkflowWaitingOnTheInternalQueue() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    // Far enough out that the row is still waiting when the debounce reaches it.
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+    // The writer also kept the inputs in the payload table, which the runner reads first.
+    DebouncedRows.insertInput(
+        dataSource, waiting, DebouncedRows.read(dataSource, waiting).inputs());
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
+
+    // The bounce extended the waiting row: the handle is that row, its delay moved to our period
+    // and its inputs are ours. No service workflow was started beside it.
+    assertEquals(waiting, handle.workflowId());
+    var bounced = DebouncedRows.read(dataSource, waiting);
+    assertTrue(bounced.delayUntilEpochMs() < planted);
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+
+    // Once the delay elapses the sweep enqueues it, clearing the key, and it runs with our args.
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
+    assertNull(dbos.getWorkflowStatus(waiting).orElseThrow().deduplicationId());
+  }
+
+  @Test
+  public void coalescesIntoADebouncedWorkflowWaitingOnAUserQueue() throws Exception {
+    String userQueue = "mixed-user-queue";
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    dbos.registerQueue(userQueue, QueueOptions.empty());
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting = DebouncedRows.insert(dataSource, debouncedRow(userQueue, "process", planted));
+
+    var handle =
+        dbos.<String>debouncer()
+            .withQueue(userQueue)
+            .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
+
+    assertEquals(waiting, handle.workflowId());
+    assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
+    assertEquals(userQueue, dbos.getWorkflowStatus(waiting).orElseThrow().queueName());
+  }
+
+  @Test
+  public void refusesAKeyHeldByADifferentDebouncedWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    // "process" + "mixed" collides with "process-mixed" held for another workflow.
+    var other =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "other", planted));
+
+    assertThrows(
+        DBOSQueueDuplicatedException.class,
+        () ->
+            dbos.<String>debouncer()
+                .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh")));
+
+    // Untouched: the other workflow keeps its delay and its inputs.
+    assertEquals(planted, DebouncedRows.read(dataSource, other).delayUntilEpochMs());
+    assertEquals(0, serviceImpl.callCount());
+  }
+
+  @Test
+  public void rejectsAPriorityWithoutAQueue() {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                dbos.<String>debouncer()
+                    .withPriority(3)
+                    .debounce("prio", Duration.ofMillis(500), () -> svc.process("x")));
+
+    assertTrue(e.getMessage().contains("queue"), e.getMessage());
+    assertEquals(0, serviceImpl.callCount());
+  }
+
+  private record RecordedStep(int functionId, String serialization, String output) {}
 
   private RecordedStep lookupDebouncerStep(String workflowId) throws SQLException {
     var sql =
-        "SELECT function_id, serialization FROM dbos.operation_outputs"
+        "SELECT function_id, serialization, output FROM dbos.operation_outputs"
             + " WHERE workflow_uuid = ? AND function_name = ?";
     try (Connection conn = pgContainer.dataSource().getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -559,7 +822,8 @@ public class DebouncerTest {
       stmt.setString(2, "DBOS.lookupDebouncer");
       try (var rs = stmt.executeQuery()) {
         assertTrue(rs.next(), "no DBOS.lookupDebouncer step was recorded");
-        return new RecordedStep(rs.getInt("function_id"), rs.getString("serialization"));
+        return new RecordedStep(
+            rs.getInt("function_id"), rs.getString("serialization"), rs.getString("output"));
       }
     }
   }

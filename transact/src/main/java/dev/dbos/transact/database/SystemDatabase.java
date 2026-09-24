@@ -48,6 +48,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import javax.sql.DataSource;
 
@@ -351,32 +352,198 @@ public class SystemDatabase implements AutoCloseable {
     notificationSource.start();
   }
 
-  private static boolean isConnectionFailure(SQLException e) {
-    String state = e.getSQLState();
-    if (state != null && (state.startsWith("08") || state.startsWith("57"))) {
-      return true;
-    }
-    // HikariCP and JDBC throw connection errors without a SQLSTATE (e.g. "Connection is closed").
-    // Walk the cause chain so wrapped exceptions are also caught.
-    for (Throwable t = e; t != null; t = t.getCause()) {
-      String msg = t.getMessage();
-      if (msg != null) {
-        String lower = msg.toLowerCase();
-        if (lower.contains("connection is closed")
-            || lower.contains("connection is not available")
-            || lower.contains("connection reset")
-            || lower.contains("broken pipe")
-            || lower.contains("socket closed")) {
-          return true;
+  /** How far {@link #anyLinked} walks before giving up; see its note on cycles. */
+  private static final int MAX_LINKED_EXCEPTIONS = 1000;
+
+  /**
+   * Whether anything reachable from {@code t} along either of JDBC's chains satisfies {@code
+   * match}.
+   *
+   * <p>Two chains, not one. Causes carry DBOS's own wrapping; {@link
+   * SQLException#getNextException()} carries what JDBC links rather than wraps -- HikariCP's
+   * connection failure behind a pool timeout, and a failed batch's second and later errors.
+   *
+   * <p>{@link SQLException}'s iterator covers an exception, its causes, its next exceptions and
+   * their causes, but not a nested cause's next exceptions, which is why the outer loop re-enters
+   * at every level.
+   *
+   * <p>Bounded because neither chain is guaranteed acyclic: {@link SQLException#setNextException}
+   * has no self-link guard, and the iterator over a self-linked exception never ends. Giving up can
+   * only lose a SQLSTATE, which hands the failure up rather than retrying it.
+   */
+  private static boolean anyLinked(Throwable t, Predicate<Throwable> match) {
+    int budget = MAX_LINKED_EXCEPTIONS;
+    for (Throwable cause = t; cause != null && budget-- > 0; cause = cause.getCause()) {
+      if (match.test(cause)) {
+        return true;
+      }
+      if (cause instanceof SQLException sqlException) {
+        for (Throwable linked : sqlException) {
+          if (budget-- <= 0) {
+            return false;
+          }
+          if (match.test(linked)) {
+            return true;
+          }
         }
       }
     }
     return false;
   }
 
-  private static boolean isTransientState(SQLException e) {
-    String state = e.getSQLState();
-    return state != null && (state.startsWith("40") || state.startsWith("53"));
+  /** Whether any SQLSTATE reachable from {@code t} satisfies {@code match}. */
+  private static boolean anySqlState(Throwable t, Predicate<String> match) {
+    return anyLinked(
+        t,
+        linked ->
+            linked instanceof SQLException sqlException
+                && sqlException.getSQLState() != null
+                && match.test(sqlException.getSQLState()));
+  }
+
+  /** Whether anything in {@code t}'s chains carries a SQLSTATE at all. */
+  private static boolean hasSqlState(Throwable t) {
+    return anySqlState(t, state -> true);
+  }
+
+  /** What {@link #dbRetry} does about a failure. */
+  enum Failure {
+    /** Reset the pool and try again. */
+    CONNECTION,
+    /** Try again. */
+    TRANSIENT,
+    /** Not ours to retry: hand it up. */
+    CALLERS
+  }
+
+  /**
+   * Whether a failure is evidence that the pooled connections themselves are gone, so recycling
+   * them is what lets a retry succeed.
+   *
+   * <p>Separate from {@link #classify} because retrying and recycling are different questions whose
+   * answers do not coincide. Class 08 and the {@code 57P0x} shutdown codes mean the connection or
+   * the server went away, and a retry on the same socket cannot succeed. {@code 57014
+   * query_canceled} is class 57 too, but it means a {@code statement_timeout} fired or someone
+   * cancelled the backend: the statement is in trouble and the connection is fine, so recycling
+   * every pooled connection over it is collateral damage. A borrow that timed out is likewise
+   * contention for healthy connections, and recycling them mid-shortage makes the shortage worse.
+   *
+   * <p>HikariCP copies the last connection failure's SQLSTATE onto its timeout exception, so a
+   * timeout from genuinely broken connections carries class 08 and does evict. That copy is not
+   * always about the timeout: {@code PoolBase} records the last failure on a failed keepalive too
+   * and clears it only when a new connection is established, so a demand-spike timeout can carry a
+   * state from something else a {@code maxLifetime} earlier and be handed to the caller on its
+   * account. Left alone: the states realistically sitting there are from connections that could not
+   * be made, and handing those up beats retrying them forever.
+   */
+  static boolean evictsPool(SQLException e) {
+    if (hasSqlState(e)) {
+      return anySqlState(
+          e, state -> state.startsWith("08") || (state.startsWith("57") && !"57014".equals(state)));
+    }
+    return e instanceof SQLRecoverableException || anyMessage(e, DEAD_CONNECTION_MESSAGES);
+  }
+
+  /**
+   * What a failed statement means, deciding on the SQLSTATE when there is one and on the exception
+   * type only when there is not.
+   *
+   * <p>These are two tiers, not two alternatives. The dispatch used to OR them -- {@code e
+   * instanceof SQLTransientException || isTransientState(e)} -- which let the coarse signal
+   * override the precise one. {@link SQLTransientException} has three standard subclasses and one
+   * of them, {@link java.sql.SQLTransactionRollbackException}, is class 40: a serialization failure
+   * or deadlock arriving as JDBC's standard type went back into this unbounded loop, which is what
+   * the conflict-retry change set out to stop. PgJDBC's {@code PSQLException} extends {@link
+   * SQLException} directly, so it does not fire on the current driver, which is why no test caught
+   * it. The narrow guard that patched it is gone: a class 40 state now falls through to {@link
+   * Failure#CALLERS} because it is not a state this retries, without having to be named.
+   *
+   * <p>All three reference SDKs read the code first and fall back to type or message only for
+   * errors carrying no code: Go reads {@code pgErrCode} then {@code net.Error}, Python reads {@code
+   * pgcode} then driver message text, TypeScript reads {@code code} then its errno set.
+   *
+   * <p>This answers only whether to retry; whether to recycle the pool is {@link #evictsPool},
+   * decided separately. A {@link Failure#CONNECTION} verdict does not by itself evict: {@code
+   * 57014} and a state-less pool timeout are both retried on the pool they arrived from.
+   */
+  static Failure classify(SQLException e) {
+    if (hasSqlState(e)) {
+      if (isConnectionState(e)) {
+        return Failure.CONNECTION;
+      }
+      return isTransientState(e) ? Failure.TRANSIENT : Failure.CALLERS;
+    }
+    if (e instanceof SQLRecoverableException || hasConnectionMessage(e)) {
+      return Failure.CONNECTION;
+    }
+    return e instanceof SQLTransientException ? Failure.TRANSIENT : Failure.CALLERS;
+  }
+
+  /** Class 08 connection_exception or class 57 operator_intervention, anywhere in the chains. */
+  static boolean isConnectionState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("08") || state.startsWith("57"));
+  }
+
+  /**
+   * Messages naming a connection that is gone. HikariCP and JDBC raise these below the protocol
+   * level, with no SQLSTATE to prefer over them.
+   */
+  private static final List<String> DEAD_CONNECTION_MESSAGES =
+      List.of("connection is closed", "connection reset", "broken pipe", "socket closed");
+
+  /**
+   * HikariCP's message for a borrow that timed out. Unlike the above this is contention for live
+   * connections, not a dead one: worth retrying, not worth recycling the pool over.
+   */
+  private static final List<String> POOL_EXHAUSTED_MESSAGES =
+      List.of("connection is not available");
+
+  /** Whether any message along either chain contains one of {@code needles}. */
+  private static boolean anyMessage(Throwable t, List<String> needles) {
+    return anyLinked(t, linked -> messageContains(linked, needles));
+  }
+
+  private static boolean messageContains(Throwable t, List<String> needles) {
+    String msg = t.getMessage();
+    if (msg == null) {
+      return false;
+    }
+    String lower = msg.toLowerCase();
+    return needles.stream().anyMatch(lower::contains);
+  }
+
+  /**
+   * Whether any message in the chains names a connection failure.
+   *
+   * <p>Only for exceptions carrying no SQLSTATE at all: HikariCP and JDBC raise connection errors
+   * as bare messages ("Connection is closed"). A message is a guess where a SQLSTATE is a fact, so
+   * this is the fallback tier and never overrides one.
+   */
+  static boolean hasConnectionMessage(Throwable t) {
+    return anyMessage(t, DEAD_CONNECTION_MESSAGES) || anyMessage(t, POOL_EXHAUSTED_MESSAGES);
+  }
+
+  /** Class 53 insufficient_resources, anywhere in the chains. */
+  static boolean isTransientState(Throwable t) {
+    return anySqlState(t, state -> state.startsWith("53"));
+  }
+
+  /**
+   * Whether a failure is a transaction conflict the database has already rolled back: SQLSTATE
+   * 40001 serialization_failure or 40P01 deadlock_detected.
+   *
+   * <p>Named for Python's {@code _is_serialization_error} and TypeScript's {@code
+   * isSerializationError}, which match the same two codes; Go's {@code IsRetryableTransaction} is
+   * the same predicate under another name.
+   *
+   * <p>Retrying one means replaying the whole transaction, so only a caller that knows its work is
+   * safe to re-run may do it -- see {@link #retryOnSerializationError} for what that requires, and
+   * {@link #dbRetryIncludingSerializationError} for the callers that opt in. {@link #dbRetry} does
+   * not, so any caller that has not opted in lets the conflict reach its own caller; the dequeue
+   * relies on that.
+   */
+  public static boolean isSerializationError(Throwable t) {
+    return anySqlState(t, state -> "40001".equals(state) || "40P01".equals(state));
   }
 
   /**
@@ -384,36 +551,55 @@ public class SystemDatabase implements AutoCloseable {
    * 55P03 lock_not_available, raised by the {@code FOR UPDATE NOWAIT} that rate-limited queues take
    * so every executor sees a consistent count.
    *
-   * <p>Matched by code rather than by class, because {@link #isTransientState} works by SQLSTATE
-   * class prefix and class 55 is not class 40. That is the right call for {@link #dbRetry}, which
-   * cannot know that asking again on the next poll is exactly what the queue listener does; it just
-   * means the caller has to recognise the code itself. Serialization failures (class 40) never
-   * reach a caller, since dbRetry retries those internally.
+   * <p>40001 serialization_failure counts too: a dequeue that escalates to REPEATABLE READ to keep
+   * a shared budget consistent loses the race the same way, and the queue listener reacts to both
+   * identically. TypeScript classifies exactly these two codes here, and Go the same plus 40P01.
+   * Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects one, so a
+   * deadlock is a real error and should be logged as one.
+   *
+   * <p>{@link #dbRetry} no longer absorbs class 40, so a serialization failure now reaches this
+   * caller rather than being slept off on a pooled thread.
    *
    * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
    */
   public static boolean isContentionError(Throwable t) {
-    for (Throwable cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sqlException
-          && "55P03".equals(sqlException.getSQLState())) {
-        return true;
-      }
-    }
-    return false;
+    return anySqlState(t, state -> "55P03".equals(state) || "40001".equals(state));
   }
 
-  private static void sleepWithJitter(double baseMs) {
+  /**
+   * Whether {@code t} is 55P03 lock_not_available: a {@code FOR UPDATE NOWAIT} that lost the race
+   * for a row lock.
+   *
+   * <p>Separate from {@link #isContentionError} because the two codes deserve different reactions
+   * at the queue poll loop. This one means a peer holds the rows inside its dequeue transaction --
+   * a select, an update and a commit, with dispatch deliberately outside it -- so the obstruction
+   * lasts milliseconds and is gone by the next tick. A serialization failure means a peer already
+   * committed, which under a shared budget can keep happening, so that one is worth damping.
+   *
+   * <p>The exception arrives wrapped by dbRetry, so this walks the cause chain.
+   */
+  public static boolean isLockNotAvailable(Throwable t) {
+    return anySqlState(t, "55P03"::equals);
+  }
+
+  /**
+   * Sleeps for {@code baseMs} scaled by a random factor in [0.5, 1.5), so peers that collided do
+   * not collide again.
+   *
+   * <p>Propagates {@link InterruptedException} rather than restoring the flag and returning. Both
+   * callers are retry loops that must stop when cancelled, and a swallowed interrupt reaches them
+   * as a normal return with a flag quietly set -- invisible unless the loop remembers to check it.
+   * Declaring it makes the compiler ask the question instead. A caller that cannot propagate it
+   * restores the flag with {@code Thread.currentThread().interrupt()} and stops.
+   */
+  public static void sleepWithJitter(double baseMs) throws InterruptedException {
     double jitter = 0.5 + ThreadLocalRandom.current().nextDouble(); // [0.5, 1.5)
-    long sleepMs = (long) (baseMs * jitter);
-    try {
-      Thread.sleep(sleepMs);
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
+    Thread.sleep((long) (baseMs * jitter));
   }
 
+  /** A database call returning nothing, which may fail with {@link SQLException}. */
   @FunctionalInterface
-  interface SqlRunnable {
+  public interface SqlRunnable {
     void run() throws SQLException;
   }
 
@@ -425,11 +611,128 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  /** A database call returning a value, which may fail with {@link SQLException}. */
   @FunctionalInterface
-  interface SqlSupplier<T> {
+  public interface SqlSupplier<T> {
     T get() throws SQLException;
   }
 
+  /**
+   * Replays work that a transaction conflict rolled back, up to ten times.
+   *
+   * <p>For callers whose work is safe to re-run -- which is stronger than it sounds. A
+   * serialization error means a <em>peer committed</em>, so the replay never sees the state the
+   * first attempt saw; it sees a later one. The work must be safe against a database that changed
+   * underneath it, not merely safe because a rollback undid the first attempt. See {@link
+   * #dbRetryIncludingSerializationError} for what qualifies.
+   *
+   * <p>Only a caller that knows this may use it. {@link #dbRetry} deliberately does not, because a
+   * conflict on the dequeue is a signal the queue poll loop needs rather than one to sleep off.
+   *
+   * <p>Bounded, unlike {@link #dbRetry}: a conflict means a peer won, which is progress, so
+   * spinning forever would only mean this caller never does. The schedule is Python's and
+   * TypeScript's exactly -- ten attempts, 50 ms doubling to a 2 s cap, jittered so peers that
+   * collided do not collide again.
+   *
+   * <p>Stops on interruption, leaving the flag set for the caller. Both exhaustion and cancellation
+   * give back the same {@link SQLException}, and the interrupt flag is the only thing that
+   * separates them.
+   *
+   * @param operation what is being replayed, for the log
+   * @param work the database call, which must be safe to run more than once
+   */
+  public static <T> T retryOnSerializationError(String operation, SqlSupplier<T> work)
+      throws SQLException {
+    final int maxAttempts = 10;
+    final double maxBackoffMs = 2000.0;
+    double backoffMs = 50.0;
+    for (int attempt = 1; ; attempt++) {
+      try {
+        return work.get();
+      } catch (SQLException e) {
+        if (!isSerializationError(e)) {
+          throw e;
+        }
+        if (attempt == maxAttempts) {
+          logger.warn("{} failed after {} attempts", operation, maxAttempts, e);
+          throw e;
+        }
+        logger.warn(
+            "Contention or deadlock detected in {} (attempt {}); retrying", operation, attempt, e);
+        try {
+          sleepWithJitter(backoffMs);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          logger.warn("{} interrupted after {} attempts; giving up", operation, attempt, e);
+          throw e;
+        }
+        backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
+      }
+    }
+  }
+
+  /** As {@link #retryOnSerializationError(String, SqlSupplier)}, for work returning nothing. */
+  public static void retryOnSerializationError(String operation, SqlRunnable work)
+      throws SQLException {
+    retryOnSerializationError(
+        operation,
+        () -> {
+          work.run();
+          return null;
+        });
+  }
+
+  /**
+   * As {@link #dbRetry(SqlSupplier)}, but a serialization error is replayed rather than thrown at
+   * the caller -- so this retries what {@link #retryOnSerializationError} does as well as what
+   * {@link #dbRetry} does.
+   *
+   * <p>The caller asserts the precondition by choosing this method, and it is stronger than it
+   * looks. A serialization error means a <em>peer committed</em>, so the replay never sees the
+   * state the first attempt saw -- it sees a later one. The work must therefore be safe to re-run
+   * against a database that has changed underneath it, not merely safe because a rollback undid the
+   * first attempt.
+   *
+   * <p>That holds for an upsert keyed on identity, an insert guarded by {@code ON CONFLICT}, a
+   * delete, a read, or a step whose recorded-result check makes a peer's win the right answer. It
+   * does <em>not</em> hold when part of the work has already committed -- a transaction followed by
+   * batched sweeps replays the committed part, and anything it counts or returns will be wrong. See
+   * {@code renameApplication}, which is excluded for exactly that reason.
+   *
+   * <p>The replay goes <em>inside</em> the connection retry, and that order matters: {@link
+   * #dbRetry} turns a failure it will not retry into a {@link RuntimeException}, which {@link
+   * #retryOnSerializationError} does not catch, so the other nesting would silently replay nothing.
+   * Composing it here means no call site can get that wrong.
+   *
+   * @param operation what is being run, for the log
+   * @param supplier the work, which must be safe to run more than once
+   */
+  private <T> T dbRetryIncludingSerializationError(String operation, SqlSupplier<T> supplier) {
+    return dbRetry(() -> retryOnSerializationError(operation, supplier));
+  }
+
+  /**
+   * As {@link #dbRetryIncludingSerializationError(String, SqlSupplier)}, for work returning
+   * nothing.
+   */
+  private void dbRetryIncludingSerializationError(String operation, SqlRunnable runnable) {
+    dbRetry(() -> retryOnSerializationError(operation, runnable));
+  }
+
+  /**
+   * Runs {@code supplier}, retrying while the failure looks like it will pass, and adapting the
+   * checked {@link SQLException} the caller cannot declare into an unchecked one.
+   *
+   * <p>Every exit that carries a database failure wraps it in {@link DBOSSystemDatabaseException}
+   * and does so <b>exactly once</b>: this never throws from a path it would retry, so nothing
+   * re-enters and wraps a second time. That is what lets the SQLSTATE classifiers find the original
+   * one level down a chain of known depth.
+   *
+   * @throws DBOSSystemDatabaseException if the failure is not one worth retrying, or an interrupt
+   *     stops the loop
+   * @throws IllegalStateException if the system database has been closed, which is a lifecycle
+   *     error rather than a database one and so is not wrapped
+   */
   private <T> T dbRetry(SqlSupplier<T> supplier) {
     double backoffMs = 1000.0;
     final double maxBackoffMs = 60_000.0;
@@ -442,18 +745,33 @@ public class SystemDatabase implements AutoCloseable {
         return supplier.get();
       } catch (SQLException e) {
         attempt++;
-        if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
-          logger.warn(
-              "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
-          if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
-            hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+        switch (classify(e)) {
+          case CONNECTION -> {
+            if (evictsPool(e)) {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
+              if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
+                hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+              }
+            } else {
+              logger.warn(
+                  "Recoverable connection error (attempt {}), retrying on the same pool",
+                  attempt,
+                  e);
+            }
           }
-        } else if (e instanceof SQLTransientException || isTransientState(e)) {
-          logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
-        } else {
-          throw new RuntimeException(e);
+          case TRANSIENT -> logger.warn("Transient DB error (attempt {}), retrying", attempt, e);
+          case CALLERS -> throw new DBOSSystemDatabaseException(e);
         }
-        sleepWithJitter(backoffMs);
+        try {
+          sleepWithJitter(backoffMs);
+        } catch (InterruptedException ie) {
+          // This loop is otherwise unbounded, so an ignored interrupt means nothing can stop it.
+          // Restore the flag for the caller and give back the failure that was being retried.
+          Thread.currentThread().interrupt();
+          logger.warn("Interrupted while retrying a database operation (attempt {})", attempt, e);
+          throw new DBOSSystemDatabaseException(e);
+        }
         backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
     }
@@ -480,31 +798,28 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Initializes the status of a workflow.
    *
+   * <p>Only the first writer of a row owns its execution: a caller that finds a row someone else
+   * inserted gets {@code shouldExecuteOnThisExecutor() == false} and polls for the outcome instead.
+   * A workflow the queue has already claimed never comes through here -- the claim wrote everything
+   * this would, so the dispatch path runs from the claimed row directly.
+   *
    * @param initStatus The initial workflow status details.
-   * @param maxRetries Optional maximum number of retries.
-   * @param isRecoveryRequest True if this is a recovery request, indicating that this node is told
-   *     it owns the workflow even if the ID already exists
-   * @param isDequeuedRequest True if this is a dequeue request, indicating that this node is told
-   *     it owns the workflow (provided it is in the enqueued state)
+   * @param maxRetries The workflow's configured attempt budget, reported if it is already
+   *     dead-lettered.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
    * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
-   * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow exceeds max retries.
+   * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow has already been
+   *     dead-lettered.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus,
-      Integer maxRetries,
-      boolean isRecoveryRequest,
-      boolean isDequeuedRequest) {
+      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries) {
 
     // This ID will be used to tell if we are the first writer of the record, or if
     // there is an existing one.
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    return dbRetry(
-        () ->
-            WorkflowDAO.initWorkflowStatus(
-                ctx, initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid));
+    return dbRetry(() -> WorkflowDAO.initWorkflowStatus(ctx, initStatus, maxRetries, ownerXid));
   }
 
   /**
@@ -562,6 +877,36 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.findDeduplicationHolder(ctx, queueName, deduplicationId));
   }
 
+  /**
+   * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
+   * pair instead; as the caller's step when one is given, checkpointed in the same transaction. See
+   * {@link WorkflowDAO#debounceDelayedWorkflow}.
+   */
+  public Object debounceDelayedWorkflow(
+      String workflowName,
+      String className,
+      @Nullable String instanceName,
+      String queueName,
+      String deduplicationId,
+      long delayUntilEpochMs,
+      Object[] args,
+      @Nullable String serializationFormat,
+      @Nullable DebounceCaller caller) {
+    return dbRetry(
+        () ->
+            WorkflowDAO.debounceDelayedWorkflow(
+                ctx,
+                workflowName,
+                className,
+                instanceName,
+                queueName,
+                deduplicationId,
+                delayUntilEpochMs,
+                args,
+                serializationFormat,
+                caller));
+  }
+
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
     return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
   }
@@ -570,8 +915,25 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.getStepAggregates(ctx, input));
   }
 
-  public boolean clearQueueAssignment(String workflowId) {
-    return dbRetry(() -> QueuesDAO.clearQueueAssignment(ctx, workflowId));
+  /** Returns the given executors' PENDING workflows to their queues; reports which rows moved. */
+  public List<String> reenqueueForRecovery(
+      List<String> executorIds, String appVersion, String recoveryQueueName) {
+    return dbRetry(
+        () -> QueuesDAO.reenqueueForRecovery(ctx, executorIds, appVersion, recoveryQueueName));
+  }
+
+  /**
+   * Moves claimed workflows that have exhausted their attempts off the queue.
+   *
+   * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
+   * decision was read from, so a row another executor has already moved on -- or one given a fresh
+   * budget by resume -- is left alone.
+   */
+  public void deadLetterWorkflows(List<String> workflowIds, int minRecoveryAttempts) {
+    if (workflowIds.isEmpty()) {
+      return;
+    }
+    dbRetry(() -> WorkflowDAO.deadLetterWorkflows(ctx, workflowIds, minRecoveryAttempts));
   }
 
   public List<String> getQueuePartitions(String queueName) {
@@ -584,7 +946,8 @@ public class SystemDatabase implements AutoCloseable {
       throw new IllegalArgumentException(
           String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
     }
-    return dbRetry(
+    return dbRetryIncludingSerializationError(
+        "upsertQueue",
         () -> QueuesDAO.upsertQueue(ctx, name, options, updateExisting, applicationName));
   }
 
@@ -649,11 +1012,18 @@ public class SystemDatabase implements AutoCloseable {
       String executorId,
       String appVersion,
       String partitionKey,
-      long localRunningCount) {
+      long localRunningCount,
+      long partitionLocalRunningCount) {
     return dbRetry(
         () ->
             QueuesDAO.startQueuedWorkflows(
-                ctx, queue, executorId, appVersion, partitionKey, localRunningCount));
+                ctx,
+                queue,
+                executorId,
+                appVersion,
+                partitionKey,
+                localRunningCount,
+                partitionLocalRunningCount));
   }
 
   public void recordChildWorkflow(
@@ -679,7 +1049,8 @@ public class SystemDatabase implements AutoCloseable {
       String functionName,
       boolean sendToForks,
       String serialization) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "sendBulk",
         () ->
             NotificationsDAO.sendBulk(
                 ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
@@ -707,7 +1078,8 @@ public class SystemDatabase implements AutoCloseable {
       Object message,
       boolean asStep,
       String serialization) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "setEvent",
         () ->
             NotificationsDAO.setEvent(
                 ctx, workflowId, functionId, key, message, asStep, serialization));
@@ -745,19 +1117,24 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetry(() -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
+    dbRetryIncludingSerializationError(
+        "deleteWorkflows", () -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetry(() -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+    return dbRetryIncludingSerializationError(
+        "forkWorkflow",
+        () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
   }
 
   public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
-    return dbRetry(() -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
+    return dbRetryIncludingSerializationError(
+        "forkFromFailure", () -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "createApplicationVersion",
         () -> ApplicationVersionDAO.createApplicationVersion(ctx, versionName, applicationName));
   }
 
@@ -778,6 +1155,9 @@ public class SystemDatabase implements AutoCloseable {
       String newName,
       @Nullable Integer batchSize,
       boolean adoptUnclaimedRows) {
+    // Deliberately not dbRetryIncludingSerializationError: this is a transaction followed by two
+    // batched sweeps in their own transactions, so a replay would re-run an already-committed
+    // move -- finding no rows left under the old name, and undercounting what it reports.
     return dbRetry(
         () ->
             ApplicationRenameDAO.renameApplication(
@@ -867,7 +1247,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
-    dbRetry(() -> SchedulesDAO.applySchedules(ctx, schedules));
+    dbRetryIncludingSerializationError(
+        "applySchedules", () -> SchedulesDAO.applySchedules(ctx, schedules));
   }
 
   @SuppressWarnings("removal") // implements the deprecated ExternalState API
@@ -882,7 +1263,8 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<MetricData> getMetrics(
       Instant startTime, Instant endTime, @Nullable List<String> applicationName) {
-    return dbRetry(() -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
+    return dbRetryIncludingSerializationError(
+        "getMetrics", () -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
@@ -910,7 +1292,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
-    dbRetry(() -> WorkflowDAO.importWorkflow(ctx, workflows));
+    dbRetryIncludingSerializationError(
+        "importWorkflow", () -> WorkflowDAO.importWorkflow(ctx, workflows));
   }
 
   public void writeStreamFromStep(
@@ -924,7 +1307,8 @@ public class SystemDatabase implements AutoCloseable {
 
   public void writeStreamFromWorkflow(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
-    dbRetry(
+    dbRetryIncludingSerializationError(
+        "writeStreamFromWorkflow",
         () ->
             StreamsDAO.writeStreamFromWorkflow(
                 ctx, workflowId, functionId, key, value, serializationFormat));
@@ -932,7 +1316,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(() -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
+    dbRetryIncludingSerializationError(
+        "closeStream", () -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
     // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
     signal(new SignalKey.Stream(workflowId, key));
   }

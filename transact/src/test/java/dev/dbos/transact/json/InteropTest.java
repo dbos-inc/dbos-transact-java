@@ -5,11 +5,13 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
@@ -330,12 +332,12 @@ public class InteropTest {
 
       // Enqueue the canonical workflow with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("canonicalWorkflow", "interop", "interopq")
+          new EnqueueOptions("canonicalWorkflow", "interop", QueueName.of("interopq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
       WorkflowHandle<String, ?> handle =
-          client.enqueuePortableWorkflow(
+          client.enqueueWorkflow(
               options,
               new Object[] {
                 CANONICAL_TEXT,
@@ -458,10 +460,11 @@ public class InteropTest {
       namedArgs.put("tags", Arrays.asList("a", "b"));
 
       var options =
-          new DBOSClient.EnqueueOptions("interop", "namedArgsWorkflow", "interopq")
-              .withWorkflowId(workflowId);
+          new EnqueueOptions("namedArgsWorkflow", "interop", QueueName.of("interopq"))
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
 
-      client.<String>enqueuePortableWorkflow(options, new Object[] {}, namedArgs);
+      client.<String, RuntimeException>enqueueWorkflow(options, new Object[] {}, namedArgs);
 
       // Java doesn't use named args but can pass them to Python.
       // For this test, let's verify the stored format matches what Python produces.

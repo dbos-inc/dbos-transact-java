@@ -12,5 +12,11 @@ public @interface Workflow {
 
   int maxRecoveryAttempts() default -1;
 
+  /**
+   * The format this workflow's arguments and result are recorded in.
+   *
+   * <p>Ignored for a scheduled workflow: a schedule fires inside one application, so its runs are
+   * always recorded with the application's own serializer, whichever path starts them.
+   */
   SerializationStrategy serializationStrategy() default SerializationStrategy.DEFAULT;
 }

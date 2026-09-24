@@ -6,6 +6,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.SqlTransaction;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
@@ -307,41 +308,53 @@ public class NotificationsDAO {
             .formatted(ctx.schema());
 
     try (var txConn = ctx.getConnection()) {
-      return SqlTransaction.call(
-          txConn,
-          conn -> {
-            String serializedMessage = null;
-            String serialization = null;
-            try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setString(2, recvTopic);
-              stmt.setString(3, workflowId);
-              stmt.setString(4, recvTopic);
+      // Only the claim is replayed, never the wait above it: re-running the whole method would
+      // register a fresh subscription and restart the caller's timeout from zero. A peer that won
+      // the message between attempts lands this on the null-message branch below, which is a case
+      // it already handles.
+      return SystemDatabase.retryOnSerializationError(
+          "recv claim",
+          () ->
+              SqlTransaction.call(
+                  txConn,
+                  conn -> {
+                    String serializedMessage = null;
+                    String serialization = null;
+                    try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+                      stmt.setString(1, workflowId);
+                      stmt.setString(2, recvTopic);
+                      stmt.setString(3, workflowId);
+                      stmt.setString(4, recvTopic);
 
-              // Note, if there are two executors running the same workflow waiting on the same
-              // recv,
-              // only the first one will return a row here. The second one get a null message but
-              // then
-              // throw a WorkflowExecutionConflictException when it records the step result.
-              try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                  serializedMessage = rs.getString("message");
-                  serialization = rs.getString("serialization");
-                }
-              }
-            }
+                      // Note, if there are two executors running the same workflow waiting on the
+                      // same recv, only the first one will return a row here. The second one gets
+                      // a null message but then throws a WorkflowExecutionConflictException when
+                      // it records the step result.
+                      try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                          serializedMessage = rs.getString("message");
+                          serialization = rs.getString("serialization");
+                        }
+                      }
+                    }
 
-            var deserializedMessage =
-                SerializationUtil.deserializeValue(
-                    serializedMessage, serialization, ctx.serializer());
+                    var deserializedMessage =
+                        SerializationUtil.deserializeValue(
+                            serializedMessage, serialization, ctx.serializer());
 
-            var output =
-                new StepResult(
-                    workflowId, stepId, stepName, serializedMessage, null, null, serialization);
-            StepsDAO.recordStepResult(ctx, conn, output, startTime);
+                    var output =
+                        new StepResult(
+                            workflowId,
+                            stepId,
+                            stepName,
+                            serializedMessage,
+                            null,
+                            null,
+                            serialization);
+                    StepsDAO.recordStepResult(ctx, conn, output, startTime);
 
-            return deserializedMessage;
-          });
+                    return deserializedMessage;
+                  }));
     }
   }
 

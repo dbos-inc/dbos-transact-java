@@ -3371,6 +3371,85 @@ public class ConductorTest {
     }
   }
 
+  private void stubSchedule(String scheduleName) {
+    dev.dbos.transact.workflow.WorkflowSchedule schedule =
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1",
+            scheduleName,
+            "TestWorkflow",
+            "TestClass",
+            "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+            null,
+            Instant.now(),
+            false,
+            null,
+            null,
+            null);
+    when(mockDB.getSchedule(scheduleName)).thenReturn(Optional.of(schedule));
+    when(mockDB.getLatestApplicationVersion())
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now(), null));
+  }
+
+  // A workflow's output is written and read back in the format its row records, so a
+  // Conductor-started scheduled run must use the application's configured serializer.
+  @RetryingTest(3)
+  public void triggerScheduleUsesConfiguredSerializer() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    stubSchedule("schedule-to-trigger");
+    when(mockDB.serializer()).thenReturn(dev.dbos.transact.json.KryoSerializer.INSTANCE);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.TRIGGER_SCHEDULE,
+          "req-trigger-sched",
+          Map.of("schedule_name", "schedule-to-trigger"));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      assertNull(mapper.readTree(listener.message).get("error_message"));
+
+      ArgumentCaptor<dev.dbos.transact.workflow.internal.WorkflowStatusInternal> captor =
+          ArgumentCaptor.forClass(dev.dbos.transact.workflow.internal.WorkflowStatusInternal.class);
+      verify(mockDB).initWorkflowStatus(captor.capture(), any());
+      assertEquals(dev.dbos.transact.json.KryoSerializer.NAME, captor.getValue().serialization());
+    }
+  }
+
+  @RetryingTest(3)
+  public void backfillScheduleUsesConfiguredSerializer() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    stubSchedule("schedule-to-backfill");
+    when(mockDB.serializer()).thenReturn(dev.dbos.transact.json.KryoSerializer.INSTANCE);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.BACKFILL_SCHEDULE,
+          "req-backfill-sched",
+          Map.of(
+              "schedule_name", "schedule-to-backfill",
+              "start", "2024-01-01T00:00:00Z",
+              "end", "2024-01-02T00:00:00Z"));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      assertNull(mapper.readTree(listener.message).get("error_message"));
+
+      ArgumentCaptor<dev.dbos.transact.workflow.internal.WorkflowStatusInternal> captor =
+          ArgumentCaptor.forClass(dev.dbos.transact.workflow.internal.WorkflowStatusInternal.class);
+      verify(mockDB).initWorkflowStatus(captor.capture(), any());
+      assertEquals(dev.dbos.transact.json.KryoSerializer.NAME, captor.getValue().serialization());
+    }
+  }
+
   @RetryingTest(3)
   public void canTriggerScheduleThrows() throws Exception {
     MessageListener listener = new MessageListener();
@@ -3836,7 +3915,6 @@ public class ConductorTest {
             .withConcurrency(5)
             .withWorkerConcurrency(2)
             .withRateLimit(10, Duration.ofSeconds(60))
-            .withPriorityEnabled(true)
             .withPartitioningEnabled(true)
             .withPollingInterval(Duration.ofMillis(500));
     dev.dbos.transact.workflow.Queue q2 = new dev.dbos.transact.workflow.Queue("queue-2");
@@ -3877,7 +3955,7 @@ public class ConductorTest {
       assertTrue(second.get("worker_concurrency").isNull());
       assertTrue(second.get("rate_limit_max").isNull());
       assertTrue(second.get("rate_limit_period_sec").isNull());
-      assertFalse(second.get("priority_enabled").asBoolean());
+      assertTrue(second.get("priority_enabled").asBoolean());
       assertFalse(second.get("partition_queue").asBoolean());
       assertEquals(1.0, second.get("polling_interval_sec").asDouble(), 0.001);
     }

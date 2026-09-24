@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -151,9 +153,11 @@ public class MultiClassInstanceTest {
   public void enqueueForSpecificInstance() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new dev.dbos.transact.DBOSClient.EnqueueOptions(
-                  "stepWorkflow", "dev.dbos.transact.invocation.BearServiceImpl", "testQueue")
-              .withInstanceName("A");
+          new EnqueueOptions(
+              "stepWorkflow",
+              "dev.dbos.transact.invocation.BearServiceImpl",
+              "A",
+              QueueName.of("testQueue"));
       var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
 
       var result = handle.getResult();
@@ -180,7 +184,7 @@ public class MultiClassInstanceTest {
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      var eh = dbosExecutor.executeWorkflowById(handle.workflowId(), false, true);
+      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
