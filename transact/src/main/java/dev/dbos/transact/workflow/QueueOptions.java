@@ -90,9 +90,10 @@ public record QueueOptions(
   /**
    * Constructs options with no per-partition limits.
    *
-   * @deprecated Retained for source compatibility with the pre-per-partition-limit shape.
+   * @deprecated Retained for source compatibility with the pre-per-partition-limit shape. Use the
+   *     canonical constructor, or the {@code with} and {@code and} builders.
    */
-  @Deprecated(since = "1.1")
+  @Deprecated(since = "1.1", forRemoval = true)
   public QueueOptions(
       @NonNull Field<Integer> concurrency,
       @NonNull Field<Integer> workerConcurrency,

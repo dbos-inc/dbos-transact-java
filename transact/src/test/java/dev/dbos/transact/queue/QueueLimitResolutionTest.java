@@ -219,7 +219,7 @@ public class QueueLimitResolutionTest {
 
     @Test
     void theDeprecatedConstructorLeavesThePerPartitionFieldsAbsent() {
-      @SuppressWarnings("deprecation")
+      @SuppressWarnings("removal")
       var o =
           new QueueOptions(
               Field.of(4),
