@@ -9,6 +9,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -152,9 +153,11 @@ public class MultiClassInstanceTest {
   public void enqueueForSpecificInstance() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options =
-          new EnqueueOptions("stepWorkflow", "testQueue")
-              .withClassName("dev.dbos.transact.invocation.BearServiceImpl")
-              .withInstanceName("A");
+          new EnqueueOptions(
+              "stepWorkflow",
+              "dev.dbos.transact.invocation.BearServiceImpl",
+              "A",
+              QueueName.of("testQueue"));
       var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
 
       var result = handle.getResult();

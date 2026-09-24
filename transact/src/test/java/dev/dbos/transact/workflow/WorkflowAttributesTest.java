@@ -198,7 +198,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new EnqueueOptions("client_workflow", ATTR_QUEUE)
+          new EnqueueOptions("client_workflow", QueueName.of(ATTR_QUEUE))
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(
@@ -312,7 +312,7 @@ public class WorkflowAttributesTest {
 
     try (DBOSClient cl = pgContainer.dbosClient()) {
       var options =
-          new EnqueueOptions("client_workflow", ATTR_QUEUE)
+          new EnqueueOptions("client_workflow", QueueName.of(ATTR_QUEUE))
               .withAttributes(Map.of("source", "client"));
       var handle = cl.enqueueWorkflow(options, new Object[] {1});
       assertEquals(

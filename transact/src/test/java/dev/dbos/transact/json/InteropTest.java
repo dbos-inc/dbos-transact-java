@@ -11,6 +11,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
@@ -331,8 +332,7 @@ public class InteropTest {
 
       // Enqueue the canonical workflow with portable serialization
       var options =
-          new EnqueueOptions("canonicalWorkflow", "interopq")
-              .withClassName("interop")
+          new EnqueueOptions("canonicalWorkflow", "interop", QueueName.of("interopq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -460,8 +460,7 @@ public class InteropTest {
       namedArgs.put("tags", Arrays.asList("a", "b"));
 
       var options =
-          new EnqueueOptions("namedArgsWorkflow", "interopq")
-              .withClassName("interop")
+          new EnqueueOptions("namedArgsWorkflow", "interop", QueueName.of("interopq"))
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 

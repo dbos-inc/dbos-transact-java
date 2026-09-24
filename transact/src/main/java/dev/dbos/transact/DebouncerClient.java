@@ -358,8 +358,10 @@ public final class DebouncerClient<R> {
     DebouncerMessage initial = new DebouncerMessage(messageId, args, debouncePeriod);
 
     var enqueueOpts =
-        new EnqueueOptions(Constants.DEBOUNCER_WORKFLOW_NAME, Constants.DBOS_INTERNAL_QUEUE)
-            .withClassName(Constants.DEBOUNCER_CLASS_NAME)
+        new EnqueueOptions(
+                Constants.DEBOUNCER_WORKFLOW_NAME,
+                Constants.DEBOUNCER_CLASS_NAME,
+                QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
             .withDeduplicationId(deduplicationId);
 
     while (true) {

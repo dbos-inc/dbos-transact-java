@@ -296,8 +296,10 @@ public class DebouncerClientTest {
         new DebouncerMessage(
             UUID.randomUUID().toString(), new Object[] {"legacy"}, Duration.ofMillis(200));
     dbosClient.enqueueWorkflow(
-        new EnqueueOptions(Constants.DEBOUNCER_WORKFLOW_NAME, Constants.DBOS_INTERNAL_QUEUE)
-            .withClassName(Constants.DEBOUNCER_CLASS_NAME)
+        new EnqueueOptions(
+                Constants.DEBOUNCER_WORKFLOW_NAME,
+                Constants.DEBOUNCER_CLASS_NAME,
+                QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
             .withDeduplicationId("process-legacy-negative"),
         new Object[] {debouncerOpts, ctx, message});
 

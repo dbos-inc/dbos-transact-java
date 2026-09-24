@@ -20,6 +20,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
@@ -67,8 +68,7 @@ class AppNameServiceImpl implements AppNameService {
   public String enqueueGreet(
       String workflowName, String className, String queueName, String childId, String arg) {
     dbos.enqueueWorkflow(
-        new EnqueueOptions(workflowName, queueName)
-            .withClassName(className)
+        new EnqueueOptions(workflowName, className, QueueName.of(queueName))
             .withWorkflowId(childId),
         new Object[] {arg});
     return childId;
@@ -493,7 +493,8 @@ public class ApplicationNameTest {
             true,
             APP_B)) {
       var options =
-          new EnqueueOptions("greet", "queue-a").withSerialization(SerializationStrategy.PORTABLE);
+          new EnqueueOptions("greet", QueueName.of("queue-a"))
+              .withSerialization(SerializationStrategy.PORTABLE);
       foreignId = client.enqueueWorkflow(options, new Object[] {"peer"}).workflowId();
     }
 
@@ -531,7 +532,7 @@ public class ApplicationNameTest {
       unclaimedId =
           client
               .enqueueWorkflow(
-                  new EnqueueOptions("greet", queueName)
+                  new EnqueueOptions("greet", QueueName.of(queueName))
                       .withSerialization(SerializationStrategy.PORTABLE),
                   new Object[] {"nobody"})
               .workflowId();
@@ -559,7 +560,8 @@ public class ApplicationNameTest {
       assertTrue(seen.contains(idB));
 
       var options =
-          new EnqueueOptions("greet", "queue-b").withSerialization(SerializationStrategy.PORTABLE);
+          new EnqueueOptions("greet", QueueName.of("queue-b"))
+              .withSerialization(SerializationStrategy.PORTABLE);
       var handle = client.enqueueWorkflow(options, new Object[] {"nameless"});
       assertNull(workflowAppName(handle.workflowId()));
     }
@@ -579,8 +581,10 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
-              .withClassName(AppNameServiceImpl.class.getName())
+          new EnqueueOptions(
+                  "greet",
+                  AppNameServiceImpl.class.getName(),
+                  QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
               .withWorkflowId("wf-db-holder")
               .withDeduplicationId(dedupId),
           new Object[] {"theirs"});
@@ -602,8 +606,10 @@ public class ApplicationNameTest {
 
     try (var peer = new DBOSClient(dataSource, null, null, APP_B)) {
       peer.enqueueWorkflow(
-          new EnqueueOptions("greet", Constants.DBOS_INTERNAL_QUEUE)
-              .withClassName(AppNameServiceImpl.class.getName())
+          new EnqueueOptions(
+                  "greet",
+                  AppNameServiceImpl.class.getName(),
+                  QueueName.of(Constants.DBOS_INTERNAL_QUEUE))
               .withWorkflowId("wf-db-client-holder")
               .withDeduplicationId(dedupId),
           new Object[] {"theirs"});
@@ -687,8 +693,7 @@ public class ApplicationNameTest {
 
     WorkflowHandle<String, RuntimeException> handle =
         dbosA.enqueueWorkflow(
-            new EnqueueOptions("greet", "queue-b")
-                .withClassName(AppNameServiceImpl.class.getName())
+            new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-b"))
                 .withWorkflowId(childId)
                 .withApplicationName(APP_B),
             new Object[] {"peer"});
@@ -710,8 +715,7 @@ public class ApplicationNameTest {
     var childId = UUID.randomUUID().toString();
 
     dbosA.enqueueWorkflow(
-        new EnqueueOptions("greet", "queue-a")
-            .withClassName(AppNameServiceImpl.class.getName())
+        new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"))
             .withWorkflowId(childId),
         new Object[] {"own"});
 

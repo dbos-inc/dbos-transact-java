@@ -1065,8 +1065,6 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String serializationFormat) {
 
     Objects.requireNonNull(options, "options must not be null");
-    Objects.requireNonNull(options.workflowName(), "EnqueueOptions workflowName must not be null");
-    Objects.requireNonNull(options.queueName(), "EnqueueOptions queueName must not be null");
 
     if (options.timeout() != null && options.deadline() != null) {
       throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");

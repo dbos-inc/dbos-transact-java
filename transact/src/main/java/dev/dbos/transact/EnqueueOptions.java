@@ -4,12 +4,14 @@ import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
 
+import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -33,8 +35,9 @@ import org.jspecify.annotations.Nullable;
  *   <li>The application that owns the enqueued workflow
  * </ul>
  *
- * <p>Required fields: {@code workflowName}, {@code queueName}. All other fields are optional and
- * can be set using the provided {@code with} methods.
+ * <p>The constructors fix what to run and where: the required {@code workflowName} and queue, and
+ * optionally {@code className} and {@code instanceName}. Every other field is optional and set with
+ * the {@code with} methods.
  *
  * @param workflowName The name of the workflow function to enqueue. Required.
  * @param className The Java class containing the workflow function. Optional.
@@ -82,8 +85,14 @@ public record EnqueueOptions(
     @Nullable String applicationName) {
 
   public EnqueueOptions {
-    if (nullableIsEmpty(workflowName)) {
+    Objects.requireNonNull(workflowName, "workflowName must not be null");
+    if (workflowName.isEmpty()) {
       throw new IllegalArgumentException("workflowName must not be empty");
+    }
+
+    Objects.requireNonNull(queueName, "queueName must not be null");
+    if (queueName.isEmpty()) {
+      throw new IllegalArgumentException("queueName must not be empty");
     }
 
     if (nullableIsEmpty(className)) {
@@ -92,10 +101,6 @@ public record EnqueueOptions(
 
     if (nullableIsEmpty(instanceName)) {
       throw new IllegalArgumentException("instanceName must not be empty");
-    }
-
-    if (nullableIsEmpty(queueName)) {
-      throw new IllegalArgumentException("queueName must not be empty");
     }
 
     if (nullableIsEmpty(workflowId)) {
@@ -137,13 +142,47 @@ public record EnqueueOptions(
     attributes = validateAttributes(attributes);
   }
 
-  /** Construct `EnqueueOptions` with a minimum set of required options */
-  public EnqueueOptions(@NonNull String workflowName, @NonNull String queueName) {
+  /**
+   * Options for enqueuing the named workflow on {@code queue}.
+   *
+   * @param workflowName name of the workflow to enqueue
+   * @param queue name of the queue to enqueue on
+   */
+  public EnqueueOptions(@NonNull String workflowName, @NonNull QueueName queue) {
+    this(workflowName, null, null, queue);
+  }
+
+  /**
+   * Options for enqueuing the named workflow of {@code className} on {@code queue}.
+   *
+   * @param workflowName name of the workflow to enqueue
+   * @param className class containing the workflow, or its {@code @WorkflowClassName}
+   * @param queue name of the queue to enqueue on
+   */
+  public EnqueueOptions(
+      @NonNull String workflowName, @Nullable String className, @NonNull QueueName queue) {
+    this(workflowName, className, null, queue);
+  }
+
+  /**
+   * Options for enqueuing the named workflow of {@code className}, on the instance registered as
+   * {@code instanceName}, on {@code queue}.
+   *
+   * @param workflowName name of the workflow to enqueue
+   * @param className class containing the workflow, or its {@code @WorkflowClassName}
+   * @param instanceName name the target instance was registered under
+   * @param queue name of the queue to enqueue on
+   */
+  public EnqueueOptions(
+      @NonNull String workflowName,
+      @Nullable String className,
+      @Nullable String instanceName,
+      @NonNull QueueName queue) {
     this(
         workflowName,
-        null,
-        null,
-        queueName,
+        className,
+        instanceName,
+        Objects.requireNonNull(queue, "queue must not be null").value(),
         null,
         null,
         null,
@@ -158,34 +197,6 @@ public record EnqueueOptions(
         null,
         null,
         null);
-  }
-
-  /**
-   * Specify the Java classname for the class containing the workflow to enqueue
-   *
-   * @param className Class containing the workflow to enqueue
-   * @return New `EnqueueOptions` with the class name set
-   */
-  public @NonNull EnqueueOptions withClassName(@Nullable String className) {
-    return new EnqueueOptions(
-        this.workflowName,
-        className,
-        this.instanceName,
-        this.queueName,
-        this.workflowId,
-        this.appVersion,
-        this.timeout,
-        this.deadline,
-        this.deduplicationId,
-        this.priority,
-        this.queuePartitionKey,
-        this.delay,
-        this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles,
-        this.attributes,
-        this.applicationName);
   }
 
   /**
@@ -322,35 +333,6 @@ public record EnqueueOptions(
         this.timeout,
         this.deadline,
         deduplicationId,
-        this.priority,
-        this.queuePartitionKey,
-        this.delay,
-        this.serialization,
-        this.authenticatedUser,
-        this.assumedRole,
-        this.authenticatedRoles,
-        this.attributes,
-        this.applicationName);
-  }
-
-  /**
-   * Specify an object instance name to execute the workflow. If workflow objects are named, this
-   * must be specified to direct processing to the correct instance.
-   *
-   * @param instName Instance name registered within `DBOS.registerWorkflows`
-   * @return New `EnqueueOptions` with the target instance name set
-   */
-  public @NonNull EnqueueOptions withInstanceName(@Nullable String instName) {
-    return new EnqueueOptions(
-        this.workflowName,
-        this.className,
-        instName,
-        this.queueName,
-        this.workflowId,
-        this.appVersion,
-        this.timeout,
-        this.deadline,
-        this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
         this.delay,
