@@ -602,9 +602,6 @@ public class MigrationManager {
 
   static final String MIGRATION_1 =
       """
-      -- Enable uuid extension for generating UUIDs
-      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
       CREATE TABLE "%1$s".workflow_status (
           workflow_uuid TEXT PRIMARY KEY,
           status TEXT,
