@@ -82,6 +82,39 @@ class MigrationManagerTest {
     dataSource = pgContainer.dataSource();
   }
 
+  /**
+   * A role holding only USAGE and CREATE on a pre-created DBOS schema, and nothing on the database,
+   * can migrate a new system database. Migration 1 used to install uuid-ossp, which needs CREATE on
+   * the database even for a trusted extension, and nothing in the schema used it (#576).
+   */
+  @Test
+  void aSchemaScopedRoleCanMigrateANewSystemDatabase() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "Postgres privilege model");
+
+    var schema = Constants.DB_SCHEMA;
+    var role = "dbos_schema_only";
+    var password = "dbos_schema_only_pw";
+    // An administrator provisions the database, the role and its schema; the role does the rest.
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.execute("CREATE ROLE %s LOGIN PASSWORD '%s'".formatted(role, password));
+      stmt.execute("CREATE SCHEMA \"%s\"".formatted(schema));
+      stmt.execute("GRANT USAGE, CREATE ON SCHEMA \"%s\" TO %s".formatted(schema, role));
+    }
+
+    assertDoesNotThrow(
+        () -> MigrationManager.runMigrations(pgContainer.jdbcUrl(), role, password, schema, true));
+
+    try (var conn = dataSource.getConnection()) {
+      var metaData = conn.getMetaData();
+      for (var table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table);
+      }
+    }
+  }
+
   @Test
   void testRunMigrations_CreatesTables() throws Exception {
 
