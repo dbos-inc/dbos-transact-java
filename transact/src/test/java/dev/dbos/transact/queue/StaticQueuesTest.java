@@ -327,6 +327,13 @@ public class StaticQueuesTest {
 
     var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
+    // The enqueues above can share a created_at millisecond, and listWorkflows leaves the order of
+    // such ties unspecified, so sort by workflow ID rather than relying on the list order.
+    assertEquals(5, wfs.size());
+    wfs.sort(
+        (a, b) -> {
+          return a.workflowId().compareTo(b.workflowId());
+        });
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
