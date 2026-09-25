@@ -392,8 +392,17 @@ public class WorkflowDAO {
         throw e;
       }
 
+      // Only the call that created the status row writes its input. A row that was already there
+      // keeps the input it was written with, including one that keeps it in workflow_status.inputs,
+      // which a payload row here would override on every read. Checked here rather than left to the
+      // callers' rollback: not every caller rolls back (recordErrorForUnstartedWorkflow commits
+      // regardless), and a repeat start then skips a statement it would only have discarded.
+      if (!ownerXid.equals(result.ownerXid())) {
+        return result;
+      }
+
       // Two statements rather than one data-modifying CTE: at scale the CTE costs more than the
-      // round trip it saves. DO NOTHING because a row that already exists keeps its own input.
+      // round trip it saves. DO NOTHING for a retried commit that did land the first time.
       var inputSQL =
           """
             INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
