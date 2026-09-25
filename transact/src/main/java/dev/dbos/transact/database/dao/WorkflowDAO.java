@@ -405,15 +405,14 @@ public class WorkflowDAO {
       // round trip it saves. DO NOTHING for a retried commit that did land the first time.
       var inputSQL =
           """
-            INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
-            VALUES (?, ?, ?)
+            INSERT INTO "%s".workflow_input (workflow_uuid, inputs)
+            VALUES (?, ?)
             ON CONFLICT (workflow_uuid) DO NOTHING
           """
               .formatted(schema);
       try (var inputStmt = conn.prepareStatement(inputSQL)) {
         inputStmt.setString(1, status.workflowId());
         inputStmt.setString(2, status.inputs());
-        inputStmt.setLong(3, now);
         inputStmt.executeUpdate();
       }
 
@@ -841,17 +840,18 @@ public class WorkflowDAO {
     // The latest call's inputs win, in the payload table, in the same transaction. An upsert
     // rather than an update: a row enqueued by a release that still wrote the status row's inputs
     // has no payload row yet, and the one created here takes precedence over the stale column on
-    // every read. retention_timestamp is left alone on conflict, as in Python and TypeScript.
+    // every read. retention_timestamp takes the column default on insert and is left alone on
+    // conflict, as in Python and TypeScript.
     var inputsSql =
         """
-          INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
-          VALUES (?, ?, ?)
+          INSERT INTO "%s".workflow_input (workflow_uuid, inputs)
+          VALUES (?, ?)
           ON CONFLICT (workflow_uuid) DO UPDATE SET inputs = EXCLUDED.inputs
         """
             .formatted(ctx.schema());
     String workflowId = null;
-    long now = System.currentTimeMillis();
     try (var stmt = conn.prepareStatement(sql)) {
+      long now = System.currentTimeMillis();
       int i = 1;
       stmt.setLong(i++, delayUntilEpochMs);
       stmt.setLong(i++, delayUntilEpochMs);
@@ -877,7 +877,6 @@ public class WorkflowDAO {
       try (var stmt = conn.prepareStatement(inputsSql)) {
         stmt.setString(1, workflowId);
         stmt.setString(2, inputs);
-        stmt.setLong(3, now);
         stmt.executeUpdate();
       }
       return new DebounceResult.Bounced(workflowId);
@@ -3126,19 +3125,18 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
 
-    // Retention starts at import: the original timestamps are long past the cutoff and the payload
-    // would be collected immediately.
+    // retention_timestamp takes the column default, so retention starts at import. The export
+    // carries no retention timestamp to restore, and the original ones would be long past the
+    // cutoff, getting the payloads collected immediately.
     var wfInputSQL =
         """
-        INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
-        VALUES (?, ?, (EXTRACT(epoch FROM now()) * 1000)::bigint)
+        INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES (?, ?)
         """
             .formatted(ctx.schema());
 
     var wfOutputSQL =
         """
-        INSERT INTO "%s".workflow_output (workflow_uuid, output, error, retention_timestamp)
-        VALUES (?, ?, ?, (EXTRACT(epoch FROM now()) * 1000)::bigint)
+        INSERT INTO "%s".workflow_output (workflow_uuid, output, error) VALUES (?, ?, ?)
         """
             .formatted(ctx.schema());
 
