@@ -402,7 +402,13 @@ public class WorkflowDAO {
       }
 
       // Two statements rather than one data-modifying CTE: at scale the CTE costs more than the
-      // round trip it saves. DO NOTHING for a retried commit that did land the first time.
+      // round trip it saves.
+      //
+      // An upsert, because this call created the status row, so any input already filed under the
+      // ID is not this workflow's. Retention deletes status rows before it sweeps their payloads,
+      // so a workflow started under a reused ID in between would otherwise run with the previous
+      // workflow's input, and then lose it to the payload sweep. A retried commit that did land
+      // the first time rewrites the same values.
       //
       // retention_timestamp is the row's created_at, not the column default. The payload sweep
       // treats a payload below the cutoff as an orphan unless its status row was also created
@@ -413,7 +419,8 @@ public class WorkflowDAO {
           """
             INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
             VALUES (?, ?, ?)
-            ON CONFLICT (workflow_uuid) DO NOTHING
+            ON CONFLICT (workflow_uuid)
+              DO UPDATE SET inputs = EXCLUDED.inputs, retention_timestamp = EXCLUDED.retention_timestamp
           """
               .formatted(schema);
       try (var inputStmt = conn.prepareStatement(inputSQL)) {
@@ -480,13 +487,16 @@ public class WorkflowDAO {
     }
 
     // The payload follows the status transition it belongs to, so both must land together: the
-    // caller runs them in one transaction.
+    // caller runs them in one transaction. A row already here belongs to an earlier workflow under
+    // the same ID whose payloads retention had not yet swept, so its retention_timestamp is reset
+    // along with the payload; kept, it would get this workflow's output swept as an orphan.
     var outputSQL =
         """
           INSERT INTO "%s".workflow_output (workflow_uuid, output, error)
           VALUES (?, ?, ?)
           ON CONFLICT (workflow_uuid)
-            DO UPDATE SET output = EXCLUDED.output, error = EXCLUDED.error
+            DO UPDATE SET output = EXCLUDED.output, error = EXCLUDED.error,
+                          retention_timestamp = EXCLUDED.retention_timestamp
         """
             .formatted(schema);
     try (var stmt = conn.prepareStatement(outputSQL)) {
@@ -2213,8 +2223,9 @@ public class WorkflowDAO {
       stmt.executeUpdate();
     }
 
-    // The fork's input is a copy of the original's, under a new ID that cannot already exist, so
-    // no ON CONFLICT. retention_timestamp defaults to now: the fork starts its own retention.
+    // The fork's input is a copy of the original's. The status insert above just claimed each new
+    // ID, so an input already filed under one is a leftover retention has not yet swept, and is
+    // replaced. retention_timestamp defaults to now, the same reading as the fork's created_at.
     StringBuilder inputSQL =
         new StringBuilder(
             """
@@ -2226,6 +2237,10 @@ public class WorkflowDAO {
       inputRows.add("(?, ?)");
     }
     inputSQL.append(inputRows);
+    inputSQL.append(
+        " ON CONFLICT (workflow_uuid)"
+            + " DO UPDATE SET inputs = EXCLUDED.inputs,"
+            + " retention_timestamp = EXCLUDED.retention_timestamp");
 
     try (var stmt = conn.prepareStatement(inputSQL.toString())) {
       int p = 1;
@@ -3134,16 +3149,23 @@ public class WorkflowDAO {
 
     // retention_timestamp takes the column default, so retention starts at import. The export
     // carries no retention timestamp to restore, and the original ones would be long past the
-    // cutoff, getting the payloads collected immediately.
+    // cutoff, getting the payloads collected immediately. The status insert above fails on an
+    // existing row, so a payload already filed under the ID is a leftover retention has not yet
+    // swept, and is replaced.
     var wfInputSQL =
         """
         INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES (?, ?)
+        ON CONFLICT (workflow_uuid)
+          DO UPDATE SET inputs = EXCLUDED.inputs, retention_timestamp = EXCLUDED.retention_timestamp
         """
             .formatted(ctx.schema());
 
     var wfOutputSQL =
         """
         INSERT INTO "%s".workflow_output (workflow_uuid, output, error) VALUES (?, ?, ?)
+        ON CONFLICT (workflow_uuid)
+          DO UPDATE SET output = EXCLUDED.output, error = EXCLUDED.error,
+                        retention_timestamp = EXCLUDED.retention_timestamp
         """
             .formatted(ctx.schema());
 

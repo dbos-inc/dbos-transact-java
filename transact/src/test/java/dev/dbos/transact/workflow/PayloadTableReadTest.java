@@ -4,13 +4,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AutoClose;
@@ -133,6 +136,34 @@ class PayloadTableReadTest {
     // The outcome this release recorded went to workflow_output, beside the legacy input: a row
     // of both shapes, which every read resolves.
     assertEveryReadSees(workflowId, 7);
+  }
+
+  @Test
+  void aReusedIdDoesNotInheritPayloadsRetentionHasNotSweptYet() throws Exception {
+    var donor = dbos.startWorkflow(() -> proxy.echo(2));
+    assertEquals(2, donor.getResult());
+
+    // A retention round deletes a workflow's status row before its payload sweep removes the
+    // payloads, so for a while they sit under an ID no workflow holds. Plant that state.
+    var workflowId = "reused-" + UUID.randomUUID();
+    givePayloadRowsOf(donor.workflowId(), workflowId);
+    exec(
+        "UPDATE dbos.workflow_input SET retention_timestamp = 1000 WHERE workflow_uuid = ?",
+        workflowId);
+    exec(
+        "UPDATE dbos.workflow_output SET retention_timestamp = 1000 WHERE workflow_uuid = ?",
+        workflowId);
+
+    // A new workflow under that ID runs with its own input, not the leftover one.
+    var handle = dbos.startWorkflow(() -> proxy.echo(5), new StartWorkflowOptions(workflowId));
+    assertEquals(5, handle.getResult());
+    assertEveryReadSees(workflowId, 5);
+
+    // And its payloads carry its own retention, so the payload sweep that would have removed the
+    // leftovers leaves them alone.
+    DBOSTestAccess.getSystemDatabase(dbos)
+        .garbageCollect(Instant.now().minusSeconds(60), null, 1000);
+    assertEveryReadSees(workflowId, 5);
   }
 
   /** Every read path that goes through the inputs/output COALESCE helpers. */
