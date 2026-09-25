@@ -11,6 +11,7 @@ import dev.dbos.transact.utils.PgContainer;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +36,8 @@ class PayloadTableReadTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
-    proxy = dbos.registerProxy(PayloadReadService.class, new PayloadReadServiceImpl());
+    PayloadReadServiceImpl.stepRuns.set(0);
+    proxy = dbos.registerProxy(PayloadReadService.class, new PayloadReadServiceImpl(dbos));
     dbos.launch();
   }
 
@@ -102,6 +104,35 @@ class PayloadTableReadTest {
         "failure 2",
         systemDatabase.getWorkflowStatus(targetId).error().message(),
         "and still be read once the legacy column is gone");
+  }
+
+  @Test
+  void aWorkflowAnOlderReleaseLeftMidRunRecoversWithItsLegacyInputs() throws Exception {
+    var handle = dbos.startWorkflow(() -> proxy.stepThenEcho(7));
+    assertEquals(7, handle.getResult());
+    assertEquals(1, PayloadReadServiceImpl.stepRuns.get());
+    var workflowId = handle.workflowId();
+
+    // Rewind the row to what a 1.1 executor that crashed after the step leaves behind: PENDING,
+    // the step checkpointed, the input only on the status row, and no outcome anywhere.
+    moveToLegacyColumns(workflowId);
+    exec(
+        "UPDATE dbos.workflow_status SET status = 'PENDING', output = NULL, error = NULL,"
+            + " completed_at = NULL WHERE workflow_uuid = ?",
+        workflowId);
+
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    assertEquals(
+        List.of(workflowId), executor.recoverPendingWorkflows(List.of(executor.executorId())));
+
+    // Recovery re-enqueues, and the run it starts has only the legacy column to read the input
+    // from. The step replays from its checkpoint rather than running again.
+    assertEquals(7, dbos.<Integer, Exception>retrieveWorkflow(workflowId).getResult());
+    assertEquals(1, PayloadReadServiceImpl.stepRuns.get(), "the step must replay, not re-run");
+
+    // The outcome this release recorded went to workflow_output, beside the legacy input: a row
+    // of both shapes, which every read resolves.
+    assertEveryReadSees(workflowId, 7);
   }
 
   /** Every read path that goes through the inputs/output COALESCE helpers. */
@@ -196,15 +227,36 @@ class PayloadTableReadTest {
 interface PayloadReadService {
   int echo(int x);
 
+  int stepThenEcho(int x);
+
   int fail(int x);
 }
 
 class PayloadReadServiceImpl implements PayloadReadService {
 
+  static final AtomicInteger stepRuns = new AtomicInteger();
+
+  private final DBOS dbos;
+
+  PayloadReadServiceImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
   @Workflow
   @Override
   public int echo(int x) {
     return x;
+  }
+
+  @Workflow
+  @Override
+  public int stepThenEcho(int x) {
+    return dbos.runStep(
+        () -> {
+          stepRuns.incrementAndGet();
+          return x;
+        },
+        "recordInput");
   }
 
   @Workflow
