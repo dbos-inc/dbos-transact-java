@@ -9,15 +9,24 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.util.concurrent.TimeUnit;
+
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * A client never migrates, so it is the caller's job to point it at a schema this SDK can read. It
  * checks that on construction rather than failing later on a raw "relation does not exist".
+ *
+ * <p>The suite-wide two-minute timeout does not fit this class. The tests that need a schema to
+ * check migrate a fresh container from empty, which on CockroachDB is over a hundred online schema
+ * changes: 20-40s on a CI runner, but two to three minutes on a slow one (#529). Raised rather than
+ * removed, so a genuine hang still fails rather than hanging CI.
  */
+@Timeout(value = 5, unit = TimeUnit.MINUTES)
 class ClientSysDbVersionTest {
 
   @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
