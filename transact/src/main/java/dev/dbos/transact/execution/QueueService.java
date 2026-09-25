@@ -18,6 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -34,9 +35,18 @@ public class QueueService implements AutoCloseable {
   private static final double BACKOFF_GROWTH_FACTOR = 2.0;
   private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
+  // One claim round trip plus dispatching what it claimed, with room for a slow database.
+  private static final Duration PAUSE_DRAIN_TIMEOUT = Duration.ofSeconds(30);
+  private static final long PAUSE_DRAIN_POLL_MS = 5;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
+
+  // A pass registers in passesInFlight before it reads paused, and pause() writes paused before it
+  // reads passesInFlight. Both are sequentially consistent, so either the pass sees the flag or
+  // pause() sees the pass: none can slip in behind a pause() that found nothing in flight.
   private final AtomicBoolean paused = new AtomicBoolean(false);
+  private final AtomicInteger passesInFlight = new AtomicInteger();
+
   private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
   private volatile Map<String, Queue> dynamicQueueMap = Map.of();
 
@@ -54,12 +64,59 @@ public class QueueService implements AutoCloseable {
     speedup = 0.01;
   }
 
+  /**
+   * Stops claiming queued workflows and transitioning delayed ones, and waits for any pass that
+   * could still do either to finish. Once that wait completes, a row enqueued afterwards stays put
+   * until {@link #unpause()}; workflows already dispatched keep running. Only tests pause the
+   * service.
+   *
+   * <p>The wait is bounded. It lasts at most 30 seconds, and ends early if the thread is
+   * interrupted (the interrupt is restored) or if {@link #unpause()} supersedes it. After a timeout
+   * (which is logged) or an interrupt, this returns with the service paused but a pass possibly
+   * still in flight, and that pass may still claim a row. Not to be called from a queue thread,
+   * which would wait on its own pass until the timeout.
+   */
   public void pause() {
     paused.set(true);
+    long deadline = System.nanoTime() + PAUSE_DRAIN_TIMEOUT.toNanos();
+    while (paused.get() && passesInFlight.get() > 0) {
+      if (System.nanoTime() - deadline > 0) {
+        logger.warn(
+            "Queue service paused, but {} poll pass(es) still in flight after {}",
+            passesInFlight.get(),
+            PAUSE_DRAIN_TIMEOUT);
+        return;
+      }
+      try {
+        Thread.sleep(PAUSE_DRAIN_POLL_MS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return;
+      }
+    }
   }
 
   public void unpause() {
     paused.set(false);
+  }
+
+  /**
+   * Registers a pass that may claim or transition rows, unless the service is paused.
+   *
+   * @return false if paused, in which case the caller must do nothing and not call {@link
+   *     #endPass()}
+   */
+  private boolean beginPass() {
+    passesInFlight.incrementAndGet();
+    if (paused.get()) {
+      passesInFlight.decrementAndGet();
+      return false;
+    }
+    return true;
+  }
+
+  private void endPass() {
+    passesInFlight.decrementAndGet();
   }
 
   public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {
@@ -228,7 +285,9 @@ public class QueueService implements AutoCloseable {
      */
     int processPartition(@Nullable String partition, long running) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
-      if (!paused.get()) {
+      // The claim and the dispatch of what it claimed are one pass: pause() waits for both.
+      if (!beginPass()) return 0;
+      try {
         // The two worker-scoped limits count different things: workerConcurrency bounds the queue
         // across every partition, partitionWorkerConcurrency bounds this partition alone.
         long partitionLocalRunningCount =
@@ -264,8 +323,9 @@ public class QueueService implements AutoCloseable {
           }
         }
         return workflowIds.size();
+      } finally {
+        endPass();
       }
-      return 0;
     }
 
     /**
@@ -375,13 +435,15 @@ public class QueueService implements AutoCloseable {
 
   // ── Shared helpers ────────────────────────────────────────────────────────
 
-  private void transitionDelayedWorkflows() {
-    if (!paused.get()) {
-      try {
-        systemDatabase.transitionDelayedWorkflows();
-      } catch (Throwable e) {
-        logger.error("Exception transitioning delayed workflows", e);
-      }
+  // Package-private so a test can drive one transition directly.
+  void transitionDelayedWorkflows() {
+    if (!beginPass()) return;
+    try {
+      systemDatabase.transitionDelayedWorkflows();
+    } catch (Throwable e) {
+      logger.error("Exception transitioning delayed workflows", e);
+    } finally {
+      endPass();
     }
   }
 }
