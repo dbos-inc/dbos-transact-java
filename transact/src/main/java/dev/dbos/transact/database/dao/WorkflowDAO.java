@@ -403,16 +403,23 @@ public class WorkflowDAO {
 
       // Two statements rather than one data-modifying CTE: at scale the CTE costs more than the
       // round trip it saves. DO NOTHING for a retried commit that did land the first time.
+      //
+      // retention_timestamp is the row's created_at, not the column default. The payload sweep
+      // treats a payload below the cutoff as an orphan unless its status row was also created
+      // before it, which holds only if the input is never stamped earlier than created_at.
+      // created_at comes from this JVM's clock, so the database's now() would break that by
+      // however far the two clocks disagree, and a live workflow could lose its input.
       var inputSQL =
           """
-            INSERT INTO "%s".workflow_input (workflow_uuid, inputs)
-            VALUES (?, ?)
+            INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
+            VALUES (?, ?, ?)
             ON CONFLICT (workflow_uuid) DO NOTHING
           """
               .formatted(schema);
       try (var inputStmt = conn.prepareStatement(inputSQL)) {
         inputStmt.setString(1, status.workflowId());
         inputStmt.setString(2, status.inputs());
+        inputStmt.setLong(3, now);
         inputStmt.executeUpdate();
       }
 
@@ -500,7 +507,6 @@ public class WorkflowDAO {
           conn, c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error));
     }
   }
-
 
   /**
    * Store the result to workflow_output, marking the workflow SUCCESS
