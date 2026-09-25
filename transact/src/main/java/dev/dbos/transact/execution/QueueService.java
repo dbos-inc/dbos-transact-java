@@ -17,8 +17,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
@@ -34,9 +35,23 @@ public class QueueService implements AutoCloseable {
   private static final double BACKOFF_GROWTH_FACTOR = 2.0;
   private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
+  // One claim round trip plus dispatching what it claimed, with room for a slow database.
+  private static final Duration PAUSE_DRAIN_TIMEOUT = Duration.ofSeconds(30);
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
-  private final AtomicBoolean paused = new AtomicBoolean(false);
+
+  // `paused` and `passesInFlight` are guarded together, so a pass cannot see the flag clear and
+  // then slip in behind a pause() that has already found nothing in flight.
+  private final ReentrantLock passLock = new ReentrantLock();
+  private final Condition passesDrained = passLock.newCondition();
+  private boolean paused = false;
+  private int passesInFlight = 0;
+  // In-flight passes whose own thread is blocked in pause(). They cannot finish until it returns,
+  // so pause() does not wait for them: its own, or another pass pausing at the same time.
+  private int passesPausing = 0;
+  // Set while this thread runs a pass.
+  private final ThreadLocal<Boolean> inPass = new ThreadLocal<>();
+
   private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
   private volatile Map<String, Queue> dynamicQueueMap = Map.of();
 
@@ -54,12 +69,85 @@ public class QueueService implements AutoCloseable {
     speedup = 0.01;
   }
 
+  /**
+   * Stops claiming queued workflows and transitioning delayed ones, and returns once no pass that
+   * could still do either is in flight. A row enqueued after this returns stays put until {@link
+   * #unpause()}; workflows already dispatched keep running.
+   *
+   * <p>Waits at most 30 seconds, and gives up early if interrupted (restoring the interrupt) or if
+   * {@link #unpause()} supersedes it. Called from inside a pass, it does not wait for that pass,
+   * which checks the flag again before its next claim.
+   */
   public void pause() {
-    paused.set(true);
+    boolean fromPass = Boolean.TRUE.equals(inPass.get());
+    passLock.lock();
+    try {
+      paused = true;
+      if (fromPass) {
+        passesPausing++;
+        // Another pause() may be waiting on this pass, which will not finish while it waits here.
+        passesDrained.signalAll();
+      }
+      long remaining = PAUSE_DRAIN_TIMEOUT.toNanos();
+      while (paused && passesInFlight > passesPausing) {
+        if (remaining <= 0) {
+          logger.warn(
+              "Queue service paused, but {} poll pass(es) still in flight after {}",
+              passesInFlight - passesPausing,
+              PAUSE_DRAIN_TIMEOUT);
+          return;
+        }
+        remaining = passesDrained.awaitNanos(remaining);
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      if (fromPass) {
+        passesPausing--;
+      }
+      passLock.unlock();
+    }
   }
 
   public void unpause() {
-    paused.set(false);
+    passLock.lock();
+    try {
+      paused = false;
+      // A pause() still draining has been superseded; release it.
+      passesDrained.signalAll();
+    } finally {
+      passLock.unlock();
+    }
+  }
+
+  /**
+   * Registers a pass that may claim or transition rows, unless the service is paused.
+   *
+   * @return false if paused, in which case the caller must do nothing and not call {@link
+   *     #endPass()}
+   */
+  private boolean beginPass() {
+    passLock.lock();
+    try {
+      if (paused) return false;
+      passesInFlight++;
+      inPass.set(Boolean.TRUE);
+      return true;
+    } finally {
+      passLock.unlock();
+    }
+  }
+
+  private void endPass() {
+    passLock.lock();
+    try {
+      inPass.remove();
+      if (--passesInFlight == 0) {
+        passesDrained.signalAll();
+      }
+    } finally {
+      passLock.unlock();
+    }
   }
 
   public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {
@@ -228,7 +316,9 @@ public class QueueService implements AutoCloseable {
      */
     int processPartition(@Nullable String partition, long running) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
-      if (!paused.get()) {
+      // The claim and the dispatch of what it claimed are one pass: pause() waits for both.
+      if (!beginPass()) return 0;
+      try {
         // The two worker-scoped limits count different things: workerConcurrency bounds the queue
         // across every partition, partitionWorkerConcurrency bounds this partition alone.
         long partitionLocalRunningCount =
@@ -264,8 +354,9 @@ public class QueueService implements AutoCloseable {
           }
         }
         return workflowIds.size();
+      } finally {
+        endPass();
       }
-      return 0;
     }
 
     /**
@@ -375,13 +466,15 @@ public class QueueService implements AutoCloseable {
 
   // ── Shared helpers ────────────────────────────────────────────────────────
 
-  private void transitionDelayedWorkflows() {
-    if (!paused.get()) {
-      try {
-        systemDatabase.transitionDelayedWorkflows();
-      } catch (Throwable e) {
-        logger.error("Exception transitioning delayed workflows", e);
-      }
+  // Package-private so a test can drive one transition directly.
+  void transitionDelayedWorkflows() {
+    if (!beginPass()) return;
+    try {
+      systemDatabase.transitionDelayedWorkflows();
+    } catch (Throwable e) {
+      logger.error("Exception transitioning delayed workflows", e);
+    } finally {
+      endPass();
     }
   }
 }
