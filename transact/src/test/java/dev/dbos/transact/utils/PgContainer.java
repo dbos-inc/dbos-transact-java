@@ -15,6 +15,8 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.cockroachdb.CockroachContainer;
 import org.testcontainers.containers.JdbcDatabaseContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -36,6 +38,18 @@ public class PgContainer implements AutoCloseable {
   private static final String CRDB_STORE = "/cockroach/prebuilt";
 
   private static final Queue<JdbcDatabaseContainer<?>> POOL = new ConcurrentLinkedQueue<>();
+
+  /**
+   * How long {@link #acquire()} waits for a pooled container's previous user to disconnect. Closing
+   * a test's remaining resources takes about a second at most, so running out means something
+   * leaked.
+   */
+  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(30);
+
+  /** SQLSTATE 53300, "sorry, too many clients already". */
+  private static final String TOO_MANY_CONNECTIONS = "53300";
+
+  private static final Logger logger = LoggerFactory.getLogger(PgContainer.class);
 
   private static String image(String variable, String fallback) {
     var value = System.getenv(variable);
@@ -123,16 +137,31 @@ public class PgContainer implements AutoCloseable {
   }
 
   static JdbcDatabaseContainer<?> acquire() {
-    var container = POOL.poll();
-    if (container != null) {
+    JdbcDatabaseContainer<?> container;
+    while ((container = POOL.poll()) != null) {
       var jdbcUrl = container.getJdbcUrl().replaceFirst("/[^/]+$", "/" + POOLED_DB_NAME);
-      try (var conn =
-          DriverManager.getConnection(jdbcUrl, container.getUsername(), container.getPassword())) {
+      try (var conn = connectOnceIdle(container, jdbcUrl)) {
+        if (conn == null) {
+          // Whatever is still connected is not going to let go, and handing the container on
+          // would put two tests on one database. It is off the pool and nothing else will close
+          // it, so stop it rather than leave it running, and try the next one.
+          logger.warn(
+              "Discarding pooled container {}: its previous user was still connected after {}",
+              container.getContainerId(),
+              IDLE_TIMEOUT);
+          closeQuietly(container);
+          continue;
+        }
         resetDbosTables(conn);
       } catch (SQLException e) {
         // The container came out of the pool, so nothing else is holding it: dropping it here
         // without closing it would leave it running and unreachable for the rest of the run.
         closeQuietly(container);
+        throw new RuntimeException(e);
+      } catch (InterruptedException e) {
+        // Nothing is wrong with the container, and the next acquire() waits and resets it anyway.
+        release(container);
+        Thread.currentThread().interrupt();
         throw new RuntimeException(e);
       }
       return container;
@@ -168,6 +197,88 @@ public class PgContainer implements AutoCloseable {
     }
   }
 
+  /**
+   * Connects to a pooled container once nothing else is connected to it, or returns null if that
+   * has not happened within {@link #IDLE_TIMEOUT}.
+   *
+   * <p>A container goes back to the pool when its {@code PgContainer} closes, and nothing orders
+   * that after the DBOS instances, clients and data sources the test built against it. JUnit closes
+   * a class's {@code @AutoClose} fields in declaration order, and the suite declares the {@code
+   * PgContainer} first, so the container is normally back in the pool while its previous test still
+   * holds a few dozen connections. Handed on in that state, it can hit {@code max_connections}
+   * before the new test has opened anything (#547). And since every test on a container shares one
+   * database, the old instance would also still be polling the tables just reset for the new one.
+   *
+   * <p>Waiting here, where the container is reused, is what makes this hold however a test orders
+   * or closes its resources. The wait is the time the rest of the previous test's fields take to
+   * close, normally well under a second.
+   *
+   * <p>A saturated server refuses this connection too, so "too many clients" counts as not idle yet
+   * rather than as a failure.
+   */
+  private static Connection connectOnceIdle(JdbcDatabaseContainer<?> container, String jdbcUrl)
+      throws SQLException, InterruptedException {
+    var deadline = System.nanoTime() + IDLE_TIMEOUT.toNanos();
+    Connection conn = null;
+    try {
+      while (true) {
+        if (conn == null) {
+          try {
+            conn =
+                DriverManager.getConnection(
+                    jdbcUrl, container.getUsername(), container.getPassword());
+          } catch (SQLException e) {
+            if (!TOO_MANY_CONNECTIONS.equals(e.getSQLState())) {
+              throw e;
+            }
+          }
+        }
+        if (conn != null && otherSessions(conn) == 0) {
+          var idle = conn;
+          conn = null;
+          return idle;
+        }
+        if (System.nanoTime() - deadline > 0) {
+          return null;
+        }
+        Thread.sleep(50);
+      }
+    } finally {
+      if (conn != null) {
+        conn.close();
+      }
+    }
+  }
+
+  /**
+   * Counts the client sessions on the server other than {@code conn}'s own, across every database,
+   * since they all draw on the same connection limit.
+   *
+   * <p>CockroachDB accepts {@code pg_stat_activity} but always returns it empty, so there the
+   * sessions come from {@code crdb_internal}, which lists client sessions only.
+   */
+  private static int otherSessions(Connection conn) throws SQLException {
+    var sql =
+        USE_COCKROACH_DB
+            ? """
+              SELECT count(*) FROM crdb_internal.cluster_sessions
+              WHERE status <> 'CLOSED' AND session_id <> (SELECT session_id FROM [SHOW session_id])
+              """
+            : """
+              SELECT count(*) FROM pg_stat_activity
+              WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()
+              """;
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      rs.next();
+      return rs.getInt(1);
+    }
+  }
+
+  /**
+   * Returns a container to the pool. Its previous user may still be connected: {@link #acquire()}
+   * waits for that before handing it on, so callers need not close anything first.
+   */
   static void release(JdbcDatabaseContainer<?> c) {
     POOL.offer(c);
   }
