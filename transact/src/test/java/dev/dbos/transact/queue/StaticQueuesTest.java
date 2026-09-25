@@ -469,8 +469,8 @@ public class StaticQueuesTest {
     // Compare starts in the order they happened, not the order the tasks were enqueued. Dequeue
     // orders by created_at, which has millisecond resolution, and the enqueue loop fits several
     // tasks into one millisecond, so tied tasks start in either order. Indexed by task, a tie
-    // straddling a wave boundary pairs a task from one wave with one two waves on and reports a
-    // limiter overshoot that never happened.
+    // straddling a wave boundary can put task i and task i + limit in the same wave, which reads
+    // as a limiter overshoot that never happened.
     Collections.sort(times);
 
     double periodTolerance = 0.5;
