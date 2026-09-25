@@ -17,9 +17,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
@@ -37,20 +37,15 @@ public class QueueService implements AutoCloseable {
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
   // One claim round trip plus dispatching what it claimed, with room for a slow database.
   private static final Duration PAUSE_DRAIN_TIMEOUT = Duration.ofSeconds(30);
+  private static final long PAUSE_DRAIN_POLL_MS = 5;
 
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
 
-  // `paused` and `passesInFlight` are guarded together, so a pass cannot see the flag clear and
-  // then slip in behind a pause() that has already found nothing in flight.
-  private final ReentrantLock passLock = new ReentrantLock();
-  private final Condition passesDrained = passLock.newCondition();
-  private boolean paused = false;
-  private int passesInFlight = 0;
-  // In-flight passes whose own thread is blocked in pause(). They cannot finish until it returns,
-  // so pause() does not wait for them: its own, or another pass pausing at the same time.
-  private int passesPausing = 0;
-  // Set while this thread runs a pass.
-  private final ThreadLocal<Boolean> inPass = new ThreadLocal<>();
+  // A pass registers in passesInFlight before it reads paused, and pause() writes paused before it
+  // reads passesInFlight. Both are sequentially consistent, so either the pass sees the flag or
+  // pause() sees the pass: none can slip in behind a pause() that found nothing in flight.
+  private final AtomicBoolean paused = new AtomicBoolean(false);
+  private final AtomicInteger passesInFlight = new AtomicInteger();
 
   private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
   private volatile Map<String, Queue> dynamicQueueMap = Map.of();
@@ -72,55 +67,37 @@ public class QueueService implements AutoCloseable {
   /**
    * Stops claiming queued workflows and transitioning delayed ones, and waits for any pass that
    * could still do either to finish. Once that wait completes, a row enqueued afterwards stays put
-   * until {@link #unpause()}; workflows already dispatched keep running.
+   * until {@link #unpause()}; workflows already dispatched keep running. Only tests pause the
+   * service.
    *
    * <p>The wait is bounded. It lasts at most 30 seconds, and ends early if the thread is
    * interrupted (the interrupt is restored) or if {@link #unpause()} supersedes it. After a timeout
    * (which is logged) or an interrupt, this returns with the service paused but a pass possibly
-   * still in flight, and that pass may still claim a row. After {@link #unpause()}, the service is
-   * no longer paused. Called from inside a pass, it does not wait for that pass, which checks the
-   * flag again before its next claim.
+   * still in flight, and that pass may still claim a row. Not to be called from a queue thread,
+   * which would wait on its own pass until the timeout.
    */
   public void pause() {
-    boolean fromPass = Boolean.TRUE.equals(inPass.get());
-    passLock.lock();
-    try {
-      paused = true;
-      if (fromPass) {
-        passesPausing++;
-        // Another pause() may be waiting on this pass, which will not finish while it waits here.
-        passesDrained.signalAll();
+    paused.set(true);
+    long deadline = System.nanoTime() + PAUSE_DRAIN_TIMEOUT.toNanos();
+    while (paused.get() && passesInFlight.get() > 0) {
+      if (System.nanoTime() - deadline > 0) {
+        logger.warn(
+            "Queue service paused, but {} poll pass(es) still in flight after {}",
+            passesInFlight.get(),
+            PAUSE_DRAIN_TIMEOUT);
+        return;
       }
-      long remaining = PAUSE_DRAIN_TIMEOUT.toNanos();
-      while (paused && passesInFlight > passesPausing) {
-        if (remaining <= 0) {
-          logger.warn(
-              "Queue service paused, but {} poll pass(es) still in flight after {}",
-              passesInFlight - passesPausing,
-              PAUSE_DRAIN_TIMEOUT);
-          return;
-        }
-        remaining = passesDrained.awaitNanos(remaining);
+      try {
+        Thread.sleep(PAUSE_DRAIN_POLL_MS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return;
       }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } finally {
-      if (fromPass) {
-        passesPausing--;
-      }
-      passLock.unlock();
     }
   }
 
   public void unpause() {
-    passLock.lock();
-    try {
-      paused = false;
-      // A pause() still draining has been superseded; release it.
-      passesDrained.signalAll();
-    } finally {
-      passLock.unlock();
-    }
+    paused.set(false);
   }
 
   /**
@@ -130,27 +107,16 @@ public class QueueService implements AutoCloseable {
    *     #endPass()}
    */
   private boolean beginPass() {
-    passLock.lock();
-    try {
-      if (paused) return false;
-      passesInFlight++;
-      inPass.set(Boolean.TRUE);
-      return true;
-    } finally {
-      passLock.unlock();
+    passesInFlight.incrementAndGet();
+    if (paused.get()) {
+      passesInFlight.decrementAndGet();
+      return false;
     }
+    return true;
   }
 
   private void endPass() {
-    passLock.lock();
-    try {
-      inPass.remove();
-      if (--passesInFlight == 0) {
-        passesDrained.signalAll();
-      }
-    } finally {
-      passLock.unlock();
-    }
+    passesInFlight.decrementAndGet();
   }
 
   public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {

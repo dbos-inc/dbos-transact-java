@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -276,27 +275,6 @@ public class QueueServicePollTest {
     queueService.transitionDelayedWorkflows();
 
     verifyNoInteractions(systemDatabase);
-  }
-
-  @Test
-  @DisplayName("pause() from inside a pass does not wait on that pass")
-  public void pauseFromInsideAPassDoesNotWaitOnItself() {
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
-        .thenReturn(List.of("wf-1", "wf-2"));
-    when(dbosExecutor.executeWorkflowById("wf-1"))
-        .thenAnswer(
-            inv -> {
-              queueService.pause();
-              return null;
-            });
-
-    // Without the exemption this waits out the drain timeout, far past the bound here.
-    assertTimeoutPreemptively(
-        Duration.ofSeconds(5), () -> taskFor(PLAIN).processPartition(null, 0));
-
-    // What the pass had already claimed is still dispatched; the next claim is refused.
-    verify(dbosExecutor).executeWorkflowById("wf-2");
-    assertEquals(0, taskFor(PLAIN).processPartition(null, 0));
   }
 
   @Test
