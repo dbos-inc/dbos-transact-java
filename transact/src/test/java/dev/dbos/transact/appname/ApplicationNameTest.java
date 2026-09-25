@@ -570,9 +570,16 @@ public class ApplicationNameTest {
     assertNull(workflowAppName(unclaimedId));
 
     var appVersion = DBOSTestAccess.getDbosExecutor(dbosA).appVersion();
-    var dequeued =
-        DBOSTestAccess.getSystemDatabase(dbosA)
-            .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0, 0);
+    // Poll, as the queue service does: on CockroachDB the SKIP LOCKED claim passes over the
+    // enqueue's committed but not yet resolved write intents (cockroachdb/cockroach#167582).
+    List<String> dequeued = List.of();
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (dequeued.isEmpty() && System.currentTimeMillis() < deadline) {
+      dequeued =
+          DBOSTestAccess.getSystemDatabase(dbosA)
+              .startQueuedWorkflows(new Queue(queueName), "exec-a", appVersion, null, 0, 0);
+      if (dequeued.isEmpty()) Thread.sleep(100);
+    }
 
     assertEquals(List.of(unclaimedId), dequeued);
     assertEquals(APP_A, workflowAppName(unclaimedId));
