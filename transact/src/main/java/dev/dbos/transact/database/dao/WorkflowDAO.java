@@ -432,7 +432,7 @@ public class WorkflowDAO {
    * that need to distinguish a deleted row do so when they park on the recorded outcome (see {@link
    * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
    */
-  static boolean updateWorkflowOutcome(
+  private static boolean updateWorkflowOutcome(
       Connection conn,
       String schema,
       String workflowId,
@@ -491,6 +491,17 @@ public class WorkflowDAO {
     return true;
   }
 
+  private static boolean updateWorkflowOutcome(
+      DbContext ctx, String workflowId, WorkflowState state, String output, String error)
+      throws SQLException {
+
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn, c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error));
+    }
+  }
+
+
   /**
    * Store the result to workflow_output, marking the workflow SUCCESS
    *
@@ -501,7 +512,7 @@ public class WorkflowDAO {
   public static boolean recordWorkflowOutput(DbContext ctx, String workflowId, String result)
       throws SQLException {
 
-    return recordOutcome(ctx, workflowId, WorkflowState.SUCCESS, result, null);
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.SUCCESS, result, null);
   }
 
   /**
@@ -514,17 +525,7 @@ public class WorkflowDAO {
   public static boolean recordWorkflowError(DbContext ctx, String workflowId, String error)
       throws SQLException {
 
-    return recordOutcome(ctx, workflowId, WorkflowState.ERROR, null, error);
-  }
-
-  private static boolean recordOutcome(
-      DbContext ctx, String workflowId, WorkflowState state, String output, String error)
-      throws SQLException {
-
-    try (var conn = ctx.getConnection()) {
-      return SqlTransaction.call(
-          conn, c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error));
-    }
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.ERROR, null, error);
   }
 
   /**
