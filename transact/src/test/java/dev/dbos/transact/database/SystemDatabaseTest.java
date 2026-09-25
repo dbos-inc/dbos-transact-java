@@ -508,8 +508,21 @@ public class SystemDatabaseTest {
     assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5).status());
     assertEquals(0, DBUtils.getWorkflowRow(dataSource, wfid).recoveryAttempts());
 
-    var claimed =
-        sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
+    // Poll the claim, as the queue service does, rather than asserting on one pass. The claim
+    // selects FOR UPDATE SKIP LOCKED, and CockroachDB skips a key that still carries a write
+    // intent even when the transaction that wrote it has committed
+    // (cockroachdb/cockroach#167582). The insert's intents are resolved asynchronously after its
+    // commit, so a claim issued right behind it can find nothing. Reading the row back above does
+    // not settle that: the read resolves only the key it touches, and the claim's plan may scan an
+    // index whose intent is still outstanding. What this test pins is that the claim counts the
+    // dispatch, not that it wins the first pass.
+    List<String> claimed = List.of();
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
+      claimed =
+          sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
+      if (claimed.isEmpty()) Thread.sleep(100);
+    }
     assertEquals(List.of(wfid), claimed);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
