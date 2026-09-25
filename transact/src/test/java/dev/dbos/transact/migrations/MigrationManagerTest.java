@@ -560,7 +560,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(112, latest, "The shared history currently ends at migration 112");
+    assertEquals(114, latest, "The shared history currently ends at migration 114");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -595,6 +595,9 @@ class MigrationManagerTest {
       }
       assertColumnExists(conn, "operation_outputs", "retention_timestamp");
       assertIndexExists(conn, "idx_operation_outputs_retention");
+
+      assertIndexAbsent(conn, "idx_notifications");
+      assertIndexExists(conn, "idx_workflow_topic");
     }
   }
 

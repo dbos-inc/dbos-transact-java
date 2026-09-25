@@ -23,7 +23,7 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111);
+      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -39,9 +39,11 @@ public class MigrationManager {
    * to a full scan and sort of the largest payload table per batch. That presents as a retention
    * round that never finishes rather than as an error, so 111 is the floor, not 110.
    *
-   * <p>Migration 112 deliberately does not raise this. It drops a constraint rather than adding
-   * anything to read, and every delete path clears the child tables by ID, so this SDK behaves
-   * identically whether or not the cascade is still there.
+   * <p>Migrations 112 to 114 deliberately do not raise this. 112 drops a constraint rather than
+   * adding anything to read, and every delete path clears the child tables by ID, so this SDK
+   * behaves identically whether or not the cascade is still there. After 113 the shared enqueue
+   * function writes inputs only to workflow_input, which every read here already COALESCEs over,
+   * and 114 drops an index that duplicates idx_workflow_topic.
    *
    * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
    * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
@@ -580,7 +582,9 @@ public class MigrationManager {
             MIGRATION_109,
             MIGRATION_110,
             migration111(isCockroach),
-            MIGRATION_112));
+            MIGRATION_112,
+            migration113(isCockroach),
+            migration114(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1502,10 +1506,10 @@ public class MigrationManager {
       """;
 
   // Migration 109: the tables that payloads move into, so a status update no longer rewrites a
-  // large input. Creating them is all this release does: the reads below COALESCE over both
-  // shapes, but every write here still fills the legacy workflow_status columns. Migration 113,
-  // which stops the shared enqueue_workflow function writing them, comes with the writes in a
-  // later release, once every executor can read both shapes.
+  // large input. The reads COALESCE over both shapes. Migration 113 moves the shared
+  // enqueue_workflow function's write; it had to wait for a release in which every executor reads
+  // both shapes, because the first node to migrate changes what every other node reads. This
+  // SDK's own writes still fill the legacy workflow_status columns until they move too.
   static final String MIGRATION_109 =
       """
       CREATE TABLE IF NOT EXISTS "%1$s"."workflow_input" (
@@ -1557,4 +1561,125 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."operation_outputs"
           DROP CONSTRAINT IF EXISTS "operation_outputs_workflow_uuid_fkey";
       """;
+
+  // Migration 113: the enqueue half of the payload move. Same signature as 105, so no DROP is
+  // needed; the body writes the inputs to workflow_input instead of workflow_status.inputs. Every
+  // read here COALESCEs over both shapes, so rows enqueued before and after it read the same.
+  static String migration113(boolean isCockroach) {
+    var migration =
+        """
+        CREATE OR REPLACE FUNCTION "%1$s".enqueue_workflow(
+            workflow_name TEXT,
+            queue_name TEXT,
+            positional_args JSON[] DEFAULT ARRAY[]::JSON[],
+            named_args JSON DEFAULT '{}'::JSON,
+            class_name TEXT DEFAULT NULL,
+            config_name TEXT DEFAULT NULL,
+            workflow_id TEXT DEFAULT NULL,
+            app_version TEXT DEFAULT NULL,
+            timeout_ms BIGINT DEFAULT NULL,
+            deadline_epoch_ms BIGINT DEFAULT NULL,
+            deduplication_id TEXT DEFAULT NULL,
+            priority INT4 DEFAULT NULL,
+            queue_partition_key TEXT DEFAULT NULL,
+            authenticated_user TEXT DEFAULT NULL,
+            authenticated_roles TEXT DEFAULT NULL,
+            delay_until_epoch_ms BIGINT DEFAULT NULL,
+            application_name TEXT DEFAULT NULL
+        ) RETURNS TEXT AS $$
+        DECLARE
+            v_workflow_id TEXT;
+            v_serialized_inputs TEXT;
+            v_owner_xid TEXT;
+            v_now BIGINT;
+            v_recovery_attempts INT4 := 0;
+            v_priority INT4;
+            v_status TEXT;
+        BEGIN
+
+            -- Validate required parameters
+            IF workflow_name IS NULL OR workflow_name = '' THEN
+                RAISE EXCEPTION 'Workflow name cannot be null or empty';
+            END IF;
+            IF queue_name IS NULL OR queue_name = '' THEN
+                RAISE EXCEPTION 'Queue name cannot be null or empty';
+            END IF;
+            IF named_args IS NOT NULL AND jsonb_typeof(named_args::jsonb) != 'object' THEN
+                RAISE EXCEPTION 'Named args must be a JSON object';
+            END IF;
+            IF workflow_id IS NOT NULL AND workflow_id = '' THEN
+                RAISE EXCEPTION 'Workflow ID cannot be an empty string if provided.';
+            END IF;
+            IF delay_until_epoch_ms IS NOT NULL AND delay_until_epoch_ms < 0 THEN
+                RAISE EXCEPTION 'delay_until_epoch_ms must be >= 0';
+            END IF;
+
+            v_workflow_id := COALESCE(workflow_id, gen_random_uuid()::TEXT);
+            v_owner_xid := gen_random_uuid()::TEXT;
+            v_priority := COALESCE(priority, 0);
+            v_serialized_inputs := json_build_object(
+                'positionalArgs', positional_args,
+                'namedArgs', named_args
+            )::TEXT;
+            v_now := EXTRACT(epoch FROM now()) * 1000;
+            v_status := CASE WHEN delay_until_epoch_ms IS NULL THEN 'ENQUEUED' ELSE 'DELAYED' END;
+
+            INSERT INTO "%1$s".workflow_status (
+                workflow_uuid, status,
+                name, class_name, config_name,
+                queue_name, deduplication_id, priority, queue_partition_key,
+                application_version,
+                created_at, updated_at, recovery_attempts,
+                workflow_timeout_ms, workflow_deadline_epoch_ms,
+                parent_workflow_id, owner_xid, serialization,
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms, application_name
+            ) VALUES (
+                v_workflow_id, v_status,
+                workflow_name, class_name, config_name,
+                queue_name, deduplication_id, v_priority, queue_partition_key,
+                app_version,
+                v_now, v_now, v_recovery_attempts,
+                timeout_ms, deadline_epoch_ms,
+                NULL, v_owner_xid, 'portable_json',
+                authenticated_user, authenticated_roles,
+                delay_until_epoch_ms, application_name
+            )
+            ON CONFLICT (workflow_uuid)
+            DO UPDATE SET
+                updated_at = EXCLUDED.updated_at;
+
+            INSERT INTO "%1$s".workflow_input (
+                workflow_uuid, inputs, retention_timestamp
+            ) VALUES (
+                v_workflow_id, v_serialized_inputs, v_now
+            )
+            ON CONFLICT (workflow_uuid) DO NOTHING;
+
+            RETURN v_workflow_id;
+
+        EXCEPTION
+            WHEN unique_violation THEN
+                RAISE EXCEPTION 'DBOS queue duplicated'
+                   USING DETAIL = format('Workflow %%s with queue %%s and deduplication ID %%s already exists', v_workflow_id, queue_name, deduplication_id),
+                        ERRCODE = 'unique_violation';
+        END;
+        $$ LANGUAGE plpgsql;
+        """;
+    if (!isCockroach) {
+      migration +=
+          """
+          ALTER FUNCTION "%1$s".enqueue_workflow(
+              TEXT, TEXT, JSON[], JSON, TEXT, TEXT, TEXT, TEXT, BIGINT, BIGINT, TEXT, INT4, TEXT, TEXT, TEXT, BIGINT, TEXT
+          ) SET search_path = pg_catalog, pg_temp;
+          """;
+    }
+    return migration;
+  }
+
+  // Migration 114: duplicate of idx_workflow_topic, which covers the same columns in the same
+  // order.
+  static String migration114(boolean isCockroach) {
+    return "DROP INDEX " + concurrently(isCockroach) + " IF EXISTS \"%1$s\".\"idx_notifications\"";
+  }
 }

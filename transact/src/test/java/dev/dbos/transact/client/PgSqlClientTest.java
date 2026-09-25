@@ -3,6 +3,7 @@ package dev.dbos.transact.client;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,6 +68,24 @@ public class PgSqlClientTest {
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
     assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+
+    // Migration 113 splits the payload off the status row: the function writes workflow_input
+    // and leaves workflow_status.inputs null, so running the workflow proves the read falls
+    // back to the new table.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "SELECT ws.inputs AS legacy, wi.inputs AS split"
+                    + " FROM dbos.workflow_status ws"
+                    + " LEFT JOIN dbos.workflow_input wi ON wi.workflow_uuid = ws.workflow_uuid"
+                    + " WHERE ws.workflow_uuid = ?")) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next());
+        assertNull(rs.getString("legacy"), "migration 113 stops writing workflow_status.inputs");
+        assertNotNull(rs.getString("split"), "the payload lands in workflow_input");
+      }
+    }
 
     var handle = dbos.retrieveWorkflow(workflowId);
 
