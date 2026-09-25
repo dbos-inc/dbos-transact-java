@@ -103,13 +103,15 @@ public class UnifiedProxyTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(wfs.size(), 4);
-    // The children are enqueued back to back and can share a created_at millisecond, and
-    // listWorkflows leaves the order of such ties unspecified, so sort them by workflow ID.
-    wfs.subList(1, 4)
-        .sort(
-            (a, b) -> {
-              return a.workflowId().compareTo(b.workflowId());
-            });
+    // The children are enqueued back to back, and the first can land in the parent's millisecond
+    // too. listWorkflows leaves the order of created_at ties unspecified, so put the parent first
+    // and the children in workflow ID order.
+    wfs.sort(
+        (a, b) -> {
+          if (a.workflowId().equals(wfid1)) return -1;
+          if (b.workflowId().equals(wfid1)) return 1;
+          return a.workflowId().compareTo(b.workflowId());
+        });
 
     assertEquals(wfid1, wfs.get(0).workflowId());
     assertEquals("child0", wfs.get(1).workflowId());
