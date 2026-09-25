@@ -444,11 +444,11 @@ public class WorkflowDAO {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
 
-    if (status != WorkflowState.SUCCESS
-        && status != WorkflowState.ERROR
-        && status != WorkflowState.CANCELLED) {
+    // Only the outcomes that carry a payload. Cancellation goes through its own paths, and here it
+    // would write an empty workflow_output row.
+    if (status != WorkflowState.SUCCESS && status != WorkflowState.ERROR) {
       throw new IllegalArgumentException(
-          "updateWorkflowOutcome called with non-terminal status: " + status);
+          "updateWorkflowOutcome records SUCCESS or ERROR, not " + status);
     }
 
     var sql =
