@@ -70,13 +70,16 @@ public class QueueService implements AutoCloseable {
   }
 
   /**
-   * Stops claiming queued workflows and transitioning delayed ones, and returns once no pass that
-   * could still do either is in flight. A row enqueued after this returns stays put until {@link
-   * #unpause()}; workflows already dispatched keep running.
+   * Stops claiming queued workflows and transitioning delayed ones, and waits for any pass that
+   * could still do either to finish. Once that wait completes, a row enqueued afterwards stays put
+   * until {@link #unpause()}; workflows already dispatched keep running.
    *
-   * <p>Waits at most 30 seconds, and gives up early if interrupted (restoring the interrupt) or if
-   * {@link #unpause()} supersedes it. Called from inside a pass, it does not wait for that pass,
-   * which checks the flag again before its next claim.
+   * <p>The wait is bounded. It lasts at most 30 seconds, and ends early if the thread is
+   * interrupted (the interrupt is restored) or if {@link #unpause()} supersedes it. After a timeout
+   * (which is logged) or an interrupt, this returns with the service paused but a pass possibly
+   * still in flight, and that pass may still claim a row. After {@link #unpause()}, the service is
+   * no longer paused. Called from inside a pass, it does not wait for that pass, which checks the
+   * flag again before its next claim.
    */
   public void pause() {
     boolean fromPass = Boolean.TRUE.equals(inPass.get());
