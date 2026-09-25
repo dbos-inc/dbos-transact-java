@@ -225,7 +225,11 @@ public class DBUtils {
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    String sql = "SELECT * FROM \"%s\".workflow_status ORDER BY created_at".formatted(schema);
+    // created_at is in milliseconds, so rows can tie on it. Break ties on workflow_uuid so the
+    // order is total. For a parent and its derived child IDs (parentId-0, ...) that order matches
+    // creation order.
+    String sql =
+        "SELECT * FROM \"%s\".workflow_status ORDER BY created_at, workflow_uuid".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
