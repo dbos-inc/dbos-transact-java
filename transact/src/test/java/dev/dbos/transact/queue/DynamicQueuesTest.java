@@ -32,6 +32,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -937,22 +938,28 @@ public class DynamicQueuesTest {
       assertNotNull(startedAt, "workflow " + h.workflowId() + " has no start time");
       times.add(startedAt / 1000.0);
     }
+    // Compare starts in the order they happened, not the order the tasks were enqueued. Dequeue
+    // orders by created_at, which has millisecond resolution, and the enqueue loop fits several
+    // tasks into one millisecond, so tied tasks start in either order. Indexed by task, a tie
+    // straddling a wave boundary can put task i and task i + limit in the same wave, which reads
+    // as a limiter overshoot that never happened.
+    Collections.sort(times);
 
     double periodTolerance = 0.5;
 
     // The limiter is a sliding window: it refuses to dequeue while `limit` workflows on the queue
-    // have started within the last period. Task i and task i + limit are therefore at least a
+    // have started within the last period. Start i and start i + limit are therefore at least a
     // period apart, because otherwise limit + 1 starts would fit in one window. This is a lower
     // bound, so a slow database pushes the gap away from the boundary rather than into it —
     // unlike an upper bound on how close consecutive tasks start, which measures the per-workflow
     // round trip rather than the limiter, and which CockroachDB was slow enough to miss.
     for (int i = 0; i + limit < numTasks; i++) {
       double diff = times.get(i + limit) - times.get(i);
-      logger.info(String.format("Tasks %d and %d: Time diff %.3f", i, i + limit, diff));
+      logger.info(String.format("Starts %d and %d: Time diff %.3f", i, i + limit, diff));
       assertTrue(
           diff > periodSec - periodTolerance,
           String.format(
-              "Only %d tasks may start per %.3fs, so tasks %d and %d should start at least %.3fs"
+              "Only %d tasks may start per %.3fs, so starts %d and %d should be at least %.3fs"
                   + " apart. Actual: %.3f",
               limit, periodSec, i, i + limit, periodSec - periodTolerance, diff));
     }
@@ -962,6 +969,10 @@ public class DynamicQueuesTest {
     // first costs a period, so the starts span numWaves - 1 periods, plus however long it takes
     // to dispatch and run the tasks within a wave. Two further periods of allowance for that
     // still catches a limiter releasing half its configured rate.
+    //
+    // Keep this bound fixed rather than scaling it by a measured per-task cost. On CockroachDB it
+    // caught #512, lost row locks backing the poll interval off, which a measured cost would have
+    // absorbed.
     double maxSpan = (numWaves + 1) * periodSec;
     double span = times.get(numTasks - 1) - times.get(0);
     logger.info(String.format("Span of all %d starts: %.3f", numTasks, span));
