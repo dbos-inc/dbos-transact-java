@@ -87,6 +87,58 @@ class DBOSExecutorTest {
     }
   }
 
+  /**
+   * recordErrorForUnstartedWorkflow commits whether or not it created the row. A row a 1.1 executor
+   * wrote keeps its inputs in workflow_status.inputs, with no workflow_input row, and a call that
+   * did not create the row must not write one: it would override those inputs on every read.
+   */
+  @Test
+  public void recordErrorForUnstartedWorkflowLeavesAnExistingRowsInputsAlone() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      dbos.launch();
+      var executor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      var workflowId = UUID.randomUUID().toString();
+      executor.recordErrorForUnstartedWorkflow(
+          workflowId,
+          "missingWorkflow",
+          "MissingService",
+          null,
+          new Object[] {"original"},
+          new DBOSWorkflowFunctionNotFoundException(workflowId, "missingWorkflow"));
+
+      // Rewrite the row into the shape a 1.1 executor leaves: inputs on the status row only.
+      try (var conn = dataSource.getConnection();
+          var stmt = conn.createStatement()) {
+        stmt.executeUpdate(
+            ("UPDATE dbos.workflow_status ws SET inputs = wi.inputs FROM dbos.workflow_input wi"
+                    + " WHERE wi.workflow_uuid = ws.workflow_uuid AND ws.workflow_uuid = '%s'")
+                .formatted(workflowId));
+        stmt.executeUpdate(
+            "DELETE FROM dbos.workflow_input WHERE workflow_uuid = '%s'".formatted(workflowId));
+      }
+
+      executor.recordErrorForUnstartedWorkflow(
+          workflowId,
+          "missingWorkflow",
+          "MissingService",
+          null,
+          new Object[] {"replacement"},
+          new DBOSWorkflowFunctionNotFoundException(workflowId, "missingWorkflow"));
+
+      try (var conn = dataSource.getConnection();
+          var stmt =
+              conn.prepareStatement("SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = ?")) {
+        stmt.setString(1, workflowId);
+        try (var rs = stmt.executeQuery()) {
+          assertFalse(rs.next(), "a call that did not create the row writes no input for it");
+        }
+      }
+      var status = dbos.retrieveWorkflow(workflowId).getStatus();
+      assertArrayEquals(new Object[] {"original"}, status.input());
+    }
+  }
+
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {
