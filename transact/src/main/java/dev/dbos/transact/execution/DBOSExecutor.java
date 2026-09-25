@@ -535,7 +535,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      String workflowName, String className, @Nullable String instanceName) {
+      String workflowName, @Nullable String className, @Nullable String instanceName) {
+    // Java workflows are always registered under a class, so a row enqueued without one (for a
+    // target that looks workflows up by name alone, such as Python) can never match here.
+    if (className == null) {
+      return Optional.empty();
+    }
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var wf = this.workflowMap.get(fqName);
     if (wf == null) {
@@ -1520,7 +1525,14 @@ public class DBOSExecutor implements AutoCloseable {
         RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
         args);
 
-    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
+    // Looked up before the workflow ID is resolved, which takes the caller's next function ID and
+    // any ID set with WorkflowOptions. A miss creates no workflow, so there is no ID to report.
+    var workflow =
+        getRegisteredWorkflow(workflowName, className, instanceName)
+            .orElseThrow(
+                () ->
+                    new DBOSWorkflowFunctionNotFoundException(
+                        null, workflowName, className, instanceName));
 
     var ctx = DBOSContextHolder.get();
 
@@ -1805,15 +1817,13 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     Object[] inputs = status.input();
-    var wfName =
-        RegisteredWorkflow.fullyQualifiedName(
-            status.workflowName(), status.className(), status.instanceName());
     RegisteredWorkflow workflow =
         getRegisteredWorkflow(status.workflowName(), status.className(), status.instanceName())
             .orElse(null);
 
     if (workflow == null) {
-      throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
+      throw new DBOSWorkflowFunctionNotFoundException(
+          workflowId, status.workflowName(), status.className(), status.instanceName());
     }
 
     // Coerce deserialized arguments to match the method's expected parameter types.

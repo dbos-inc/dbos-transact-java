@@ -42,7 +42,8 @@ import org.jspecify.annotations.Nullable;
  * the {@code with} methods.
  *
  * @param workflowName The name of the workflow function to enqueue. Required.
- * @param className The Java class containing the workflow function. Optional.
+ * @param className The Java class containing the workflow function. Required to target a Java
+ *     workflow; omit it only for a workflow not registered on a class, such as a Python function.
  * @param instanceName The instance name for object-based workflows. Optional.
  * @param queueName The name of the queue to enqueue the workflow to. Required.
  * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
@@ -158,6 +159,13 @@ public record EnqueueOptions(
   /**
    * Options for enqueuing the named workflow on {@code queue}.
    *
+   * <p>With no class name the workflow can only be run by a target that looks workflows up by name
+   * alone, such as a Python application. Java workflows are registered by class, so a Java executor
+   * that dequeues it cannot run it: it logs a {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException} and leaves the workflow
+   * {@code PENDING}, as for any workflow it has no registration for. Use a constructor that takes a
+   * class name to target a Java workflow.
+   *
    * @param workflowName name of the workflow to enqueue
    * @param queue name of the queue to enqueue on
    */
@@ -169,7 +177,9 @@ public record EnqueueOptions(
    * Options for enqueuing the named workflow of {@code className} on {@code queue}.
    *
    * @param workflowName name of the workflow to enqueue
-   * @param className class containing the workflow, or its {@code @WorkflowClassName}
+   * @param className class containing the workflow, or its {@code @WorkflowClassName}; required to
+   *     target a Java workflow, and {@code null} only for a workflow not registered on a class,
+   *     such as a Python function
    * @param queue name of the queue to enqueue on
    */
   public EnqueueOptions(
@@ -182,7 +192,9 @@ public record EnqueueOptions(
    * {@code instanceName}, on {@code queue}.
    *
    * @param workflowName name of the workflow to enqueue
-   * @param className class containing the workflow, or its {@code @WorkflowClassName}
+   * @param className class containing the workflow, or its {@code @WorkflowClassName}; required to
+   *     target a Java workflow, and {@code null} only for a workflow not registered on a class,
+   *     such as a Python function
    * @param instanceName name the target instance was registered under
    * @param queue name of the queue to enqueue on
    */

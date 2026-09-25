@@ -268,6 +268,32 @@ class DBOSExecutorTest {
     }
   }
 
+  /**
+   * Running a workflow method that was never registered reports it as not found. No workflow is
+   * created, so there is no ID, and nothing is written.
+   */
+  @Test
+  void runUnregisteredWorkflowIsNotFound() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      dbos.launch();
+
+      var method = ExecutingServiceImpl.class.getMethod("workflowMethod", String.class);
+      var wfTag = method.getAnnotation(Workflow.class);
+      var e =
+          assertThrows(
+              DBOSWorkflowFunctionNotFoundException.class,
+              () ->
+                  dbos.integration()
+                      .runWorkflow(
+                          new ExecutingServiceImpl(dbos), null, method, new Object[] {"x"}, wfTag));
+      assertNull(e.workflowId());
+      assertTrue(e.workflowName().startsWith("workflowMethod/"), e.workflowName());
+      assertEquals(
+          "Workflow function %s does not exist.".formatted(e.workflowName()), e.getMessage());
+      assertTrue(DBUtils.getWorkflowRows(dataSource).isEmpty());
+    }
+  }
+
   @Test
   public void executeWithStep() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
