@@ -80,8 +80,8 @@ public class ClientTest {
 
   /**
    * A row enqueued without a class name targets a by-name runtime such as Python. When a Java
-   * executor dequeues it anyway, the queue's dispatch must fail it as an unregistered workflow --
-   * not throw an NPE building the lookup key, and not leave it PENDING for handles to poll forever.
+   * executor dequeues it anyway, it must fail as an unregistered workflow, not with an NPE from
+   * building the lookup key. Like any unregistered workflow, it records nothing and stays PENDING.
    */
   @Test
   public void dequeueNullClassNameIsNotFound() throws Exception {
@@ -91,15 +91,25 @@ public class ClientTest {
       workflowId = client.enqueueWorkflow(options, new Object[] {42, "spam"}).workflowId();
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
-    var e = assertThrows(DBOSWorkflowFunctionNotFoundException.class, handle::getResult);
-    assertEquals(workflowId, e.workflowId());
-    assertEquals("enqueueTest", e.workflowName());
-    assertTrue(e.getMessage().contains("without a class name"), e.getMessage());
+    // The queue claims the row before it looks the workflow up, so PENDING means the dispatch ran.
+    var deadline = Instant.now().plusSeconds(10);
+    while (DBUtils.getWorkflowRow(dataSource, workflowId).status().equals("ENQUEUED")
+        && Instant.now().isBefore(deadline)) {
+      Thread.sleep(50);
+    }
+    assertEquals("PENDING", DBUtils.getWorkflowRow(dataSource, workflowId).status());
 
-    var status = handle.getStatus();
-    assertEquals(WorkflowState.ERROR, status.status());
-    assertTrue(status.error().message().contains("without a class name"), status.error().message());
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var e =
+        assertThrows(
+            DBOSWorkflowFunctionNotFoundException.class,
+            () -> executor.executeWorkflowById(workflowId));
+    assertEquals(workflowId, e.workflowId());
+    assertEquals("enqueueTest//", e.workflowName());
+    assertEquals(
+        "Workflow function enqueueTest// does not exist for workflow id %s.".formatted(workflowId),
+        e.getMessage());
+    assertEquals("PENDING", DBUtils.getWorkflowRow(dataSource, workflowId).status());
   }
 
   /** The pre-1.1 options type still enqueues through the deprecated overloads until 2.0. */

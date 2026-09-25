@@ -184,6 +184,8 @@ public class DBOSIntegration {
    * @return the workflow's return value
    * @throws Exception if the workflow throws a checked exception
    * @throws IllegalStateException if DBOS has not been launched
+   * @throws dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException if {@code method} is
+   *     not registered as a workflow on {@code target} under {@code instanceName}
    */
   public Object runWorkflow(
       Object target, String instanceName, Method method, Object[] args, Workflow wfTag)

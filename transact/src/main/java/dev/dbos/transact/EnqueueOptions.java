@@ -161,9 +161,10 @@ public record EnqueueOptions(
    *
    * <p>With no class name the workflow can only be run by a target that looks workflows up by name
    * alone, such as a Python application. Java workflows are registered by class, so a Java executor
-   * that dequeues it records the workflow as {@code ERROR}, and its result throws {@link
-   * dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException}. Use a constructor that
-   * takes a class name to target a Java workflow.
+   * that dequeues it cannot run it: it logs a {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException} and leaves the workflow
+   * {@code PENDING}, as for any workflow it has no registration for. Use a constructor that takes a
+   * class name to target a Java workflow.
    *
    * @param workflowName name of the workflow to enqueue
    * @param queue name of the queue to enqueue on

@@ -1525,7 +1525,14 @@ public class DBOSExecutor implements AutoCloseable {
         RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
         args);
 
-    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
+    // Looked up before the workflow ID is resolved, which takes the caller's next function ID and
+    // any ID set with WorkflowOptions. A miss creates no workflow, so there is no ID to report.
+    var workflow =
+        getRegisteredWorkflow(workflowName, className, instanceName)
+            .orElseThrow(
+                () ->
+                    new DBOSWorkflowFunctionNotFoundException(
+                        null, workflowName, className, instanceName));
 
     var ctx = DBOSContextHolder.get();
 
@@ -1814,23 +1821,9 @@ public class DBOSExecutor implements AutoCloseable {
         getRegisteredWorkflow(status.workflowName(), status.className(), status.instanceName())
             .orElse(null);
 
-    if (workflow == null && status.className() == null) {
-      // No Java executor can ever run a row without a class name, so fail it rather than leave it
-      // PENDING under this executor, where handles awaiting it would poll until recovery gave up.
-      var e =
-          new DBOSWorkflowFunctionNotFoundException(
-              workflowId,
-              status.workflowName(),
-              "it was enqueued without a class name, and Java workflows are registered by class");
-      logger.error("No class name for workflow {}", workflowId, e);
-      persistWorkflowError(workflowId, e, status.serialization());
-      throw e;
-    }
     if (workflow == null) {
       throw new DBOSWorkflowFunctionNotFoundException(
-          workflowId,
-          RegisteredWorkflow.fullyQualifiedName(
-              status.workflowName(), status.className(), status.instanceName()));
+          workflowId, status.workflowName(), status.className(), status.instanceName());
     }
 
     // Coerce deserialized arguments to match the method's expected parameter types.
