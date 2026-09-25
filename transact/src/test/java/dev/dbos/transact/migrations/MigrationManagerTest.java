@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assertions;
@@ -24,9 +25,20 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+/**
+ * The suite-wide two-minute timeout does not fit this class, for the reason {@link
+ * CockroachMigrationTest} gives. Most tests here migrate a fresh container from empty, and on
+ * CockroachDB that is over a hundred online schema changes: 20-40s on a CI runner, but two to three
+ * minutes on a slow one, where it degrades about five times as much as the pooled tests around it
+ * (#529). The migration is what these tests exist to exercise, so it cannot be skipped, and an
+ * in-memory store does not make it measurably cheaper on CI. Raised rather than removed, so a
+ * genuine hang still fails rather than hanging CI.
+ */
+@Timeout(value = 5, unit = TimeUnit.MINUTES)
 class MigrationManagerTest {
 
   // Expected tables after migrations
