@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  * not exist.
  */
 public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
-  private final String workflowId;
+  private final @Nullable String workflowId;
   private final String workflowName;
 
   /**
@@ -22,7 +22,7 @@ public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
    *     before any workflow was created
    * @param name the workflow function name that does not exist in the registry
    */
-  public DBOSWorkflowFunctionNotFoundException(String id, String name) {
+  public DBOSWorkflowFunctionNotFoundException(@Nullable String id, String name) {
     super(
         id == null
             ? String.format("Workflow function %s does not exist.", name)
@@ -60,7 +60,7 @@ public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
    * The ID of the workflow attempted with an unregistered function name, or {@code null} when the
    * lookup failed before any workflow was created
    */
-  public String workflowId() {
+  public @Nullable String workflowId() {
     return workflowId;
   }
 }
