@@ -2,8 +2,11 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
@@ -13,9 +16,11 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -86,6 +91,7 @@ public class ImportExportTypeRoundTripTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
+  @AutoClose HikariDataSource dataSource;
   OrderService service;
   SystemDatabase sysdb;
 
@@ -95,6 +101,7 @@ public class ImportExportTypeRoundTripTest {
     service = dbos.registerProxy(OrderService.class, new OrderServiceImpl(dbos));
     dbos.launch();
     sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    dataSource = pgContainer.dataSource();
   }
 
   /** Export through Conductor's JSON, delete the original, and import what came back. */
@@ -155,5 +162,84 @@ public class ImportExportTypeRoundTripTest {
             () -> dbos.<Order, RuntimeException>retrieveWorkflow(workflowId).getResult());
     assertInstanceOf(OrderRejected.class, thrown, "workflow error after import");
     assertEquals("rejected o-2", thrown.getMessage());
+  }
+
+  /**
+   * A workflow whose payloads are in workflow_input and workflow_output exports them, and imports
+   * them into the workflow_status columns, where this release writes payloads.
+   *
+   * <p>This release reads both payload shapes but writes only the status row. The payload tables
+   * are written by a later release or another SDK sharing the system database.
+   */
+  @Test
+  void payloadsReadFromThePayloadTablesImportIntoTheStatusRow() throws Exception {
+    var workflowId = "roundtrip-payload-tables-" + System.currentTimeMillis();
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.fulfil(new Order("o-3", 5L));
+    }
+
+    // Move the payloads to where a later release writes them.
+    execute(
+        """
+        INSERT INTO dbos.workflow_input (workflow_uuid, inputs)
+        SELECT workflow_uuid, inputs FROM dbos.workflow_status WHERE workflow_uuid = ?
+        """,
+        workflowId);
+    execute(
+        """
+        INSERT INTO dbos.workflow_output (workflow_uuid, output, error)
+        SELECT workflow_uuid, output, error FROM dbos.workflow_status WHERE workflow_uuid = ?
+        """,
+        workflowId);
+    execute(
+        """
+        UPDATE dbos.workflow_status SET inputs = NULL, output = NULL, error = NULL
+        WHERE workflow_uuid = ?
+        """,
+        workflowId);
+    assertInstanceOf(Order.class, sysdb.getWorkflowStatus(workflowId).output());
+
+    roundTripThroughConductorJson(workflowId);
+
+    var after = sysdb.getWorkflowStatus(workflowId);
+    assertAll(
+        () -> assertInstanceOf(Order.class, after.input()[0], "workflow input after import"),
+        () -> assertInstanceOf(Order.class, after.output(), "workflow output after import"),
+        () -> assertNotNull(statusColumn(workflowId, "inputs"), "inputs in workflow_status"),
+        () -> assertNotNull(statusColumn(workflowId, "output"), "output in workflow_status"),
+        () -> assertFalse(hasRow("workflow_input", workflowId), "workflow_input row"),
+        () -> assertFalse(hasRow("workflow_output", workflowId), "workflow_output row"));
+  }
+
+  private void execute(String sql, String workflowId) throws SQLException {
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.executeUpdate();
+    }
+  }
+
+  /** A payload column of the workflow's status row, read raw rather than through both shapes. */
+  private String statusColumn(String workflowId, String column) throws SQLException {
+    var sql = "SELECT %s FROM dbos.workflow_status WHERE workflow_uuid = ?".formatted(column);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next(), "no status row for " + workflowId);
+        return rs.getString(1);
+      }
+    }
+  }
+
+  private boolean hasRow(String table, String workflowId) throws SQLException {
+    var sql = "SELECT 1 FROM dbos.%s WHERE workflow_uuid = ?".formatted(table);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
   }
 }

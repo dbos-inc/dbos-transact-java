@@ -1379,7 +1379,7 @@ public class SystemDatabaseTest {
     if (isTerminal) {
       builder.completedAt(now);
     }
-    return new ExportedWorkflow(builder.build(), List.of(), List.of(), List.of(), List.of());
+    return new ExportedWorkflow(builder.build(), List.of(), List.of(), List.of(), List.of(), null);
   }
 
   // ── Workflow state based on queue/delay ──────────────────────────────────
@@ -1924,9 +1924,9 @@ public class SystemDatabaseTest {
             .build();
     sysdb.importWorkflow(
         List.of(
-            new ExportedWorkflow(q1Status, List.of(), List.of(), List.of(), List.of()),
-            new ExportedWorkflow(q2Status, List.of(), List.of(), List.of(), List.of()),
-            new ExportedWorkflow(q3Status, List.of(), List.of(), List.of(), List.of())));
+            new ExportedWorkflow(q1Status, List.of(), List.of(), List.of(), List.of(), null),
+            new ExportedWorkflow(q2Status, List.of(), List.of(), List.of(), List.of(), null),
+            new ExportedWorkflow(q3Status, List.of(), List.of(), List.of(), List.of(), null)));
 
     // Group by queue_name with select_min_created_at (common "oldest item" pattern)
     var rows =
@@ -2001,7 +2001,8 @@ public class SystemDatabaseTest {
             .completedAt(queuedStartedAt)
             .build();
     sysdb.importWorkflow(
-        List.of(new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of())));
+        List.of(
+            new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of(), null)));
     var afterAll = queuedStartedAt.plusMillis(1);
 
     // completed_after/completed_before covers all 6
@@ -2069,7 +2070,7 @@ public class SystemDatabaseTest {
               .completedAt(now)
               .build();
       sysdb.importWorkflow(
-          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null)));
     }
 
     // 2 queued SUCCESS (started_at set → max_queue_wait_ms populated)
@@ -2087,7 +2088,7 @@ public class SystemDatabaseTest {
               .completedAt(now)
               .build();
       sysdb.importWorkflow(
-          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null)));
     }
 
     // Only select max_queue_wait_ms + max_total_latency_ms — count must be null
@@ -2139,7 +2140,7 @@ public class SystemDatabaseTest {
             .createdAt(now)
             .updatedAt(now)
             .build();
-    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of());
+    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of(), null);
   }
 
   @Test

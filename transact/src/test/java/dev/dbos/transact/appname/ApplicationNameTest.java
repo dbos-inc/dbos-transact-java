@@ -285,7 +285,8 @@ public class ApplicationNameTest {
                 .toList(),
             original.events(),
             original.eventHistory(),
-            original.streams());
+            original.streams(),
+            original.payloads());
 
     DBOSTestAccess.getSystemDatabase(dbosA).deleteWorkflows(List.of(idA), false);
     DBOSTestAccess.getSystemDatabase(dbosA).importWorkflow(List.of(ownerless));

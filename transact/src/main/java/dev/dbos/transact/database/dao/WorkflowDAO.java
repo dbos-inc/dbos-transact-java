@@ -28,7 +28,6 @@ import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepAggregateRow;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -536,21 +535,7 @@ public class WorkflowDAO {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
 
-    var sql =
-        ("SELECT "
-                + WORKFLOW_STATUS_COLUMNS
-                + ", "
-                + INPUTS_COLUMN
-                + ", "
-                + OUTPUT_COLUMNS
-                + ", serialization")
-            + " FROM \"%s\".workflow_status ".formatted(schema)
-            + inputsJoin(schema)
-            + " "
-            + outputJoin(schema)
-            + " WHERE workflow_status.workflow_uuid = ?";
-
-    try (var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(workflowStatusByIdSql(schema))) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -560,6 +545,22 @@ public class WorkflowDAO {
     }
 
     return null;
+  }
+
+  /** One workflow's status row with its payloads, read through both payload shapes. */
+  private static String workflowStatusByIdSql(String schema) {
+    return ("SELECT "
+            + WORKFLOW_STATUS_COLUMNS
+            + ", "
+            + INPUTS_COLUMN
+            + ", "
+            + OUTPUT_COLUMNS
+            + ", serialization")
+        + " FROM \"%s\".workflow_status ".formatted(schema)
+        + inputsJoin(schema)
+        + " "
+        + outputJoin(schema)
+        + " WHERE workflow_status.workflow_uuid = ?";
   }
 
   public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
@@ -2969,34 +2970,51 @@ public class WorkflowDAO {
   }
 
   /**
-   * Refuse to move a workflow whose payloads this runtime cannot handle.
+   * Refuse to import a workflow with a payload this runtime would have to re-serialize but cannot.
    *
-   * <p>Export and import round-trip the payloads through this runtime's serializers, so neither can
-   * settle for the null a status read reports: a payload dropped on the way through restores a
-   * workflow that never had it.
+   * <p>Payloads carried as stored strings are written back unchanged and need no serializer. Only
+   * an export written before payloads travelled that way carries them deserialized, in the
+   * workflow's status and its steps, and re-serializing those needs the format that wrote them. A
+   * payload dropped on the way through would restore a workflow that never had it.
    */
-  private static void requireSerializerFor(
-      String action,
-      String workflowId,
-      String workflowSerialization,
-      List<StepInfo> steps,
-      DBOSSerializer serializer) {
+  private static void requireSerializerFor(ExportedWorkflow workflow, DBOSSerializer serializer) {
+    var status = workflow.status();
+    var payloads = workflow.payloads();
     var formats = new LinkedHashSet<String>();
-    if (!SerializationUtil.canDeserialize(workflowSerialization, serializer)) {
-      formats.add(workflowSerialization);
+    if (payloads == null && !SerializationUtil.canDeserialize(status.serialization(), serializer)) {
+      formats.add(status.serialization());
     }
-    for (var step : steps) {
-      if (!SerializationUtil.canDeserialize(step.serialization(), serializer)) {
+    var storedSteps = storedStepsById(payloads);
+    for (var step : workflow.steps()) {
+      if (!storedSteps.containsKey(step.functionId())
+          && !SerializationUtil.canDeserialize(step.serialization(), serializer)) {
         formats.add(step.serialization());
       }
     }
     if (!formats.isEmpty()) {
       throw new IllegalStateException(
-          "Cannot %s workflow %s: it is serialized as %s, which this application has no serializer for"
-              .formatted(action, workflowId, String.join(", ", formats)));
+          "Cannot import workflow %s: it is serialized as %s, which this application has no serializer for"
+              .formatted(status.workflowId(), String.join(", ", formats)));
     }
   }
 
+  private static Map<Integer, ExportedWorkflow.SerializedStep> storedStepsById(
+      ExportedWorkflow.@Nullable SerializedPayloads payloads) {
+    if (payloads == null) {
+      return Map.of();
+    }
+    return payloads.steps().stream()
+        .collect(Collectors.toMap(ExportedWorkflow.SerializedStep::stepId, s -> s));
+  }
+
+  /**
+   * Exports a workflow, and its children when asked, with every payload exactly as stored.
+   *
+   * <p>Nothing is deserialized: the payloads travel as stored strings in {@link
+   * ExportedWorkflow#payloads()}, so an export keeps the payloads' types however the export is
+   * encoded, and needs no serializer for them. A workflow written in a format this application
+   * cannot read exports like any other.
+   */
   public static List<ExportedWorkflow> exportWorkflow(
       DbContext ctx, String workflowId, boolean exportChildren) throws SQLException {
 
@@ -3010,17 +3028,35 @@ public class WorkflowDAO {
     var workflows = new ArrayList<ExportedWorkflow>();
     for (var wfid : workflowIds) {
       try (var conn = ctx.getConnection()) {
-        var status = getWorkflowStatus(conn, ctx.schema(), ctx.serializer(), wfid);
-        var steps =
-            StepsDAO.listWorkflowSteps(
-                conn, ctx.schema(), ctx.serializer(), wfid, true, null, null);
-        if (status != null) {
-          requireSerializerFor("export", wfid, status.serialization(), steps, ctx.serializer());
+        WorkflowStatus status = null;
+        String serialization = null;
+        String inputs = null;
+        String output = null;
+        String error = null;
+        try (var stmt = conn.prepareStatement(workflowStatusByIdSql(ctx.schema()))) {
+          stmt.setString(1, wfid);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              // The metadata only: the payloads are taken below as the strings they are stored as.
+              status = resultsToWorkflowStatus(rs, false, false, ctx.serializer());
+              serialization = rs.getString("serialization");
+              inputs = rs.getString("inputs");
+              output = rs.getString("output");
+              error = rs.getString("error");
+            }
+          }
         }
+        var steps = StepsDAO.exportWorkflowSteps(conn, ctx.schema(), wfid);
+        var payloads =
+            status == null
+                ? null
+                : new ExportedWorkflow.SerializedPayloads(
+                    serialization, inputs, output, error, steps.stored());
         var events = listWorkflowEvents(conn, ctx.schema(), wfid);
         var eventHistory = listWorkflowEventHistory(conn, ctx.schema(), wfid);
         var streams = listWorkflowStreams(conn, ctx.schema(), wfid);
-        workflows.add(new ExportedWorkflow(status, steps, events, eventHistory, streams));
+        workflows.add(
+            new ExportedWorkflow(status, steps.steps(), events, eventHistory, streams, payloads));
       }
     }
     return workflows;
@@ -3033,9 +3069,7 @@ public class WorkflowDAO {
     // The whole batch, before anything is written: export and import are a single-SDK affair but
     // not a single-configuration one, and a payload we cannot re-serialize imports empty.
     for (var workflow : workflows) {
-      var s = workflow.status();
-      requireSerializerFor(
-          "import", s.workflowId(), s.serialization(), workflow.steps(), serializer);
+      requireSerializerFor(workflow, serializer);
     }
 
     var wfSQL =
@@ -3113,6 +3147,12 @@ public class WorkflowDAO {
 
               for (var workflow : workflows) {
                 var status = workflow.status();
+                var payloads = workflow.payloads();
+                // Stored strings are written back unchanged. Only an export that predates them
+                // carries its payloads deserialized, and those are re-serialized here.
+                var serialization =
+                    payloads != null ? payloads.serialization() : status.serialization();
+                var storedSteps = storedStepsById(payloads);
 
                 wfStmt.setString(1, status.workflowId());
                 wfStmt.setString(2, status.status().name());
@@ -3126,27 +3166,37 @@ public class WorkflowDAO {
                     status.authenticatedRoles() == null
                         ? null
                         : JsonUtility.toJson(status.authenticatedRoles()));
-                wfStmt.setString(
-                    9,
-                    status.output() == null
-                        ? null
-                        : SerializationUtil.serializeValue(
-                                status.output(), status.serialization(), serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    10,
-                    status.error() == null
-                        ? null
-                        : SerializationUtil.serializeError(
-                                status.error().throwable(), status.serialization(), serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    11,
-                    status.input() == null
-                        ? null
-                        : SerializationUtil.serializeArgs(
-                                status.input(), null, status.serialization(), serializer)
-                            .serializedValue());
+                String inputs;
+                String output;
+                String error;
+                if (payloads != null) {
+                  inputs = payloads.inputs();
+                  output = payloads.output();
+                  error = payloads.error();
+                } else {
+                  inputs =
+                      status.input() == null
+                          ? null
+                          : SerializationUtil.serializeArgs(
+                                  status.input(), null, status.serialization(), serializer)
+                              .serializedValue();
+                  output =
+                      status.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  status.output(), status.serialization(), serializer)
+                              .serializedValue();
+                  error =
+                      status.error() == null
+                          ? null
+                          : SerializationUtil.serializeError(
+                                  status.error().throwable(), status.serialization(), serializer)
+                              .serializedValue();
+                }
+
+                wfStmt.setString(9, output);
+                wfStmt.setString(10, error);
+                wfStmt.setString(11, inputs);
                 wfStmt.setString(12, status.executorId());
                 wfStmt.setString(13, status.appVersion());
                 wfStmt.setString(14, status.appId());
@@ -3162,7 +3212,7 @@ public class WorkflowDAO {
                 wfStmt.setObject(24, status.recoveryAttempts());
                 wfStmt.setString(25, status.forkedFrom());
                 wfStmt.setString(26, status.parentWorkflowId());
-                wfStmt.setString(27, status.serialization());
+                wfStmt.setString(27, serialization);
                 wfStmt.setObject(28, status.delayUntilEpochMs());
                 wfStmt.setObject(29, status.completedAtEpochMs());
                 // NOT NULL column: an export predating it carries no value, so fall back to false.
@@ -3176,15 +3226,21 @@ public class WorkflowDAO {
                   stepStmt.setString(1, status.workflowId());
                   stepStmt.setInt(2, step.functionId());
                   stepStmt.setString(3, step.functionName());
-                  stepStmt.setString(
-                      4,
-                      step.output() == null
-                          ? null
-                          : SerializationUtil.serializeValue(
-                                  step.output(), step.serialization(), serializer)
-                              .serializedValue());
-                  stepStmt.setString(
-                      5, step.error() == null ? null : step.error().serializedError());
+                  var stored = storedSteps.get(step.functionId());
+                  if (stored != null) {
+                    stepStmt.setString(4, stored.output());
+                    stepStmt.setString(5, stored.error());
+                  } else {
+                    stepStmt.setString(
+                        4,
+                        step.output() == null
+                            ? null
+                            : SerializationUtil.serializeValue(
+                                    step.output(), step.serialization(), serializer)
+                                .serializedValue());
+                    stepStmt.setString(
+                        5, step.error() == null ? null : step.error().serializedError());
+                  }
                   stepStmt.setString(6, step.childWorkflowId());
                   stepStmt.setObject(7, step.startedAtEpochMs());
                   stepStmt.setObject(8, step.completedAtEpochMs());
