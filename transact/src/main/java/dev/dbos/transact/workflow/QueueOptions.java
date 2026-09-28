@@ -67,24 +67,30 @@ public record QueueOptions(
     @NonNull Optional<Boolean> partitionQueue,
     @NonNull Optional<Duration> pollingInterval) {
 
-  private static final QueueOptions EMPTY =
-      new QueueOptions(
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Field.absent(),
-          Optional.empty(),
-          Optional.empty(),
-          Optional.empty());
-
   public QueueOptions {
     // Every queue dispatches in priority order, so the flag carries no information. Dropping it
-    // here keeps options that set only it equal to, and as empty as, empty().
+    // here keeps options that set only it equal to, and as empty as, new QueueOptions().
     priorityEnabled = Optional.empty();
+  }
+
+  /**
+   * Constructs options with every property absent; no queue property will be set or changed. Chain
+   * the {@code with} builders from here to set properties, e.g. {@code new
+   * QueueOptions().withConcurrency(10).withRateLimit(100, Duration.ofSeconds(60))}.
+   */
+  public QueueOptions() {
+    this(
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Field.absent(),
+        Optional.empty(),
+        Optional.empty(),
+        Optional.empty());
   }
 
   /**
@@ -142,12 +148,13 @@ public record QueueOptions(
   }
 
   /**
-   * Returns the shared all-absent instance; no queue property will be set or changed. Chain the
-   * {@code with} builders from here to set properties, e.g. {@code
-   * QueueOptions.empty().withConcurrency(10).withRateLimit(100, Duration.ofSeconds(60))}.
+   * Returns options with every property absent.
+   *
+   * @deprecated Use {@link #QueueOptions()}, as with the other options types.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions empty() {
-    return EMPTY;
+    return new QueueOptions();
   }
 
   /** Returns {@code true} if all fields are absent — no property will be set or changed. */
@@ -170,22 +177,22 @@ public record QueueOptions(
    * Creates options that set only {@code concurrency}; all other fields are absent.
    *
    * @param value the concurrency limit, or {@code null} to clear the column
-   * @deprecated Use {@code QueueOptions.empty().withConcurrency(value)}.
+   * @deprecated Use {@code new QueueOptions().withConcurrency(value)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setConcurrency(@Nullable Integer value) {
-    return EMPTY.withConcurrency(value);
+    return new QueueOptions().withConcurrency(value);
   }
 
   /**
    * Creates options that set only {@code workerConcurrency}; all other fields are absent.
    *
    * @param value the per-worker concurrency limit, or {@code null} to clear the column
-   * @deprecated Use {@code QueueOptions.empty().withWorkerConcurrency(value)}.
+   * @deprecated Use {@code new QueueOptions().withWorkerConcurrency(value)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setWorkerConcurrency(@Nullable Integer value) {
-    return EMPTY.withWorkerConcurrency(value);
+    return new QueueOptions().withWorkerConcurrency(value);
   }
 
   /**
@@ -193,12 +200,12 @@ public record QueueOptions(
    *
    * @param max max starts per window, or {@code null} to clear
    * @param period length of the rolling window, or {@code null} to clear
-   * @deprecated Use {@code QueueOptions.empty().withRateLimit(max, period)}.
+   * @deprecated Use {@code new QueueOptions().withRateLimit(max, period)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setRateLimit(
       @Nullable Integer max, @Nullable Duration period) {
-    return EMPTY.withRateLimit(max, period);
+    return new QueueOptions().withRateLimit(max, period);
   }
 
   /**
@@ -207,11 +214,11 @@ public record QueueOptions(
    * @param limit max starts per window
    * @param period length of the rolling window
    * @param unit time unit for {@code period}
-   * @deprecated Use {@code QueueOptions.empty().withRateLimit(limit, period, unit)}.
+   * @deprecated Use {@code new QueueOptions().withRateLimit(limit, period, unit)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setRateLimit(int limit, long period, @NonNull TimeUnit unit) {
-    return EMPTY.withRateLimit(limit, period, unit);
+    return new QueueOptions().withRateLimit(limit, period, unit);
   }
 
   /**
@@ -219,11 +226,11 @@ public record QueueOptions(
    * Setting it is what partitions the queue.
    *
    * @param value the per-partition concurrency limit, or {@code null} to clear the column
-   * @deprecated Use {@code QueueOptions.empty().withPartitionConcurrency(value)}.
+   * @deprecated Use {@code new QueueOptions().withPartitionConcurrency(value)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setPartitionConcurrency(@Nullable Integer value) {
-    return EMPTY.withPartitionConcurrency(value);
+    return new QueueOptions().withPartitionConcurrency(value);
   }
 
   /**
@@ -231,11 +238,11 @@ public record QueueOptions(
    * Setting it is what partitions the queue.
    *
    * @param value the per-partition, per-worker concurrency limit, or {@code null} to clear
-   * @deprecated Use {@code QueueOptions.empty().withPartitionWorkerConcurrency(value)}.
+   * @deprecated Use {@code new QueueOptions().withPartitionWorkerConcurrency(value)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setPartitionWorkerConcurrency(@Nullable Integer value) {
-    return EMPTY.withPartitionWorkerConcurrency(value);
+    return new QueueOptions().withPartitionWorkerConcurrency(value);
   }
 
   /**
@@ -244,12 +251,12 @@ public record QueueOptions(
    *
    * @param max max starts per window per partition, or {@code null} to clear
    * @param period length of the rolling window, or {@code null} to clear
-   * @deprecated Use {@code QueueOptions.empty().withPartitionRateLimit(max, period)}.
+   * @deprecated Use {@code new QueueOptions().withPartitionRateLimit(max, period)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setPartitionRateLimit(
       @Nullable Integer max, @Nullable Duration period) {
-    return EMPTY.withPartitionRateLimit(max, period);
+    return new QueueOptions().withPartitionRateLimit(max, period);
   }
 
   /**
@@ -258,12 +265,12 @@ public record QueueOptions(
    * @param limit max starts per window per partition
    * @param period length of the rolling window
    * @param unit time unit for {@code period}
-   * @deprecated Use {@code QueueOptions.empty().withPartitionRateLimit(limit, period, unit)}.
+   * @deprecated Use {@code new QueueOptions().withPartitionRateLimit(limit, period, unit)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setPartitionRateLimit(
       int limit, long period, @NonNull TimeUnit unit) {
-    return EMPTY.withPartitionRateLimit(limit, period, unit);
+    return new QueueOptions().withPartitionRateLimit(limit, period, unit);
   }
 
   /**
@@ -274,7 +281,7 @@ public record QueueOptions(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public static @NonNull QueueOptions setPriorityEnabled(boolean value) {
-    return EMPTY.withPriorityEnabled(Optional.of(value));
+    return new QueueOptions().withPriorityEnabled(Optional.of(value));
   }
 
   /**
@@ -287,18 +294,18 @@ public record QueueOptions(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public static @NonNull QueueOptions setPartitionQueue(boolean value) {
-    return EMPTY.withPartitionQueue(Optional.of(value));
+    return new QueueOptions().withPartitionQueue(Optional.of(value));
   }
 
   /**
    * Creates options that set only {@code pollingInterval}; all other fields are absent.
    *
    * @param value the interval at which workers poll for new queue entries
-   * @deprecated Use {@code QueueOptions.empty().withPollingInterval(value)}.
+   * @deprecated Use {@code new QueueOptions().withPollingInterval(value)}.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions setPollingInterval(@NonNull Duration value) {
-    return EMPTY.withPollingInterval(value);
+    return new QueueOptions().withPollingInterval(value);
   }
 
   // ── Builders for chaining ─────────────────────────────────────────────────

@@ -374,8 +374,8 @@ public class ApplicationNameTest {
 
   @Test
   void queuesAreOwnedByTheApplicationThatRegistersThem() {
-    dbosA.registerQueue("dynamic-a", QueueOptions.empty());
-    dbosB.registerQueue("dynamic-b", QueueOptions.empty());
+    dbosA.registerQueue("dynamic-a", new QueueOptions());
+    dbosB.registerQueue("dynamic-b", new QueueOptions());
 
     var listedByA = dbosA.listQueues().stream().map(Queue::name).toList();
     var listedByB = dbosB.listQueues().stream().map(Queue::name).toList();
@@ -386,12 +386,12 @@ public class ApplicationNameTest {
 
   @Test
   void registeringAQueueAnotherApplicationOwnsRaises() {
-    dbosA.registerQueue("contested", QueueOptions.empty());
+    dbosA.registerQueue("contested", new QueueOptions());
 
     var conflict =
         assertThrows(
             DBOSApplicationNameConflictException.class,
-            () -> dbosB.registerQueue("contested", QueueOptions.empty()));
+            () -> dbosB.registerQueue("contested", new QueueOptions()));
     assertEquals(APP_A, conflict.owner());
     assertTrue(conflict.getMessage().contains("contested"));
   }
@@ -432,7 +432,7 @@ public class ApplicationNameTest {
   void registeringAQueueForAPeerGivesThatPeerTheQueue() throws Exception {
     try (var client = pgContainer.dbosClient(APP_A)) {
       client.registerQueue(
-          "peer-queue", QueueOptions.empty(), QueueConflictResolution.ALWAYS_UPDATE, APP_B);
+          "peer-queue", new QueueOptions(), QueueConflictResolution.ALWAYS_UPDATE, APP_B);
     }
 
     assertEquals(List.of("peer-queue"), dbosB.listQueues().stream().map(Queue::name).toList());
@@ -456,7 +456,7 @@ public class ApplicationNameTest {
   /** Acting for a peer is naming it, not impersonating it: a third application still collides. */
   @Test
   void registeringAQueueForAPeerStillCollidesWithAThirdApplication() throws Exception {
-    dbosA.registerQueue("contested", QueueOptions.empty());
+    dbosA.registerQueue("contested", new QueueOptions());
 
     try (var client = pgContainer.dbosClient(APP_B)) {
       var conflict =
@@ -465,7 +465,7 @@ public class ApplicationNameTest {
               () ->
                   client.registerQueue(
                       "contested",
-                      QueueOptions.empty(),
+                      new QueueOptions(),
                       QueueConflictResolution.ALWAYS_UPDATE,
                       APP_B));
       assertEquals(APP_A, conflict.owner());
@@ -510,7 +510,7 @@ public class ApplicationNameTest {
 
   @Test
   void workflowsAreNotDequeuedAcrossApplications() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     // A peer application enqueues onto a queue this application polls. The row is addressable --
     // the queue name is shared -- but it is not this application's work to run.
     String foreignId;
@@ -588,7 +588,7 @@ public class ApplicationNameTest {
 
   @Test
   void aNamelessClientOwnsNothingAndSeesEveryApplication() throws Exception {
-    dbosB.registerQueue("queue-b", QueueOptions.empty());
+    dbosB.registerQueue("queue-b", new QueueOptions());
     var idA = runIn(serviceA, "a");
     var idB = runIn(serviceB, "b");
 
@@ -704,7 +704,7 @@ public class ApplicationNameTest {
 
   @Test
   void enqueueByNameWithNoTimeoutInheritsTheParentsTimeout() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     try (var o =
         new WorkflowOptions("wf-dl-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
       serviceA.enqueueGreet(
@@ -726,7 +726,7 @@ public class ApplicationNameTest {
    */
   @Test
   void enqueueByNameInAWorkflowHonorsEachTimeoutState() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     var modes = List.of("unset", "inherit", "none", "1234");
     for (var mode : modes) {
       try (var o =
@@ -756,7 +756,7 @@ public class ApplicationNameTest {
    */
   @Test
   void enqueueByNameInAWorkflowKeepsAGivenDeadline() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     var deadline = Instant.now().plus(Duration.ofHours(1)).toEpochMilli();
     var modes = List.of("unset", "inherit", "none");
     for (var mode : modes) {
@@ -782,7 +782,7 @@ public class ApplicationNameTest {
    */
   @Test
   void inheritingOutsideAWorkflowMeansNoTimeout() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     var target =
         new EnqueueOptions("greet", AppNameServiceImpl.class.getName(), QueueName.of("queue-a"));
 
@@ -818,7 +818,7 @@ public class ApplicationNameTest {
    */
   @Test
   void enqueuingForAPeerLetsThatPeerRunIt() throws Exception {
-    dbosB.registerQueue("queue-b", QueueOptions.empty());
+    dbosB.registerQueue("queue-b", new QueueOptions());
     var childId = UUID.randomUUID().toString();
 
     WorkflowHandle<String, RuntimeException> handle =
@@ -841,7 +841,7 @@ public class ApplicationNameTest {
   /** Unnamed, the enqueue belongs to the enqueueing application, as every other write does. */
   @Test
   void enqueuingWithoutNamingAnApplicationKeepsTheEnqueuersOwn() throws Exception {
-    dbosA.registerQueue("queue-a", QueueOptions.empty());
+    dbosA.registerQueue("queue-a", new QueueOptions());
     var childId = UUID.randomUUID().toString();
 
     dbosA.enqueueWorkflow(
@@ -921,7 +921,7 @@ public class ApplicationNameTest {
    */
   @Test
   void renamingAnApplicationMovesEveryTableItOwns() throws Exception {
-    dbosA.registerQueue("renamed-queue", QueueOptions.empty());
+    dbosA.registerQueue("renamed-queue", new QueueOptions());
     dbosA.createSchedule(
         new WorkflowSchedule(
             "renamed-sched", "greet", AppNameServiceImpl.class.getName(), "0 0 * * * *"));

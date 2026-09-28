@@ -55,7 +55,7 @@ public class WorkflowMgmtTest {
     myqueue = "myqueue";
 
     dbos.launch();
-    dbos.registerQueue(myqueue, QueueOptions.empty());
+    dbos.registerQueue(myqueue, new QueueOptions());
   }
 
   @Test

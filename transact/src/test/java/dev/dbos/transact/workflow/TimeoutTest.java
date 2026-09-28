@@ -122,7 +122,7 @@ public class TimeoutTest {
     String simpleQ = "simpleQ";
 
     dbos.launch();
-    dbos.registerQueue(simpleQ, QueueOptions.empty());
+    dbos.registerQueue(simpleQ, new QueueOptions());
 
     // queued
 
@@ -149,7 +149,7 @@ public class TimeoutTest {
     String simpleQ = "simpleQ";
 
     dbos.launch();
-    dbos.registerQueue(simpleQ, QueueOptions.empty());
+    dbos.registerQueue(simpleQ, new QueueOptions());
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout

@@ -50,7 +50,7 @@ public class WorkflowAttributesTest {
     impl.setDbos(dbos);
 
     dbos.launch();
-    dbos.registerQueue(ATTR_QUEUE, QueueOptions.empty());
+    dbos.registerQueue(ATTR_QUEUE, new QueueOptions());
   }
 
   @Test

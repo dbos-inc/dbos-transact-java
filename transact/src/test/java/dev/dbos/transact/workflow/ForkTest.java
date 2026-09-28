@@ -61,8 +61,8 @@ public class ForkTest {
     impl.setProxy(proxy);
 
     dbos.launch();
-    dbos.registerQueue(testPartitionQueue, QueueOptions.empty().andPartitionQueue(true));
-    dbos.registerQueue(testQueue, QueueOptions.empty());
+    dbos.registerQueue(testPartitionQueue, new QueueOptions().andPartitionQueue(true));
+    dbos.registerQueue(testQueue, new QueueOptions());
   }
 
   @Test

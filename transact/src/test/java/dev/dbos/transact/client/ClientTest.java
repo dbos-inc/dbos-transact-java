@@ -56,7 +56,7 @@ public class ClientTest {
     impl.setProxy(service);
 
     dbos.launch();
-    dbos.registerQueue("testQueue", QueueOptions.empty());
+    dbos.registerQueue("testQueue", new QueueOptions());
   }
 
   @Test

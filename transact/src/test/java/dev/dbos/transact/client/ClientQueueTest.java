@@ -20,7 +20,7 @@ public class ClientQueueTest {
   @Test
   public void testClientRegisterAndFindQueue() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-find", QueueOptions.empty().withConcurrency(7));
+      client.registerQueue("cq-find", new QueueOptions().withConcurrency(7));
 
       var q = client.findQueue("cq-find").orElseThrow();
       assertEquals("cq-find", q.name());
@@ -33,9 +33,9 @@ public class ClientQueueTest {
   @Test
   public void testClientListQueues() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-list-1", QueueOptions.empty().withConcurrency(1));
-      client.registerQueue("cq-list-2", QueueOptions.empty().withConcurrency(2));
-      client.registerQueue("cq-list-3", QueueOptions.empty());
+      client.registerQueue("cq-list-1", new QueueOptions().withConcurrency(1));
+      client.registerQueue("cq-list-2", new QueueOptions().withConcurrency(2));
+      client.registerQueue("cq-list-3", new QueueOptions());
 
       var names = client.listQueues().stream().map(Queue::name).toList();
       assertTrue(names.contains("cq-list-1"));
@@ -47,7 +47,7 @@ public class ClientQueueTest {
   @Test
   public void testClientDeleteQueue() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-del", QueueOptions.empty());
+      client.registerQueue("cq-del", new QueueOptions());
       assertTrue(client.findQueue("cq-del").isPresent());
 
       assertTrue(client.deleteQueue("cq-del"));
@@ -60,10 +60,10 @@ public class ClientQueueTest {
   @Test
   public void testClientUpdateQueue() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-update", QueueOptions.empty().withConcurrency(5));
+      client.registerQueue("cq-update", new QueueOptions().withConcurrency(5));
       assertEquals(5, client.findQueue("cq-update").orElseThrow().concurrency());
 
-      client.updateQueue("cq-update", QueueOptions.empty().withConcurrency(10));
+      client.updateQueue("cq-update", new QueueOptions().withConcurrency(10));
       assertEquals(10, client.findQueue("cq-update").orElseThrow().concurrency());
     }
   }
@@ -71,11 +71,9 @@ public class ClientQueueTest {
   @Test
   public void testClientNeverUpdate() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-never", QueueOptions.empty().withConcurrency(5));
+      client.registerQueue("cq-never", new QueueOptions().withConcurrency(5));
       client.registerQueue(
-          "cq-never",
-          QueueOptions.empty().withConcurrency(99),
-          QueueConflictResolution.NEVER_UPDATE);
+          "cq-never", new QueueOptions().withConcurrency(99), QueueConflictResolution.NEVER_UPDATE);
 
       assertEquals(5, client.findQueue("cq-never").orElseThrow().concurrency());
     }
@@ -84,10 +82,10 @@ public class ClientQueueTest {
   @Test
   public void testClientAlwaysUpdate() {
     try (var client = pgContainer.dbosClient()) {
-      client.registerQueue("cq-always", QueueOptions.empty().withConcurrency(5));
+      client.registerQueue("cq-always", new QueueOptions().withConcurrency(5));
       client.registerQueue(
           "cq-always",
-          QueueOptions.empty().withConcurrency(99),
+          new QueueOptions().withConcurrency(99),
           QueueConflictResolution.ALWAYS_UPDATE);
 
       assertEquals(99, client.findQueue("cq-always").orElseThrow().concurrency());
@@ -102,7 +100,7 @@ public class ClientQueueTest {
           () ->
               client.registerQueue(
                   "cq-version",
-                  QueueOptions.empty(),
+                  new QueueOptions(),
                   QueueConflictResolution.UPDATE_IF_LATEST_VERSION));
     }
   }
@@ -112,7 +110,7 @@ public class ClientQueueTest {
     try (var client = pgContainer.dbosClient()) {
       assertThrows(
           IllegalArgumentException.class,
-          () -> client.registerQueue("_dbos_internal_queue", QueueOptions.empty()));
+          () -> client.registerQueue("_dbos_internal_queue", new QueueOptions()));
     }
   }
 }

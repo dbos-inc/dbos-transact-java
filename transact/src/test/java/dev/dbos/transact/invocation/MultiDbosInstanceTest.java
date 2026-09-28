@@ -62,7 +62,7 @@ public class MultiDbosInstanceTest {
     proxyA = dbosA.registerProxy(TestService.class, implA);
     queueA = "queueA";
     dbosA.launch();
-    dbosA.registerQueue(queueA, QueueOptions.empty());
+    dbosA.registerQueue(queueA, new QueueOptions());
 
     var dbosConfigB = pgContainerB.dbosConfig("multi-dbos-instance-test-b");
     dbosB = new DBOS(dbosConfigB);
@@ -71,7 +71,7 @@ public class MultiDbosInstanceTest {
     proxyB = dbosB.registerProxy(TestService.class, implB);
     queueB = "queueB";
     dbosB.launch();
-    dbosB.registerQueue(queueB, QueueOptions.empty());
+    dbosB.registerQueue(queueB, new QueueOptions());
   }
 
   @Test

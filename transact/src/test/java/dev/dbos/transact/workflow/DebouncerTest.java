@@ -229,7 +229,7 @@ public class DebouncerTest {
     String userQueue = "debouncer-user-queue";
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
-    dbos.registerQueue(userQueue, QueueOptions.empty());
+    dbos.registerQueue(userQueue, new QueueOptions());
 
     var debouncer = dbos.<String>debouncer().withQueue(QueueName.of(userQueue));
     var handle = debouncer.debounce("user-q", Duration.ofMillis(500), () -> svc.process("queued"));
@@ -358,7 +358,7 @@ public class DebouncerTest {
     var orch =
         dbos.registerProxy(OrchestratorService.class, new OrchestratorServiceImpl(dbos, svc, q));
     dbos.launch();
-    dbos.registerQueue(q, QueueOptions.empty());
+    dbos.registerQueue(q, new QueueOptions());
 
     var h = dbos.startWorkflow(() -> orch.debounceWithPriority("prio-val"));
     assertEquals("result:prio-val", h.getResult());
@@ -512,7 +512,7 @@ public class DebouncerTest {
     String userQueue = "dedup-user-queue";
     serviceImpl.gate = new CountDownLatch(1);
     dbos.launch();
-    dbos.registerQueue(userQueue, QueueOptions.empty());
+    dbos.registerQueue(userQueue, new QueueOptions());
 
     String dedupId = "user-dedup-1";
     var handle =
@@ -753,7 +753,7 @@ public class DebouncerTest {
     String userQueue = "mixed-user-queue";
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
-    dbos.registerQueue(userQueue, QueueOptions.empty());
+    dbos.registerQueue(userQueue, new QueueOptions());
     var dataSource = pgContainer.dataSource();
     long planted = System.currentTimeMillis() + 60_000;
     var waiting = DebouncedRows.insert(dataSource, debouncedRow(userQueue, "process", planted));

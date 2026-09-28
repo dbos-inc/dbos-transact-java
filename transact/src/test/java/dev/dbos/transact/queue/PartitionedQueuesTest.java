@@ -125,7 +125,7 @@ public class PartitionedQueuesTest {
     var impl = new ResumingTestServiceImpl();
     var proxy = dbos.registerProxy(ResumingTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(1).andPartitionQueue(true));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(1).andPartitionQueue(true));
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("key");
     var wfid = UUID.randomUUID().toString();
@@ -164,9 +164,8 @@ public class PartitionedQueuesTest {
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(partitionlessQueue, QueueOptions.empty());
-    dbos.registerQueue(
-        queue, QueueOptions.empty().withWorkerConcurrency(1).andPartitionQueue(true));
+    dbos.registerQueue(partitionlessQueue, new QueueOptions());
+    dbos.registerQueue(queue, new QueueOptions().withWorkerConcurrency(1).andPartitionQueue(true));
 
     var blockedPartitionKey = "blocked";
     var normalPartitionKey = "normal";
@@ -239,7 +238,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty());
+    dbos.registerQueue(queue, new QueueOptions());
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
     assertThrows(
         IllegalArgumentException.class,
@@ -252,7 +251,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().andPartitionQueue(true));
+    dbos.registerQueue(queue, new QueueOptions().andPartitionQueue(true));
     var options = new StartWorkflowOptions().withQueue(queue);
     assertThrows(
         IllegalArgumentException.class,
@@ -265,7 +264,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().andPartitionQueue(true));
+    dbos.registerQueue(queue, new QueueOptions().andPartitionQueue(true));
 
     var options =
         new StartWorkflowOptions()
@@ -298,7 +297,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionLimitTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withPartitionConcurrency(1));
+    dbos.registerQueue(queue, new QueueOptions().withPartitionConcurrency(1));
 
     var registered = dbos.findQueue(queue).orElseThrow();
     assertTrue(registered.isPartitioned());
@@ -337,8 +336,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionLimitTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(
-        queue, QueueOptions.empty().withPartitionRateLimit(2, Duration.ofSeconds(30)));
+    dbos.registerQueue(queue, new QueueOptions().withPartitionRateLimit(2, Duration.ofSeconds(30)));
 
     var registered = dbos.findQueue(queue).orElseThrow();
     assertTrue(registered.isPartitioned());
@@ -372,7 +370,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionLimitTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withPartitionWorkerConcurrency(1));
+    dbos.registerQueue(queue, new QueueOptions().withPartitionWorkerConcurrency(1));
 
     assertTrue(dbos.findQueue(queue).orElseThrow().isPartitioned());
 
@@ -404,7 +402,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionLimitTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(1).withPartitionConcurrency(1));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(1).withPartitionConcurrency(1));
 
     var a = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("a");
     var b = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("b");
@@ -429,7 +427,7 @@ public class PartitionedQueuesTest {
     dbos.launch();
     dbos.registerQueue(
         queue,
-        QueueOptions.empty()
+        new QueueOptions()
             .withConcurrency(10)
             .withPartitionConcurrency(4)
             .withPartitionWorkerConcurrency(2)
@@ -456,7 +454,7 @@ public class PartitionedQueuesTest {
 
     dbos.updateQueue(
         queue,
-        QueueOptions.empty()
+        new QueueOptions()
             .withPartitionConcurrency((Integer) null)
             .withPartitionWorkerConcurrency((Integer) null)
             .withPartitionRateLimit(null, null));
@@ -477,7 +475,7 @@ public class PartitionedQueuesTest {
     dbos.launch();
     dbos.registerQueue(
         queue,
-        QueueOptions.empty().withConcurrency(3).withWorkerConcurrency(2).andPartitionQueue(true));
+        new QueueOptions().withConcurrency(3).withWorkerConcurrency(2).andPartitionQueue(true));
 
     var q = dbos.findQueue(queue).orElseThrow();
     assertTrue(q.isLegacyPartitioned());
@@ -503,10 +501,7 @@ public class PartitionedQueuesTest {
     dbos.launch();
     dbos.registerQueue(
         queue,
-        QueueOptions.empty()
-            .withConcurrency(10)
-            .andPartitionQueue(true)
-            .withPartitionConcurrency(2));
+        new QueueOptions().withConcurrency(10).andPartitionQueue(true).withPartitionConcurrency(2));
 
     var q = dbos.findQueue(queue).orElseThrow();
     assertTrue(q.isPartitioned());
@@ -528,12 +523,12 @@ public class PartitionedQueuesTest {
   public void testUpdateQueueValidatesAgainstStoredLimits() throws Exception {
     String queue = "update-validation-queue";
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(2));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(2));
 
     var ex =
         assertThrows(
             IllegalArgumentException.class,
-            () -> dbos.updateQueue(queue, QueueOptions.empty().withPartitionConcurrency(5)));
+            () -> dbos.updateQueue(queue, new QueueOptions().withPartitionConcurrency(5)));
     assertTrue(
         ex.getMessage().contains("concurrency must be greater than or equal to"), ex.getMessage());
 
@@ -553,18 +548,18 @@ public class PartitionedQueuesTest {
   public void testUpdateQueueKeepsPartitionFlagInSync() throws Exception {
     String queue = "partition-flag-sync-queue";
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(10));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(10));
 
     var initial = dbos.findQueue(queue).orElseThrow();
     assertFalse(initial.partitioningEnabled());
 
-    dbos.updateQueue(queue, QueueOptions.empty().withPartitionConcurrency(3));
+    dbos.updateQueue(queue, new QueueOptions().withPartitionConcurrency(3));
     var partitioned = dbos.findQueue(queue).orElseThrow();
     assertTrue(partitioned.partitioningEnabled());
     assertTrue(partitioned.isPartitioned());
     assertFalse(partitioned.isLegacyPartitioned());
 
-    dbos.updateQueue(queue, QueueOptions.empty().withPartitionConcurrency((Integer) null));
+    dbos.updateQueue(queue, new QueueOptions().withPartitionConcurrency((Integer) null));
     var cleared = dbos.findQueue(queue).orElseThrow();
     assertFalse(cleared.partitioningEnabled());
     assertFalse(cleared.isPartitioned());
@@ -581,10 +576,10 @@ public class PartitionedQueuesTest {
   public void aLegacyQueueKeepsItsPartitionedMeaning() throws Exception {
     String queue = "legacy-flag-sync-queue";
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(4).andPartitionQueue(true));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(4).andPartitionQueue(true));
 
     // An update that touches no limit leaves the queue legacy, and its concurrency per partition.
-    dbos.updateQueue(queue, QueueOptions.empty().withPollingInterval(Duration.ofSeconds(2)));
+    dbos.updateQueue(queue, new QueueOptions().withPollingInterval(Duration.ofSeconds(2)));
     var updated = dbos.findQueue(queue).orElseThrow();
     assertTrue(updated.isLegacyPartitioned());
     assertEquals(4, updated.resolveLimits().partitionConcurrency());
@@ -594,10 +589,10 @@ public class PartitionedQueuesTest {
     // limit the update did not mention, silently. Re-registration is the way across.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue(queue, QueueOptions.empty().withPartitionConcurrency(2)));
+        () -> dbos.updateQueue(queue, new QueueOptions().withPartitionConcurrency(2)));
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue(queue, QueueOptions.empty().withConcurrency(6)));
+        () -> dbos.updateQueue(queue, new QueueOptions().withConcurrency(6)));
 
     var after = dbos.findQueue(queue).orElseThrow();
     assertTrue(after.isLegacyPartitioned(), "neither rejected update may have been written");
@@ -615,7 +610,7 @@ public class PartitionedQueuesTest {
     var impl = new PartitionLimitTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionLimitTestService.class, impl);
     dbos.launch();
-    dbos.registerQueue(queue, QueueOptions.empty().withConcurrency(1));
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(1));
 
     // Enqueued while the queue is unpartitioned, so it has no partition key.
     var orphan =
@@ -638,7 +633,7 @@ public class PartitionedQueuesTest {
             () -> proxy.blockedWorkflow(), new StartWorkflowOptions().withQueue(queue));
     assertEquals(WorkflowState.ENQUEUED, stranded.getStatus().status());
 
-    dbos.updateQueue(queue, QueueOptions.empty().withPartitionConcurrency(1));
+    dbos.updateQueue(queue, new QueueOptions().withPartitionConcurrency(1));
     assertTrue(dbos.findQueue(queue).orElseThrow().isPartitioned());
 
     // getQueuePartitions reads the keys present, and this row has none, so no sweep reaches it.
@@ -661,35 +656,35 @@ public class PartitionedQueuesTest {
         List.of(
             new Case(
                 "v1",
-                QueueOptions.empty().withPartitionConcurrency(0),
+                new QueueOptions().withPartitionConcurrency(0),
                 "partitionConcurrency must be greater than zero"),
             new Case(
                 "v2",
-                QueueOptions.empty().withPartitionWorkerConcurrency(0),
+                new QueueOptions().withPartitionWorkerConcurrency(0),
                 "partitionWorkerConcurrency must be greater than zero"),
             new Case(
                 "v3",
-                QueueOptions.empty().withPartitionConcurrency(1).withPartitionWorkerConcurrency(2),
+                new QueueOptions().withPartitionConcurrency(1).withPartitionWorkerConcurrency(2),
                 "partitionConcurrency must be greater than or equal to partitionWorkerConcurrency"),
             new Case(
                 "v4",
-                QueueOptions.empty().withWorkerConcurrency(1).withPartitionWorkerConcurrency(2),
+                new QueueOptions().withWorkerConcurrency(1).withPartitionWorkerConcurrency(2),
                 "workerConcurrency must be greater than or equal to partitionWorkerConcurrency"),
             new Case(
                 "v5",
-                QueueOptions.empty().withConcurrency(1).withPartitionConcurrency(2),
+                new QueueOptions().withConcurrency(1).withPartitionConcurrency(2),
                 "concurrency must be greater than or equal to partitionConcurrency"),
             new Case(
                 "v6",
-                QueueOptions.empty().withConcurrency(1).withPartitionWorkerConcurrency(2),
+                new QueueOptions().withConcurrency(1).withPartitionWorkerConcurrency(2),
                 "concurrency must be greater than or equal to partitionWorkerConcurrency"),
             new Case(
                 "v7",
-                QueueOptions.empty().withPartitionRateLimit(0, Duration.ofSeconds(1)),
+                new QueueOptions().withPartitionRateLimit(0, Duration.ofSeconds(1)),
                 "partitionRateLimit limit must be greater than zero"),
             new Case(
                 "v8",
-                QueueOptions.empty().withPartitionRateLimit(1, Duration.ZERO),
+                new QueueOptions().withPartitionRateLimit(1, Duration.ZERO),
                 "partitionRateLimit period must be greater than zero"));
 
     for (var c : cases) {

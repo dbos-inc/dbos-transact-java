@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -8,18 +9,25 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 /**
- * The set/and builders survive until 2.0 only as fronts for the plain-value with builders, so each
- * must build exactly what its replacement does.
+ * empty() and the set/and builders survive until their removal only as fronts for the no-arg
+ * constructor and the plain-value with builders, so each must build exactly what its replacement
+ * does.
  */
 @SuppressWarnings("removal")
 class DeprecatedQueueOptionsTest {
 
-  private static final QueueOptions BASE = QueueOptions.empty().withPollingInterval(Duration.ZERO);
+  private static final QueueOptions BASE = new QueueOptions().withPollingInterval(Duration.ZERO);
   private static final Duration PERIOD = Duration.ofSeconds(60);
 
   @Test
+  void emptyMatchesTheNoArgConstructor() {
+    assertEquals(new QueueOptions(), QueueOptions.empty());
+    assertTrue(QueueOptions.empty().isEmpty());
+  }
+
+  @Test
   void staticFactoriesMatchWithBuilders() {
-    var empty = QueueOptions.empty();
+    var empty = new QueueOptions();
     assertEquals(empty.withConcurrency(3), QueueOptions.setConcurrency(3));
     assertEquals(empty.withWorkerConcurrency(4), QueueOptions.setWorkerConcurrency(4));
     assertEquals(empty.withRateLimit(5, PERIOD), QueueOptions.setRateLimit(5, PERIOD));

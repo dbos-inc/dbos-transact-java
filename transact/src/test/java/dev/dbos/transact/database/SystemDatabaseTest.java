@@ -2552,7 +2552,7 @@ public class SystemDatabaseTest {
   @Test
   public void testUpsertQueueInsert() {
     var options =
-        QueueOptions.empty()
+        new QueueOptions()
             .withConcurrency(5)
             .withWorkerConcurrency(2)
             .withRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS);
@@ -2573,14 +2573,11 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueOptionsExisting() {
-    sysdb.upsertQueue("q-update", QueueOptions.empty().withConcurrency(3), true, null);
+    sysdb.upsertQueue("q-update", new QueueOptions().withConcurrency(3), true, null);
 
     boolean inserted =
         sysdb.upsertQueue(
-            "q-update",
-            QueueOptions.empty().withConcurrency(7).withWorkerConcurrency(4),
-            true,
-            null);
+            "q-update", new QueueOptions().withConcurrency(7).withWorkerConcurrency(4), true, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-update").orElseThrow();
@@ -2590,10 +2587,10 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpsertQueueNoUpdateExisting() {
-    sysdb.upsertQueue("q-no-update", QueueOptions.empty().withConcurrency(3), true, null);
+    sysdb.upsertQueue("q-no-update", new QueueOptions().withConcurrency(3), true, null);
 
     boolean inserted =
-        sysdb.upsertQueue("q-no-update", QueueOptions.empty().withConcurrency(99), false, null);
+        sysdb.upsertQueue("q-no-update", new QueueOptions().withConcurrency(99), false, null);
     assertFalse(inserted, "upsertQueue should return false when the row already existed");
 
     var fetched = sysdb.findQueue("q-no-update").orElseThrow();
@@ -2609,9 +2606,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListQueuesFromDB() {
-    sysdb.upsertQueue("q-list-a", QueueOptions.empty().withConcurrency(1), true, null);
-    sysdb.upsertQueue("q-list-b", QueueOptions.empty().withConcurrency(2), true, null);
-    sysdb.upsertQueue("q-list-c", QueueOptions.empty(), true, null);
+    sysdb.upsertQueue("q-list-a", new QueueOptions().withConcurrency(1), true, null);
+    sysdb.upsertQueue("q-list-b", new QueueOptions().withConcurrency(2), true, null);
+    sysdb.upsertQueue("q-list-c", new QueueOptions(), true, null);
 
     var queues = sysdb.listQueues();
     var names = queues.stream().map(Queue::name).toList();
@@ -2622,7 +2619,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testDeleteQueue() {
-    sysdb.upsertQueue("q-delete", QueueOptions.empty().withConcurrency(1), true, null);
+    sysdb.upsertQueue("q-delete", new QueueOptions().withConcurrency(1), true, null);
     assertTrue(sysdb.findQueue("q-delete").isPresent());
 
     boolean deleted = sysdb.deleteQueue("q-delete");
@@ -2639,13 +2636,13 @@ public class SystemDatabaseTest {
   public void testUpdateQueuePartialConcurrency() {
     sysdb.upsertQueue(
         "q-partial",
-        QueueOptions.empty()
+        new QueueOptions()
             .withConcurrency(5)
             .withRateLimit(10, 60, java.util.concurrent.TimeUnit.SECONDS),
         true,
         null);
 
-    sysdb.updateQueue("q-partial", QueueOptions.empty().withConcurrency(99));
+    sysdb.updateQueue("q-partial", new QueueOptions().withConcurrency(99));
 
     var q = sysdb.findQueue("q-partial").orElseThrow();
     assertEquals(99, q.concurrency(), "concurrency should be updated");
@@ -2655,9 +2652,9 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueClearConcurrency() {
-    sysdb.upsertQueue("q-clear-conc", QueueOptions.empty().withConcurrency(5), true, null);
+    sysdb.upsertQueue("q-clear-conc", new QueueOptions().withConcurrency(5), true, null);
 
-    sysdb.updateQueue("q-clear-conc", QueueOptions.empty().withConcurrency((Integer) null));
+    sysdb.updateQueue("q-clear-conc", new QueueOptions().withConcurrency((Integer) null));
 
     var q = sysdb.findQueue("q-clear-conc").orElseThrow();
     assertNull(q.concurrency(), "concurrency should be cleared to null");
@@ -2667,11 +2664,11 @@ public class SystemDatabaseTest {
   public void testUpdateQueueClearRateLimit() {
     sysdb.upsertQueue(
         "q-clear-rate",
-        QueueOptions.empty().withRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
+        new QueueOptions().withRateLimit(5, 30, java.util.concurrent.TimeUnit.SECONDS),
         true,
         null);
 
-    sysdb.updateQueue("q-clear-rate", QueueOptions.empty().withRateLimit(null, null));
+    sysdb.updateQueue("q-clear-rate", new QueueOptions().withRateLimit(null, null));
 
     var q = sysdb.findQueue("q-clear-rate").orElseThrow();
     assertNull(q.rateLimit(), "rateLimit should be cleared to null");
@@ -2687,14 +2684,14 @@ public class SystemDatabaseTest {
 
     // A row an earlier version stored as false is healed by the next partial update...
     forcePriorityEnabledFalse("q-prio");
-    sysdb.updateQueue("q-prio", QueueOptions.empty().withConcurrency(3));
+    sysdb.updateQueue("q-prio", new QueueOptions().withConcurrency(3));
     assertTrue(storedPriorityEnabled("q-prio"));
 
     // ...and by the next re-registration, which binds every column through the update statement.
     forcePriorityEnabledFalse("q-prio");
     sysdb.upsertQueue(
         "q-prio",
-        QueueOptions.empty()
+        new QueueOptions()
             .withConcurrency(10)
             .withWorkerConcurrency(5)
             .withRateLimit(20, Duration.ofSeconds(30))
@@ -2718,7 +2715,7 @@ public class SystemDatabaseTest {
 
     // Options that set only the ignored flag are empty, so an update with them changes nothing.
     assertTrue(QueueOptions.setPriorityEnabled(false).isEmpty());
-    assertEquals(QueueOptions.empty(), QueueOptions.setPriorityEnabled(false));
+    assertEquals(new QueueOptions(), QueueOptions.setPriorityEnabled(false));
   }
 
   private void forcePriorityEnabledFalse(String name) throws Exception {
@@ -2744,10 +2741,10 @@ public class SystemDatabaseTest {
 
   @Test
   public void testUpdateQueueEmpty() {
-    sysdb.upsertQueue("q-empty-update", QueueOptions.empty().withConcurrency(5), true, null);
+    sysdb.upsertQueue("q-empty-update", new QueueOptions().withConcurrency(5), true, null);
 
     // Empty update should be a no-op (no exception, no change)
-    var emptyUpdate = QueueOptions.empty();
+    var emptyUpdate = new QueueOptions();
     sysdb.updateQueue("q-empty-update", emptyUpdate);
 
     var q = sysdb.findQueue("q-empty-update").orElseThrow();
@@ -2758,7 +2755,7 @@ public class SystemDatabaseTest {
   public void testUpsertQueueRoundTrip() {
     sysdb.upsertQueue(
         "q-roundtrip",
-        QueueOptions.empty()
+        new QueueOptions()
             .withConcurrency(8)
             .withWorkerConcurrency(4)
             .andPartitionQueue(true)
