@@ -820,6 +820,7 @@ public class ApplicationNameTest {
    * given for the call replaces it rather than losing to it.
    */
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void aTimeoutGivenForTheCallBeatsAnAmbientDeadline() throws Exception {
     dbosA.registerQueue("queue-a", QueueOptions.empty());
     var target =

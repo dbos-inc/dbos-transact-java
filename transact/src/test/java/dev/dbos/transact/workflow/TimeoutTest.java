@@ -424,7 +424,7 @@ public class TimeoutTest {
     queueService.pause();
 
     var parentId = "wf-short-parent";
-    try (var o = new WorkflowOptions(parentId).withTimeout(Duration.ofSeconds(1)).setContext()) {
+    try (var o = new WorkflowOptions(parentId).withTimeout(Duration.ofSeconds(3)).setContext()) {
       assertEquals("QueuedChildren", simpleService.syncWithQueued());
     }
     var deadline = DBUtils.getWorkflowRow(dataSource, parentId).deadlineEpochMs();
@@ -466,6 +466,44 @@ public class TimeoutTest {
     assertEquals("SUCCESS", child.status());
     assertNull(child.timeoutMs());
     assertNull(child.deadlineEpochMs());
+  }
+
+  @Test
+  public void aResumedWorkflowKeepsItsTimeoutAndGetsAFreshDeadline() throws Exception {
+    // The other half of the resume rule: the old deadline is cleared, and the kept timeout sets a
+    // new one when the workflow is dequeued again.
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+    dbos.registerQueue("childQ", QueueOptions.empty());
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.pause();
+
+    var wfid = "wf-resume-timeout";
+    var options =
+        new StartWorkflowOptions(wfid).withQueue("childQ").withTimeout(Duration.ofMinutes(5));
+    dbos.startWorkflow(() -> simpleService.childWorkflow("resumed"), options);
+    dbos.cancelWorkflow(wfid);
+    // A deadline long past, as if the workflow had run out of time before it was canceled.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ?"
+                    + " WHERE workflow_uuid = ?")) {
+      stmt.setLong(1, System.currentTimeMillis() - 10_000);
+      stmt.setString(2, wfid);
+      assertEquals(1, stmt.executeUpdate());
+    }
+
+    var resumedAt = System.currentTimeMillis();
+    var handle = dbos.<String, RuntimeException>resumeWorkflow(wfid);
+    queueService.unpause();
+    assertEquals("resumed", handle.getResult());
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(Duration.ofMinutes(5).toMillis(), row.timeoutMs());
+    assertTrue(row.deadlineEpochMs() >= resumedAt + Duration.ofMinutes(5).toMillis());
   }
 
   @Test

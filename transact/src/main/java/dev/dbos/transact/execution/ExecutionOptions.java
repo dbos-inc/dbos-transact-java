@@ -169,7 +169,7 @@ public record ExecutionOptions(
         this.scheduleName);
   }
 
-  @SuppressWarnings("removal") // honors the deprecated deadline option until 2.0
+  @SuppressWarnings("removal") // honors the deprecated deadline option
   public ExecutionOptions withOptions(EnqueueOptions options) {
     return new ExecutionOptions(
         this.workflowId,
@@ -190,7 +190,7 @@ public record ExecutionOptions(
         this.scheduleName);
   }
 
-  @SuppressWarnings("removal") // honors the deprecated deadline option until 2.0
+  @SuppressWarnings("removal") // honors the deprecated deadline option
   public ExecutionOptions withOptions(StartWorkflowOptions options) {
     if (options == null) {
       return this;

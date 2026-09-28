@@ -22,7 +22,10 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
     return new Inherit();
   }
 
-  /** Run the workflow with no timeout and no deadline. */
+  /**
+   * Run the workflow with no timeout, and don't inherit a deadline. A deadline set on the same
+   * options still applies.
+   */
   static Timeout none() {
     return new None();
   }

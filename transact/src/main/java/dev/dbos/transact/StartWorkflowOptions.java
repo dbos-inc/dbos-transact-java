@@ -40,7 +40,7 @@ import org.jspecify.annotations.Nullable;
  * @param deadline The absolute time by which the workflow must start or complete before being
  *     canceled. It can't be combined with an explicit timeout. May be null. A timeout or deadline
  *     given here replaces both the timeout and the deadline set with {@code WorkflowOptions}.
- *     Deprecated for removal in 2.0: set a timeout instead.
+ *     Deprecated for removal: set a timeout instead.
  * @param queueName Optional name of the queue to which the workflow should be enqueued for
  *     execution. May be null.
  * @param deduplicationId If {@code queueName} is specified, an optional ID used to prevent
@@ -81,6 +81,10 @@ public record StartWorkflowOptions(
 
     if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
+    }
+
+    if (timeout instanceof Timeout.Explicit && deadline != null) {
+      throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
 
     if (nullableIsEmpty(queueName)) {
@@ -228,7 +232,7 @@ public record StartWorkflowOptions(
   /**
    * The absolute deadline set for the workflow, if any.
    *
-   * @deprecated Set a timeout instead. Removed in 2.0.
+   * @deprecated Set a timeout instead. To be removed in a future release.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   @Override
@@ -241,9 +245,9 @@ public record StartWorkflowOptions(
    *
    * @param deadline the absolute deadline to assign
    * @return a new StartWorkflowOptions with the updated deadline
-   * @deprecated The other DBOS SDKs bound a workflow by a timeout only. Use {@link
-   *     #withTimeout(Duration)}; for a workflow that starts at once, a timeout of {@code
-   *     Duration.between(Instant.now(), deadline)} is the same bound. Removed in 2.0.
+   * @deprecated To be removed in a future release. The other DBOS SDKs bound a workflow by a
+   *     timeout only. Use {@link #withTimeout(Duration)}; for a workflow that starts at once, a
+   *     timeout of {@code Duration.between(Instant.now(), deadline)} is the same bound.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull StartWorkflowOptions withDeadline(@Nullable Instant deadline) {

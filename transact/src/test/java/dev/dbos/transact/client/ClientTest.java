@@ -112,7 +112,7 @@ public class ClientTest {
     assertEquals("PENDING", DBUtils.getWorkflowRow(dataSource, workflowId).status());
   }
 
-  /** The pre-1.1 options type still enqueues through the deprecated overloads until 2.0. */
+  /** The pre-1.1 options type still enqueues through the deprecated overloads. */
   @Test
   @SuppressWarnings("removal")
   public void clientEnqueueWithDeprecatedOptions() throws Exception {
