@@ -9,6 +9,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.QueueName;
@@ -24,6 +25,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -601,34 +603,41 @@ public class InteropTest {
   }
 
   /**
-   * Exporting a workflow this runtime cannot read is refused rather than silently emptied.
+   * A workflow this runtime cannot read exports and imports unchanged.
    *
-   * <p>A status read reports an unreadable payload as null, which is right when the metadata is
-   * what was asked for. An export is imported back, so the same null would restore a workflow that
-   * never had an input.
+   * <p>Export carries the payloads as the strings they are stored as and never deserializes them,
+   * so it needs no serializer for their format, and import writes them back exactly.
    */
   @Test
-  public void testExportRefusesAWorkflowItCannotRead() throws Exception {
+  public void testExportCarriesAWorkflowItCannotReadUnchanged() throws Exception {
     String workflowId = "peer-export";
     insertPeerWorkflowRow(workflowId, "py_pickle", "gASVCgAAAA==", "gASVBAAAAA==", null);
+    insertPeerStepRow(workflowId, "py_pickle", "gASVAwAAAA==", null);
 
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    var thrown =
-        assertThrows(
-            IllegalStateException.class, () -> systemDatabase.exportWorkflow(workflowId, false));
-    assertTrue(
-        thrown.getMessage().contains("py_pickle"),
-        "The refusal should name the format it could not read, got: " + thrown.getMessage());
+    var exported = systemDatabase.exportWorkflow(workflowId, false);
+    systemDatabase.deleteWorkflows(List.of(workflowId), false);
+    systemDatabase.importWorkflow(exported);
+
+    var payloads = systemDatabase.exportWorkflow(workflowId, false).get(0).payloads();
+    assertEquals("py_pickle", payloads.serialization());
+    assertEquals("gASVCgAAAA==", payloads.inputs());
+    assertEquals("gASVBAAAAA==", payloads.output());
+    assertNull(payloads.error());
+    assertEquals(1, payloads.steps().size());
+    assertEquals("gASVAwAAAA==", payloads.steps().get(0).output());
   }
 
   /**
-   * Importing one is refused too, before anything is written.
+   * Importing a payload that has to be re-serialized, in a format this runtime cannot read, is
+   * refused before anything is written.
    *
-   * <p>Export and import are a single-SDK affair, but not a single-configuration one: the source
-   * application may have had a serializer this one does not. Import re-serializes the payloads, so
-   * it needs that serializer as much as export did — and a payload the export already carried as
+   * <p>Current exports carry payloads as stored strings and need no serializer. An export written
+   * before that carries them deserialized, and import re-serializes those, which needs the format
+   * that wrote them. Export and import are a single-SDK affair, but not a single-configuration one:
+   * the source application may have had a serializer this one does not, and a payload carried as
    * null would otherwise be written as NULL and committed.
    */
   @Test
@@ -639,8 +648,9 @@ public class InteropTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    // Exported readably, then given a step in a format this application has no serializer for —
-    // which is what a batch arriving from an application configured differently looks like.
+    // Exported readably, then given a step carried deserialized, with no stored string, in a format
+    // this application has no serializer for. That is what an older export from an application
+    // configured differently looks like.
     var exported = systemDatabase.exportWorkflow(workflowId, false).get(0);
     var foreignStep =
         new StepInfo(
@@ -652,13 +662,53 @@ public class InteropTest {
                 List.of(foreignStep),
                 exported.events(),
                 exported.eventHistory(),
-                exported.streams()));
+                exported.streams(),
+                exported.payloads()));
 
     var thrown =
         assertThrows(IllegalStateException.class, () -> systemDatabase.importWorkflow(batch));
     assertTrue(
         thrown.getMessage().contains("custom_base64"),
         "The refusal should name the format, got: " + thrown.getMessage());
+  }
+
+  /**
+   * An export written before payloads travelled as stored strings is refused too, when the
+   * workflow's own format is one this runtime cannot read.
+   *
+   * <p>Such an export carries the workflow's payloads deserialized, and import would have to
+   * re-serialize them in that format. Nothing is written.
+   */
+  @Test
+  public void testImportRefusesAnOlderExportOfAWorkflowItCannotRead() throws Exception {
+    String workflowId = "peer-import-older-export";
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    var now = Instant.now();
+    var status =
+        new WorkflowStatusBuilder(workflowId)
+            .status(WorkflowState.SUCCESS)
+            .workflowName("echoWorkflow")
+            .className("interop")
+            .input(new Object[] {"positional"})
+            .output("output")
+            .serialization("custom_base64")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    var batch =
+        List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null));
+
+    var thrown =
+        assertThrows(IllegalStateException.class, () -> systemDatabase.importWorkflow(batch));
+    assertTrue(
+        thrown.getMessage().contains("custom_base64"),
+        "The refusal should name the format, got: " + thrown.getMessage());
+    assertTrue(dbos.getWorkflowStatus(workflowId).isEmpty(), "nothing is imported");
   }
 
   /**

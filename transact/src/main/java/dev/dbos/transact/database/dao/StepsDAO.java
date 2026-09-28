@@ -7,6 +7,7 @@ import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -185,15 +186,7 @@ public class StepsDAO {
       Integer offset)
       throws SQLException {
 
-    StringBuilder sqlBuilder =
-        new StringBuilder(
-            """
-              SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization, application_name
-              FROM "%s".operation_outputs
-              WHERE workflow_uuid = ?
-              ORDER BY function_id
-            """
-                .formatted(schema));
+    StringBuilder sqlBuilder = new StringBuilder(workflowStepsSql(schema));
 
     if (limit != null) {
       sqlBuilder.append(" LIMIT ?");
@@ -222,12 +215,8 @@ public class StepsDAO {
 
         while (rs.next()) {
           int functionId = rs.getInt("function_id");
-          String functionName = rs.getString("function_name");
           String outputData = rs.getString("output");
           String errorData = SystemDatabase.errorOrNull(rs.getString("error"));
-          String childWorkflowId = rs.getString("child_workflow_id");
-          Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
-          Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
           String serialization = rs.getString("serialization");
 
           Object outputVal = null;
@@ -248,22 +237,68 @@ public class StepsDAO {
             }
             stepError = ErrorResult.deserialize(errorData, serialization, serializer);
           }
-          steps.add(
-              new StepInfo(
-                  functionId,
-                  functionName,
-                  outputVal,
-                  stepError,
-                  childWorkflowId,
-                  startedAt == null ? null : Instant.ofEpochMilli(startedAt),
-                  completedAt == null ? null : Instant.ofEpochMilli(completedAt),
-                  serialization,
-                  rs.getString("application_name")));
+          steps.add(stepInfo(rs, outputVal, stepError));
         }
       }
     }
 
     return steps;
+  }
+
+  /** Every step of a workflow, in step ID order. */
+  private static String workflowStepsSql(String schema) {
+    return """
+          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization, application_name
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ?
+          ORDER BY function_id
+        """
+        .formatted(schema);
+  }
+
+  /** The step on the current row, with the payloads given rather than read from the row. */
+  private static StepInfo stepInfo(ResultSet rs, Object output, ErrorResult error)
+      throws SQLException {
+    Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
+    Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
+    return new StepInfo(
+        rs.getInt("function_id"),
+        rs.getString("function_name"),
+        output,
+        error,
+        rs.getString("child_workflow_id"),
+        startedAt == null ? null : Instant.ofEpochMilli(startedAt),
+        completedAt == null ? null : Instant.ofEpochMilli(completedAt),
+        rs.getString("serialization"),
+        rs.getString("application_name"));
+  }
+
+  /**
+   * A workflow's steps for export: each step's metadata, and its output and error exactly as
+   * stored. Both lists come from one read, so they hold the same steps in the same order.
+   */
+  record ExportedSteps(List<StepInfo> steps, List<ExportedWorkflow.SerializedStep> stored) {}
+
+  /**
+   * Reads a workflow's steps for export. Nothing is deserialized: the payload fields of each {@link
+   * StepInfo} are left null, and the payloads are carried as stored strings instead.
+   */
+  static ExportedSteps exportWorkflowSteps(Connection conn, String schema, String workflowId)
+      throws SQLException {
+    var steps = new ArrayList<StepInfo>();
+    var stored = new ArrayList<ExportedWorkflow.SerializedStep>();
+    try (var stmt = conn.prepareStatement(workflowStepsSql(schema))) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          steps.add(stepInfo(rs, null, null));
+          stored.add(
+              new ExportedWorkflow.SerializedStep(
+                  rs.getInt("function_id"), rs.getString("output"), rs.getString("error")));
+        }
+      }
+    }
+    return new ExportedSteps(steps, stored);
   }
 
   public static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
