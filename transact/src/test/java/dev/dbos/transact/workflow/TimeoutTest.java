@@ -410,6 +410,96 @@ public class TimeoutTest {
     }
   }
 
+  @Test
+  public void queuedChildIsCanceledAtTheParentsDeadlineNotAfterAFreshTimeout() throws Exception {
+    // #561 end to end: the children wait on a paused queue until the parent's deadline has passed.
+    // Handed a copy of the parent's timeout, they would start a fresh one on dequeue and succeed.
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+    dbos.registerQueue("childQ", QueueOptions.empty());
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.pause();
+
+    var parentId = "wf-short-parent";
+    try (var o = new WorkflowOptions(parentId).withTimeout(Duration.ofSeconds(1)).setContext()) {
+      assertEquals("QueuedChildren", simpleService.syncWithQueued());
+    }
+    var deadline = DBUtils.getWorkflowRow(dataSource, parentId).deadlineEpochMs();
+    Thread.sleep(Math.max(0, deadline - System.currentTimeMillis()) + 200);
+    queueService.unpause();
+
+    for (var childId : List.of("child0", "child1", "child2")) {
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> dbos.retrieveWorkflow(childId).getResult(),
+          childId);
+    }
+  }
+
+  @Test
+  public void aResumedChildThatInheritedOnlyADeadlineRunsUnbounded() throws Exception {
+    // Resume clears a deadline and keeps a timeout, as in Python and TypeScript. A child that
+    // inherited only its parent's deadline has no timeout to keep.
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+    dbos.registerQueue("childQ", QueueOptions.empty());
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    queueService.pause();
+
+    try (var o =
+        new WorkflowOptions("wf-resume-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
+      assertEquals("QueuedChildren", simpleService.syncWithQueued());
+    }
+    assertNotNull(DBUtils.getWorkflowRow(dataSource, "child0").deadlineEpochMs());
+
+    dbos.cancelWorkflow("child0");
+    var handle = dbos.resumeWorkflow("child0");
+    queueService.unpause();
+    handle.getResult();
+
+    var child = DBUtils.getWorkflowRow(dataSource, "child0");
+    assertEquals("SUCCESS", child.status());
+    assertNull(child.timeoutMs());
+    assertNull(child.deadlineEpochMs());
+  }
+
+  @Test
+  public void anInnerWorkflowOptionsBoundReplacesAnOuterDeadline() throws Exception {
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+
+    var farDeadline = Instant.now().plus(Duration.ofDays(1));
+    try (var outer = new WorkflowOptions().withDeadline(farDeadline).setContext()) {
+      try (var inner =
+          new WorkflowOptions("wf-inner-timeout").withTimeout(Duration.ofMinutes(5)).setContext()) {
+        simpleService.workWithString("timeout");
+      }
+      try (var inner = new WorkflowOptions("wf-inner-none").withNoTimeout().setContext()) {
+        simpleService.workWithString("none");
+      }
+      // Closing the inner blocks restores the outer deadline.
+      try (var id = new WorkflowOptions("wf-outer-deadline").setContext()) {
+        simpleService.workWithString("deadline");
+      }
+    }
+
+    var timed = DBUtils.getWorkflowRow(dataSource, "wf-inner-timeout");
+    assertEquals(Duration.ofMinutes(5).toMillis(), timed.timeoutMs());
+    assertTrue(timed.deadlineEpochMs() < farDeadline.toEpochMilli());
+    var unbounded = DBUtils.getWorkflowRow(dataSource, "wf-inner-none");
+    assertNull(unbounded.timeoutMs());
+    assertNull(unbounded.deadlineEpochMs());
+    var outer = DBUtils.getWorkflowRow(dataSource, "wf-outer-deadline");
+    assertNull(outer.timeoutMs());
+    assertEquals(farDeadline.toEpochMilli(), outer.deadlineEpochMs());
+  }
+
   private void setWorkflowDeadlinePassed(DataSource ds, String workflowId) throws SQLException {
 
     String sql =

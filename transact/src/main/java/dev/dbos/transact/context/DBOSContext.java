@@ -29,6 +29,7 @@ public class DBOSContext {
   private int functionId;
   private Integer stepFunctionId;
   private final WorkflowInfo parent;
+  private final Duration timeout;
   private final Instant deadline;
   private final String authenticatedUser;
   private final String assumedRole;
@@ -41,6 +42,7 @@ public class DBOSContext {
     workflowId = null;
     functionId = -1;
     parent = null;
+    timeout = null;
     deadline = null;
     authenticatedUser = null;
     assumedRole = null;
@@ -51,6 +53,7 @@ public class DBOSContext {
   public DBOSContext(
       String workflowId,
       WorkflowInfo parent,
+      Duration timeout,
       Instant deadline,
       String authenticatedUser,
       String assumedRole,
@@ -59,6 +62,7 @@ public class DBOSContext {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
+    this.timeout = timeout;
     this.deadline = deadline;
     this.authenticatedUser = authenticatedUser;
     this.assumedRole = assumedRole;
@@ -82,6 +86,7 @@ public class DBOSContext {
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
     this.parent = other.parent;
+    this.timeout = other.timeout;
     this.deadline = other.deadline;
     this.authenticatedUser = other.authenticatedUser;
     this.assumedRole = other.assumedRole;
@@ -141,6 +146,11 @@ public class DBOSContext {
 
   public Timeout getNextTimeout() {
     return nextTimeout;
+  }
+
+  /** The running workflow's own timeout. Its children inherit its deadline, not this. */
+  public Duration getTimeout() {
+    return timeout;
   }
 
   public Instant getNextDeadline() {
@@ -204,8 +214,8 @@ public class DBOSContext {
       return new TimeoutAndDeadline(null, nextDeadline);
     }
     if (nextTimeout instanceof Timeout.Explicit e) {
-      var deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-      return new TimeoutAndDeadline(e.value(), deadline);
+      var childDeadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+      return new TimeoutAndDeadline(e.value(), childDeadline);
     }
     if (nextTimeout instanceof Timeout.None) {
       return new TimeoutAndDeadline(null, null);

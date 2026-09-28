@@ -1715,7 +1715,8 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // An unset timeout takes an ambient one, else inherits, as startWorkflow does.
+    // With neither a timeout nor a deadline given, the ambient ones apply, else the running
+    // workflow's deadline, as startWorkflow does.
     var td = ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
     var execOptions =
         new ExecutionOptions(workflowId)
@@ -2077,6 +2078,7 @@ public class DBOSExecutor implements AutoCloseable {
                 new DBOSContext(
                     workflowId,
                     parent,
+                    finalOptions.timeoutDuration(),
                     finalOptions.deadline(),
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),

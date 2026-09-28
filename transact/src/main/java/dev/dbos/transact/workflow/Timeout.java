@@ -22,15 +22,21 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
     return new Inherit();
   }
 
+  /** Run the workflow with no timeout and no deadline. */
   static Timeout none() {
     return new None();
   }
 
+  /**
+   * Cancel the workflow once it has run for {@code d}, timed from when it starts, or from when it
+   * is dequeued if it is queued. A null duration means {@link #none()}.
+   */
   static Timeout of(Duration d) {
     if (d == null) return none();
     return new Explicit(d);
   }
 
+  /** As {@link #of(Duration)}, with the duration given as a value and unit. */
   static Timeout of(long value, TimeUnit unit) {
     return new Explicit(Duration.ofNanos(unit.toNanos(value)));
   }

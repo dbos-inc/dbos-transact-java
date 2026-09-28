@@ -24,7 +24,9 @@ import org.jspecify.annotations.Nullable;
  *
  * @param workflowId The ID to be assigned to the next workflow in the DBOS context
  * @param timeout The timeout to be assigned to the next workflow in the DBOS context
- * @param deadline The deadline to be assigned to the next workflow in the DBOS context
+ * @param deadline The deadline to be assigned to the next workflow in the DBOS context. A timeout
+ *     or deadline set here replaces both of those set by an enclosing block, and one given for a
+ *     call replaces both of these.
  * @param attributes Custom JSON-serializable attributes to attach to the next workflow. Recorded in
  *     the workflow status at creation and not inherited by child workflows.
  */
@@ -275,10 +277,12 @@ public record WorkflowOptions(
     if (workflowId != null) {
       ctx.nextWorkflowId = workflowId;
     }
-    if (timeout != null) {
+    // A timeout and a deadline are one bound, so setting either replaces an outer block's bound as
+    // a
+    // whole, as options given for the call do. Taken field by field, an outer deadline would
+    // override an inner timeout or none.
+    if (timeout != null || deadline != null) {
       ctx.nextTimeout = timeout;
-    }
-    if (deadline != null) {
       ctx.nextDeadline = deadline;
     }
     if (authenticatedUser.isPresent()) {

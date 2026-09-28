@@ -52,10 +52,12 @@ import org.jspecify.annotations.Nullable;
  * @param timeout How long the workflow may run before being canceled: {@link Timeout#of} an
  *     explicit duration, timed from when the workflow is dequeued; {@link Timeout#none()}; or
  *     {@link Timeout#inherit()}, which bounds it by the running workflow's deadline instead.
- *     Inheriting outside a workflow, or from a client, means no timeout. Optional; unset behaves as
- *     {@code DBOS.startWorkflow} does, taking an ambient timeout set with {@code WorkflowOptions},
- *     else inheriting.
- * @param deadline The absolute time by which the workflow must start or complete. Optional.
+ *     Inheriting outside a workflow, or from a client, means no timeout. Optional; with no deadline
+ *     either, it behaves as {@code DBOS.startWorkflow} does, taking the timeout or deadline set
+ *     with {@code WorkflowOptions}, else inheriting.
+ * @param deadline The absolute time by which the workflow must start or complete. Optional. A
+ *     timeout or deadline given here replaces both the timeout and the deadline set with {@code
+ *     WorkflowOptions}.
  * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
  * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
  *     Must not be negative. Optional.
@@ -338,7 +340,8 @@ public record EnqueueOptions(
   }
 
   /**
-   * Run the workflow with no timeout, rather than inheriting one from the enqueuing workflow.
+   * Run the workflow with no timeout, rather than taking the enqueuing workflow's deadline or a
+   * bound set with {@code WorkflowOptions}.
    *
    * @return New `EnqueueOptions` with no timeout
    */

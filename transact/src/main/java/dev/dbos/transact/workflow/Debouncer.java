@@ -41,6 +41,11 @@ import org.slf4j.LoggerFactory;
  * <p>The returned {@link WorkflowHandle} points to the user workflow that will eventually run with
  * the latest arguments; polling it for {@code getResult()} waits for that workflow's outcome.
  *
+ * <p>The user workflow takes only a timeout set with {@code WorkflowOptions} around the {@code
+ * debounce} call, timed from when it starts. It inherits neither the calling workflow's timeout nor
+ * its deadline, and a deadline set with {@code WorkflowOptions} is ignored: the workflow may start
+ * long after the call. The service workflow runs with no timeout.
+ *
  * <h2>Example</h2>
  *
  * <pre>{@code
@@ -333,9 +338,10 @@ public final class Debouncer<R> {
             deduplicationId);
     // Only a timeout the caller set for this call carries over, as in Python and TypeScript. The
     // running workflow's own timeout is its budget, not the debounced workflow's (#561).
+    var callerCtx = DBOSContextHolder.get();
     Duration workflowTimeout =
-        DBOSContextHolder.get().getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
-    var workflowAttributes = DBOSContextHolder.get().resolveNextAttributes();
+        callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
+    var workflowAttributes = callerCtx.resolveNextAttributes();
     DebouncerContextOptions ctx =
         new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
