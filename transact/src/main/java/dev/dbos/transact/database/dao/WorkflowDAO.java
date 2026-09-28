@@ -3183,23 +3183,16 @@ public class WorkflowDAO {
 
     // retention_timestamp takes the column default, so retention starts at import. The export
     // carries no retention timestamp to restore, and the original ones would be long past the
-    // cutoff, getting the payloads collected immediately. The status insert above fails on an
-    // existing row, so a payload already filed under the ID is a leftover retention has not yet
-    // swept, and is replaced.
+    // cutoff, getting the payloads collected immediately.
     var wfInputSQL =
         """
         INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES (?, ?)
-        ON CONFLICT (workflow_uuid)
-          DO UPDATE SET inputs = EXCLUDED.inputs, retention_timestamp = EXCLUDED.retention_timestamp
         """
             .formatted(ctx.schema());
 
     var wfOutputSQL =
         """
         INSERT INTO "%s".workflow_output (workflow_uuid, output, error) VALUES (?, ?, ?)
-        ON CONFLICT (workflow_uuid)
-          DO UPDATE SET output = EXCLUDED.output, error = EXCLUDED.error,
-                        retention_timestamp = EXCLUDED.retention_timestamp
         """
             .formatted(ctx.schema());
 
@@ -3404,6 +3397,14 @@ public class WorkflowDAO {
               }
 
               wfStmt.executeBatch();
+
+              // The status inserts fail on an existing row, so any payload under these IDs is a
+              // leftover retention has not swept yet. Clear it before writing this import's own.
+              deleteWorkflowChildRows(
+                  conn,
+                  ctx.schema(),
+                  workflows.stream().map(w -> w.status().workflowId()).toArray(String[]::new));
+
               wfInputStmt.executeBatch();
               wfOutputStmt.executeBatch();
               stepStmt.executeBatch();

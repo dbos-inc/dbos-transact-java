@@ -523,4 +523,74 @@ public class ImportExportTest {
     assertNull(output[1]);
     assertTrue(Long.parseLong(output[2]) > 1, "retention restarts at import");
   }
+
+  @Test
+  public void testImportClearsWhatAPreviousWorkflowLeftUnderTheSameId() throws Exception {
+    // An import with no output writes no output row, so only a delete removes a leftover one.
+    var id = "payload-leftover-no-output";
+    var schema = Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos");
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_input (workflow_uuid, inputs, retention_timestamp) VALUES ('%s', 'stale', 1)"
+              .formatted(schema, id));
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_output (workflow_uuid, output, error, retention_timestamp) VALUES ('%s', 'stale', null, 1)"
+              .formatted(schema, id));
+      for (var functionId : List.of(0, 1)) {
+        stmt.executeUpdate(
+            "INSERT INTO \"%s\".operation_outputs (workflow_uuid, function_id, function_name, output, retention_timestamp) VALUES ('%s', %d, 'staleStep', 'stale', 1)"
+                .formatted(schema, id, functionId));
+      }
+    }
+
+    Instant now = Instant.now();
+    sysdb.importWorkflow(
+        List.of(
+            new ExportedWorkflow(
+                new WorkflowStatusBuilder(id)
+                    .status(WorkflowState.PENDING)
+                    .workflowName("TestWorkflow")
+                    .appVersion("1.0.0")
+                    .recoveryAttempts(0)
+                    .priority(0)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build(),
+                List.of(
+                    new StepInfo(
+                        0, "freshStep", null, null, null, null, null, "portable_json", null)),
+                List.of(),
+                List.of(),
+                List.of(),
+                new ExportedWorkflow.SerializedPayloads(
+                    "portable_json",
+                    "{\"positionalArgs\":[4]}",
+                    null,
+                    null,
+                    List.of(new ExportedWorkflow.SerializedStep(0, "\"fresh\"", null))))));
+
+    assertEquals("{\"positionalArgs\":[4]}", rawRow("workflow_input", id, "inputs")[0]);
+    assertNull(rawRow("workflow_output", id, "output"), "leftover output row");
+    var steps = sysdb.listWorkflowSteps(id, false, null, null);
+    assertEquals(1, steps.size(), "only the imported step");
+    assertEquals("freshStep", steps.get(0).functionName());
+    assertEquals(
+        "\"fresh\"", rawStep(id, 0, "output"), "the imported step's output, not the leftover's");
+  }
+
+  /** One column of a step's row, read raw. */
+  private String rawStep(String workflowId, int functionId, String column) throws SQLException {
+    var sql =
+        "SELECT %s FROM \"%s\".operation_outputs WHERE workflow_uuid = ? AND function_id = ?"
+            .formatted(column, Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos"));
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString(1) : null;
+      }
+    }
+  }
 }
