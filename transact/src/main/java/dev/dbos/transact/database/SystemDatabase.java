@@ -823,7 +823,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Store the result to workflow_status
+   * Store the result to workflow_output, marking the workflow SUCCESS
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
@@ -835,7 +835,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Store the error to workflow_status
+   * Store the error to workflow_output, marking the workflow ERROR
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json

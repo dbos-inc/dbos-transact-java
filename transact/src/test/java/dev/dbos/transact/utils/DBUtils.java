@@ -225,7 +225,12 @@ public class DBUtils {
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    String sql = "SELECT * FROM \"%s\".workflow_status ORDER BY created_at".formatted(schema);
+    // created_at is in milliseconds, so rows can tie on it. Break ties on workflow_uuid so the
+    // order is total. For a parent and its derived child IDs (parentId-0, ...) that order matches
+    // creation order.
+    String sql =
+        selectWorkflowStatus(schema)
+            + " ORDER BY workflow_status.created_at, workflow_status.workflow_uuid";
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
@@ -245,7 +250,7 @@ public class DBUtils {
   public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    var sql = "SELECT * FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
+    var sql = selectWorkflowStatus(schema) + " WHERE workflow_status.workflow_uuid = ?";
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -257,6 +262,23 @@ public class DBUtils {
         }
       }
     }
+  }
+
+  // Payloads live in workflow_input / workflow_output since migration 109. Read them the way
+  // every SDK does -- new table first, legacy column as a fallback -- so these helpers see the
+  // payload whichever shape wrote it. Aliased rather than COALESCEd in SQL because
+  // workflow_status.* already carries the legacy names.
+  private static String selectWorkflowStatus(String schema) {
+    return """
+        SELECT workflow_status.*,
+               wi.inputs AS payload_inputs,
+               wo.output AS payload_output,
+               wo.error AS payload_error
+        FROM "%1$s".workflow_status
+        LEFT JOIN "%1$s".workflow_input wi ON wi.workflow_uuid = workflow_status.workflow_uuid
+        LEFT JOIN "%1$s".workflow_output wo ON wo.workflow_uuid = workflow_status.workflow_uuid
+        """
+        .formatted(schema);
   }
 
   public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId)

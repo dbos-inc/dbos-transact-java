@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
@@ -19,6 +20,9 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -189,5 +193,138 @@ public class QueueServicePollTest {
     when(systemDatabase.findQueue("q")).thenReturn(Optional.empty());
 
     assertFalse(queueService.new QueueListenerTask(PLAIN, true).refreshQueue());
+  }
+
+  // ── pause() ───────────────────────────────────────────────────────────────
+
+  /**
+   * Holds the next claim on {@code release} after counting down {@code claiming}, then returns
+   * {@code claimed}.
+   */
+  private void blockTheClaim(
+      CountDownLatch claiming, CountDownLatch release, List<String> claimed) {
+    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
+        .thenAnswer(
+            inv -> {
+              claiming.countDown();
+              assertTrue(release.await(10, TimeUnit.SECONDS), "claim never released");
+              return claimed;
+            });
+  }
+
+  private static Thread start(Runnable body) {
+    var thread = new Thread(body);
+    thread.setDaemon(true);
+    thread.start();
+    return thread;
+  }
+
+  /** Waits until {@code thread} is parked or done, so the test knows where it stands. */
+  private static void awaitParkedOrDone(Thread thread) throws InterruptedException {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (true) {
+      var state = thread.getState();
+      if (state == Thread.State.TIMED_WAITING
+          || state == Thread.State.WAITING
+          || state == Thread.State.TERMINATED) {
+        return;
+      }
+      if (System.nanoTime() > deadline) throw new AssertionError("thread never parked: " + state);
+      Thread.onSpinWait();
+    }
+  }
+
+  @Test
+  @DisplayName("pause() returns only after the pass in flight has claimed and dispatched")
+  public void pauseDrainsThePassInFlight() throws Exception {
+    var claiming = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    blockTheClaim(claiming, release, List.of("wf-1"));
+    var events = new ConcurrentLinkedQueue<String>();
+    when(dbosExecutor.executeWorkflowById("wf-1"))
+        .thenAnswer(
+            inv -> {
+              events.add("dispatched wf-1");
+              return null;
+            });
+
+    var poll = start(() -> taskFor(PLAIN).processPartition(null, 0));
+    assertTrue(claiming.await(10, TimeUnit.SECONDS));
+
+    // The pass is past its paused check and mid-claim: exactly the window #528 is about.
+    var pauser =
+        start(
+            () -> {
+              queueService.pause();
+              events.add("pause returned");
+            });
+    awaitParkedOrDone(pauser);
+    release.countDown();
+    pauser.join(10_000);
+    poll.join(10_000);
+
+    assertEquals(List.of("dispatched wf-1", "pause returned"), List.copyOf(events));
+  }
+
+  @Test
+  @DisplayName("once pause() returns, neither a claim nor a delayed transition runs")
+  public void nothingRunsAfterPauseReturns() {
+    queueService.pause();
+
+    assertEquals(0, taskFor(PLAIN).processPartition(null, 0));
+    queueService.transitionDelayedWorkflows();
+
+    verifyNoInteractions(systemDatabase);
+  }
+
+  @Test
+  @DisplayName("unpause() releases a pause() still waiting on a pass")
+  public void unpauseSupersedesAWaitingPause() throws Exception {
+    var claiming = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    blockTheClaim(claiming, release, List.of());
+
+    var poll = start(() -> taskFor(PLAIN).processPartition(null, 0));
+    try {
+      assertTrue(claiming.await(10, TimeUnit.SECONDS));
+      var pauser = start(queueService::pause);
+      awaitParkedOrDone(pauser);
+
+      queueService.unpause();
+      pauser.join(10_000);
+      assertFalse(pauser.isAlive(), "pause() kept waiting after unpause()");
+    } finally {
+      release.countDown();
+      poll.join(10_000);
+    }
+  }
+
+  @Test
+  @DisplayName("an interrupted pause() returns with the interrupt restored")
+  public void interruptedPauseRestoresTheInterrupt() throws Exception {
+    var claiming = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    blockTheClaim(claiming, release, List.of());
+
+    var poll = start(() -> taskFor(PLAIN).processPartition(null, 0));
+    try {
+      assertTrue(claiming.await(10, TimeUnit.SECONDS));
+      var interrupted = new CountDownLatch(1);
+      var pauser =
+          start(
+              () -> {
+                queueService.pause();
+                if (Thread.currentThread().isInterrupted()) interrupted.countDown();
+              });
+      awaitParkedOrDone(pauser);
+
+      pauser.interrupt();
+      assertTrue(interrupted.await(10, TimeUnit.SECONDS), "pause() swallowed the interrupt");
+    } finally {
+      release.countDown();
+      poll.join(10_000);
+    }
+    // Still paused: giving up the wait does not give up the pause.
+    assertEquals(0, taskFor(PLAIN).processPartition(null, 0));
   }
 }

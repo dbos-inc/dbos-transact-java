@@ -235,20 +235,25 @@ public class EventsTest {
 
     // test OAOO
     var timeoutWFID = UUID.randomUUID().toString();
+    var targetWFID = UUID.randomUUID().toString();
     try (var ctx = new WorkflowOptions(timeoutWFID).setContext()) {
       var begin = System.currentTimeMillis();
-      var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
-      var end = System.currentTimeMillis();
-      assert (end - begin > 1500);
+      var result = proxy.getEventWorkflow(targetWFID, "key", Duration.ofSeconds(2));
+      var elapsed = System.currentTimeMillis() - begin;
+      assertTrue(elapsed > 1500, "getEvent returned after " + elapsed + "ms, before its timeout");
       assertNull(result);
     }
 
+    // Publish the event the timed-out getEvent was waiting for. A replay that ran getEvent again
+    // would now find it, so only the recorded timeout yields null. This asserts on the outcome
+    // rather than on how fast the replay returns, which measures database latency.
+    try (var ctx = new WorkflowOptions(targetWFID).setContext()) {
+      proxy.setEventWorkflow("key", "value");
+    }
+
     try (var ctx = new WorkflowOptions(timeoutWFID).setContext()) {
-      var begin = System.currentTimeMillis();
-      var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
-      var end = System.currentTimeMillis();
-      assert (end - begin < 300);
-      assertNull(result);
+      var result = proxy.getEventWorkflow(targetWFID, "key", Duration.ofSeconds(2));
+      assertNull(result, "the replay must return the recorded timeout, not the new event");
     }
 
     // No OAOO for getEvent outside of a workflow
@@ -256,8 +261,8 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result =
           dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2)).orElse(null);
-      var end = System.currentTimeMillis();
-      assert (end - begin > 1500);
+      var elapsed = System.currentTimeMillis() - begin;
+      assertTrue(elapsed > 1500, "getEvent returned after " + elapsed + "ms, before its timeout");
       assertNull(result);
     }
 
@@ -265,8 +270,8 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result =
           dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2)).orElse(null);
-      var end = System.currentTimeMillis();
-      assert (end - begin > 1500);
+      var elapsed = System.currentTimeMillis() - begin;
+      assertTrue(elapsed > 1500, "getEvent returned after " + elapsed + "ms, before its timeout");
       assertNull(result);
     }
 

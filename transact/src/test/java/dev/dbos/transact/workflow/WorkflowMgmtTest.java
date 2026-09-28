@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -483,6 +484,48 @@ public class WorkflowMgmtTest {
         () ->
             assertThrows(
                 InterruptedException.class, () -> dbos.retrieveWorkflow(workflowId).getResult()));
+  }
+
+  @Test
+  public void payloadsAreWrittenToTheirOwnTables() throws Exception {
+    var handle = dbos.startWorkflow(() -> proxy.helloWorkflow("Ada"));
+    assertEquals("Hello, Ada!", handle.getResult());
+
+    // Migration 109 moved payloads off workflow_status so a status update never rewrites a large
+    // one. Every SDK writes the new tables and leaves the legacy columns null; the reads still
+    // fall back to those columns for rows written before the move.
+    var sql =
+        """
+          SELECT ws.inputs AS legacy_inputs, ws.output AS legacy_output, ws.error AS legacy_error,
+                 wi.inputs AS inputs, wo.output AS output, wo.error AS error,
+                 ws.created_at, wi.retention_timestamp AS input_retention
+          FROM "%1$s".workflow_status ws
+          LEFT JOIN "%1$s".workflow_input wi ON wi.workflow_uuid = ws.workflow_uuid
+          LEFT JOIN "%1$s".workflow_output wo ON wo.workflow_uuid = ws.workflow_uuid
+          WHERE ws.workflow_uuid = ?
+        """
+            .formatted(Constants.DB_SCHEMA);
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, handle.workflowId());
+      try (var rs = stmt.executeQuery()) {
+        assertTrue(rs.next(), "workflow row not found");
+        assertNull(rs.getString("legacy_inputs"), "inputs must not go to workflow_status");
+        assertNull(rs.getString("legacy_output"), "output must not go to workflow_status");
+        assertNull(rs.getString("legacy_error"), "error must not go to workflow_status");
+        assertTrue(rs.getString("inputs").contains("Ada"), "workflow_input holds the input");
+        assertTrue(
+            rs.getString("output").contains("Hello, Ada!"), "workflow_output holds the output");
+        assertNull(rs.getString("error"), "a successful workflow records no error");
+        // The payload sweep keeps an input only while it is stamped no earlier than its status
+        // row's created_at, so the two are written from the same clock reading.
+        assertEquals(
+            rs.getLong("created_at"),
+            rs.getLong("input_retention"),
+            "the input's retention starts at the workflow's created_at");
+      }
+    }
   }
 
   @Test

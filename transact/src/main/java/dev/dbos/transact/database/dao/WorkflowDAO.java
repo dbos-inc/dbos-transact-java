@@ -28,7 +28,6 @@ import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepAggregateRow;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -94,10 +93,10 @@ public class WorkflowDAO {
         application_name
       """;
 
-  // Migration 109 created the tables that input and output payloads move into. The Java SDK
-  // currently still writes the legacy workflow_status columns, but a later release will write to
-  // the new tables. So every read prefers the new table but falls back to the old column. We are
-  // splitting the read and write changes into separate releases to enable rolling upgrades.
+  // Payloads moved off workflow_status in migration 109, so a status update no longer rewrites a
+  // large payload. Every SDK writes workflow_input and workflow_output and leaves the legacy
+  // columns null, but rows written before the move still carry them, so every read prefers the new
+  // table and falls back to the column.
   //
   // One LEFT JOIN per payload table, as in Python and TypeScript: the join is on the payload
   // table's primary key, so it probes once per row however many of that table's columns the
@@ -287,7 +286,7 @@ public class WorkflowDAO {
     String insertSQL =
         """
           INSERT INTO "%s".workflow_status (
-            workflow_uuid, status, inputs,
+            workflow_uuid, status,
             name, class_name, config_name,
             queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
             authenticated_user, assumed_role, authenticated_roles,
@@ -296,7 +295,7 @@ public class WorkflowDAO {
             workflow_timeout_ms, workflow_deadline_epoch_ms,
             parent_workflow_id, owner_xid, serialization, attributes, schedule_name,
             application_name
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               -- recovery_attempts is absent by design: only the queue's claim counts a dispatch.
@@ -330,43 +329,42 @@ public class WorkflowDAO {
       var now = System.currentTimeMillis();
       stmt.setString(1, status.workflowId());
       stmt.setString(2, state.name());
-      stmt.setString(3, status.inputs());
+      stmt.setString(3, status.workflowName());
+      stmt.setString(4, status.className());
+      stmt.setString(5, status.instanceName());
 
-      stmt.setString(4, status.workflowName());
-      stmt.setString(5, status.className());
-      stmt.setString(6, status.instanceName());
+      stmt.setString(6, status.queueName());
+      stmt.setString(7, status.deduplicationId());
+      stmt.setInt(8, Objects.requireNonNullElse(status.priority(), 0));
+      stmt.setString(9, status.queuePartitionKey());
+      stmt.setObject(10, status.delayMs() != null ? now + status.delayMs() : null);
 
-      stmt.setString(7, status.queueName());
-      stmt.setString(8, status.deduplicationId());
-      stmt.setInt(9, Objects.requireNonNullElse(status.priority(), 0));
-      stmt.setString(10, status.queuePartitionKey());
-      stmt.setObject(11, status.delayMs() != null ? now + status.delayMs() : null);
+      stmt.setString(11, status.authenticatedUser());
+      stmt.setString(12, status.assumedRole());
+      stmt.setString(13, authenticatedRolesJson);
 
-      stmt.setString(12, status.authenticatedUser());
-      stmt.setString(13, status.assumedRole());
-      stmt.setString(14, authenticatedRolesJson);
+      stmt.setString(14, status.executorId());
+      stmt.setString(15, status.appVersion());
+      stmt.setString(16, status.appId());
 
-      stmt.setString(15, status.executorId());
-      stmt.setString(16, status.appVersion());
-      stmt.setString(17, status.appId());
+      stmt.setLong(17, now); // created_at
+      stmt.setLong(18, now); // updated_at
+      stmt.setInt(19, recoveryAttempts);
 
-      stmt.setLong(18, now); // created_at
-      stmt.setLong(19, now); // updated_at
-      stmt.setInt(20, recoveryAttempts);
+      stmt.setObject(20, status.timeoutMs());
+      stmt.setObject(21, status.deadlineEpochMs());
+      stmt.setString(22, status.parentWorkflowId());
 
-      stmt.setObject(21, status.timeoutMs());
-      stmt.setObject(22, status.deadlineEpochMs());
-      stmt.setString(23, status.parentWorkflowId());
+      stmt.setObject(23, ownerXid);
+      stmt.setString(24, status.serialization());
+      stmt.setString(25, attributesJson);
+      stmt.setString(26, status.scheduleName());
+      stmt.setString(27, appName);
 
-      stmt.setObject(24, ownerXid);
-      stmt.setString(25, status.serialization());
-      stmt.setString(26, attributesJson);
-      stmt.setString(27, status.scheduleName());
-      stmt.setString(28, appName);
-
+      InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
-          InsertWorkflowResult result =
+          result =
               new InsertWorkflowResult(
                   rs.getInt("recovery_attempts"),
                   WorkflowState.valueOf(rs.getString("status")),
@@ -377,8 +375,6 @@ public class WorkflowDAO {
                   SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
                   rs.getString("serialization"),
                   rs.getString("owner_xid"));
-
-          return result;
         } else {
           throw new RuntimeException(
               "Attempt to insert workflow " + status.workflowId() + " failed: No rows returned.");
@@ -394,6 +390,46 @@ public class WorkflowDAO {
         // Re-throw other SQL exceptions
         throw e;
       }
+
+      // Only the call that created the status row writes its input. A row that was already there
+      // keeps the input it was written with, including one that keeps it in workflow_status.inputs,
+      // which a payload row here would override on every read. Checked here rather than left to the
+      // callers' rollback: not every caller rolls back (recordErrorForUnstartedWorkflow commits
+      // regardless), and a repeat start then skips a statement it would only have discarded.
+      if (!ownerXid.equals(result.ownerXid())) {
+        return result;
+      }
+
+      // Two statements rather than one data-modifying CTE: at scale the CTE costs more than the
+      // round trip it saves.
+      //
+      // An upsert, because this call created the status row, so any input already filed under the
+      // ID is not this workflow's. Retention deletes status rows before it sweeps their payloads,
+      // so a workflow started under a reused ID in between would otherwise run with the previous
+      // workflow's input, and then lose it to the payload sweep. A retried commit that did land
+      // the first time rewrites the same values.
+      //
+      // retention_timestamp is the row's created_at, not the column default. The payload sweep
+      // treats a payload below the cutoff as an orphan unless its status row was also created
+      // before it, which holds only if the input is never stamped earlier than created_at.
+      // created_at comes from this JVM's clock, so the database's now() would break that by
+      // however far the two clocks disagree, and a live workflow could lose its input.
+      var inputSQL =
+          """
+            INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
+            VALUES (?, ?, ?)
+            ON CONFLICT (workflow_uuid)
+              DO UPDATE SET inputs = EXCLUDED.inputs, retention_timestamp = EXCLUDED.retention_timestamp
+          """
+              .formatted(schema);
+      try (var inputStmt = conn.prepareStatement(inputSQL)) {
+        inputStmt.setString(1, status.workflowId());
+        inputStmt.setString(2, status.inputs());
+        inputStmt.setLong(3, now);
+        inputStmt.executeUpdate();
+      }
+
+      return result;
     }
   }
 
@@ -409,7 +445,7 @@ public class WorkflowDAO {
    * that need to distinguish a deleted row do so when they park on the recorded outcome (see {@link
    * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
    */
-  static boolean updateWorkflowOutcome(
+  private static boolean updateWorkflowOutcome(
       Connection conn,
       String schema,
       String workflowId,
@@ -420,37 +456,69 @@ public class WorkflowDAO {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
 
-    if (status != WorkflowState.SUCCESS
-        && status != WorkflowState.ERROR
-        && status != WorkflowState.CANCELLED) {
+    // Only the outcomes that carry a payload. Cancellation goes through its own paths, and here it
+    // would write an empty workflow_output row.
+    if (status != WorkflowState.SUCCESS && status != WorkflowState.ERROR) {
       throw new IllegalArgumentException(
-          "updateWorkflowOutcome called with non-terminal status: " + status);
+          "updateWorkflowOutcome records SUCCESS or ERROR, not " + status);
     }
 
     var sql =
         """
           UPDATE "%s".workflow_status
-          SET status = ?, output = ?, error = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
+          SET status = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
           WHERE workflow_uuid = ? AND status = ?
         """
             .formatted(schema);
 
+    long now = System.currentTimeMillis();
     try (var stmt = conn.prepareStatement(sql)) {
-      long now = System.currentTimeMillis();
       stmt.setString(1, status.name());
+      stmt.setLong(2, now);
+      stmt.setLong(3, now);
+      stmt.setString(4, workflowId);
+      stmt.setString(5, WorkflowState.PENDING.name());
+
+      if (stmt.executeUpdate() == 0) {
+        // The outcome was not ours to write, so leave no orphan payload.
+        return false;
+      }
+    }
+
+    // The payload follows the status transition it belongs to, so both must land together: the
+    // caller runs them in one transaction. A row already here belongs to an earlier workflow under
+    // the same ID whose payloads retention had not yet swept, so its retention_timestamp is reset
+    // along with the payload; kept, it would get this workflow's output swept as an orphan.
+    var outputSQL =
+        """
+          INSERT INTO "%s".workflow_output (workflow_uuid, output, error)
+          VALUES (?, ?, ?)
+          ON CONFLICT (workflow_uuid)
+            DO UPDATE SET output = EXCLUDED.output, error = EXCLUDED.error,
+                          retention_timestamp = EXCLUDED.retention_timestamp
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(outputSQL)) {
+      stmt.setString(1, workflowId);
       stmt.setString(2, output);
       stmt.setString(3, error);
-      stmt.setLong(4, now);
-      stmt.setLong(5, now);
-      stmt.setString(6, workflowId);
-      stmt.setString(7, WorkflowState.PENDING.name());
+      stmt.executeUpdate();
+    }
+    return true;
+  }
 
-      return stmt.executeUpdate() != 0;
+  private static boolean updateWorkflowOutcome(
+      DbContext ctx, String workflowId, WorkflowState state, String output, String error)
+      throws SQLException {
+
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn, c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error));
     }
   }
 
   /**
-   * Store the result to workflow_status
+   * Store the result to workflow_output, marking the workflow SUCCESS
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
@@ -459,14 +527,11 @@ public class WorkflowDAO {
   public static boolean recordWorkflowOutput(DbContext ctx, String workflowId, String result)
       throws SQLException {
 
-    try (var conn = ctx.getConnection()) {
-      return updateWorkflowOutcome(
-          conn, ctx.schema(), workflowId, WorkflowState.SUCCESS, result, null);
-    }
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.SUCCESS, result, null);
   }
 
   /**
-   * Store the error to workflow_status
+   * Store the error to workflow_output, marking the workflow ERROR
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
@@ -475,10 +540,7 @@ public class WorkflowDAO {
   public static boolean recordWorkflowError(DbContext ctx, String workflowId, String error)
       throws SQLException {
 
-    try (var conn = ctx.getConnection()) {
-      return updateWorkflowOutcome(
-          conn, ctx.schema(), workflowId, WorkflowState.ERROR, null, error);
-    }
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.ERROR, null, error);
   }
 
   /**
@@ -493,14 +555,18 @@ public class WorkflowDAO {
   public static void recordErrorForUnstartedWorkflow(
       DbContext ctx, WorkflowStatusInternal initStatus, String error) throws SQLException {
 
-    // No explicit transaction: the calling debouncer workflow is itself durable, so a crash
-    // between these two statements is replayed and retried. ON CONFLICT makes the insert
-    // idempotent and the outcome update is safe to repeat.
+    // One transaction: the outcome payload is written only when the status transition lands, so
+    // a crash between the two would leave an ERROR row with no error, which replaying the durable
+    // debouncer workflow cannot repair -- the retry no longer finds the row PENDING.
     try (var conn = ctx.getConnection()) {
-      insertWorkflowStatus(
-          conn, ctx.schema(), initStatus, UUID.randomUUID().toString(), owner(ctx, initStatus));
-      updateWorkflowOutcome(
-          conn, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
+      SqlTransaction.run(
+          conn,
+          c -> {
+            insertWorkflowStatus(
+                c, ctx.schema(), initStatus, UUID.randomUUID().toString(), owner(ctx, initStatus));
+            updateWorkflowOutcome(
+                c, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
+          });
     }
   }
 
@@ -536,21 +602,7 @@ public class WorkflowDAO {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
 
-    var sql =
-        ("SELECT "
-                + WORKFLOW_STATUS_COLUMNS
-                + ", "
-                + INPUTS_COLUMN
-                + ", "
-                + OUTPUT_COLUMNS
-                + ", serialization")
-            + " FROM \"%s\".workflow_status ".formatted(schema)
-            + inputsJoin(schema)
-            + " "
-            + outputJoin(schema)
-            + " WHERE workflow_status.workflow_uuid = ?";
-
-    try (var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(workflowStatusByIdSql(schema))) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -560,6 +612,22 @@ public class WorkflowDAO {
     }
 
     return null;
+  }
+
+  /** One workflow's status row with its payloads, read through both payload shapes. */
+  private static String workflowStatusByIdSql(String schema) {
+    return ("SELECT "
+            + WORKFLOW_STATUS_COLUMNS
+            + ", "
+            + INPUTS_COLUMN
+            + ", "
+            + OUTPUT_COLUMNS
+            + ", serialization")
+        + " FROM \"%s\".workflow_status ".formatted(schema)
+        + inputsJoin(schema)
+        + " "
+        + outputJoin(schema)
+        + " WHERE workflow_status.workflow_uuid = ?";
   }
 
   public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
@@ -774,7 +842,6 @@ public class WorkflowDAO {
                    THEN debounce_deadline_epoch_ms
                    ELSE ?
                  END,
-                 inputs = ?,
                  serialization = ?,
                  updated_at = ?%s
            WHERE name = ?
@@ -788,18 +855,16 @@ public class WorkflowDAO {
                 .formatted(ctx.schema(), claim)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
-    // The inputs are read back through the payload table first, so a row that keeps them there
-    // has to have them replaced there too, in the same transaction. A row that has no payload row
-    // reads its inputs from the status row, which the bounce updates; this version does not write
-    // payload rows of its own, so none is created here.
-    //
-    // When the enqueue moves its inputs write to workflow_input (payload-table phase 2), this
-    // becomes the upsert the other SDKs use, and the status row's inputs need no longer be set
-    // above: every row a bounce can reach will keep its inputs in the payload table. The bounce
-    // writes wherever the enqueue of the same release writes. See dbos-transact-java #457.
+    // The latest call's inputs win, in the payload table, in the same transaction. An upsert
+    // rather than an update: a row enqueued by a release that still wrote the status row's inputs
+    // has no payload row yet, and the one created here takes precedence over the stale column on
+    // every read. retention_timestamp takes the column default on insert and is left alone on
+    // conflict, as in Python and TypeScript.
     var inputsSql =
         """
-          UPDATE "%s".workflow_input SET inputs = ? WHERE workflow_uuid = ?
+          INSERT INTO "%s".workflow_input (workflow_uuid, inputs)
+          VALUES (?, ?)
+          ON CONFLICT (workflow_uuid) DO UPDATE SET inputs = EXCLUDED.inputs
         """
             .formatted(ctx.schema());
     String workflowId = null;
@@ -808,7 +873,6 @@ public class WorkflowDAO {
       int i = 1;
       stmt.setLong(i++, delayUntilEpochMs);
       stmt.setLong(i++, delayUntilEpochMs);
-      stmt.setString(i++, inputs);
       stmt.setString(i++, serialization);
       stmt.setLong(i++, now);
       if (ctx.appName() != null) {
@@ -829,8 +893,8 @@ public class WorkflowDAO {
     }
     if (workflowId != null) {
       try (var stmt = conn.prepareStatement(inputsSql)) {
-        stmt.setString(1, inputs);
-        stmt.setString(2, workflowId);
+        stmt.setString(1, workflowId);
+        stmt.setString(2, inputs);
         stmt.executeUpdate();
       }
       return new DebounceResult.Bounced(workflowId);
@@ -2120,7 +2184,7 @@ public class WorkflowDAO {
                 workflow_uuid, status, name, class_name, config_name,
                 application_version, application_id, authenticated_user,
                 authenticated_roles, assumed_role, queue_name, queue_partition_key,
-                inputs, workflow_timeout_ms, forked_from, serialization, attributes,
+                workflow_timeout_ms, forked_from, serialization, attributes,
                 application_name
               ) VALUES\s
             """
@@ -2128,7 +2192,7 @@ public class WorkflowDAO {
 
     StringJoiner rows = new StringJoiner(", ");
     for (int i = 0; i < origIds.size(); i++) {
-      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
+      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
     }
     sql.append(rows);
 
@@ -2151,12 +2215,39 @@ public class WorkflowDAO {
         stmt.setString(p++, rd.assumedRole());
         stmt.setString(p++, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
         stmt.setString(p++, queuePartitionKey);
-        stmt.setString(p++, rd.inputs());
         stmt.setObject(p++, timeoutMs);
         stmt.setString(p++, origIds.get(i));
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
         stmt.setString(p++, forkAppNames.get(i));
+      }
+      stmt.executeUpdate();
+    }
+
+    // The fork's input is a copy of the original's. The status insert above just claimed each new
+    // ID, so an input already filed under one is a leftover retention has not yet swept, and is
+    // replaced. retention_timestamp defaults to now, the same reading as the fork's created_at.
+    StringBuilder inputSQL =
+        new StringBuilder(
+            """
+              INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES\s
+            """
+                .formatted(schema));
+    StringJoiner inputRows = new StringJoiner(", ");
+    for (int i = 0; i < forkIds.size(); i++) {
+      inputRows.add("(?, ?)");
+    }
+    inputSQL.append(inputRows);
+    inputSQL.append(
+        " ON CONFLICT (workflow_uuid)"
+            + " DO UPDATE SET inputs = EXCLUDED.inputs,"
+            + " retention_timestamp = EXCLUDED.retention_timestamp");
+
+    try (var stmt = conn.prepareStatement(inputSQL.toString())) {
+      int p = 1;
+      for (int i = 0; i < forkIds.size(); i++) {
+        stmt.setString(p++, forkIds.get(i));
+        stmt.setString(p++, dataList.get(i).inputs());
       }
       stmt.executeUpdate();
     }
@@ -2969,34 +3060,51 @@ public class WorkflowDAO {
   }
 
   /**
-   * Refuse to move a workflow whose payloads this runtime cannot handle.
+   * Refuse to import a workflow with a payload this runtime would have to re-serialize but cannot.
    *
-   * <p>Export and import round-trip the payloads through this runtime's serializers, so neither can
-   * settle for the null a status read reports: a payload dropped on the way through restores a
-   * workflow that never had it.
+   * <p>Payloads carried as stored strings are written back unchanged and need no serializer. Only
+   * an export written before payloads travelled that way carries them deserialized, in the
+   * workflow's status and its steps, and re-serializing those needs the format that wrote them. A
+   * payload dropped on the way through would restore a workflow that never had it.
    */
-  private static void requireSerializerFor(
-      String action,
-      String workflowId,
-      String workflowSerialization,
-      List<StepInfo> steps,
-      DBOSSerializer serializer) {
+  private static void requireSerializerFor(ExportedWorkflow workflow, DBOSSerializer serializer) {
+    var status = workflow.status();
+    var payloads = workflow.payloads();
     var formats = new LinkedHashSet<String>();
-    if (!SerializationUtil.canDeserialize(workflowSerialization, serializer)) {
-      formats.add(workflowSerialization);
+    if (payloads == null && !SerializationUtil.canDeserialize(status.serialization(), serializer)) {
+      formats.add(status.serialization());
     }
-    for (var step : steps) {
-      if (!SerializationUtil.canDeserialize(step.serialization(), serializer)) {
+    var storedSteps = storedStepsById(payloads);
+    for (var step : workflow.steps()) {
+      if (!storedSteps.containsKey(step.functionId())
+          && !SerializationUtil.canDeserialize(step.serialization(), serializer)) {
         formats.add(step.serialization());
       }
     }
     if (!formats.isEmpty()) {
       throw new IllegalStateException(
-          "Cannot %s workflow %s: it is serialized as %s, which this application has no serializer for"
-              .formatted(action, workflowId, String.join(", ", formats)));
+          "Cannot import workflow %s: it is serialized as %s, which this application has no serializer for"
+              .formatted(status.workflowId(), String.join(", ", formats)));
     }
   }
 
+  private static Map<Integer, ExportedWorkflow.SerializedStep> storedStepsById(
+      ExportedWorkflow.@Nullable SerializedPayloads payloads) {
+    if (payloads == null) {
+      return Map.of();
+    }
+    return payloads.steps().stream()
+        .collect(Collectors.toMap(ExportedWorkflow.SerializedStep::stepId, s -> s));
+  }
+
+  /**
+   * Exports a workflow, and its children when asked, with every payload exactly as stored.
+   *
+   * <p>Nothing is deserialized: the payloads travel as stored strings in {@link
+   * ExportedWorkflow#payloads()}, so an export keeps the payloads' types however the export is
+   * encoded, and needs no serializer for them. A workflow written in a format this application
+   * cannot read exports like any other.
+   */
   public static List<ExportedWorkflow> exportWorkflow(
       DbContext ctx, String workflowId, boolean exportChildren) throws SQLException {
 
@@ -3010,17 +3118,35 @@ public class WorkflowDAO {
     var workflows = new ArrayList<ExportedWorkflow>();
     for (var wfid : workflowIds) {
       try (var conn = ctx.getConnection()) {
-        var status = getWorkflowStatus(conn, ctx.schema(), ctx.serializer(), wfid);
-        var steps =
-            StepsDAO.listWorkflowSteps(
-                conn, ctx.schema(), ctx.serializer(), wfid, true, null, null);
-        if (status != null) {
-          requireSerializerFor("export", wfid, status.serialization(), steps, ctx.serializer());
+        WorkflowStatus status = null;
+        String serialization = null;
+        String inputs = null;
+        String output = null;
+        String error = null;
+        try (var stmt = conn.prepareStatement(workflowStatusByIdSql(ctx.schema()))) {
+          stmt.setString(1, wfid);
+          try (var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              // The metadata only: the payloads are taken below as the strings they are stored as.
+              status = resultsToWorkflowStatus(rs, false, false, ctx.serializer());
+              serialization = rs.getString("serialization");
+              inputs = rs.getString("inputs");
+              output = rs.getString("output");
+              error = rs.getString("error");
+            }
+          }
         }
+        var steps = StepsDAO.exportWorkflowSteps(conn, ctx.schema(), wfid);
+        var payloads =
+            status == null
+                ? null
+                : new ExportedWorkflow.SerializedPayloads(
+                    serialization, inputs, output, error, steps.stored());
         var events = listWorkflowEvents(conn, ctx.schema(), wfid);
         var eventHistory = listWorkflowEventHistory(conn, ctx.schema(), wfid);
         var streams = listWorkflowStreams(conn, ctx.schema(), wfid);
-        workflows.add(new ExportedWorkflow(status, steps, events, eventHistory, streams));
+        workflows.add(
+            new ExportedWorkflow(status, steps.steps(), events, eventHistory, streams, payloads));
       }
     }
     return workflows;
@@ -3033,9 +3159,7 @@ public class WorkflowDAO {
     // The whole batch, before anything is written: export and import are a single-SDK affair but
     // not a single-configuration one, and a payload we cannot re-serialize imports empty.
     for (var workflow : workflows) {
-      var s = workflow.status();
-      requireSerializerFor(
-          "import", s.workflowId(), s.serialization(), workflow.steps(), serializer);
+      requireSerializerFor(workflow, serializer);
     }
 
     var wfSQL =
@@ -3044,7 +3168,6 @@ public class WorkflowDAO {
           workflow_uuid, status,
           name, class_name, config_name,
           authenticated_user, assumed_role, authenticated_roles,
-          output, error, inputs,
           executor_id, application_version, application_id,
           created_at, updated_at, started_at_epoch_ms,
           queue_name, deduplication_id, priority, queue_partition_key,
@@ -3053,8 +3176,23 @@ public class WorkflowDAO {
           delay_until_epoch_ms, completed_at, was_forked_from, attributes, schedule_name,
           application_name
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?
         )
+        """
+            .formatted(ctx.schema());
+
+    // retention_timestamp takes the column default, so retention starts at import. The export
+    // carries no retention timestamp to restore, and the original ones would be long past the
+    // cutoff, getting the payloads collected immediately.
+    var wfInputSQL =
+        """
+        INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES (?, ?)
+        """
+            .formatted(ctx.schema());
+
+    var wfOutputSQL =
+        """
+        INSERT INTO "%s".workflow_output (workflow_uuid, output, error) VALUES (?, ?, ?)
         """
             .formatted(ctx.schema());
 
@@ -3106,6 +3244,8 @@ public class WorkflowDAO {
           txConn,
           conn -> {
             try (var wfStmt = conn.prepareStatement(wfSQL);
+                var wfInputStmt = conn.prepareStatement(wfInputSQL);
+                var wfOutputStmt = conn.prepareStatement(wfOutputSQL);
                 var stepStmt = conn.prepareStatement(stepSQL);
                 var eventStmt = conn.prepareStatement(eventSQL);
                 var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
@@ -3113,6 +3253,12 @@ public class WorkflowDAO {
 
               for (var workflow : workflows) {
                 var status = workflow.status();
+                var payloads = workflow.payloads();
+                // Stored strings are written back unchanged. Only an export that predates them
+                // carries its payloads deserialized, and those are re-serialized here.
+                var serialization =
+                    payloads != null ? payloads.serialization() : status.serialization();
+                var storedSteps = storedStepsById(payloads);
 
                 wfStmt.setString(1, status.workflowId());
                 wfStmt.setString(2, status.status().name());
@@ -3126,74 +3272,98 @@ public class WorkflowDAO {
                     status.authenticatedRoles() == null
                         ? null
                         : JsonUtility.toJson(status.authenticatedRoles()));
-                wfStmt.setString(
-                    9,
-                    status.output() == null
-                        ? null
-                        : SerializationUtil.serializeValue(
-                                status.output(), status.serialization(), serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    10,
-                    status.error() == null
-                        ? null
-                        : SerializationUtil.serializeError(
-                                status.error().throwable(), status.serialization(), serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    11,
-                    status.input() == null
-                        ? null
-                        : SerializationUtil.serializeArgs(
-                                status.input(), null, status.serialization(), serializer)
-                            .serializedValue());
-                wfStmt.setString(12, status.executorId());
-                wfStmt.setString(13, status.appVersion());
-                wfStmt.setString(14, status.appId());
-                wfStmt.setObject(15, status.createdAtEpochMs());
-                wfStmt.setObject(16, status.updatedAtEpochMs());
-                wfStmt.setObject(17, status.startedAtEpochMs());
-                wfStmt.setString(18, status.queueName());
-                wfStmt.setString(19, status.deduplicationId());
-                wfStmt.setObject(20, status.priority());
-                wfStmt.setString(21, status.queuePartitionKey());
-                wfStmt.setObject(22, status.timeoutMs());
-                wfStmt.setObject(23, status.deadlineEpochMs());
-                wfStmt.setObject(24, status.recoveryAttempts());
-                wfStmt.setString(25, status.forkedFrom());
-                wfStmt.setString(26, status.parentWorkflowId());
-                wfStmt.setString(27, status.serialization());
-                wfStmt.setObject(28, status.delayUntilEpochMs());
-                wfStmt.setObject(29, status.completedAtEpochMs());
+                String inputs;
+                String output;
+                String error;
+                if (payloads != null) {
+                  inputs = payloads.inputs();
+                  output = payloads.output();
+                  error = payloads.error();
+                } else {
+                  inputs =
+                      status.input() == null
+                          ? null
+                          : SerializationUtil.serializeArgs(
+                                  status.input(), null, status.serialization(), serializer)
+                              .serializedValue();
+                  output =
+                      status.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  status.output(), status.serialization(), serializer)
+                              .serializedValue();
+                  error =
+                      status.error() == null
+                          ? null
+                          : SerializationUtil.serializeError(
+                                  status.error().throwable(), status.serialization(), serializer)
+                              .serializedValue();
+                }
+
+                wfStmt.setString(9, status.executorId());
+                wfStmt.setString(10, status.appVersion());
+                wfStmt.setString(11, status.appId());
+                wfStmt.setObject(12, status.createdAtEpochMs());
+                wfStmt.setObject(13, status.updatedAtEpochMs());
+                wfStmt.setObject(14, status.startedAtEpochMs());
+                wfStmt.setString(15, status.queueName());
+                wfStmt.setString(16, status.deduplicationId());
+                wfStmt.setObject(17, status.priority());
+                wfStmt.setString(18, status.queuePartitionKey());
+                wfStmt.setObject(19, status.timeoutMs());
+                wfStmt.setObject(20, status.deadlineEpochMs());
+                wfStmt.setObject(21, status.recoveryAttempts());
+                wfStmt.setString(22, status.forkedFrom());
+                wfStmt.setString(23, status.parentWorkflowId());
+                wfStmt.setString(24, serialization);
+                wfStmt.setObject(25, status.delayUntilEpochMs());
+                wfStmt.setObject(26, status.completedAtEpochMs());
                 // NOT NULL column: an export predating it carries no value, so fall back to false.
-                wfStmt.setBoolean(30, Boolean.TRUE.equals(status.wasForkedFrom()));
-                wfStmt.setString(31, attributesToJson(status.attributes()));
-                wfStmt.setString(32, status.scheduleName());
-                wfStmt.setString(33, status.applicationName());
+                wfStmt.setBoolean(27, Boolean.TRUE.equals(status.wasForkedFrom()));
+                wfStmt.setString(28, attributesToJson(status.attributes()));
+                wfStmt.setString(29, status.scheduleName());
+                wfStmt.setString(30, status.applicationName());
                 wfStmt.addBatch();
+
+                // Every workflow has an input row, as in Python; an output row only once there is
+                // an output or an error to hold.
+                wfInputStmt.setString(1, status.workflowId());
+                wfInputStmt.setString(2, inputs);
+                wfInputStmt.addBatch();
+                if (output != null || error != null) {
+                  wfOutputStmt.setString(1, status.workflowId());
+                  wfOutputStmt.setString(2, output);
+                  wfOutputStmt.setString(3, error);
+                  wfOutputStmt.addBatch();
+                }
 
                 for (var step : workflow.steps()) {
                   stepStmt.setString(1, status.workflowId());
                   stepStmt.setInt(2, step.functionId());
                   stepStmt.setString(3, step.functionName());
-                  stepStmt.setString(
-                      4,
-                      step.output() == null
-                          ? null
-                          : SerializationUtil.serializeValue(
-                                  step.output(), step.serialization(), serializer)
-                              .serializedValue());
-                  stepStmt.setString(
-                      5, step.error() == null ? null : step.error().serializedError());
+                  var stored = storedSteps.get(step.functionId());
+                  if (stored != null) {
+                    stepStmt.setString(4, stored.output());
+                    stepStmt.setString(5, stored.error());
+                  } else {
+                    stepStmt.setString(
+                        4,
+                        step.output() == null
+                            ? null
+                            : SerializationUtil.serializeValue(
+                                    step.output(), step.serialization(), serializer)
+                                .serializedValue());
+                    stepStmt.setString(
+                        5, step.error() == null ? null : step.error().serializedError());
+                  }
                   stepStmt.setString(6, step.childWorkflowId());
                   stepStmt.setObject(7, step.startedAtEpochMs());
                   stepStmt.setObject(8, step.completedAtEpochMs());
                   stepStmt.setString(9, step.serialization());
                   // A step keeps exactly the app_name it was exported with. An export that predates
-                  // the
-                  // column carries no app_name, so its steps import unclaimed rather than
-                  // inheriting a
-                  // guess from the workflow -- the same choice Python and TypeScript make.
+                  // the column carries no app_name, so its steps import unclaimed rather than
+                  // inheriting a guess from the workflow -- the same choice Python and TypeScript
+                  // make.
                   stepStmt.setString(10, step.applicationName());
                   stepStmt.addBatch();
                 }
@@ -3227,6 +3397,16 @@ public class WorkflowDAO {
               }
 
               wfStmt.executeBatch();
+
+              // The status inserts fail on an existing row, so any payload under these IDs is a
+              // leftover retention has not swept yet. Clear it before writing this import's own.
+              deleteWorkflowChildRows(
+                  conn,
+                  ctx.schema(),
+                  workflows.stream().map(w -> w.status().workflowId()).toArray(String[]::new));
+
+              wfInputStmt.executeBatch();
+              wfOutputStmt.executeBatch();
               stepStmt.executeBatch();
               eventStmt.executeBatch();
               eventHistoryStmt.executeBatch();

@@ -42,7 +42,7 @@ public class CancelResumeRaceTest {
   RaceServiceImpl impl;
   RaceService proxy;
 
-  static final String OUTCOME_SQL_MARKER = "SET status = ?, output = ?, error = ?";
+  static final String OUTCOME_SQL_MARKER = "SET status = ?, updated_at = ?, completed_at = ?";
 
   private static Object invokeUnwrapped(Method m, Object target, Object[] args) throws Throwable {
     try {
@@ -96,7 +96,7 @@ public class CancelResumeRaceTest {
                               && psArgs.length == 2) {
                             int idx = (Integer) psArgs[0];
                             if (idx == 1) boundStatus[0] = (String) psArgs[1];
-                            if (idx == 6) boundWfId[0] = (String) psArgs[1];
+                            if (idx == 4) boundWfId[0] = (String) psArgs[1];
                           }
                           boolean isTargetStaleWrite =
                               psMethod.getName().equals("executeUpdate")

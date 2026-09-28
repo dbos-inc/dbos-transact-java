@@ -44,8 +44,8 @@ public record WorkflowStatusRow(
         rs.getString("assumed_role"),
         rs.getString("authenticated_roles"),
         rs.getString("request"),
-        rs.getString("output"),
-        rs.getString("error"),
+        payload(rs, "payload_output", "output"),
+        payload(rs, "payload_error", "error"),
         rs.getString("executor_id"),
         rs.getObject("created_at", Long.class),
         rs.getObject("updated_at", Long.class),
@@ -57,7 +57,7 @@ public record WorkflowStatusRow(
         rs.getString("queue_name"),
         rs.getObject("workflow_timeout_ms", Long.class),
         rs.getObject("workflow_deadline_epoch_ms", Long.class),
-        rs.getString("inputs"),
+        payload(rs, "payload_inputs", "inputs"),
         rs.getObject("started_at_epoch_ms", Long.class),
         rs.getString("deduplication_id"),
         rs.getObject("priority", Integer.class),
@@ -67,5 +67,12 @@ public record WorkflowStatusRow(
         rs.getString("parent_workflow_id"),
         rs.getString("serialization"),
         rs.getObject("completed_at", Long.class));
+  }
+
+  // The payload tables win over the legacy workflow_status columns, as every SDK read does.
+  private static String payload(ResultSet rs, String payloadColumn, String legacyColumn)
+      throws SQLException {
+    var value = rs.getString(payloadColumn);
+    return value != null ? value : rs.getString(legacyColumn);
   }
 }

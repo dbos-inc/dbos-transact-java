@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -153,7 +154,7 @@ public class ImportExportTest {
             new WorkflowStream("stream-key-1", "stream-val-1", 0, 0, null),
             new WorkflowStream("stream-key-1", "stream-val-2", 1, 1, null));
 
-    return new ExportedWorkflow(status, steps, events, eventHistory, streams);
+    return new ExportedWorkflow(status, steps, events, eventHistory, streams, null);
   }
 
   @Test
@@ -327,7 +328,7 @@ public class ImportExportTest {
             .wasForkedFrom(true)
             .build();
     sysdb.importWorkflow(
-        List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+        List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null)));
 
     var exported = sysdb.exportWorkflow(wfId, false);
     assertEquals(1, exported.size());
@@ -360,7 +361,7 @@ public class ImportExportTest {
             .updatedAt(now)
             .delayUntil(delayUntil)
             .build();
-    var exported = new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
+    var exported = new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null);
 
     sysdb.importWorkflow(List.of(exported));
 
@@ -386,5 +387,210 @@ public class ImportExportTest {
     var reimported = sysdb.exportWorkflow(wfId, false);
     assertEquals(1, reimported.size());
     assertNull(reimported.get(0).status().delayUntil());
+  }
+
+  /**
+   * The named columns of a workflow's row in {@code table}, read raw, or null when there is no row.
+   * Reads the table directly rather than through {@link DBUtils}, whose status reads resolve
+   * payloads through both payload shapes the way the SDK does.
+   */
+  private String[] rawRow(String table, String workflowId, String... columns) throws SQLException {
+    var sql =
+        "SELECT %s FROM \"%s\".%s WHERE workflow_uuid = ?"
+            .formatted(
+                String.join(", ", columns),
+                Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos"),
+                table);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) {
+          return null;
+        }
+        var values = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) {
+          values[i] = rs.getString(i + 1);
+        }
+        return values;
+      }
+    }
+  }
+
+  @Test
+  public void testImportWritesStoredPayloadsToThePayloadTables() throws Exception {
+    var finished = "stored-payloads-finished";
+    var pending = "stored-payloads-pending";
+    Instant now = Instant.now();
+    var batch =
+        List.of(
+            new ExportedWorkflow(
+                new WorkflowStatusBuilder(finished)
+                    .status(WorkflowState.SUCCESS)
+                    .workflowName("TestWorkflow")
+                    .appVersion("1.0.0")
+                    .recoveryAttempts(0)
+                    .priority(0)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                new ExportedWorkflow.SerializedPayloads(
+                    "portable_json", "{\"positionalArgs\":[1]}", "\"done\"", null, List.of())),
+            new ExportedWorkflow(
+                new WorkflowStatusBuilder(pending)
+                    .status(WorkflowState.PENDING)
+                    .workflowName("TestWorkflow")
+                    .appVersion("1.0.0")
+                    .recoveryAttempts(0)
+                    .priority(0)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                new ExportedWorkflow.SerializedPayloads(
+                    "portable_json", "{\"positionalArgs\":[2]}", null, null, List.of())));
+
+    sysdb.importWorkflow(batch);
+
+    // The stored strings go into the payload tables unchanged, where this release writes payloads.
+    var row = rawRow("workflow_status", finished, "inputs", "output", "error", "serialization");
+    assertNull(row[0]);
+    assertNull(row[1]);
+    assertNull(row[2]);
+    assertEquals("portable_json", row[3]);
+    row = rawRow("workflow_status", pending, "inputs", "output", "error");
+    assertNull(row[0]);
+    assertNull(row[1]);
+    assertNull(row[2]);
+    assertEquals("{\"positionalArgs\":[1]}", rawRow("workflow_input", finished, "inputs")[0]);
+    row = rawRow("workflow_output", finished, "output", "error");
+    assertEquals("\"done\"", row[0]);
+    assertNull(row[1]);
+    assertEquals("{\"positionalArgs\":[2]}", rawRow("workflow_input", pending, "inputs")[0]);
+    // No output row until there is an output or an error to hold.
+    assertNull(rawRow("workflow_output", pending, "output"), pending + " in workflow_output");
+  }
+
+  @Test
+  public void testImportReplacesAPayloadLeftBehindUnderTheSameId() throws Exception {
+    // A retention round deletes status rows first and sweeps their payloads in a later pass, so a
+    // workflow ID can be free in workflow_status while workflow_input and workflow_output still
+    // hold the previous workflow's rows.
+    var id = "payload-leftover";
+    var schema = Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos");
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_input (workflow_uuid, inputs, retention_timestamp) VALUES ('%s', 'stale', 1)"
+              .formatted(schema, id));
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_output (workflow_uuid, output, error, retention_timestamp) VALUES ('%s', 'stale', 'stale', 1)"
+              .formatted(schema, id));
+    }
+
+    Instant now = Instant.now();
+    sysdb.importWorkflow(
+        List.of(
+            new ExportedWorkflow(
+                new WorkflowStatusBuilder(id)
+                    .status(WorkflowState.SUCCESS)
+                    .workflowName("TestWorkflow")
+                    .appVersion("1.0.0")
+                    .recoveryAttempts(0)
+                    .priority(0)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                new ExportedWorkflow.SerializedPayloads(
+                    "portable_json", "{\"positionalArgs\":[3]}", "\"fresh\"", null, List.of()))));
+
+    var input = rawRow("workflow_input", id, "inputs", "retention_timestamp");
+    assertEquals("{\"positionalArgs\":[3]}", input[0]);
+    assertTrue(Long.parseLong(input[1]) > 1, "retention restarts at import");
+    var output = rawRow("workflow_output", id, "output", "error", "retention_timestamp");
+    assertEquals("\"fresh\"", output[0]);
+    assertNull(output[1]);
+    assertTrue(Long.parseLong(output[2]) > 1, "retention restarts at import");
+  }
+
+  @Test
+  public void testImportClearsWhatAPreviousWorkflowLeftUnderTheSameId() throws Exception {
+    // An import with no output writes no output row, so only a delete removes a leftover one.
+    var id = "payload-leftover-no-output";
+    var schema = Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos");
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_input (workflow_uuid, inputs, retention_timestamp) VALUES ('%s', 'stale', 1)"
+              .formatted(schema, id));
+      stmt.executeUpdate(
+          "INSERT INTO \"%s\".workflow_output (workflow_uuid, output, error, retention_timestamp) VALUES ('%s', 'stale', null, 1)"
+              .formatted(schema, id));
+      for (var functionId : List.of(0, 1)) {
+        stmt.executeUpdate(
+            "INSERT INTO \"%s\".operation_outputs (workflow_uuid, function_id, function_name, output, retention_timestamp) VALUES ('%s', %d, 'staleStep', 'stale', 1)"
+                .formatted(schema, id, functionId));
+      }
+    }
+
+    Instant now = Instant.now();
+    sysdb.importWorkflow(
+        List.of(
+            new ExportedWorkflow(
+                new WorkflowStatusBuilder(id)
+                    .status(WorkflowState.PENDING)
+                    .workflowName("TestWorkflow")
+                    .appVersion("1.0.0")
+                    .recoveryAttempts(0)
+                    .priority(0)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build(),
+                List.of(
+                    new StepInfo(
+                        0, "freshStep", null, null, null, null, null, "portable_json", null)),
+                List.of(),
+                List.of(),
+                List.of(),
+                new ExportedWorkflow.SerializedPayloads(
+                    "portable_json",
+                    "{\"positionalArgs\":[4]}",
+                    null,
+                    null,
+                    List.of(new ExportedWorkflow.SerializedStep(0, "\"fresh\"", null))))));
+
+    assertEquals("{\"positionalArgs\":[4]}", rawRow("workflow_input", id, "inputs")[0]);
+    assertNull(rawRow("workflow_output", id, "output"), "leftover output row");
+    var steps = sysdb.listWorkflowSteps(id, false, null, null);
+    assertEquals(1, steps.size(), "only the imported step");
+    assertEquals("freshStep", steps.get(0).functionName());
+    assertEquals(
+        "\"fresh\"", rawStep(id, 0, "output"), "the imported step's output, not the leftover's");
+  }
+
+  /** One column of a step's row, read raw. */
+  private String rawStep(String workflowId, int functionId, String column) throws SQLException {
+    var sql =
+        "SELECT %s FROM \"%s\".operation_outputs WHERE workflow_uuid = ? AND function_id = ?"
+            .formatted(column, Objects.requireNonNullElse(dbosConfig.databaseSchema(), "dbos"));
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString(1) : null;
+      }
+    }
   }
 }

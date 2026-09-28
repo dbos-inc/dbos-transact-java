@@ -98,7 +98,11 @@ public final class DebouncedRows {
     }
   }
 
-  /** What the row holds now: the columns a bounce or a transition touches. */
+  /**
+   * What the row holds now: the columns a bounce or a transition touches. The inputs are the ones
+   * the workflow would run with, read the way the SDK reads them: payload table first, the legacy
+   * column as a fallback.
+   */
   public record State(
       String status,
       @Nullable String deduplicationId,
@@ -110,10 +114,11 @@ public final class DebouncedRows {
   public static State read(DataSource dataSource, String workflowId) throws SQLException {
     var sql =
         """
-          SELECT status, deduplication_id, delay_until_epoch_ms, inputs, serialization,
-                 application_name
-            FROM "dbos".workflow_status
-           WHERE workflow_uuid = ?
+          SELECT ws.status, ws.deduplication_id, ws.delay_until_epoch_ms,
+                 COALESCE(wi.inputs, ws.inputs) AS inputs, ws.serialization, ws.application_name
+            FROM "dbos".workflow_status ws
+            LEFT JOIN "dbos".workflow_input wi ON wi.workflow_uuid = ws.workflow_uuid
+           WHERE ws.workflow_uuid = ?
         """;
     try (Connection conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {

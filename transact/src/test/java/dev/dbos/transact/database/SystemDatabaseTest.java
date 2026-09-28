@@ -508,8 +508,21 @@ public class SystemDatabaseTest {
     assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5).status());
     assertEquals(0, DBUtils.getWorkflowRow(dataSource, wfid).recoveryAttempts());
 
-    var claimed =
-        sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
+    // Poll the claim, as the queue service does, rather than asserting on one pass. The claim
+    // selects FOR UPDATE SKIP LOCKED, and CockroachDB skips a key that still carries a write
+    // intent even when the transaction that wrote it has committed
+    // (cockroachdb/cockroach#167582). The insert's intents are resolved asynchronously after its
+    // commit, so a claim issued right behind it can find nothing. Reading the row back above does
+    // not settle that: the read resolves only the key it touches, and the claim's plan may scan an
+    // index whose intent is still outstanding. What this test pins is that the claim counts the
+    // dispatch, not that it wins the first pass.
+    List<String> claimed = List.of();
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
+      claimed =
+          sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
+      if (claimed.isEmpty()) Thread.sleep(100);
+    }
     assertEquals(List.of(wfid), claimed);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
@@ -1379,7 +1392,7 @@ public class SystemDatabaseTest {
     if (isTerminal) {
       builder.completedAt(now);
     }
-    return new ExportedWorkflow(builder.build(), List.of(), List.of(), List.of(), List.of());
+    return new ExportedWorkflow(builder.build(), List.of(), List.of(), List.of(), List.of(), null);
   }
 
   // ── Workflow state based on queue/delay ──────────────────────────────────
@@ -1924,9 +1937,9 @@ public class SystemDatabaseTest {
             .build();
     sysdb.importWorkflow(
         List.of(
-            new ExportedWorkflow(q1Status, List.of(), List.of(), List.of(), List.of()),
-            new ExportedWorkflow(q2Status, List.of(), List.of(), List.of(), List.of()),
-            new ExportedWorkflow(q3Status, List.of(), List.of(), List.of(), List.of())));
+            new ExportedWorkflow(q1Status, List.of(), List.of(), List.of(), List.of(), null),
+            new ExportedWorkflow(q2Status, List.of(), List.of(), List.of(), List.of(), null),
+            new ExportedWorkflow(q3Status, List.of(), List.of(), List.of(), List.of(), null)));
 
     // Group by queue_name with select_min_created_at (common "oldest item" pattern)
     var rows =
@@ -2001,7 +2014,8 @@ public class SystemDatabaseTest {
             .completedAt(queuedStartedAt)
             .build();
     sysdb.importWorkflow(
-        List.of(new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of())));
+        List.of(
+            new ExportedWorkflow(queuedStatus, List.of(), List.of(), List.of(), List.of(), null)));
     var afterAll = queuedStartedAt.plusMillis(1);
 
     // completed_after/completed_before covers all 6
@@ -2069,7 +2083,7 @@ public class SystemDatabaseTest {
               .completedAt(now)
               .build();
       sysdb.importWorkflow(
-          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null)));
     }
 
     // 2 queued SUCCESS (started_at set → max_queue_wait_ms populated)
@@ -2087,7 +2101,7 @@ public class SystemDatabaseTest {
               .completedAt(now)
               .build();
       sysdb.importWorkflow(
-          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of())));
+          List.of(new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of(), null)));
     }
 
     // Only select max_queue_wait_ms + max_total_latency_ms — count must be null
@@ -2139,7 +2153,7 @@ public class SystemDatabaseTest {
             .createdAt(now)
             .updatedAt(now)
             .build();
-    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of());
+    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of(), null);
   }
 
   @Test

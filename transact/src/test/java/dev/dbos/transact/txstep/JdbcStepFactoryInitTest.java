@@ -15,11 +15,20 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+/**
+ * The suite-wide two-minute timeout does not fit this class. Each test launches DBOS against a
+ * fresh container and so migrates its system schema from empty, which on CockroachDB is over a
+ * hundred online schema changes: 20-40s on a CI runner, but two to three minutes on a slow one
+ * (#529). Raised rather than removed, so a genuine hang still fails rather than hanging CI.
+ */
+@Timeout(value = 5, unit = TimeUnit.MINUTES)
 public class JdbcStepFactoryInitTest {
   @AutoClose final PgContainer pgContainer = PgContainer.createFresh();
 
