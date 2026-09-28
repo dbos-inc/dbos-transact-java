@@ -210,6 +210,7 @@ public class ClientTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void invalidClientEnqueueThrows() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       assertThrows(
@@ -299,6 +300,7 @@ public class ClientTest {
   }
 
   @RetryingTest(3)
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options = new EnqueueOptions("sleep", "ClientServiceImpl", QueueName.of("testQueue"));
@@ -591,6 +593,7 @@ public class ClientTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void enqueueOptionsDeadlineWrittenToDb() throws Exception {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();

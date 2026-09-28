@@ -459,6 +459,7 @@ public class DebouncerTest {
    * debounced workflow instead.
    */
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void debounceOutsideAWorkflowBoundsOnlyTheDebouncedWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();

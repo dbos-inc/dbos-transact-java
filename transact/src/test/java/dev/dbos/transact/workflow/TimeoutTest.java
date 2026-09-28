@@ -64,6 +64,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void asyncTimedOut() {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
@@ -468,6 +469,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void anInnerWorkflowOptionsBoundReplacesAnOuterDeadline() throws Exception {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     var simpleService = dbos.registerProxy(SimpleService.class, impl);

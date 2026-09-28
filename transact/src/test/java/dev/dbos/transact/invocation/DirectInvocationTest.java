@@ -134,6 +134,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void directInvokeCantSetTimeoutAndDeadline() throws Exception {
 
     String workflowId = "directInvokeSetWorkflowIdAndTimeout";
@@ -161,6 +162,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void directInvokeTimeoutDeadline() throws Exception {
 
     var options =
@@ -497,6 +499,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void workflowOptionsTimeoutAndDeadlineBothSetThrows() {
     var options =
         new WorkflowOptions()

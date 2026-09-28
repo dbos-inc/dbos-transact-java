@@ -1597,6 +1597,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   // execute a workflow via startWorkflow
+  @SuppressWarnings("removal") // honors the deprecated deadline option until 2.0
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> wfLambda, StartWorkflowOptions options) {
 
@@ -1628,6 +1629,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   // overload used by SchedulerService: scheduleName is set only for schedule-triggered
   // executions, never by user-facing StartWorkflowOptions.
+  @SuppressWarnings("removal") // honors the deprecated deadline option until 2.0
   <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
       RegisteredWorkflow workflow,
       Object[] args,
@@ -1689,6 +1691,7 @@ public class DBOSExecutor implements AutoCloseable {
    * caller gives one. An unset version is only dequeued by an executor running the owning
    * application's latest registered version.
    */
+  @SuppressWarnings("removal") // honors the deprecated deadline option until 2.0
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
       EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 

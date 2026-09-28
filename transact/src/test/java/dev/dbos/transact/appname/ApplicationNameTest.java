@@ -103,6 +103,7 @@ class AppNameServiceImpl implements AppNameService {
    */
   @Override
   @Workflow
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public String enqueueGreetWithTimeout(
       String queueName, String childId, String timeout, Long deadlineEpochMs) {
     var options =

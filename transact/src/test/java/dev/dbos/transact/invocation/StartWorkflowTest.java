@@ -115,6 +115,7 @@ public class StartWorkflowTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void timeoutAndDurationSetThrows() throws Exception {
     var options =
         new StartWorkflowOptions()

@@ -132,6 +132,7 @@ public class EnqueueOptionsTest {
    * Only an explicit timeout contradicts a deadline, and the record refuses it wherever it's built.
    */
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void anExplicitTimeoutAndADeadlineAreRefused() {
     var options = new EnqueueOptions("wf", QueueName.of("q")).withDeadline(Instant.now());
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(1)));

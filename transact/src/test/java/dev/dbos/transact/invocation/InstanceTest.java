@@ -261,6 +261,7 @@ public class InstanceTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void directInvokeTimeoutDeadline() throws Exception {
 
     var options =
