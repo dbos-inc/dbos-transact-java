@@ -2681,7 +2681,7 @@ public class ConductorTest {
           new WorkflowStream(streamKey, prefix + "streamvalue" + (i + 1), offset, stepId, null));
     }
 
-    return new ExportedWorkflow(status, steps, events, eventHistory, streams);
+    return new ExportedWorkflow(status, steps, events, eventHistory, streams, null);
   }
 
   // Helper method to create multiple test ExportedWorkflow instances
