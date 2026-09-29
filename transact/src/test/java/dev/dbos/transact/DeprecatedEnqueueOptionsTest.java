@@ -16,8 +16,9 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * DBOSClient.EnqueueOptions survives until 2.0 only as a front for the top-level EnqueueOptions, so
- * the two must stay field-for-field identical and the conversion must carry every field.
+ * DBOSClient.EnqueueOptions survives until its removal only as a front for the top-level
+ * EnqueueOptions, so the two must stay field-for-field identical and the conversion must carry
+ * every field.
  */
 @SuppressWarnings("removal")
 class DeprecatedEnqueueOptionsTest {

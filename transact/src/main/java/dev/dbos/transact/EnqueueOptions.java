@@ -49,12 +49,15 @@ import org.jspecify.annotations.Nullable;
  * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
  *     UUID will be generated.
  * @param appVersion The application version to target for execution. Optional.
- * @param timeout How long the workflow may run, from when it is dequeued, before being canceled:
- *     {@link Timeout#of} an explicit duration, {@link Timeout#none()}, or {@link Timeout#inherit()}
- *     the running workflow's. Inheriting outside a workflow, or from a client, means no timeout.
- *     Optional; unset behaves as {@code DBOS.startWorkflow} does, taking an ambient timeout set
+ * @param timeout How long the workflow may run before being canceled: {@link Timeout#of} an
+ *     explicit duration, timed from when the workflow is dequeued; {@link Timeout#none()}; or
+ *     {@link Timeout#inherit()}, which bounds it by the running workflow's deadline instead.
+ *     Inheriting outside a workflow, or from a client, means no timeout. Optional; with no deadline
+ *     either, it behaves as {@code DBOS.startWorkflow} does, taking the timeout or deadline set
  *     with {@code WorkflowOptions}, else inheriting.
- * @param deadline The absolute time by which the workflow must start or complete. Optional.
+ * @param deadline The absolute time by which the workflow must start or complete. Optional. A
+ *     timeout or deadline given here replaces both the timeout and the deadline set with {@code
+ *     WorkflowOptions}. Deprecated for removal: set a timeout instead.
  * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
  * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
  *     Must not be negative. Optional.
@@ -285,9 +288,9 @@ public record EnqueueOptions(
   }
 
   /**
-   * Specify the workflow's timeout: {@link Timeout#of} an explicit duration, {@link
-   * Timeout#none()}, or {@link Timeout#inherit()} the running workflow's. The clock starts when the
-   * workflow is dequeued; if it runs longer it is canceled.
+   * Specify the workflow's timeout: {@link Timeout#of} an explicit duration, timed from when the
+   * workflow is dequeued; {@link Timeout#none()}; or {@link Timeout#inherit()}, which bounds it by
+   * the running workflow's deadline. If the workflow runs past its bound, it is canceled.
    *
    * @param timeout the timeout, or null to leave it unset
    * @return New `EnqueueOptions` with the timeout set
@@ -337,7 +340,8 @@ public record EnqueueOptions(
   }
 
   /**
-   * Run the workflow with no timeout, rather than inheriting one from the enqueuing workflow.
+   * Run the workflow with no timeout, rather than taking the enqueuing workflow's deadline or a
+   * bound set with {@code WorkflowOptions}. A deadline set on these options still applies.
    *
    * @return New `EnqueueOptions` with no timeout
    */
@@ -346,12 +350,27 @@ public record EnqueueOptions(
   }
 
   /**
+   * The absolute deadline set for the workflow, if any.
+   *
+   * @deprecated Set a timeout instead. To be removed in a future release.
+   */
+  @Deprecated(since = "1.2", forRemoval = true)
+  @Override
+  public @Nullable Instant deadline() {
+    return deadline;
+  }
+
+  /**
    * Specify a deadline for the workflow. This is an absolute time, regardless of when the workflow
    * starts.
    *
    * @param deadline Instant after which the workflow will be canceled.
    * @return New `EnqueueOptions` with the deadline set
+   * @deprecated To be removed in a future release. The other DBOS SDKs bound a workflow by a
+   *     timeout only. Use {@link #withTimeout(Duration)}. A queued workflow's timeout is timed from
+   *     when it is dequeued, so unlike a deadline it doesn't bound the time spent waiting.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull EnqueueOptions withDeadline(@Nullable Instant deadline) {
     return new EnqueueOptions(
         this.workflowName,

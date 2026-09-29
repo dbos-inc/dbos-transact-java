@@ -310,7 +310,7 @@ public class DBOSClient implements AutoCloseable {
    * Options for enqueuing a workflow instance for execution.
    *
    * @deprecated Use the top-level {@link dev.dbos.transact.EnqueueOptions}, which {@link
-   *     DBOS#enqueueWorkflow} also takes. This nested record will be removed in 2.0.
+   *     DBOS#enqueueWorkflow} also takes. This nested record will be removed in a future release.
    * @param workflowName The name of the workflow function to enqueue. Required.
    * @param className The Java class containing the workflow function. Optional.
    * @param instanceName The instance name for object-based workflows. Optional.
@@ -1110,7 +1110,7 @@ public class DBOSClient implements AutoCloseable {
    *
    * @deprecated Set the format with {@link dev.dbos.transact.EnqueueOptions#withSerialization} and
    *     use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map)}. This
-   *     overload will be removed in 2.0.
+   *     overload will be removed in a future release.
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
    * @param options {@link EnqueueOptions} for configuring the workflow enqueue
@@ -1135,7 +1135,7 @@ public class DBOSClient implements AutoCloseable {
    * Enqueue a workflow.
    *
    * @deprecated Use {@link #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[])}. This
-   *     overload will be removed in 2.0.
+   *     overload will be removed in a future release.
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
@@ -1155,7 +1155,7 @@ public class DBOSClient implements AutoCloseable {
    * @deprecated Set {@link SerializationStrategy#PORTABLE} with {@link
    *     dev.dbos.transact.EnqueueOptions#withSerialization} and use {@link
    *     #enqueueWorkflow(dev.dbos.transact.EnqueueOptions, Object[], Map)}. This method will be
-   *     removed in 2.0.
+   *     removed in a future release.
    * @param <T> Return type of workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function

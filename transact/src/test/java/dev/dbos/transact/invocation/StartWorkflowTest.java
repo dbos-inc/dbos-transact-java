@@ -115,14 +115,12 @@ public class StartWorkflowTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void timeoutAndDurationSetThrows() throws Exception {
-    var options =
-        new StartWorkflowOptions()
-            .withTimeout(Duration.ofSeconds(10))
-            .withDeadline(Instant.now().plus(Duration.ofDays(1)));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+    // The record refuses the pair wherever it's built, so every path that takes one is covered.
+    var options = new StartWorkflowOptions().withTimeout(Duration.ofSeconds(10));
+    var deadline = Instant.now().plus(Duration.ofDays(1));
+    assertThrows(IllegalArgumentException.class, () -> options.withDeadline(deadline));
   }
 
   @Test

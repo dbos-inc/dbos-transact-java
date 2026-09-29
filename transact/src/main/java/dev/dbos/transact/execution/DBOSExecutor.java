@@ -45,7 +45,6 @@ import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
-import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
@@ -1602,12 +1601,6 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug("startWorkflow {}", options);
 
-    if (options != null
-        && options.timeout() instanceof Timeout.Explicit
-        && options.deadline() != null) {
-      throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
-    }
-
     var invocation = captureInvocation(wfLambda);
     var workflow =
         getRegisteredWorkflow(
@@ -1628,6 +1621,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   // overload used by SchedulerService: scheduleName is set only for schedule-triggered
   // executions, never by user-facing StartWorkflowOptions.
+  @SuppressWarnings("removal") // honors the deprecated deadline option
   <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
       RegisteredWorkflow workflow,
       Object[] args,
@@ -1689,6 +1683,7 @@ public class DBOSExecutor implements AutoCloseable {
    * caller gives one. An unset version is only dequeued by an executor running the owning
    * application's latest registered version.
    */
+  @SuppressWarnings("removal") // honors the deprecated deadline option
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflowByName(
       EnqueueOptions options, Object[] positionalArgs, Map<String, Object> namedArgs) {
 
@@ -1715,7 +1710,8 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // An unset timeout takes an ambient one, else inherits, as startWorkflow does.
+    // With neither a timeout nor a deadline given, the ambient ones apply, else the running
+    // workflow's deadline, as startWorkflow does.
     var td = ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
     var execOptions =
         new ExecutionOptions(workflowId)

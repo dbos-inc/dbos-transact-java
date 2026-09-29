@@ -25,9 +25,9 @@ import java.util.Objects;
  *     {@code null} if not applicable.
  * @deprecated The DBOS system database table behind this API, {@code event_dispatch_kv}, is going
  *     to be retired. The table holds dispatch bookkeeping for the in-memory event receivers that
- *     every SDK except Java either removed or never implemented. This API will be removed in DBOS
- *     Java 2.0, and a shared migration that drops the table will be added sometime after that.
- *     Store integration state in your own table instead.
+ *     every SDK except Java either removed or never implemented. This API will be removed in a
+ *     future release, and a shared migration that drops the table will be added sometime after
+ *     that. Store integration state in your own table instead.
  */
 @Deprecated(since = "1.1", forRemoval = true)
 public record ExternalState(
