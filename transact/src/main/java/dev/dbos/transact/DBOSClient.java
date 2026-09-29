@@ -15,7 +15,7 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
-import dev.dbos.transact.workflow.DebounceResult;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -32,6 +32,8 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.DebounceStamp;
+import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -1348,9 +1350,10 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
-   * pair instead. Used by {@link DebouncerClient}.
+   * pair instead; with {@code ids}, returns them completed with the outcome, as the debouncer's
+   * first step does. Used by {@link DebouncerClient}.
    */
-  DebounceResult debounceDelayedWorkflow(
+  Object debounceDelayedWorkflow(
       String workflowName,
       String className,
       @Nullable String instanceName,
@@ -1358,18 +1361,53 @@ public class DBOSClient implements AutoCloseable {
       String deduplicationId,
       long delayUntilEpochMs,
       Object[] args,
-      @Nullable SerializationStrategy serialization) {
-    return (DebounceResult)
-        systemDatabase.debounceDelayedWorkflow(
-            workflowName,
-            className,
-            instanceName,
-            queueName,
-            deduplicationId,
-            delayUntilEpochMs,
-            args,
-            serialization != null ? serialization.formatName() : null,
-            null);
+      @Nullable SerializationStrategy serialization,
+      @Nullable DebounceIds ids) {
+    return systemDatabase.debounceDelayedWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        queueName,
+        deduplicationId,
+        delayUntilEpochMs,
+        args,
+        serialization != null ? serialization.formatName() : null,
+        ids,
+        null);
+  }
+
+  /**
+   * Enqueues a debounced workflow: DELAYED until the stamp's delay and flagged as debounced, which
+   * no public option can ask for. Python's {@code _enqueue_debounced}. Used by {@link
+   * DebouncerClient}.
+   */
+  <T, E extends Exception> WorkflowHandle<T, E> enqueueDebounced(
+      dev.dbos.transact.EnqueueOptions options, Object[] args, DebounceStamp stamp) {
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
+    DBOSExecutor.enqueueWorkflow(
+        options.workflowName(),
+        options.className(),
+        options.instanceName(),
+        null,
+        args,
+        null,
+        new ExecutionOptions(workflowId).withOptions(options).withDebounce(stamp),
+        null,
+        null,
+        null,
+        options.applicationName(),
+        systemDatabase);
+    return new WorkflowHandleClient<>(workflowId);
+  }
+
+  /** See {@link InternalWorkflows#takeOverStrandedDebouncer}. Used by {@link DebouncerClient}. */
+  @Nullable String takeOverStrandedDebouncer(String serviceWorkflowId) {
+    return InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, serviceWorkflowId);
+  }
+
+  /** See {@link SystemDatabase#isDebouncedWorkflow}. Used by {@link DebouncerClient}. */
+  boolean isDebouncedWorkflow(String workflowId) {
+    return systemDatabase.isDebouncedWorkflow(workflowId);
   }
 
   /**

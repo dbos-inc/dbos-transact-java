@@ -88,6 +88,7 @@ public class DebounceDelayedWorkflowTest {
             delayUntil,
             new Object[] {"fresh"},
             serializationFormat,
+            null,
             null);
   }
 

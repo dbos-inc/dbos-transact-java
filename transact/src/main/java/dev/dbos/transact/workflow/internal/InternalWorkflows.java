@@ -3,16 +3,23 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.internal.DebugTriggers;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +54,65 @@ public class InternalWorkflows {
     } catch (NoSuchMethodException e) {
       throw new IllegalStateException("debouncerWorkflow method missing", e);
     }
+  }
+
+  /**
+   * Takes over from a debouncer service workflow that stopped answering: cancels it, which frees
+   * its debounce key, and returns the user workflow id it pre-assigned, so the caller can create
+   * that workflow itself and the handles earlier callers were given resolve to the workflow that
+   * really runs.
+   *
+   * <p>A service workflow goes silent for good once the last node of the SDK version that enqueued
+   * it drains: the computed application version hashes the SDK version, so no remaining node ever
+   * dequeues or recovers it, and it holds its key forever.
+   *
+   * <p>Returns null, cancelling nothing, when the service workflow is no longer waiting or its user
+   * workflow already exists -- it was only slow, and has committed to run. Returns null after
+   * cancelling when the inputs do not name a user workflow; the caller then creates its own. A live
+   * service workflow can still start its user workflow between this cancel and the caller's create;
+   * the caller checks for that afterwards.
+   */
+  public static @Nullable String takeOverStrandedDebouncer(
+      SystemDatabase systemDatabase, String serviceWorkflowId) {
+    var status = systemDatabase.getWorkflowStatus(serviceWorkflowId);
+    if (status == null
+        || !(status.status() == WorkflowState.ENQUEUED
+            || status.status() == WorkflowState.PENDING)) {
+      return null;
+    }
+    var childId = preassignedChildId(status.input());
+    if (childId != null && systemDatabase.getWorkflowStatus(childId) != null) {
+      return null;
+    }
+    logger.warn(
+        "Cancelling debouncer service workflow {}, which stopped acknowledging calls; its user"
+            + " workflow {} is created by the caller instead",
+        serviceWorkflowId,
+        childId);
+    systemDatabase.cancelWorkflows(List.of(serviceWorkflowId), false);
+    try {
+      DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+    return childId;
+  }
+
+  /**
+   * The user workflow id a service workflow's inputs pre-assign, from its {@link
+   * DebouncerContextOptions}; a serializer that drops Java types hands that back as a map.
+   */
+  private static @Nullable String preassignedChildId(Object @Nullable [] input) {
+    if (input == null || input.length < 2) {
+      return null;
+    }
+    if (input[1] instanceof DebouncerContextOptions ctx) {
+      return ctx.userWorkflowId();
+    }
+    if (input[1] instanceof Map<?, ?> map && map.get("userWorkflowId") instanceof String id) {
+      return id;
+    }
+    return null;
   }
 
   public void debouncerWorkflow(

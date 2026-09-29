@@ -2,16 +2,14 @@ package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
+import dev.dbos.transact.workflow.internal.DebounceStamp;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
-import dev.dbos.transact.workflow.internal.DebouncerOptions;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -28,24 +26,27 @@ import org.slf4j.LoggerFactory;
  * Debounces a series of workflow invocations on the same key into a single execution that uses the
  * most recently supplied arguments.
  *
- * <p>Each unique {@code debounceKey} maintains its own debouncer service workflow that absorbs
- * incoming calls. The service workflow starts the actual user workflow after either {@code
- * debouncePeriod} has elapsed since the last incoming call or the absolute {@code debounceTimeout}
- * has expired.
+ * <p>The first call on a {@code debounceKey} enqueues the user workflow itself, DELAYED on its
+ * queue -- the one set with {@link #withQueue}, or the internal queue -- holding the key as its
+ * deduplication ID. Each later call on the key extends that delay by {@code debouncePeriod} and
+ * replaces the workflow's arguments, up to the absolute {@code debounceTimeout} measured from the
+ * first call. Once the delay expires the workflow is dequeued and runs with the latest arguments,
+ * and the key is free: the next call starts a fresh workflow.
  *
- * <p>A newer SDK version instead keeps the user workflow itself waiting DELAYED on its queue,
- * holding the debounce key as its deduplication ID, and extends that row on each call. When a fleet
- * mixes the two, a call here that finds such a row extends it rather than starting a service
- * workflow beside it, so every call on a key still coalesces into one execution.
+ * <p>SDK versions before 1.2 debounced through a service workflow that absorbed calls for the key
+ * and started the user workflow when the period elapsed. When a fleet mixes the two, a call here
+ * that finds such a service workflow forwards to it, so every call on a key still coalesces into
+ * one execution. A service workflow that stops answering -- its SDK version has left the fleet, so
+ * nothing will ever run it -- is cancelled, and the user workflow it promised is created here
+ * instead, under the id earlier callers were given.
  *
  * <p>The returned {@link WorkflowHandle} points to the user workflow that will eventually run with
  * the latest arguments; polling it for {@code getResult()} waits for that workflow's outcome.
  *
  * <p>The user workflow takes only a timeout set with {@code WorkflowOptions} around the {@code
- * debounce} call, timed from when it starts, or from when it is dequeued if the debouncer has a
- * queue. It inherits neither the calling workflow's timeout nor its deadline, and a deadline set
- * with {@code WorkflowOptions} is ignored: the workflow may start long after the call. The service
- * workflow runs with no timeout.
+ * debounce} call, timed from when it is dequeued. It inherits neither the calling workflow's
+ * timeout nor its deadline, and a deadline set with {@code WorkflowOptions} is ignored: the
+ * workflow may start long after the call.
  *
  * <h2>Example</h2>
  *
@@ -72,73 +73,65 @@ public final class Debouncer<R> {
 
   /**
    * What the first step of a debounce records. The name and the first two components predate the
-   * bounce and are kept as they are so that steps recorded by older versions still replay.
+   * bounce and are kept as they are so that steps recorded by older versions still replay; a
+   * component an older version did not record replays as null.
+   *
+   * @param userWorkflowId the pre-assigned id of the workflow this call creates, if it creates one
+   * @param messageId the idempotency key of the call, if it is forwarded to a service workflow
+   * @param bouncedWorkflowId the debounced workflow the first bounce extended, or null
+   * @param serviceWorkflowId a debouncer service workflow of this application found holding the key
+   *     on the internal queue when nothing was extended, or null. Only an SDK version before
+   *     debounced workflows starts one; the call forwards to it rather than creating a second
+   *     workflow beside it.
    */
   public record DebounceIds(
-      String userWorkflowId, String messageId, @Nullable String bouncedWorkflowId) {
+      String userWorkflowId,
+      String messageId,
+      @Nullable String bouncedWorkflowId,
+      @Nullable String serviceWorkflowId) {
 
-    /** These ids, completed with what a bounce extended, if anything. */
-    public DebounceIds withBounced(DebounceResult bounce) {
-      return new DebounceIds(
-          userWorkflowId,
-          messageId,
-          bounce instanceof DebounceResult.Bounced bounced ? bounced.bouncedWorkflowId() : null);
+    /** These ids, completed with what a bounce extended, or else the service holder found. */
+    public DebounceIds withBounced(DebounceResult bounce, @Nullable String serviceWorkflowId) {
+      return bounce instanceof DebounceResult.Bounced bounced
+          ? new DebounceIds(userWorkflowId, messageId, bounced.bouncedWorkflowId(), null)
+          : new DebounceIds(userWorkflowId, messageId, null, serviceWorkflowId);
     }
   }
 
   private final DBOS dbos;
   private final DBOSExecutor executor;
-  private final RegisteredWorkflow debouncerWorkflow;
   private final @Nullable String queueName;
   private final @Nullable Duration debounceTimeout;
   private final @Nullable String appVersion;
   private final @Nullable Integer priority;
-  private final @Nullable String deduplicationId;
 
-  public Debouncer(
-      @NonNull DBOS dbos,
-      @NonNull DBOSExecutor executor,
-      @NonNull RegisteredWorkflow debouncerWorkflow) {
-    this(dbos, executor, debouncerWorkflow, null, null, null, null, null);
+  public Debouncer(@NonNull DBOS dbos, @NonNull DBOSExecutor executor) {
+    this(dbos, executor, null, null, null, null);
   }
 
   private Debouncer(
       DBOS dbos,
       DBOSExecutor executor,
-      RegisteredWorkflow debouncerWorkflow,
       @Nullable String queueName,
       @Nullable Duration debounceTimeout,
       @Nullable String appVersion,
-      @Nullable Integer priority,
-      @Nullable String deduplicationId) {
+      @Nullable Integer priority) {
     this.dbos = Objects.requireNonNull(dbos, "dbos must not be null");
     this.executor = Objects.requireNonNull(executor, "executor must not be null");
-    this.debouncerWorkflow =
-        Objects.requireNonNull(debouncerWorkflow, "debouncerWorkflow must not be null");
     this.queueName = queueName;
     this.debounceTimeout = debounceTimeout;
     this.appVersion = appVersion;
     this.priority = priority;
-    this.deduplicationId = deduplicationId;
   }
 
   /**
-   * Set the queue that the user workflow will be enqueued on when the debounce period elapses.
-   * {@code null} starts the user workflow directly (not enqueued).
+   * Set the queue that the user workflow waits and runs on. {@code null} uses the internal queue.
    */
   public @NonNull Debouncer<R> withQueue(@Nullable String queueName) {
     if (queueName != null && queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName must not be empty");
     }
-    return new Debouncer<>(
-        dbos,
-        executor,
-        debouncerWorkflow,
-        queueName,
-        debounceTimeout,
-        appVersion,
-        priority,
-        deduplicationId);
+    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
   }
 
   /**
@@ -165,64 +158,31 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(
-        dbos,
-        executor,
-        debouncerWorkflow,
-        queueName,
-        debounceTimeout,
-        appVersion,
-        priority,
-        deduplicationId);
+    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
   }
 
   /** Target a specific application version for the user workflow. */
   public @NonNull Debouncer<R> withAppVersion(@Nullable String appVersion) {
-    return new Debouncer<>(
-        dbos,
-        executor,
-        debouncerWorkflow,
-        queueName,
-        debounceTimeout,
-        appVersion,
-        priority,
-        deduplicationId);
+    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
   }
 
   /**
    * Set the priority for the user workflow; lower values are dequeued first. A priority only means
-   * something on a queue, so {@link #debounce} rejects one when no queue is configured, and it
-   * rejects a negative one.
+   * something on a queue of your own, so {@link #debounce} rejects one when no queue is configured,
+   * and it rejects a negative one.
    */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
-    return new Debouncer<>(
-        dbos,
-        executor,
-        debouncerWorkflow,
-        queueName,
-        debounceTimeout,
-        appVersion,
-        priority,
-        deduplicationId);
+    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
   }
 
   /**
-   * Set a deduplication ID to be forwarded to the user workflow.
+   * Ignored: the debounced workflow holds its debounce key as its deduplication ID.
    *
-   * @deprecated Ignored from the next release, where the debouncer sets the deduplication ID to one
-   *     it generates itself. To be removed in a future release.
+   * @deprecated Ignored since 1.2. To be removed in a future release.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
-    return new Debouncer<>(
-        dbos,
-        executor,
-        debouncerWorkflow,
-        queueName,
-        debounceTimeout,
-        appVersion,
-        priority,
-        deduplicationId);
+    return this;
   }
 
   /**
@@ -261,6 +221,11 @@ public final class Debouncer<R> {
     return debounceInternal(debounceKey, debouncePeriod, wfLambda);
   }
 
+  // Inside a workflow every database touch below is a step or a child enqueue, and the sequence is
+  // the one the previous release recorded: DBOS.assignDebounceIds first, then the child-enqueue
+  // slot, and on a duplicate DBOS.lookupDebouncer followed by the send and the two getEvent steps.
+  // A debounce recorded by that release therefore resumes here when the application version is
+  // pinned across the upgrade.
   private <T, E extends Exception> WorkflowHandle<T, E> debounceInternal(
       @NonNull String debounceKey,
       @NonNull Duration debouncePeriod,
@@ -276,8 +241,6 @@ public final class Debouncer<R> {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
     }
-    // Checked here as well as in the options: those are only built inside the debouncer workflow,
-    // where a bad value would fail durably rather than at this call.
     if (priority != null && priority < 0) {
       throw new IllegalArgumentException("priority must not be negative");
     }
@@ -291,178 +254,221 @@ public final class Debouncer<R> {
                 () ->
                     new IllegalStateException(
                         "Workflow %s is not registered".formatted(invocation.fqName())));
-    String debouncerDeduplicationId = invocation.workflowName() + "-" + debounceKey;
+    String targetQueue = queueName != null ? queueName : Constants.DBOS_INTERNAL_QUEUE;
+    String debounceDeduplicationId = invocation.workflowName() + "-" + debounceKey;
+    Object[] args = invocation.args();
 
-    // The first step assigns the ids and, when a queue is configured, tries to extend a debounced
-    // holder waiting on that queue. Inside a workflow it is recorded so replay is deterministic;
-    // outside one it simply runs. With a queue it bounces, and the bounce and its checkpoint
-    // commit together; without one it writes nothing and a plain step will do. The recorded shape
-    // is the same either way. Typed as Object so that replay does not cast the recorded value: a
-    // custom serializer that drops Java types hands back a map, and a step recorded by the
-    // previous version holds only the two ids.
-    Object recordedStart =
-        queueName == null
-            ? executor.runDbosFunctionAsStep(
-                () -> (Object) freshDebounceIds(), "DBOS.assignDebounceIds", null)
-            : executor.debounceDelayedWorkflow(
-                userWorkflow,
-                queueName,
-                debouncerDeduplicationId,
-                delayUntil(debouncePeriod),
-                invocation.args(),
-                "DBOS.assignDebounceIds",
-                freshDebounceIds());
-    DebounceIds ids = toDebounceIds(recordedStart);
-    if (ids.bouncedWorkflowId() != null) {
-      // A debounced workflow was already waiting on the configured queue; it now carries our args.
-      return dbos.retrieveWorkflow(ids.bouncedWorkflowId());
-    }
-    // A miss drops the holder rather than classifying it, unlike the internal-queue bounce below.
-    // This release writes no debounce key onto the user queue -- the service workflow enqueues its
-    // child with the caller's own deduplication ID, never this one -- so whoever holds the key
-    // there cannot collide with anything this call goes on to create. The cost is the mixed-fleet
-    // gap: the two shapes hold the key on different queues, so a key hit by both kinds of node
-    // within a few milliseconds runs twice. Once the enqueue puts the key on the user queue
-    // (#538), a holder found here has to be classified exactly as the one below is.
-    String userWorkflowId = ids.userWorkflowId();
-    String messageId = ids.messageId();
-
-    DebouncerOptions options =
-        new DebouncerOptions(
-            invocation.workflowName(),
-            invocation.className(),
-            invocation.instanceName(),
-            queueName,
-            debounceTimeout,
-            appVersion,
-            priority,
-            deduplicationId);
     // Only a timeout the caller set for this call carries over, as in Python and TypeScript. The
     // running workflow's own timeout is its budget, not the debounced workflow's (#561).
     var callerCtx = DBOSContextHolder.get();
     Duration workflowTimeout =
         callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
     var workflowAttributes = callerCtx.resolveNextAttributes();
-    DebouncerContextOptions ctx =
-        new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
-    DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
-    while (true) {
-      try {
-        // No timeout: the debouncer waits out the debounce period, which can outlast the caller's
-        // deadline or timeout. The user workflow gets the timeout set with WorkflowOptions around
-        // the call through ctx instead.
-        var startOpts =
-            new StartWorkflowOptions()
-                .withQueue(Constants.DBOS_INTERNAL_QUEUE)
-                .withDeduplicationId(debouncerDeduplicationId)
-                .withNoTimeout();
-        executor.startRegisteredWorkflow(
-            debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
-        // Successfully enqueued a fresh debouncer for this key.
-        return dbos.retrieveWorkflow(userWorkflowId);
-      } catch (DBOSQueueDuplicatedException dup) {
-        // Something already holds this key on the internal queue. If it is a debounced workflow
-        // waiting there, this bounce extends it and the conflict is resolved in one round trip.
-        // Otherwise the result reports the holder so we can coordinate with it or refuse.
-        // When called from inside a workflow, record the result as a durable step so that
-        // replay returns the same holder and the subsequent send/getEvent steps stay
-        // deterministic. The bounce and its checkpoint commit in one transaction, so a crash
-        // between them cannot leave a row extended but unrecorded, which on replay would bounce
-        // again. Typed as Object so that replay does not cast the recorded value: a step recorded
-        // by the previous version holds a bare workflow id, and toDebounceResult adapts it. A
-        // workflow recorded by this version is not expected to replay on that one.
-        Object recorded =
+    // The first step assigns the ids and tries to extend a debounced workflow already waiting on
+    // the target queue. Failing that, it looks for a service workflow of an older SDK version
+    // holding the key on the internal queue. Inside a workflow the bounce, the look and the
+    // checkpoint commit in one transaction, so a crash cannot leave a row extended but the step
+    // unrecorded, which on replay would bounce again. Typed as Object so that replay does not cast
+    // the recorded value: a custom serializer that drops Java types hands back a map.
+    DebounceIds ids =
+        toDebounceIds(
             executor.debounceDelayedWorkflow(
                 userWorkflow,
-                Constants.DBOS_INTERNAL_QUEUE,
-                debouncerDeduplicationId,
+                targetQueue,
+                debounceDeduplicationId,
                 delayUntil(debouncePeriod),
-                invocation.args(),
-                "DBOS.lookupDebouncer",
-                null);
-        DebounceResult result = toDebounceResult(recorded);
+                args,
+                "DBOS.assignDebounceIds",
+                freshDebounceIds()));
+    if (ids.bouncedWorkflowId() != null) {
+      return dbos.retrieveWorkflow(ids.bouncedWorkflowId());
+    }
+
+    String userWorkflowId = ids.userWorkflowId();
+    String messageId = ids.messageId();
+    // A service workflow to forward this call to before trying to create anything.
+    String serviceWorkflowId = ids.serviceWorkflowId();
+    // Set while creating the workflow a stranded service workflow promised, under its id.
+    boolean takingOver = false;
+    // Consecutive unacknowledged forwards to one service workflow; reset when the holder changes.
+    String silentHolderId = null;
+    int silentAcks = 0;
+
+    while (true) {
+      if (serviceWorkflowId != null) {
+        String holderId = serviceWorkflowId;
+        serviceWorkflowId = null;
+        String childId = forward(holderId, messageId, args, debouncePeriod);
+        if (childId != null) {
+          return dbos.retrieveWorkflow(childId);
+        }
+        silentAcks = holderId.equals(silentHolderId) ? silentAcks + 1 : 1;
+        silentHolderId = holderId;
+        if (silentAcks < Constants.DEBOUNCER_MAX_SILENT_ACKS) {
+          logger.debug("Debouncer {} did not ack message {}; retrying", holderId, messageId);
+          if (queueName != null) {
+            // An enqueue on the user queue would not collide with the service workflow, which
+            // holds the key on the internal queue, so look there again, as the previous release
+            // did at this point. Without a queue the enqueue below collides with it instead.
+            DebounceResult recheck =
+                toDebounceResult(
+                    executor.lookUpDebounceHolder(
+                        Constants.DBOS_INTERNAL_QUEUE, debounceDeduplicationId));
+            if (recheck instanceof DebounceResult.Bounced bounced) {
+              // Only a step the previous release recorded, when it found a debounced workflow
+              // waiting on the internal queue.
+              return dbos.retrieveWorkflow(bounced.bouncedWorkflowId());
+            }
+            var holder = ((DebounceResult.NotBounced) recheck).holder();
+            if (holder != null
+                && holder.isDebouncerService()
+                && !holder.isForeignTo(executor.appName())) {
+              serviceWorkflowId = holder.workflowId();
+              continue;
+            }
+          }
+        } else {
+          silentHolderId = null;
+          String promisedId = executor.takeOverStrandedDebouncer(holderId);
+          if (promisedId != null) {
+            userWorkflowId = promisedId;
+            takingOver = true;
+          }
+        }
+      }
+
+      long now = Instant.now().toEpochMilli();
+      Long deadline = debounceTimeout == null ? null : now + debounceTimeout.toMillis();
+      long delayUntil = now + debouncePeriod.toMillis();
+      if (deadline != null && deadline < delayUntil) {
+        delayUntil = deadline;
+      }
+      try {
+        WorkflowHandle<T, E> handle =
+            executor.enqueueDebounced(
+                userWorkflow,
+                args,
+                userWorkflowId,
+                targetQueue,
+                debounceDeduplicationId,
+                new DebounceStamp(delayUntil, deadline),
+                priority,
+                appVersion,
+                workflowTimeout,
+                workflowAttributes);
+        if (!handle.workflowId().equals(userWorkflowId)) {
+          // A replay of the previous release, which recorded its service workflow in this slot.
+          // That workflow started the user workflow under the id the first step assigned.
+          return dbos.retrieveWorkflow(userWorkflowId);
+        }
+        if (takingOver && !executor.isDebouncedWorkflow(userWorkflowId)) {
+          // The service workflow was only slow: it started the promised workflow between the
+          // cancel and this enqueue, with the arguments it had, and this call's arguments went
+          // nowhere. Start over under this call's own id, as for any call that arrives after its
+          // key's workflow has committed to run.
+          logger.debug(
+              "Debounced workflow {} was started by its service workflow; retrying",
+              userWorkflowId);
+          takingOver = false;
+          userWorkflowId = ids.userWorkflowId();
+          continue;
+        }
+        return handle;
+      } catch (DBOSQueueDuplicatedException dup) {
+        // Someone took the key between the first step and this enqueue. If it is a debounced
+        // workflow waiting there, this bounce extends it. Otherwise the result reports the holder
+        // so we can coordinate with it or refuse. Recorded as a step, as the first one is, and
+        // typed as Object for the same reason; a step recorded by a release before the bounce
+        // holds a bare workflow id, and toDebounceResult adapts it.
+        //
+        // A takeover that loses the key here leaves the promised workflow uncreated, and handles
+        // earlier callers hold to it wait. That needs a third call to land in the milliseconds
+        // between the cancel and the enqueue.
+        DebounceResult result =
+            toDebounceResult(
+                executor.debounceDelayedWorkflow(
+                    userWorkflow,
+                    targetQueue,
+                    debounceDeduplicationId,
+                    delayUntil(debouncePeriod),
+                    args,
+                    "DBOS.lookupDebouncer",
+                    null));
         if (result instanceof DebounceResult.Bounced bounced) {
           return dbos.retrieveWorkflow(bounced.bouncedWorkflowId());
         }
         DeduplicationHolder holder = ((DebounceResult.NotBounced) result).holder();
         if (holder == null) {
-          // The existing holder finished between the enqueue attempt and now. Retry from
-          // scratch — the next enqueue should succeed.
+          // The holder finished between the enqueue attempt and now. Retry from scratch.
           logger.debug(
-              "Debouncer for dedupId {} not found after conflict; retrying",
-              debouncerDeduplicationId);
+              "Debounce holder for dedupId {} not found after conflict; retrying",
+              debounceDeduplicationId);
           continue;
         }
         // A peer's holder is not ours to extend: it dequeues on that application's account, so
-        // it may never run at all from here, and the retry below would spin forever waiting for an
-        // ack. Surface the collision the way a plain deduplicated enqueue would.
+        // it may never run at all from here, and a retry would spin forever. Surface the collision
+        // the way a plain deduplicated enqueue would.
         if (holder.isForeignTo(executor.appName())) {
           throw new DBOSQueueDuplicatedException(
-              userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, debouncerDeduplicationId);
+              userWorkflowId, targetQueue, debounceDeduplicationId);
         }
-        if (!holder.isDebouncerService()) {
-          if (holder.isDebouncedInstanceOf(
-              invocation.workflowName(), invocation.className(), invocation.instanceName())) {
-            // A debounced instance of this workflow holds the key but is no longer DELAYED: it
-            // left that state between the enqueue attempt and the bounce, and its key is about to
-            // clear. Retry; the next enqueue starts a fresh debouncer.
-            logger.debug(
-                "Debounced workflow {} for dedupId {} is no longer delayed; retrying",
-                holder.workflowId(),
-                debouncerDeduplicationId);
-            continue;
-          }
-          // Held by a workflow this debounce must not touch: one that was deduplicated on its
-          // own, or a different workflow whose debounce key collides with ours.
-          throw new DBOSQueueDuplicatedException(
-              userWorkflowId, Constants.DBOS_INTERNAL_QUEUE, debouncerDeduplicationId);
-        }
-        // A debouncer service workflow for this key is running. Forward the latest args to it.
-        String existingDebouncerId = holder.workflowId();
-        DebouncerMessage msg = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
-        // messageId is the idempotency key — exactly-once delivery. Internal, because the
-        // debouncer reads it back as a DebouncerMessage: it must not inherit a portable format
-        // from whatever workflow called debounce().
-        executor.sendInternal(existingDebouncerId, msg, Constants.DEBOUNCER_TOPIC, messageId);
-
-        // Wait for the debouncer to acknowledge receipt. If the debouncer exited before
-        // processing this message, no ack arrives — start over.
-        var ack = dbos.getEvent(existingDebouncerId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
-        if (ack.isEmpty()) {
-          logger.debug(
-              "Debouncer {} did not ack message {}; retrying", existingDebouncerId, messageId);
+        if (holder.isDebouncerService()) {
+          serviceWorkflowId = holder.workflowId();
           continue;
         }
-        // CHILD_ID_KEY is set as the debouncer workflow's first action, before the recv-loop.
-        // If the ack arrived, the debouncer has already published this event — it cannot be empty.
-        var childId =
-            dbos.<String>getEvent(
-                    existingDebouncerId,
-                    Constants.DEBOUNCER_CHILD_ID_KEY,
-                    Constants.DEBOUNCER_ACK_TIMEOUT)
-                .orElseThrow(
-                    () ->
-                        new IllegalStateException(
-                            "Debouncer "
-                                + existingDebouncerId
-                                + " acked but did not publish "
-                                + Constants.DEBOUNCER_CHILD_ID_KEY));
-        return dbos.retrieveWorkflow(childId);
+        if (holder.isDebouncedInstanceOf(
+            invocation.workflowName(), invocation.className(), invocation.instanceName())) {
+          // A debounced instance of this workflow holds the key but is no longer DELAYED: it left
+          // that state between the enqueue attempt and the bounce, and its key is about to clear.
+          logger.debug(
+              "Debounced workflow {} for dedupId {} is no longer delayed; retrying",
+              holder.workflowId(),
+              debounceDeduplicationId);
+          continue;
+        }
+        // Held by a workflow this debounce must not touch: one that was deduplicated on its own,
+        // or a different workflow whose debounce key collides with ours.
+        throw new DBOSQueueDuplicatedException(
+            userWorkflowId, targetQueue, debounceDeduplicationId);
       }
     }
   }
 
   /**
-   * The ids the first step assigns: the pre-assigned user workflow and the message id. With a queue
-   * configured, the step also bounces on it -- that is where a newer SDK version keeps its
-   * debounced workflows, so a fleet mixing the two keeps coalescing on one key -- and records these
-   * ids completed with what the bounce extended.
+   * Forwards this call's arguments to a debouncer service workflow and returns the user workflow id
+   * it publishes, or null if it did not acknowledge in time.
    */
+  private @Nullable String forward(
+      String serviceWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
+    DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
+    // messageId is the idempotency key -- exactly-once delivery. Internal, because the service
+    // workflow reads it back as a DebouncerMessage: it must not inherit a portable format from
+    // whatever workflow called debounce().
+    executor.sendInternal(serviceWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
+    var ack = dbos.getEvent(serviceWorkflowId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
+    if (ack.isEmpty()) {
+      return null;
+    }
+    // The service workflow publishes the child id as its first action, before its receive loop,
+    // so once it has acked, the event is there.
+    return dbos.<String>getEvent(
+            serviceWorkflowId, Constants.DEBOUNCER_CHILD_ID_KEY, Constants.DEBOUNCER_ACK_TIMEOUT)
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "Debouncer "
+                        + serviceWorkflowId
+                        + " acked but did not publish "
+                        + Constants.DEBOUNCER_CHILD_ID_KEY));
+  }
+
+  /** The ids the first step assigns: the pre-assigned user workflow and the message id. */
   private DebounceIds freshDebounceIds() {
     return new DebounceIds(
         DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
         UUID.randomUUID().toString(),
+        null,
         null);
   }
 
@@ -474,8 +480,10 @@ public final class Debouncer<R> {
    * Adapts a recorded {@code DBOS.assignDebounceIds} step to the shape this version expects.
    *
    * <p>Before this SDK bounced, the step recorded only the two ids; a replay of such a step means
-   * nothing was extended. A serializer that does not carry Java type information hands back a map
-   * rather than the record, so that shape is adapted too.
+   * nothing was extended. Before 1.2 it recorded no service workflow either, and its replay goes on
+   * to the child-enqueue slot, where that release recorded the service workflow it started. A
+   * serializer that does not carry Java type information hands back a map rather than the record,
+   * so that shape is adapted too.
    */
   static DebounceIds toDebounceIds(Object recorded) {
     if (recorded instanceof DebounceIds ids) {
@@ -487,7 +495,8 @@ public final class Debouncer<R> {
       return new DebounceIds(
           userWorkflowId,
           messageId,
-          map.get("bouncedWorkflowId") instanceof String bounced ? bounced : null);
+          map.get("bouncedWorkflowId") instanceof String bounced ? bounced : null,
+          map.get("serviceWorkflowId") instanceof String service ? service : null);
     }
     throw new IllegalStateException(
         "DBOS.assignDebounceIds recorded an unexpected %s"

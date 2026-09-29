@@ -40,7 +40,9 @@ public record WorkflowStatusInternal(
      * it. Null takes the writing handle's own application, which is what every path but a
      * cross-application enqueue wants.
      */
-    String applicationName) {
+    String applicationName,
+    /** Set only for a debounced workflow, which the debouncers write DELAYED; null otherwise. */
+    DebounceStamp debounce) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {
@@ -66,6 +68,9 @@ public record WorkflowStatusInternal(
     }
     if (nullableIsNotPositive(delay)) {
       throw new IllegalArgumentException("delay must be a positive non-zero duration");
+    }
+    if (debounce != null && (queueName == null || delay != null)) {
+      throw new IllegalArgumentException("a debounced workflow needs a queue and no other delay");
     }
     // Normalize empty strings to null for auth fields — other SDKs (TypeScript, Go) send ""
     // rather than null when auth context is absent, so we treat them equivalently.

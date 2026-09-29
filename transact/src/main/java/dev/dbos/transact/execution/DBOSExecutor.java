@@ -45,6 +45,7 @@ import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
@@ -52,6 +53,8 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.DebounceStamp;
+import dev.dbos.transact.workflow.internal.InternalWorkflows;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
@@ -454,8 +457,10 @@ public class DBOSExecutor implements AutoCloseable {
    *
    * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
    * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
-   * when given, are recorded with the outcome, as the debouncer's first step has always recorded
-   * them. Outside a workflow, or with no step name, it is the plain bounce.
+   * when given, are returned completed with the outcome and, when nothing was extended, with any
+   * debouncer service workflow of this application holding the key; see {@link
+   * dev.dbos.transact.database.dao.WorkflowDAO#debounceDelayedWorkflow}. Outside a workflow, or
+   * with no step name, it is the plain bounce.
    *
    * <p>Returns what the step records as {@code Object}, deliberately: a replay hands back what the
    * serializer preserved, which under a custom serializer that drops Java types is a map, and the
@@ -476,23 +481,108 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(
             "@Step functions cannot be called from the startWorkflow lambda");
       }
-      caller =
-          new DebounceCaller(ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName, ids);
+      caller = new DebounceCaller(ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName);
     }
-    Object out =
-        systemDatabase.debounceDelayedWorkflow(
-            workflow.workflowName(),
-            workflow.className(),
-            workflow.instanceName(),
-            queueName,
-            deduplicationId,
-            delayUntilEpochMs,
-            args,
-            workflow.serializationStrategy() != null
-                ? workflow.serializationStrategy().formatName()
-                : null,
-            caller);
-    return caller == null && ids != null ? ids.withBounced((DebounceResult) out) : out;
+    return systemDatabase.debounceDelayedWorkflow(
+        workflow.workflowName(),
+        workflow.className(),
+        workflow.instanceName(),
+        queueName,
+        deduplicationId,
+        delayUntilEpochMs,
+        args,
+        workflow.serializationStrategy() != null
+            ? workflow.serializationStrategy().formatName()
+            : null,
+        ids,
+        caller);
+  }
+
+  /**
+   * Enqueues {@code workflow} as a debounced workflow: DELAYED on {@code queueName} until the
+   * stamp's delay, holding {@code deduplicationId} as its debounce key. Called from a workflow, it
+   * is a child enqueue, so a replay returns whatever child that slot recorded -- which, for a
+   * debounce recorded before debounced workflows, is the debouncer service workflow, not {@code
+   * workflowId}.
+   *
+   * <p>The workflow takes {@code timeout}, timed from its dequeue, and no deadline: it may start
+   * long after the call, so neither the caller's deadline nor its timeout carries over. The
+   * caller's authentication does.
+   */
+  public <T, E extends Exception> WorkflowHandle<T, E> enqueueDebounced(
+      RegisteredWorkflow workflow,
+      Object[] args,
+      String workflowId,
+      String queueName,
+      String deduplicationId,
+      DebounceStamp stamp,
+      @Nullable Integer priority,
+      @Nullable String appVersion,
+      @Nullable Duration timeout,
+      @Nullable Map<String, Object> attributes) {
+    var ctx = DBOSContextHolder.get();
+    var parent = getParent(ctx);
+    var options =
+        new ExecutionOptions(
+                workflowId,
+                Timeout.of(timeout),
+                null,
+                queueName,
+                deduplicationId,
+                priority,
+                null,
+                null,
+                appVersion,
+                null)
+            .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
+            .withAssumedRole(ctx.resolveNextAssumedRole())
+            .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
+            .withAttributes(attributes)
+            .withDebounce(stamp);
+    return executeWorkflow(workflow, args, options, parent);
+  }
+
+  /**
+   * The workflow holding {@code deduplicationId} on {@code queueName}, reported as a bounce that
+   * extended nothing. Called from a workflow, it is the {@code DBOS.lookupDebouncer} step, recorded
+   * one slot after the next: the slot between is where SDK versions before 1.2 tried to enqueue
+   * their service workflow before looking up the holder, and a collision there records nothing.
+   * Keeping the gap lets a debounce such a version recorded replay here.
+   *
+   * <p>Returns what the step records as {@code Object}, as {@link #debounceDelayedWorkflow} does.
+   */
+  public Object lookUpDebounceHolder(String queueName, String deduplicationId) {
+    var ctx = DBOSContextHolder.get();
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      ctx.getAndIncrementFunctionId();
+    }
+    return runDbosFunctionAsStep(
+        () ->
+            (Object)
+                new DebounceResult.NotBounced(
+                    systemDatabase.findDeduplicationHolder(queueName, deduplicationId)),
+        "DBOS.lookupDebouncer",
+        null);
+  }
+
+  /**
+   * {@link InternalWorkflows#takeOverStrandedDebouncer}, as a step when called from a workflow, so
+   * a replay neither cancels again nor loses the id it returned.
+   */
+  public @Nullable String takeOverStrandedDebouncer(String serviceWorkflowId) {
+    return runDbosFunctionAsStep(
+        () -> InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, serviceWorkflowId),
+        "DBOS.takeOverStrandedDebouncer",
+        null);
+  }
+
+  /**
+   * Whether {@code workflowId} was written as a debounced workflow, as a step when called from a
+   * workflow. See {@link SystemDatabase#isDebouncedWorkflow}.
+   */
+  public boolean isDebouncedWorkflow(String workflowId) {
+    return runDbosFunctionAsStep(
+        () -> systemDatabase.isDebouncedWorkflow(workflowId), "DBOS.isDebouncedWorkflow", null);
   }
 
   QueueService getQueueService() {
@@ -2300,7 +2390,8 @@ public class DBOSExecutor implements AutoCloseable {
             actualSerialization,
             options.attributes(),
             options.scheduleName(),
-            applicationName);
+            applicationName,
+            options.debounce());
 
     var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
 
@@ -2368,6 +2459,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             serializedArgs.serialization(),
+            null,
             null,
             null,
             null);

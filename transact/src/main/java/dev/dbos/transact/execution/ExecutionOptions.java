@@ -7,6 +7,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.DebounceStamp;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -36,7 +37,10 @@ public record ExecutionOptions(
     // run must not insert one, and it carries the queue slot the run occupies.
     WorkflowStatus claimedStatus,
     // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
-    String scheduleName) {
+    String scheduleName,
+    // Set only by the debouncers, which enqueue their workflow DELAYED and flagged as debounced.
+    // No public option reaches it.
+    DebounceStamp debounce) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -105,12 +109,14 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         null);
   }
 
   public ExecutionOptions(String workflowId) {
     this(
         workflowId,
+        null,
         null,
         null,
         null,
@@ -145,6 +151,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -166,7 +173,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         claimed,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -187,7 +195,8 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         options.attributes(),
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -211,7 +220,8 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -231,7 +241,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -251,7 +262,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
@@ -271,7 +283,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withAssumedRole(String assumedRole) {
@@ -291,7 +304,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withAuthenticatedRoles(List<String> authenticatedRoles) {
@@ -311,7 +325,8 @@ public record ExecutionOptions(
         authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withAttributes(Map<String, Object> attributes) {
@@ -331,7 +346,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withQueueName(String queueName) {
@@ -351,7 +367,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withTimeout(Duration timeout) {
@@ -371,7 +388,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withDeadline(Instant deadline) {
@@ -391,7 +409,8 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.debounce);
   }
 
   public ExecutionOptions withScheduleName(String scheduleName) {
@@ -411,7 +430,29 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        scheduleName);
+        scheduleName,
+        this.debounce);
+  }
+
+  public ExecutionOptions withDebounce(DebounceStamp debounce) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.claimedStatus,
+        this.scheduleName,
+        debounce);
   }
 
   public Duration timeoutDuration() {

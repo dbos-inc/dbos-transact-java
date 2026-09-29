@@ -19,6 +19,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -837,7 +838,11 @@ public class SystemDatabase implements AutoCloseable {
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    // A debounced workflow's delay is already absolute: it was capped at the debounce deadline.
+    Long delayUntilEpochMs =
+        initStatus.debounce() != null
+            ? Long.valueOf(initStatus.debounce().delayUntilEpochMs())
+            : resolveDelayUntil(initStatus.delay());
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
@@ -912,6 +917,14 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
+   * Whether the workflow exists and was written as a debounced workflow, which only the debouncers
+   * write. See {@link WorkflowDAO#isDebouncedWorkflow}.
+   */
+  public boolean isDebouncedWorkflow(String workflowId) {
+    return dbRetry(() -> WorkflowDAO.isDebouncedWorkflow(ctx, workflowId));
+  }
+
+  /**
    * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
    * pair instead; as the caller's step when one is given, checkpointed in the same transaction. See
    * {@link WorkflowDAO#debounceDelayedWorkflow}.
@@ -925,6 +938,7 @@ public class SystemDatabase implements AutoCloseable {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable String serializationFormat,
+      @Nullable DebounceIds ids,
       @Nullable DebounceCaller caller) {
     return dbRetry(
         () ->
@@ -938,6 +952,7 @@ public class SystemDatabase implements AutoCloseable {
                 delayUntilEpochMs,
                 args,
                 serializationFormat,
+                ids,
                 caller));
   }
 

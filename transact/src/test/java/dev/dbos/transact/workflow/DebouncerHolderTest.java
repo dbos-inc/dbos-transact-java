@@ -333,14 +333,36 @@ public class DebouncerHolderTest {
   @Test
   void adaptsIdsRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
+    var bounced =
+        Debouncer.toDebounceIds(
+            serializer.deserialize(
+                serializer.serialize(new Debouncer.DebounceIds("user-2", "msg-2", "wf-2", null))));
+    var forwarded =
+        Debouncer.toDebounceIds(
+            serializer.deserialize(
+                serializer.serialize(new Debouncer.DebounceIds("user-3", "msg-3", null, "svc-3"))));
+
+    assertEquals("user-2", bounced.userWorkflowId());
+    assertEquals("wf-2", bounced.bouncedWorkflowId());
+    assertNull(bounced.serviceWorkflowId());
+    assertEquals("user-3", forwarded.userWorkflowId());
+    assertNull(forwarded.bouncedWorkflowId());
+    assertEquals("svc-3", forwarded.serviceWorkflowId());
+  }
+
+  @Test
+  void adaptsIdsRecordedBeforeServiceWorkflowsWereLookedFor() throws Exception {
+    // 1.1 recorded three components under the typed serializer; the fourth replays as null, and
+    // the replay goes on to the child slot, where 1.1 recorded its service workflow.
     var recorded =
-        serializer.deserialize(
-            serializer.serialize(new Debouncer.DebounceIds("user-2", "msg-2", "wf-2")));
+        DBOSJavaSerializer.INSTANCE.deserialize(
+            "{\"@class\":\"dev.dbos.transact.workflow.Debouncer$DebounceIds\","
+                + "\"userWorkflowId\":\"user-4\",\"messageId\":\"msg-4\","
+                + "\"bouncedWorkflowId\":null}");
 
     var ids = Debouncer.toDebounceIds(recorded);
 
-    assertEquals("user-2", ids.userWorkflowId());
-    assertEquals("wf-2", ids.bouncedWorkflowId());
+    assertEquals(new Debouncer.DebounceIds("user-4", "msg-4", null, null), ids);
   }
 
   @Test
