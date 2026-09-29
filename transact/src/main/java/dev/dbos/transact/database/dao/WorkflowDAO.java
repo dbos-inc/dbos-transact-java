@@ -29,7 +29,6 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
-import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -47,7 +46,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -157,6 +155,7 @@ public class WorkflowDAO {
   public static WorkflowInitResult initWorkflowStatus(
       DbContext ctx,
       WorkflowStatusInternal initStatus,
+      @Nullable Long delayUntilEpochMs,
       @Nullable Integer maxRetries,
       String ownerXid)
       throws SQLException {
@@ -172,7 +171,13 @@ public class WorkflowDAO {
         conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
         InsertWorkflowResult resRow =
-            insertWorkflowStatus(conn, ctx.schema(), initStatus, ownerXid, owner(ctx, initStatus));
+            insertWorkflowStatus(
+                conn,
+                ctx.schema(),
+                initStatus,
+                delayUntilEpochMs,
+                ownerXid,
+                owner(ctx, initStatus));
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -268,6 +273,8 @@ public class WorkflowDAO {
    * Insert into the workflow_status table
    *
    * @param status WorkflowStatusInternal holds the data for a workflow_status row
+   * @param delayUntilEpochMs the absolute end of the status's delay, resolved by the caller, or
+   *     null when it has none
    * @return InsertWorkflowResult some of the column inserted
    * @throws SQLException
    */
@@ -275,6 +282,7 @@ public class WorkflowDAO {
       Connection conn,
       String schema,
       WorkflowStatusInternal status,
+      @Nullable Long delayUntilEpochMs,
       String ownerXid,
       @Nullable String appName)
       throws SQLException {
@@ -296,7 +304,7 @@ public class WorkflowDAO {
           ) VALUES (
             ?, ?,
             ?, ?, ?,
-            ?, ?, ?, ?, %2$s + ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             %2$s, %2$s, ?,
@@ -344,9 +352,7 @@ public class WorkflowDAO {
       stmt.setString(7, status.deduplicationId());
       stmt.setInt(8, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(9, status.queuePartitionKey());
-      // The statement writes delay_until_epoch_ms as the database's now() plus this delay. A start
-      // without a delay binds NULL, and now() + NULL is NULL, so the column stays NULL.
-      stmt.setObject(10, status.delayMs(), Types.BIGINT);
+      stmt.setObject(10, delayUntilEpochMs);
 
       stmt.setString(11, status.authenticatedUser());
       stmt.setString(12, status.assumedRole());
@@ -555,7 +561,11 @@ public class WorkflowDAO {
    * @param error the error serialized as json
    */
   public static void recordErrorForUnstartedWorkflow(
-      DbContext ctx, WorkflowStatusInternal initStatus, String error) throws SQLException {
+      DbContext ctx,
+      WorkflowStatusInternal initStatus,
+      @Nullable Long delayUntilEpochMs,
+      String error)
+      throws SQLException {
 
     // One transaction: the outcome payload is written only when the status transition lands, so
     // a crash between the two would leave an ERROR row with no error, which replaying the durable
@@ -565,7 +575,12 @@ public class WorkflowDAO {
           conn,
           c -> {
             insertWorkflowStatus(
-                c, ctx.schema(), initStatus, UUID.randomUUID().toString(), owner(ctx, initStatus));
+                c,
+                ctx.schema(),
+                initStatus,
+                delayUntilEpochMs,
+                UUID.randomUUID().toString(),
+                owner(ctx, initStatus));
             updateWorkflowOutcome(
                 c, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
           });
@@ -906,37 +921,22 @@ public class WorkflowDAO {
         findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
   }
 
-  public static void setWorkflowDelay(DbContext ctx, String workflowId, WorkflowDelay delay)
+  public static void setWorkflowDelay(DbContext ctx, String workflowId, long delayUntilEpochMs)
       throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
-    Objects.requireNonNull(delay, "delay must not be null");
-
-    // A relative delay counts from the database's clock, which is the one the promotion to
-    // ENQUEUED compares it against. An absolute one is the caller's instant, taken as given.
-    String delayUntil;
-    long delayMs;
-    if (delay instanceof WorkflowDelay.Delay d) {
-      delayUntil = SystemDatabase.NOW_EPOCH_MS + " + ?";
-      delayMs = d.delay().toMillis();
-    } else if (delay instanceof WorkflowDelay.DelayUntil du) {
-      delayUntil = "?";
-      delayMs = du.delayUntil().toEpochMilli();
-    } else {
-      throw new IllegalArgumentException("Unexpected WorkflowDelay value");
-    }
 
     var sql =
         """
           UPDATE "%1$s".workflow_status
-             SET delay_until_epoch_ms = %2$s,
-                 updated_at = %3$s
+             SET delay_until_epoch_ms = ?,
+                 updated_at = %2$s
            WHERE workflow_uuid = ?
              AND status = ?
         """
-            .formatted(ctx.schema(), delayUntil, SystemDatabase.NOW_EPOCH_MS);
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
-      stmt.setLong(1, delayMs);
+      stmt.setLong(1, delayUntilEpochMs);
       stmt.setString(2, workflowId);
       stmt.setString(3, WorkflowState.DELAYED.name());
 
@@ -983,20 +983,22 @@ public class WorkflowDAO {
   public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """
-          UPDATE "%1$s".workflow_status
+          UPDATE "%s".workflow_status
              SET status = ?,
                  deduplication_id = CASE WHEN is_debounced THEN NULL ELSE deduplication_id END
            WHERE status = ?
-             AND delay_until_epoch_ms <= %2$s
+             AND delay_until_epoch_ms <= ?
         """
-                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
+                .formatted(ctx.schema())
             + ctx.andAppScope();
 
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
       stmt.setString(2, WorkflowState.DELAYED.name());
-      ctx.bindAppScope(stmt, 3);
+      // This JVM's clock, the one delays are counted from, as in Python and TypeScript.
+      stmt.setLong(3, System.currentTimeMillis());
+      ctx.bindAppScope(stmt, 4);
 
       stmt.executeUpdate();
     }

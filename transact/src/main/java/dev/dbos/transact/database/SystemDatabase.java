@@ -780,14 +780,14 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * The database's clock in epoch milliseconds, for inlining into SQL. The workflow_status and
    * queues timestamps that executors compare with each other are stamped and compared on this
-   * clock: created_at, updated_at, completed_at, started_at_epoch_ms, a relative delay_until, and
-   * the rate-limit window. Executors sharing a system database would otherwise write those rows on
-   * as many clocks as there are hosts, and FIFO order, rate limits, delays and retention would all
-   * inherit the skew between them.
+   * clock: created_at, updated_at, completed_at, started_at_epoch_ms, and the rate-limit window.
+   * Executors sharing a system database would otherwise write those rows on as many clocks as there
+   * are hosts, and FIFO order, rate limits, delays and retention would all inherit the skew between
+   * them.
    *
    * <p>Times that only the writing executor reads stay on the JVM's clock: step timings, durable
    * sleep and timeout deadlines, and workflow deadlines, which the executor enforces against its
-   * own clock.
+   * own clock. So do delays and their promotion to ENQUEUED, as in Python and TypeScript.
    *
    * <p>now() is the transaction's start time on Postgres and CockroachDB alike, so every statement
    * in one transaction reads the same value. It matches the column defaults, which is what keeps a
@@ -837,7 +837,20 @@ public class SystemDatabase implements AutoCloseable {
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    return dbRetry(() -> WorkflowDAO.initWorkflowStatus(ctx, initStatus, maxRetries, ownerXid));
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    return dbRetry(
+        () ->
+            WorkflowDAO.initWorkflowStatus(
+                ctx, initStatus, delayUntilEpochMs, maxRetries, ownerXid));
+  }
+
+  /**
+   * The absolute end of a relative delay, counted from this JVM's clock, as Python and TypeScript
+   * count it from their process's. Resolved once, outside the write's retry loop: resolved inside
+   * it, every retry would push the delay later by that attempt's backoff.
+   */
+  private static @Nullable Long resolveDelayUntil(@Nullable Duration delay) {
+    return delay == null ? null : System.currentTimeMillis() + delay.toMillis();
   }
 
   /**
@@ -869,7 +882,10 @@ public class SystemDatabase implements AutoCloseable {
    * See {@link WorkflowDAO#recordErrorForUnstartedWorkflow}.
    */
   public void recordErrorForUnstartedWorkflow(WorkflowStatusInternal initStatus, String error) {
-    dbRetry(() -> WorkflowDAO.recordErrorForUnstartedWorkflow(ctx, initStatus, error));
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    dbRetry(
+        () ->
+            WorkflowDAO.recordErrorForUnstartedWorkflow(ctx, initStatus, delayUntilEpochMs, error));
   }
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
@@ -1202,7 +1218,17 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
-    dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delay));
+    Objects.requireNonNull(delay, "delay must not be null");
+    long delayUntilEpochMs;
+    if (delay instanceof WorkflowDelay.Delay d) {
+      delayUntilEpochMs = resolveDelayUntil(d.delay());
+    } else if (delay instanceof WorkflowDelay.DelayUntil du) {
+      // An absolute delay is the caller's instant, taken as given.
+      delayUntilEpochMs = du.delayUntil().toEpochMilli();
+    } else {
+      throw new IllegalArgumentException("Unexpected WorkflowDelay value");
+    }
+    dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delayUntilEpochMs));
   }
 
   public void transitionDelayedWorkflows() {

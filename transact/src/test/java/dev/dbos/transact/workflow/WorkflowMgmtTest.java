@@ -315,8 +315,7 @@ public class WorkflowMgmtTest {
 
   @Test
   public void startsWithoutADelayLeaveDelayUntilNull() throws Exception {
-    // The insert adds the delay to the database's now(), so it relies on now() + NULL being NULL
-    // for a start that asked for no delay, whether run directly or enqueued.
+    // A start that asked for no delay writes no delay_until, whether run directly or enqueued.
     var direct = dbos.startWorkflow(() -> proxy.helloWorkflow("direct"));
     var queued =
         dbos.startWorkflow(
@@ -355,9 +354,6 @@ public class WorkflowMgmtTest {
     row = DBUtils.getWorkflowRow(dataSource, wfId);
     assertTrue(row.delayUntilEpochMs() >= before + 29_000);
     assertTrue(row.delayUntilEpochMs() <= before + 31_000);
-    // The delay counts from the database's clock, the one the promotion to ENQUEUED compares it
-    // against, in the same reading that stamps updated_at.
-    assertEquals(row.updatedAt() + 30_000, row.delayUntilEpochMs());
 
     // Clear the delay so the workflow can run
     dbos.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
