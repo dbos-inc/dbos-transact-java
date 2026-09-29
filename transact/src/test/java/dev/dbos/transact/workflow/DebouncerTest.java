@@ -809,6 +809,29 @@ public class DebouncerTest {
   }
 
   @Test
+  public void cancelsAStrandedServiceWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    // Its node started the promised workflow, then died before the service workflow finished, so
+    // it holds the key under a version nothing serves.
+    var stranded = plantService("started", "promised-8", null, "no-such-version");
+    dbos.startWorkflow(
+            () -> svc.process("from-service"),
+            new StartWorkflowOptions().withWorkflowId("promised-8"))
+        .getResult();
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("started", Duration.ofMillis(300), () -> svc.process("fresh"));
+
+    // The cancel frees the key; that workflow already ran, so this call starts its own.
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
+    assertNotEquals("promised-8", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(2, serviceImpl.callCount());
+  }
+
+  @Test
   public void startsOverWhenASlowServiceWorkflowStartsThePromisedWorkflowFirst() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();

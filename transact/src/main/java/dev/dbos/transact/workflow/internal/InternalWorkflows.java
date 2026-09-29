@@ -66,11 +66,12 @@ public class InternalWorkflows {
    * it drains: the computed application version hashes the SDK version, so no remaining node ever
    * dequeues or recovers it, and it holds its key forever.
    *
-   * <p>Returns null, cancelling nothing, when the service workflow is no longer waiting or its user
-   * workflow already exists -- it was only slow, and has committed to run. Returns null after
-   * cancelling when the inputs do not name a user workflow; the caller then creates its own. A live
-   * service workflow can still start its user workflow between this cancel and the caller's create;
-   * the caller checks for that afterwards.
+   * <p>Returns null, cancelling nothing, when the service workflow is no longer waiting. Returns
+   * null after cancelling when its user workflow already exists -- it started that workflow and
+   * then went silent, which the cancel cannot undo, but left alone it would hold the key forever
+   * once its node is gone -- or when the inputs do not name one; the caller then creates its own. A
+   * live service workflow can still start its user workflow between this cancel and the caller's
+   * create; the caller checks for that afterwards.
    */
   public static @Nullable String takeOverStrandedDebouncer(
       SystemDatabase systemDatabase, String serviceWorkflowId) {
@@ -82,6 +83,12 @@ public class InternalWorkflows {
     }
     var childId = preassignedChildId(status.input());
     if (childId != null && systemDatabase.getWorkflowStatus(childId) != null) {
+      logger.warn(
+          "Cancelling debouncer service workflow {}, which stopped acknowledging calls after"
+              + " starting its user workflow {}",
+          serviceWorkflowId,
+          childId);
+      systemDatabase.cancelWorkflows(List.of(serviceWorkflowId), false);
       return null;
     }
     logger.warn(
