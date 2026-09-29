@@ -33,14 +33,15 @@ class PayloadTableReadTest {
   DBOSConfig dbosConfig;
   @AutoClose DBOS dbos;
 
+  private PayloadReadServiceImpl impl;
   private PayloadReadService proxy;
 
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
-    PayloadReadServiceImpl.stepRuns.set(0);
-    proxy = dbos.registerProxy(PayloadReadService.class, new PayloadReadServiceImpl(dbos));
+    impl = new PayloadReadServiceImpl(dbos);
+    proxy = dbos.registerProxy(PayloadReadService.class, impl);
     dbos.launch();
   }
 
@@ -113,7 +114,7 @@ class PayloadTableReadTest {
   void aWorkflowAnOlderReleaseLeftMidRunRecoversWithItsLegacyInputs() throws Exception {
     var handle = dbos.startWorkflow(() -> proxy.stepThenEcho(7));
     assertEquals(7, handle.getResult());
-    assertEquals(1, PayloadReadServiceImpl.stepRuns.get());
+    assertEquals(1, impl.stepRuns.get());
     var workflowId = handle.workflowId();
 
     // Rewind the row to what a 1.1 executor that crashed after the step leaves behind: PENDING,
@@ -131,7 +132,7 @@ class PayloadTableReadTest {
     // Recovery re-enqueues, and the run it starts has only the legacy column to read the input
     // from. The step replays from its checkpoint rather than running again.
     assertEquals(7, dbos.<Integer, Exception>retrieveWorkflow(workflowId).getResult());
-    assertEquals(1, PayloadReadServiceImpl.stepRuns.get(), "the step must replay, not re-run");
+    assertEquals(1, impl.stepRuns.get(), "the step must replay, not re-run");
 
     // The outcome this release recorded went to workflow_output, beside the legacy input: a row
     // of both shapes, which every read resolves.
@@ -265,7 +266,8 @@ interface PayloadReadService {
 
 class PayloadReadServiceImpl implements PayloadReadService {
 
-  static final AtomicInteger stepRuns = new AtomicInteger();
+  // Per instance, not static: this class's tests run concurrently, each with its own DBOS.
+  final AtomicInteger stepRuns = new AtomicInteger();
 
   private final DBOS dbos;
 
