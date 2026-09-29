@@ -134,6 +134,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void directInvokeCantSetTimeoutAndDeadline() throws Exception {
 
     String workflowId = "directInvokeSetWorkflowIdAndTimeout";
@@ -161,6 +162,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void directInvokeTimeoutDeadline() throws Exception {
 
     var options =
@@ -297,7 +299,8 @@ public class DirectInvocationTest {
     var row1 = rows.get(1);
 
     assertEquals(10000L, row0.timeoutMs());
-    assertEquals(10000L, row1.timeoutMs());
+    // The child inherits the parent's deadline, not a copy of its timeout.
+    assertNull(row1.timeoutMs());
     assertNotNull(row0.deadlineEpochMs());
     assertNotNull(row1.deadlineEpochMs());
     assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
@@ -414,7 +417,8 @@ public class DirectInvocationTest {
     var row0 = table.get(0);
     var row1 = table.get(1);
     assertEquals(10000L, row0.timeoutMs());
-    assertEquals(10000L, row1.timeoutMs());
+    // The child inherits the parent's deadline, not a copy of its timeout.
+    assertNull(row1.timeoutMs());
     assertNotNull(row0.deadlineEpochMs());
     assertNotNull(row1.deadlineEpochMs());
     assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
@@ -495,6 +499,7 @@ public class DirectInvocationTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // exercises the deprecated deadline option
   void workflowOptionsTimeoutAndDeadlineBothSetThrows() {
     var options =
         new WorkflowOptions()

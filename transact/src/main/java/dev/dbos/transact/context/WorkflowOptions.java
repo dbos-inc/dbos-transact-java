@@ -22,9 +22,13 @@ import org.jspecify.annotations.Nullable;
  * restore the context when complete: try (var _i = new WorkflowOptions(wfId).setContext()) { ...
  * function called here will get id `wfId` ... }
  *
+ * <p>A timeout or deadline set here replaces both of those set by an enclosing block, and one given
+ * for a call replaces both of these.
+ *
  * @param workflowId The ID to be assigned to the next workflow in the DBOS context
  * @param timeout The timeout to be assigned to the next workflow in the DBOS context
- * @param deadline The deadline to be assigned to the next workflow in the DBOS context
+ * @param deadline The deadline to be assigned to the next workflow in the DBOS context. Deprecated
+ *     for removal: set a timeout instead.
  * @param attributes Custom JSON-serializable attributes to attach to the next workflow. Recorded in
  *     the workflow status at creation and not inherited by child workflows.
  */
@@ -111,10 +115,25 @@ public record WorkflowOptions(
   }
 
   /**
+   * The absolute deadline set for the workflow, if any.
+   *
+   * @deprecated Set a timeout instead. To be removed in a future release.
+   */
+  @Deprecated(since = "1.2", forRemoval = true)
+  @Override
+  public @Nullable Instant deadline() {
+    return deadline;
+  }
+
+  /**
    * Create a WorkflowOptions like this one, but with the deadline set
    *
    * @param deadline deadline to use, expressed as a `java.util.Instant`
+   * @deprecated To be removed in a future release. The other DBOS SDKs bound a workflow by a
+   *     timeout only. Use {@link #withTimeout(Duration)}; for a workflow that starts at once, a
+   *     timeout of {@code Duration.between(Instant.now(), deadline)} is the same bound.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull WorkflowOptions withDeadline(@Nullable Instant deadline) {
     return new WorkflowOptions(
         this.workflowId,
@@ -275,10 +294,11 @@ public record WorkflowOptions(
     if (workflowId != null) {
       ctx.nextWorkflowId = workflowId;
     }
-    if (timeout != null) {
+    // A timeout and a deadline are one bound, so setting either replaces an outer block's bound
+    // as a whole, as options given for the call do. Taken field by field, an outer deadline would
+    // override an inner timeout or none.
+    if (timeout != null || deadline != null) {
       ctx.nextTimeout = timeout;
-    }
-    if (deadline != null) {
       ctx.nextDeadline = deadline;
     }
     if (authenticatedUser.isPresent()) {

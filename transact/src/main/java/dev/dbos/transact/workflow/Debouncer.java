@@ -41,6 +41,12 @@ import org.slf4j.LoggerFactory;
  * <p>The returned {@link WorkflowHandle} points to the user workflow that will eventually run with
  * the latest arguments; polling it for {@code getResult()} waits for that workflow's outcome.
  *
+ * <p>The user workflow takes only a timeout set with {@code WorkflowOptions} around the {@code
+ * debounce} call, timed from when it starts, or from when it is dequeued if the debouncer has a
+ * queue. It inherits neither the calling workflow's timeout nor its deadline, and a deadline set
+ * with {@code WorkflowOptions} is ignored: the workflow may start long after the call. The service
+ * workflow runs with no timeout.
+ *
  * <h2>Example</h2>
  *
  * <pre>{@code
@@ -204,7 +210,7 @@ public final class Debouncer<R> {
    * Set a deduplication ID to be forwarded to the user workflow.
    *
    * @deprecated Ignored from the next release, where the debouncer sets the deduplication ID to one
-   *     it generates itself. Removed in 2.0.
+   *     it generates itself. To be removed in a future release.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull Debouncer<R> withDeduplicationId(@Nullable String deduplicationId) {
@@ -331,18 +337,26 @@ public final class Debouncer<R> {
             appVersion,
             priority,
             deduplicationId);
-    Duration workflowTimeout = DBOS.inWorkflow() ? DBOSContextHolder.get().getTimeout() : null;
-    var workflowAttributes = DBOSContextHolder.get().resolveNextAttributes();
+    // Only a timeout the caller set for this call carries over, as in Python and TypeScript. The
+    // running workflow's own timeout is its budget, not the debounced workflow's (#561).
+    var callerCtx = DBOSContextHolder.get();
+    Duration workflowTimeout =
+        callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
+    var workflowAttributes = callerCtx.resolveNextAttributes();
     DebouncerContextOptions ctx =
         new DebouncerContextOptions(userWorkflowId, workflowTimeout, workflowAttributes);
     DebouncerMessage initial = new DebouncerMessage(messageId, invocation.args(), debouncePeriod);
 
     while (true) {
       try {
+        // No timeout: the debouncer waits out the debounce period, which can outlast the caller's
+        // deadline or timeout. The user workflow gets the timeout set with WorkflowOptions around
+        // the call through ctx instead.
         var startOpts =
             new StartWorkflowOptions()
                 .withQueue(Constants.DBOS_INTERNAL_QUEUE)
-                .withDeduplicationId(debouncerDeduplicationId);
+                .withDeduplicationId(debouncerDeduplicationId)
+                .withNoTimeout();
         executor.startRegisteredWorkflow(
             debouncerWorkflow, new Object[] {options, ctx, initial}, startOpts);
         // Successfully enqueued a fresh debouncer for this key.

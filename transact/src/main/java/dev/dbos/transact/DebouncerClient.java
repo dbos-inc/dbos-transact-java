@@ -230,7 +230,7 @@ public final class DebouncerClient<R> {
    * Set a deduplication ID to be forwarded to the user workflow.
    *
    * @deprecated Ignored from the next release, where the debouncer sets the deduplication ID to one
-   *     it generates itself. Removed in 2.0.
+   *     it generates itself. To be removed in a future release.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull DebouncerClient<R> withDeduplicationId(@Nullable String deduplicationId) {

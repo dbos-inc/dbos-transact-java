@@ -32,10 +32,15 @@ import org.jspecify.annotations.Nullable;
  *
  * @param workflowId The unique identifier for the workflow instance. Used for idempotency and
  *     tracking. May be null.
- * @param timeout The timeout configuration specifying how long the workflow may run before
- *     expiring. Promoted to a deadline at execution time. May be null.
+ * @param timeout How long the workflow may run before being canceled: {@link Timeout#of} an
+ *     explicit duration, timed from when the workflow starts, or from when it is dequeued if it is
+ *     queued; {@link Timeout#none()}; or {@link Timeout#inherit()}, which bounds it by the running
+ *     workflow's deadline. May be null: with no deadline either, the workflow takes the timeout or
+ *     deadline set with {@code WorkflowOptions}, else inherits.
  * @param deadline The absolute time by which the workflow must start or complete before being
- *     canceled. If both timeout and deadline are set, the earlier is used. May be null.
+ *     canceled. It can't be combined with an explicit timeout. May be null. A timeout or deadline
+ *     given here replaces both the timeout and the deadline set with {@code WorkflowOptions}.
+ *     Deprecated for removal: set a timeout instead.
  * @param queueName Optional name of the queue to which the workflow should be enqueued for
  *     execution. May be null.
  * @param deduplicationId If {@code queueName} is specified, an optional ID used to prevent
@@ -76,6 +81,10 @@ public record StartWorkflowOptions(
 
     if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
+    }
+
+    if (timeout instanceof Timeout.Explicit && deadline != null) {
+      throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
 
     if (nullableIsEmpty(queueName)) {
@@ -221,11 +230,26 @@ public record StartWorkflowOptions(
   }
 
   /**
+   * The absolute deadline set for the workflow, if any.
+   *
+   * @deprecated Set a timeout instead. To be removed in a future release.
+   */
+  @Deprecated(since = "1.2", forRemoval = true)
+  @Override
+  public @Nullable Instant deadline() {
+    return deadline;
+  }
+
+  /**
    * Returns a new StartWorkflowOptions with the specified deadline.
    *
    * @param deadline the absolute deadline to assign
    * @return a new StartWorkflowOptions with the updated deadline
+   * @deprecated To be removed in a future release. The other DBOS SDKs bound a workflow by a
+   *     timeout only. Use {@link #withTimeout(Duration)}; for a workflow that starts at once, a
+   *     timeout of {@code Duration.between(Instant.now(), deadline)} is the same bound.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull StartWorkflowOptions withDeadline(@Nullable Instant deadline) {
     return new StartWorkflowOptions(
         this.workflowId,
