@@ -778,10 +778,16 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * The database's clock in epoch milliseconds, for inlining into SQL. Every system-database
-   * timestamp is stamped and compared on this clock, as in the other SDKs: executors sharing a
-   * system database would otherwise write rows on as many clocks as there are hosts, and FIFO
-   * order, rate limits, delays and retention would all inherit the skew between them.
+   * The database's clock in epoch milliseconds, for inlining into SQL. The workflow_status and
+   * queues timestamps that executors compare with each other are stamped and compared on this
+   * clock: created_at, updated_at, completed_at, started_at_epoch_ms, a relative delay_until, and
+   * the rate-limit window. Executors sharing a system database would otherwise write those rows on
+   * as many clocks as there are hosts, and FIFO order, rate limits, delays and retention would all
+   * inherit the skew between them.
+   *
+   * <p>Times that only the writing executor reads stay on the JVM's clock: step timings, durable
+   * sleep and timeout deadlines, and workflow deadlines, which the executor enforces against its
+   * own clock.
    *
    * <p>now() is the transaction's start time on Postgres and CockroachDB alike, so every statement
    * in one transaction reads the same value. It matches the column defaults, which is what keeps a

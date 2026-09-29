@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.lang.reflect.InvocationTargetException;
@@ -42,7 +43,9 @@ public class CancelResumeRaceTest {
   RaceServiceImpl impl;
   RaceService proxy;
 
-  static final String OUTCOME_SQL_MARKER = "SET status = ?, updated_at = ?, completed_at = ?";
+  static final String OUTCOME_SQL_MARKER =
+      "SET status = ?, updated_at = %1$s, completed_at = %1$s"
+          .formatted(SystemDatabase.NOW_EPOCH_MS);
 
   private static Object invokeUnwrapped(Method m, Object target, Object[] args) throws Throwable {
     try {
@@ -96,7 +99,7 @@ public class CancelResumeRaceTest {
                               && psArgs.length == 2) {
                             int idx = (Integer) psArgs[0];
                             if (idx == 1) boundStatus[0] = (String) psArgs[1];
-                            if (idx == 4) boundWfId[0] = (String) psArgs[1];
+                            if (idx == 2) boundWfId[0] = (String) psArgs[1];
                           }
                           boolean isTargetStaleWrite =
                               psMethod.getName().equals("executeUpdate")
