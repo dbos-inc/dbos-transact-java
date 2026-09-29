@@ -1238,7 +1238,7 @@ public class WorkflowDAO {
     boolean hasBucket = input.timeBucketSize() != null;
     if (hasBucket) {
       long ms = input.timeBucketSize().toMillis();
-      String bucketExpr = "(floor(created_at / %1$d) * %2$d)::bigint".formatted(ms, ms);
+      String bucketExpr = "(floor(created_at / %d) * %d)::bigint".formatted(ms, ms);
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
@@ -1418,7 +1418,7 @@ public class WorkflowDAO {
     if (input.groupByStatus()) dims.add(new GroupDim("status", statusExpr));
     if (input.timeBucketSize() != null) {
       long ms = input.timeBucketSize().toMillis();
-      String bucketExpr = "(floor(completed_at_epoch_ms / %1$d) * %2$d)::bigint".formatted(ms, ms);
+      String bucketExpr = "(floor(completed_at_epoch_ms / %d) * %d)::bigint".formatted(ms, ms);
       dims.add(new GroupDim("time_bucket", bucketExpr));
     }
 
@@ -2397,7 +2397,7 @@ public class WorkflowDAO {
       return;
     }
     for (var table : List.of("operation_outputs", "workflow_input", "workflow_output")) {
-      var sql = "DELETE FROM \"%1$s\".%2$s WHERE workflow_uuid = ANY(?)".formatted(schema, table);
+      var sql = "DELETE FROM \"%s\".%s WHERE workflow_uuid = ANY(?)".formatted(schema, table);
       try (var stmt = conn.prepareStatement(sql)) {
         var array = conn.createArrayOf("text", workflowIds);
         try {
@@ -2598,7 +2598,7 @@ public class WorkflowDAO {
   private static void sweepWorkflowStatus(
       DbContext ctx, Connection conn, long deadline, int batchSize) throws SQLException {
     var seedSql =
-        "SELECT completed_at FROM \"%1$s\".workflow_status WHERE %2$s ORDER BY completed_at LIMIT 1"
+        "SELECT completed_at FROM \"%s\".workflow_status WHERE %s ORDER BY completed_at LIMIT 1"
             .formatted(ctx.schema(), STATUS_GC_FILTER);
 
     Long oldest =
@@ -2639,14 +2639,14 @@ public class WorkflowDAO {
       DbContext ctx, Connection conn, long deadline, long watermark, int batchSize)
       throws SQLException {
     var stepSql =
-        ("SELECT completed_at FROM \"%1$s\".workflow_status WHERE %2$s AND completed_at > ?"
+        ("SELECT completed_at FROM \"%s\".workflow_status WHERE %s AND completed_at > ?"
                 + " ORDER BY completed_at LIMIT 1 OFFSET ?")
             .formatted(ctx.schema(), STATUS_GC_FILTER);
     var boundedSql =
-        "DELETE FROM \"%1$s\".workflow_status WHERE %2$s AND completed_at > ? AND completed_at <= ?"
+        "DELETE FROM \"%s\".workflow_status WHERE %s AND completed_at > ? AND completed_at <= ?"
             .formatted(ctx.schema(), STATUS_GC_FILTER);
     var remainderSql =
-        "DELETE FROM \"%1$s\".workflow_status WHERE %2$s".formatted(ctx.schema(), STATUS_GC_FILTER);
+        "DELETE FROM \"%s\".workflow_status WHERE %s".formatted(ctx.schema(), STATUS_GC_FILTER);
 
     return SqlTransaction.call(
         conn,
@@ -2800,7 +2800,7 @@ public class WorkflowDAO {
         // Per table, so one refusal does not skip the rest.
         try (var stmt = conn.createStatement()) {
           stmt.execute(
-              "VACUUM (INDEX_CLEANUP ON, TRUNCATE OFF, ANALYZE) \"%1$s\".%2$s"
+              "VACUUM (INDEX_CLEANUP ON, TRUNCATE OFF, ANALYZE) \"%s\".%s"
                   .formatted(ctx.schema(), table));
           // A refused or stalled VACUUM does not raise, it says so in a warning; a successful one
           // is silent, so anything here is worth surfacing.
@@ -2821,11 +2821,11 @@ public class WorkflowDAO {
     // A payload below the cutoff belongs to a workflow created before it, so the status side of
     // this anti-join is the few such rows still present, not the whole table.
     var orphaned =
-        (" AND NOT EXISTS (SELECT 1 FROM \"%1$s\".workflow_status ws"
-                + " WHERE ws.workflow_uuid = %2$s.workflow_uuid AND ws.created_at < ?)")
+        (" AND NOT EXISTS (SELECT 1 FROM \"%s\".workflow_status ws"
+                + " WHERE ws.workflow_uuid = %s.workflow_uuid AND ws.created_at < ?)")
             .formatted(ctx.schema(), table);
     var seedSql =
-        ("SELECT retention_timestamp FROM \"%1$s\".%2$s WHERE retention_timestamp < ?"
+        ("SELECT retention_timestamp FROM \"%s\".%s WHERE retention_timestamp < ?"
                 + " ORDER BY retention_timestamp LIMIT 1")
             .formatted(ctx.schema(), table);
 
@@ -2845,12 +2845,12 @@ public class WorkflowDAO {
     }
 
     var stepSql =
-        ("SELECT retention_timestamp FROM \"%1$s\".%2$s"
+        ("SELECT retention_timestamp FROM \"%s\".%s"
                 + " WHERE retention_timestamp < ? AND retention_timestamp > ?"
                 + " ORDER BY retention_timestamp LIMIT 1 OFFSET ?")
             .formatted(ctx.schema(), table);
     var deleteSql =
-        "DELETE FROM \"%1$s\".%2$s WHERE retention_timestamp < ? AND retention_timestamp > ?"
+        "DELETE FROM \"%s\".%s WHERE retention_timestamp < ? AND retention_timestamp > ?"
             .formatted(ctx.schema(), table);
 
     var deleted = 0L;
@@ -3080,7 +3080,7 @@ public class WorkflowDAO {
     }
     if (!formats.isEmpty()) {
       throw new IllegalStateException(
-          "Cannot import workflow %1$s: it is serialized as %2$s, which this application has no serializer for"
+          "Cannot import workflow %s: it is serialized as %s, which this application has no serializer for"
               .formatted(status.workflowId(), String.join(", ", formats)));
     }
   }

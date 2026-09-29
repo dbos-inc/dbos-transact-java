@@ -175,10 +175,10 @@ public class QueuesDAO {
         var query =
             """
             SELECT workflow_uuid
-            FROM "%1$s".workflow_status
+            FROM "%s".workflow_status
             WHERE queue_name = ?
               AND status = ?
-              AND %2$s
+              AND %s
           """
                     .formatted(ctx.schema(), versionClause)
                 + ctx.andAppScope();
@@ -698,7 +698,7 @@ public class QueuesDAO {
         params.add(name);
 
         String sql =
-            "UPDATE \"%1$s\".queues SET %2$s WHERE name = ?"
+            "UPDATE \"%s\".queues SET %s WHERE name = ?"
                 .formatted(ctx.schema(), String.join(", ", setClauses));
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -745,7 +745,7 @@ public class QueuesDAO {
       var field = firstLimitSet(update);
       if (field != null) {
         throw new IllegalArgumentException(
-            ("cannot set %1$s on queue %2$s: it is registered with the deprecated partitionQueue"
+            ("cannot set %s on queue %s: it is registered with the deprecated partitionQueue"
                     + " option, under which concurrency, workerConcurrency and rateLimit apply per"
                     + " partition; re-register the queue with the partition limits instead")
                 .formatted(field, current.name()));
@@ -834,8 +834,8 @@ public class QueuesDAO {
     if (newMax == null && newPeriod == null) return null;
     if (newMax == null || newPeriod == null) {
       throw new IllegalArgumentException(
-          ("queue %1$s cannot have half of %2$s: %2$sMax and %2$sPeriod are set and cleared together")
-              .formatted(queue, name));
+          ("queue %s cannot have half of %s: %sMax and %sPeriod are set and cleared together")
+              .formatted(queue, name, name, name));
     }
     return new Queue.RateLimit(newMax, newPeriod);
   }
