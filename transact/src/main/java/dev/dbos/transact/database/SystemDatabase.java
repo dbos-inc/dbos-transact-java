@@ -777,6 +777,18 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
+  /**
+   * The database's clock in epoch milliseconds, for inlining into SQL. Every system-database
+   * timestamp is stamped and compared on this clock, as in the other SDKs: executors sharing a
+   * system database would otherwise write rows on as many clocks as there are hosts, and FIFO
+   * order, rate limits, delays and retention would all inherit the skew between them.
+   *
+   * <p>now() is the transaction's start time on Postgres and CockroachDB alike, so every statement
+   * in one transaction reads the same value. It matches the column defaults, which is what keeps a
+   * payload row's retention_timestamp from landing before its status row's created_at.
+   */
+  public static final String NOW_EPOCH_MS = "(EXTRACT(epoch FROM now()) * 1000.0)::bigint";
+
   public static Instant toInstant(Long epochMs) {
     return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
   }

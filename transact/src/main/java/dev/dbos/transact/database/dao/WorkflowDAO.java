@@ -47,6 +47,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -237,20 +238,17 @@ public class WorkflowDAO {
         """
           UPDATE "%s".workflow_status
           SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
-              updated_at = ?, completed_at = ?
+              updated_at = %2$s, completed_at = %2$s
           WHERE workflow_uuid = ANY(?) AND status = ? AND recovery_attempts >= ?
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      long now = System.currentTimeMillis();
       stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
-      stmt.setLong(2, now);
-      stmt.setLong(3, now);
-      stmt.setArray(4, conn.createArrayOf("text", workflowIds.toArray()));
-      stmt.setString(5, WorkflowState.PENDING.name());
-      stmt.setInt(6, minRecoveryAttempts);
+      stmt.setArray(2, conn.createArrayOf("text", workflowIds.toArray()));
+      stmt.setString(3, WorkflowState.PENDING.name());
+      stmt.setInt(4, minRecoveryAttempts);
       stmt.executeUpdate();
     }
   }
@@ -295,7 +293,17 @@ public class WorkflowDAO {
             workflow_timeout_ms, workflow_deadline_epoch_ms,
             parent_workflow_id, owner_xid, serialization, attributes, schedule_name,
             application_name
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
+          ) VALUES (
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, %2$s + ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            %2$s, %2$s, ?,
+            ?, ?,
+            ?, ?, ?, ?::jsonb, ?,
+            ?
+          )
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               -- recovery_attempts is absent by design: only the queue's claim counts a dispatch.
@@ -308,7 +316,7 @@ public class WorkflowDAO {
               application_name = COALESCE(workflow_status.application_name, EXCLUDED.application_name)
           RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization
         """
-            .formatted(schema);
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
 
     Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
@@ -326,7 +334,6 @@ public class WorkflowDAO {
     var attributesJson = attributesToJson(status.attributes());
     try (var stmt = conn.prepareStatement(insertSQL)) {
 
-      var now = System.currentTimeMillis();
       stmt.setString(1, status.workflowId());
       stmt.setString(2, state.name());
       stmt.setString(3, status.workflowName());
@@ -337,7 +344,7 @@ public class WorkflowDAO {
       stmt.setString(7, status.deduplicationId());
       stmt.setInt(8, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(9, status.queuePartitionKey());
-      stmt.setObject(10, status.delayMs() != null ? now + status.delayMs() : null);
+      stmt.setObject(10, status.delayMs(), Types.BIGINT); // added to now; null stays null
 
       stmt.setString(11, status.authenticatedUser());
       stmt.setString(12, status.assumedRole());
@@ -347,19 +354,17 @@ public class WorkflowDAO {
       stmt.setString(15, status.appVersion());
       stmt.setString(16, status.appId());
 
-      stmt.setLong(17, now); // created_at
-      stmt.setLong(18, now); // updated_at
-      stmt.setInt(19, recoveryAttempts);
+      stmt.setInt(17, recoveryAttempts);
 
-      stmt.setObject(20, status.timeoutMs());
-      stmt.setObject(21, status.deadlineEpochMs());
-      stmt.setString(22, status.parentWorkflowId());
+      stmt.setObject(18, status.timeoutMs());
+      stmt.setObject(19, status.deadlineEpochMs());
+      stmt.setString(20, status.parentWorkflowId());
 
-      stmt.setObject(23, ownerXid);
-      stmt.setString(24, status.serialization());
-      stmt.setString(25, attributesJson);
-      stmt.setString(26, status.scheduleName());
-      stmt.setString(27, appName);
+      stmt.setObject(21, ownerXid);
+      stmt.setString(22, status.serialization());
+      stmt.setString(23, attributesJson);
+      stmt.setString(24, status.scheduleName());
+      stmt.setString(25, appName);
 
       InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
@@ -407,17 +412,16 @@ public class WorkflowDAO {
       // ID is not this workflow's. Retention deletes status rows before it sweeps their payloads,
       // so a workflow started under a reused ID in between would otherwise run with the previous
       // workflow's input, and then lose it to the payload sweep. A retried commit that did land
-      // the first time rewrites the same values.
+      // the first time rewrites the same input, stamped later than the created_at it kept.
       //
-      // retention_timestamp is the row's created_at, not the column default. The payload sweep
-      // treats a payload below the cutoff as an orphan unless its status row was also created
-      // before it, which holds only if the input is never stamped earlier than created_at.
-      // created_at comes from this JVM's clock, so the database's now() would break that by
-      // however far the two clocks disagree, and a live workflow could lose its input.
+      // retention_timestamp takes the column default, the same now() as the status row's
+      // created_at: both statements share a transaction. The payload sweep treats a payload below
+      // the cutoff as an orphan unless its status row was also created before it, which holds only
+      // if the input is never stamped earlier than created_at.
       var inputSQL =
           """
-            INSERT INTO "%s".workflow_input (workflow_uuid, inputs, retention_timestamp)
-            VALUES (?, ?, ?)
+            INSERT INTO "%s".workflow_input (workflow_uuid, inputs)
+            VALUES (?, ?)
             ON CONFLICT (workflow_uuid)
               DO UPDATE SET inputs = EXCLUDED.inputs, retention_timestamp = EXCLUDED.retention_timestamp
           """
@@ -425,7 +429,6 @@ public class WorkflowDAO {
       try (var inputStmt = conn.prepareStatement(inputSQL)) {
         inputStmt.setString(1, status.workflowId());
         inputStmt.setString(2, status.inputs());
-        inputStmt.setLong(3, now);
         inputStmt.executeUpdate();
       }
 
@@ -466,18 +469,15 @@ public class WorkflowDAO {
     var sql =
         """
           UPDATE "%s".workflow_status
-          SET status = ?, updated_at = ?, completed_at = ?, deduplication_id = NULL
+          SET status = ?, updated_at = %2$s, completed_at = %2$s, deduplication_id = NULL
           WHERE workflow_uuid = ? AND status = ?
         """
-            .formatted(schema);
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
 
-    long now = System.currentTimeMillis();
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, status.name());
-      stmt.setLong(2, now);
-      stmt.setLong(3, now);
-      stmt.setString(4, workflowId);
-      stmt.setString(5, WorkflowState.PENDING.name());
+      stmt.setString(2, workflowId);
+      stmt.setString(3, WorkflowState.PENDING.name());
 
       if (stmt.executeUpdate() == 0) {
         // The outcome was not ours to write, so leave no orphan payload.
@@ -843,7 +843,7 @@ public class WorkflowDAO {
                    ELSE ?
                  END,
                  serialization = ?,
-                 updated_at = ?%s
+                 updated_at = %s%s
            WHERE name = ?
              AND class_name = ?
              AND config_name IS NOT DISTINCT FROM ?
@@ -852,7 +852,7 @@ public class WorkflowDAO {
              AND status = ?
              AND is_debounced = TRUE
         """
-                .formatted(ctx.schema(), claim)
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS, claim)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
     // The latest call's inputs win, in the payload table, in the same transaction. An upsert
@@ -869,12 +869,10 @@ public class WorkflowDAO {
             .formatted(ctx.schema());
     String workflowId = null;
     try (var stmt = conn.prepareStatement(sql)) {
-      long now = System.currentTimeMillis();
       int i = 1;
       stmt.setLong(i++, delayUntilEpochMs);
       stmt.setLong(i++, delayUntilEpochMs);
       stmt.setString(i++, serialization);
-      stmt.setLong(i++, now);
       if (ctx.appName() != null) {
         stmt.setString(i++, ctx.appName());
       }
@@ -910,32 +908,34 @@ public class WorkflowDAO {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
     Objects.requireNonNull(delay, "delay must not be null");
 
-    Instant resolved = null;
+    // A relative delay counts from the database's clock, which is the one the promotion to
+    // ENQUEUED compares it against. An absolute one is the caller's instant, taken as given.
+    String delayUntil;
+    long delayMs;
     if (delay instanceof WorkflowDelay.Delay d) {
-      resolved = Instant.now().plus(d.delay());
+      delayUntil = SystemDatabase.NOW_EPOCH_MS + " + ?";
+      delayMs = d.delay().toMillis();
     } else if (delay instanceof WorkflowDelay.DelayUntil du) {
-      resolved = du.delayUntil();
-    }
-
-    if (resolved == null) {
+      delayUntil = "?";
+      delayMs = du.delayUntil().toEpochMilli();
+    } else {
       throw new IllegalArgumentException("Unexpected WorkflowDelay value");
     }
 
     var sql =
         """
           UPDATE "%s".workflow_status
-             SET delay_until_epoch_ms = ?,
-                 updated_at = ?
+             SET delay_until_epoch_ms = %s,
+                 updated_at = %s
            WHERE workflow_uuid = ?
              AND status = ?
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), delayUntil, SystemDatabase.NOW_EPOCH_MS);
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
-      stmt.setLong(1, resolved.toEpochMilli());
-      stmt.setLong(2, System.currentTimeMillis());
-      stmt.setString(3, workflowId);
-      stmt.setString(4, WorkflowState.DELAYED.name());
+      stmt.setLong(1, delayMs);
+      stmt.setString(2, workflowId);
+      stmt.setString(3, WorkflowState.DELAYED.name());
 
       stmt.executeUpdate();
     }
@@ -956,15 +956,14 @@ public class WorkflowDAO {
         """
           UPDATE "%s".workflow_status
              SET attributes = ?::jsonb,
-                 updated_at = ?
+                 updated_at = %s
            WHERE workflow_uuid = ?
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, attributesJson);
-      stmt.setLong(2, System.currentTimeMillis());
-      stmt.setString(3, workflowId);
+      stmt.setString(2, workflowId);
       stmt.executeUpdate();
     }
   }
@@ -985,17 +984,16 @@ public class WorkflowDAO {
              SET status = ?,
                  deduplication_id = CASE WHEN is_debounced THEN NULL ELSE deduplication_id END
            WHERE status = ?
-             AND delay_until_epoch_ms <= ?
+             AND delay_until_epoch_ms <= %s
         """
-                .formatted(ctx.schema())
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
             + ctx.andAppScope();
 
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
       stmt.setString(2, WorkflowState.DELAYED.name());
-      stmt.setLong(3, System.currentTimeMillis());
-      ctx.bindAppScope(stmt, 4);
+      ctx.bindAppScope(stmt, 3);
 
       stmt.executeUpdate();
     }
@@ -1764,24 +1762,21 @@ public class WorkflowDAO {
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
-              updated_at = ?,
-              completed_at = ?
+              updated_at = %2$s,
+              completed_at = %2$s
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
-      long now = System.currentTimeMillis();
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
-        stmt.setLong(2, now);
-        stmt.setLong(3, now);
-        stmt.setArray(4, array);
-        stmt.setString(5, WorkflowState.SUCCESS.name());
-        stmt.setString(6, WorkflowState.ERROR.name());
+        stmt.setArray(2, array);
+        stmt.setString(3, WorkflowState.SUCCESS.name());
+        stmt.setString(4, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();
@@ -1806,11 +1801,11 @@ public class WorkflowDAO {
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
               completed_at = NULL,
-              updated_at = ?
+              updated_at = %s
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
 
     try (Connection conn = ctx.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -1818,10 +1813,9 @@ public class WorkflowDAO {
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
         stmt.setString(2, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setLong(3, System.currentTimeMillis());
-        stmt.setArray(4, array);
-        stmt.setString(5, WorkflowState.SUCCESS.name());
-        stmt.setString(6, WorkflowState.ERROR.name());
+        stmt.setArray(3, array);
+        stmt.setString(4, WorkflowState.SUCCESS.name());
+        stmt.setString(5, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();

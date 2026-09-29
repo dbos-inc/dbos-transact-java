@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
@@ -12,7 +13,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -232,8 +232,8 @@ public class QueuesDAO {
             SET status = ?,
                 application_version = ?,
                 executor_id = ?,
-                started_at_epoch_ms = ?,
-                updated_at = ?,
+                started_at_epoch_ms = %2$s,
+                updated_at = %2$s,
                 rate_limited = ?,
                 -- Count this dispatch against the dead-letter budget; no later write does it.
                 recovery_attempts = recovery_attempts + 1,
@@ -243,37 +243,33 @@ public class QueuesDAO {
                 application_name = COALESCE(application_name, ?),
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN ? + workflow_timeout_ms
+                    THEN %2$s + workflow_timeout_ms
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE workflow_uuid = ?
               AND status = ?
           """
-                    .formatted(ctx.schema())
+                    .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
                 // Re-check ownership alongside status: the candidate SELECT scoped the row, and the
                 // claim must not widen that.
                 + ctx.andAppScope();
 
         List<String> updatedWorkflowIds = new ArrayList<>();
         try (var ps = connection.prepareStatement(updateQuery)) {
-          var now = System.currentTimeMillis();
           // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
           // limiter's remaining slots.
           for (var id : dequeuedWorkflowIds) {
             ps.setString(1, WorkflowState.PENDING.name());
             ps.setString(2, appVersion);
             ps.setString(3, executorId);
-            ps.setLong(4, now);
-            ps.setLong(5, now);
             // Whichever scope the limiter is at: rateLimitRemaining counts only rows marked
             // here, so a queue limited solely per partition would otherwise count none of its
             // own claims and hand back the full limit every poll.
-            ps.setBoolean(6, limits.rateLimit() != null || limits.partitionRateLimit() != null);
-            ps.setString(7, ctx.appName());
-            ps.setLong(8, now);
-            ps.setString(9, id);
-            ps.setString(10, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 11);
+            ps.setBoolean(4, limits.rateLimit() != null || limits.partitionRateLimit() != null);
+            ps.setString(5, ctx.appName());
+            ps.setString(6, id);
+            ps.setString(7, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 8);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
@@ -330,13 +326,13 @@ public class QueuesDAO {
           UPDATE "%s".workflow_status
           SET status = ?,
               started_at_epoch_ms = NULL,
-              updated_at = ?,
+              updated_at = %s,
               queue_name = COALESCE(NULLIF(queue_name, ''), ?)
           WHERE status = ?
             AND executor_id = ANY(?)
             AND application_version = ?
         """
-                .formatted(ctx.schema())
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
 
@@ -344,12 +340,11 @@ public class QueuesDAO {
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       Array executorIdArray = connection.createArrayOf("text", executorIds.toArray());
       stmt.setString(1, WorkflowState.ENQUEUED.name());
-      stmt.setLong(2, System.currentTimeMillis());
-      stmt.setString(3, recoveryQueueName);
-      stmt.setString(4, WorkflowState.PENDING.name());
-      stmt.setArray(5, executorIdArray);
-      stmt.setString(6, appVersion);
-      ctx.bindAppScope(stmt, 7);
+      stmt.setString(2, recoveryQueueName);
+      stmt.setString(3, WorkflowState.PENDING.name());
+      stmt.setArray(4, executorIdArray);
+      stmt.setString(5, appVersion);
+      ctx.bindAppScope(stmt, 6);
 
       var workflowIds = new ArrayList<String>();
       try (ResultSet rs = stmt.executeQuery()) {
@@ -418,10 +413,10 @@ public class QueuesDAO {
             partition_rate_limit_max, partition_rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
         -- priority_enabled is vestigial: every queue dispatches in priority order.
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, %s, ?)
         ON CONFLICT (name) DO NOTHING
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
     final String updateSql =
         """
         UPDATE "%s".queues SET
@@ -436,13 +431,13 @@ public class QueuesDAO {
           priority_enabled                = TRUE,
           partition_queue                 = ?,
           polling_interval_sec            = ?,
-          updated_at                      = ?,
+          updated_at                      = %s,
           -- Claim only an unclaimed row, so a registration landing between the ownership
           -- check above and this write keeps the name it just took.
           application_name                = COALESCE(application_name, ?)
         WHERE name = ?
         """
-            .formatted(ctx.schema());
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
 
     try (Connection connection = ctx.getConnection()) {
       // Read the current owner first: the writes below are silent about why they declined to claim.
@@ -482,9 +477,9 @@ public class QueuesDAO {
         WHERE queue_name = ?
         AND rate_limited = true
         AND status NOT IN (?, ?)
-        AND started_at_epoch_ms > ?
+        AND started_at_epoch_ms > %s - ?
       """
-                .formatted(ctx.schema())
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
             + ctx.andAppScope();
     if (partitionKey != null) {
       sql += " AND queue_partition_key = ?";
@@ -494,7 +489,7 @@ public class QueuesDAO {
       ps.setString(1, queueName);
       ps.setString(2, WorkflowState.ENQUEUED.name());
       ps.setString(3, WorkflowState.DELAYED.name());
-      ps.setLong(4, Instant.now().minus(rateLimit.period()).toEpochMilli());
+      ps.setLong(4, rateLimit.period().toMillis());
       var index = ctx.bindAppScope(ps, 5);
       if (partitionKey != null) {
         ps.setString(index, partitionKey);
@@ -540,9 +535,9 @@ public class QueuesDAO {
   }
 
   /**
-   * Binds a queue row's columns, from {@code concurrency} through {@code updated_at}, starting at
-   * {@code offset}, and returns the next free index. The insert and the update list those columns
-   * in the same order, with {@code priority_enabled} written as a literal in both.
+   * Binds a queue row's columns, from {@code concurrency} through {@code polling_interval_sec},
+   * starting at {@code offset}, and returns the next free index. The insert and the update list
+   * those columns in the same order, with {@code priority_enabled} written as a literal in both.
    */
   private static int bindQueueParams(PreparedStatement ps, Queue queue, int offset)
       throws SQLException {
@@ -556,8 +551,7 @@ public class QueuesDAO {
     // to decide whether to dequeue per partition.
     ps.setBoolean(offset + 8, queue.isPartitioned());
     ps.setDouble(offset + 9, queue.pollingInterval().toMillis() / 1000.0);
-    ps.setLong(offset + 10, System.currentTimeMillis());
-    return offset + 11;
+    return offset + 10;
   }
 
   public static Optional<Queue> findQueue(DbContext ctx, String name) throws SQLException {
@@ -700,8 +694,7 @@ public class QueuesDAO {
         collectOptional(
             setClauses, params, "polling_interval_sec", durationToSec(update.pollingInterval()));
 
-        setClauses.add("\"updated_at\" = ?");
-        params.add(System.currentTimeMillis());
+        setClauses.add("\"updated_at\" = " + SystemDatabase.NOW_EPOCH_MS);
         params.add(name);
 
         String sql =
