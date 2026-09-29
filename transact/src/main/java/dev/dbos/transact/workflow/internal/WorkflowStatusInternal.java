@@ -3,8 +3,6 @@ package dev.dbos.transact.workflow.internal;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
-import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -43,8 +41,16 @@ public record WorkflowStatusInternal(
      * cross-application enqueue wants.
      */
     String applicationName,
-    /** Set only for a debounced workflow, which the debouncers write DELAYED; null otherwise. */
-    DebounceStamp debounce) {
+    /**
+     * Whether this is a debounced workflow, whose deduplication ID is a debounce key cleared when
+     * it leaves DELAYED. Set only by the debouncers.
+     */
+    boolean isDebounced,
+    /**
+     * The latest a debounced workflow's delay may be extended to, by its first delay or by any
+     * later bounce; null for no cap. Set only by the debouncers.
+     */
+    Instant debounceDeadline) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {
@@ -71,8 +77,11 @@ public record WorkflowStatusInternal(
     if (nullableIsNotPositive(delay)) {
       throw new IllegalArgumentException("delay must be a positive non-zero duration");
     }
-    if (debounce != null && (queueName == null || delay != null)) {
-      throw new IllegalArgumentException("a debounced workflow needs a queue and no other delay");
+    if (isDebounced && (queueName == null || delay == null)) {
+      throw new IllegalArgumentException("a debounced workflow needs a queue and a delay");
+    }
+    if (debounceDeadline != null && !isDebounced) {
+      throw new IllegalArgumentException("only a debounced workflow takes a debounce deadline");
     }
     // Normalize empty strings to null for auth fields — other SDKs (TypeScript, Go) send ""
     // rather than null when auth context is absent, so we treat them equivalently.
@@ -107,6 +116,11 @@ public record WorkflowStatusInternal(
   @JsonIgnore
   public Long delayMs() {
     return delay == null ? null : delay.toMillis();
+  }
+
+  @JsonIgnore
+  public Long debounceDeadlineEpochMs() {
+    return debounceDeadline == null ? null : debounceDeadline.toEpochMilli();
   }
 
   @JsonIgnore

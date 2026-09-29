@@ -838,11 +838,7 @@ public class SystemDatabase implements AutoCloseable {
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    // A debounced workflow's delay is already absolute: it was capped at the debounce deadline.
-    Long delayUntilEpochMs =
-        initStatus.debounce() != null
-            ? Long.valueOf(initStatus.debounce().delayUntilEpochMs())
-            : resolveDelayUntil(initStatus.delay());
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus);
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
@@ -856,6 +852,16 @@ public class SystemDatabase implements AutoCloseable {
    */
   private static @Nullable Long resolveDelayUntil(@Nullable Duration delay) {
     return delay == null ? null : System.currentTimeMillis() + delay.toMillis();
+  }
+
+  /**
+   * The absolute end of a status's delay. A debounced workflow's is capped at its debounce
+   * deadline, as every later bounce caps it.
+   */
+  private static @Nullable Long resolveDelayUntil(WorkflowStatusInternal status) {
+    Long delayUntil = resolveDelayUntil(status.delay());
+    Long cap = status.debounceDeadlineEpochMs();
+    return delayUntil != null && cap != null && cap < delayUntil ? cap : delayUntil;
   }
 
   /**
@@ -887,7 +893,7 @@ public class SystemDatabase implements AutoCloseable {
    * See {@link WorkflowDAO#recordErrorForUnstartedWorkflow}.
    */
   public void recordErrorForUnstartedWorkflow(WorkflowStatusInternal initStatus, String error) {
-    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus);
     dbRetry(
         () ->
             WorkflowDAO.recordErrorForUnstartedWorkflow(ctx, initStatus, delayUntilEpochMs, error));

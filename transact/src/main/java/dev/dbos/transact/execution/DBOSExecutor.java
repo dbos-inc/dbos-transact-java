@@ -33,7 +33,6 @@ import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
-import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -499,11 +498,11 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * Enqueues {@code workflow} as a debounced workflow: DELAYED on {@code queueName} until the
-   * stamp's delay, holding {@code deduplicationId} as its debounce key. Called from a workflow, it
-   * is a child enqueue, so a replay returns whatever child that slot recorded -- which, for a
-   * debounce recorded before debounced workflows, is the debouncer service workflow, not {@code
-   * workflowId}.
+   * Enqueues {@code workflow} as a debounced workflow: DELAYED on {@code queueName} for {@code
+   * delay}, capped at {@code debounceDeadline} if not null, holding {@code deduplicationId} as its
+   * debounce key. Called from a workflow, it is a child enqueue, so a replay returns whatever child
+   * that slot recorded -- which, for a debounce recorded before debounced workflows, is the
+   * debouncer service workflow, not {@code workflowId}.
    *
    * <p>The workflow takes {@code timeout}, timed from its dequeue, and no deadline: it may start
    * long after the call, so neither the caller's deadline nor its timeout carries over. The
@@ -515,7 +514,8 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowId,
       String queueName,
       String deduplicationId,
-      DebounceStamp stamp,
+      Duration delay,
+      @Nullable Instant debounceDeadline,
       @Nullable Integer priority,
       @Nullable String appVersion,
       @Nullable Duration timeout,
@@ -531,14 +531,14 @@ public class DBOSExecutor implements AutoCloseable {
                 deduplicationId,
                 priority,
                 null,
-                null,
+                delay,
                 appVersion,
                 null)
             .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(ctx.resolveNextAssumedRole())
             .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
             .withAttributes(attributes)
-            .withDebounce(stamp);
+            .withDebounce(debounceDeadline);
     return executeWorkflow(workflow, args, options, parent);
   }
 
@@ -2391,7 +2391,8 @@ public class DBOSExecutor implements AutoCloseable {
             options.attributes(),
             options.scheduleName(),
             applicationName,
-            options.debounce());
+            options.isDebounced(),
+            options.debounceDeadline());
 
     var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
 
@@ -2462,6 +2463,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             null,
+            false,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }

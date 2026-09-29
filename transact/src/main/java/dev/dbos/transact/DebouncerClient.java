@@ -4,7 +4,6 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
-import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -378,24 +377,19 @@ public final class DebouncerClient<R> {
         }
       }
 
-      long now = Instant.now().toEpochMilli();
-      Long deadline = debounceTimeout == null ? null : now + debounceTimeout.toMillis();
-      long delayUntil = now + debouncePeriod.toMillis();
-      if (deadline != null && deadline < delayUntil) {
-        delayUntil = deadline;
-      }
+      Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
       var enqueueOpts =
           new EnqueueOptions(workflowName, className, instanceName, QueueName.of(targetQueue))
               .withWorkflowId(userWorkflowId)
               .withDeduplicationId(deduplicationId)
+              .withDelay(debouncePeriod)
               .withPriority(priority)
               .withAppVersion(appVersion)
               .withTimeout(Timeout.of(workflowTimeout))
               .withAttributes(attributes)
               .withSerialization(serialization);
       try {
-        WorkflowHandle<R, ?> handle =
-            client.enqueueDebounced(enqueueOpts, args, new DebounceStamp(delayUntil, deadline));
+        WorkflowHandle<R, ?> handle = client.enqueueDebounced(enqueueOpts, args, deadline);
         if (takingOver && !client.isDebouncedWorkflow(userWorkflowId)) {
           // The service workflow was only slow: it started the promised workflow between the
           // cancel and this enqueue, and this call's arguments went nowhere. Start over under this

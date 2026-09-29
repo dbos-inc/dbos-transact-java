@@ -170,6 +170,7 @@ public class WorkflowStatusInternalBuilder {
         attributes,
         scheduleName,
         null,
+        false,
         null);
   }
 }

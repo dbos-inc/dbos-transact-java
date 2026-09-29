@@ -100,18 +100,6 @@ public final class Debouncer<R> {
     }
   }
 
-  /**
-   * Marks an enqueue as a debounced workflow: the row is written DELAYED until {@code
-   * delayUntilEpochMs}, flagged {@code is_debounced}, and later bounces never push it past {@code
-   * deadlineEpochMs}. Only the debouncers set it; no public option exposes it.
-   *
-   * <p>Internal: not part of the public API. It is public only because other DBOS packages use it.
-   *
-   * @param delayUntilEpochMs when the row leaves DELAYED, already capped at the deadline
-   * @param deadlineEpochMs the latest a bounce may extend the delay to, or null for no cap
-   */
-  public record DebounceStamp(long delayUntilEpochMs, @Nullable Long deadlineEpochMs) {}
-
   private final DBOS dbos;
   private final DBOSExecutor executor;
   private final @Nullable String queueName;
@@ -352,12 +340,7 @@ public final class Debouncer<R> {
         }
       }
 
-      long now = Instant.now().toEpochMilli();
-      Long deadline = debounceTimeout == null ? null : now + debounceTimeout.toMillis();
-      long delayUntil = now + debouncePeriod.toMillis();
-      if (deadline != null && deadline < delayUntil) {
-        delayUntil = deadline;
-      }
+      Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
       try {
         WorkflowHandle<T, E> handle =
             executor.enqueueDebounced(
@@ -366,7 +349,8 @@ public final class Debouncer<R> {
                 userWorkflowId,
                 targetQueue,
                 debounceDeduplicationId,
-                new DebounceStamp(delayUntil, deadline),
+                debouncePeriod,
+                deadline,
                 priority,
                 appVersion,
                 workflowTimeout,

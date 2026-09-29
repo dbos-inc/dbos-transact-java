@@ -16,7 +16,6 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
-import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -1377,12 +1376,12 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Enqueues a debounced workflow: DELAYED until the stamp's delay and flagged as debounced, which
-   * no public option can ask for. Python's {@code _enqueue_debounced}. Used by {@link
-   * DebouncerClient}.
+   * Enqueues a debounced workflow: DELAYED for the options' delay, capped at {@code
+   * debounceDeadline} if not null, and flagged as debounced, which no public option can ask for.
+   * Python's {@code _enqueue_debounced}. Used by {@link DebouncerClient}.
    */
   <T, E extends Exception> WorkflowHandle<T, E> enqueueDebounced(
-      dev.dbos.transact.EnqueueOptions options, Object[] args, DebounceStamp stamp) {
+      dev.dbos.transact.EnqueueOptions options, Object[] args, @Nullable Instant debounceDeadline) {
     var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
     DBOSExecutor.enqueueWorkflow(
         options.workflowName(),
@@ -1391,7 +1390,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         args,
         null,
-        new ExecutionOptions(workflowId).withOptions(options).withDebounce(stamp),
+        new ExecutionOptions(workflowId).withOptions(options).withDebounce(debounceDeadline),
         null,
         null,
         null,

@@ -375,9 +375,8 @@ public class WorkflowDAO {
       stmt.setString(23, attributesJson);
       stmt.setString(24, status.scheduleName());
       stmt.setString(25, appName);
-      stmt.setBoolean(26, status.debounce() != null);
-      stmt.setObject(
-          27, status.debounce() != null ? status.debounce().deadlineEpochMs() : null, Types.BIGINT);
+      stmt.setBoolean(26, status.isDebounced());
+      stmt.setObject(27, status.debounceDeadlineEpochMs(), Types.BIGINT);
 
       InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
