@@ -314,6 +314,20 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  public void startsWithoutADelayLeaveDelayUntilNull() throws Exception {
+    // A start that asked for no delay writes no delay_until, whether run directly or enqueued.
+    var direct = dbos.startWorkflow(() -> proxy.helloWorkflow("direct"));
+    var queued =
+        dbos.startWorkflow(
+            () -> proxy.helloWorkflow("queued"), new StartWorkflowOptions().withQueue(myqueue));
+    direct.getResult();
+    queued.getResult();
+
+    assertNull(DBUtils.getWorkflowRow(dataSource, direct.workflowId()).delayUntilEpochMs());
+    assertNull(DBUtils.getWorkflowRow(dataSource, queued.workflowId()).delayUntilEpochMs());
+  }
+
+  @Test
   public void setWorkflowDelayWithDuration() throws Exception {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
@@ -498,7 +512,8 @@ public class WorkflowMgmtTest {
         """
           SELECT ws.inputs AS legacy_inputs, ws.output AS legacy_output, ws.error AS legacy_error,
                  wi.inputs AS inputs, wo.output AS output, wo.error AS error,
-                 ws.created_at, wi.retention_timestamp AS input_retention
+                 ws.created_at, wi.retention_timestamp AS input_retention,
+                 ws.completed_at, wo.retention_timestamp AS output_retention
           FROM "%1$s".workflow_status ws
           LEFT JOIN "%1$s".workflow_input wi ON wi.workflow_uuid = ws.workflow_uuid
           LEFT JOIN "%1$s".workflow_output wo ON wo.workflow_uuid = ws.workflow_uuid
@@ -524,6 +539,12 @@ public class WorkflowMgmtTest {
             rs.getLong("created_at"),
             rs.getLong("input_retention"),
             "the input's retention starts at the workflow's created_at");
+        // Likewise the output against completed_at: both come from the database's now() in the
+        // transaction that records the outcome.
+        assertEquals(
+            rs.getLong("completed_at"),
+            rs.getLong("output_retention"),
+            "the output's retention starts at the workflow's completed_at");
       }
     }
   }
