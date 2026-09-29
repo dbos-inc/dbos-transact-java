@@ -241,9 +241,11 @@ public class QueuesDAO {
                 -- Left unclaimed, the row is PENDING and still visible to every peer's
                 -- recovery and global-timeout sweeps until it starts executing here.
                 application_name = COALESCE(application_name, ?),
+                -- The JVM's clock, not the database's: this executor enforces the deadline
+                -- against its own clock, as it does a directly started workflow's.
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN %2$s + workflow_timeout_ms
+                    THEN ? + workflow_timeout_ms
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE workflow_uuid = ?
@@ -256,6 +258,7 @@ public class QueuesDAO {
 
         List<String> updatedWorkflowIds = new ArrayList<>();
         try (var ps = connection.prepareStatement(updateQuery)) {
+          var now = System.currentTimeMillis();
           // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
           // limiter's remaining slots.
           for (var id : dequeuedWorkflowIds) {
@@ -267,9 +270,10 @@ public class QueuesDAO {
             // own claims and hand back the full limit every poll.
             ps.setBoolean(4, limits.rateLimit() != null || limits.partitionRateLimit() != null);
             ps.setString(5, ctx.appName());
-            ps.setString(6, id);
-            ps.setString(7, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 8);
+            ps.setLong(6, now);
+            ps.setString(7, id);
+            ps.setString(8, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 9);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
