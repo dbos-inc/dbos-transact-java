@@ -52,7 +52,7 @@ public class PgSqlClientTest {
     service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
-    dbos.registerQueue("testQueue", QueueOptions.empty());
+    dbos.registerQueue("testQueue", new QueueOptions());
   }
 
   @Test

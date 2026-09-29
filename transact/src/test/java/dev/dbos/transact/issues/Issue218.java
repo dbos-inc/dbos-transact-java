@@ -104,7 +104,7 @@ public class Issue218 {
 
       var proxy = register(dbos);
       dbos.launch();
-      dbos.registerQueue(queue, QueueOptions.empty());
+      dbos.registerQueue(queue, new QueueOptions());
 
       var handle = dbos.startWorkflow(() -> proxy.parentParallel());
       wfid = handle.workflowId();
@@ -126,7 +126,7 @@ public class Issue218 {
     try (var dbos = new DBOS(dbosConfig)) {
       register(dbos);
       dbos.launch();
-      dbos.registerQueue(queue, QueueOptions.empty());
+      dbos.registerQueue(queue, new QueueOptions());
 
       assertDoesNotThrow(() -> dbos.getResult(wfid));
     }

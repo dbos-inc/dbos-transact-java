@@ -124,7 +124,7 @@ public class TimeoutTest {
     String simpleQ = "simpleQ";
 
     dbos.launch();
-    dbos.registerQueue(simpleQ, QueueOptions.empty());
+    dbos.registerQueue(simpleQ, new QueueOptions());
 
     // queued
 
@@ -151,7 +151,7 @@ public class TimeoutTest {
     String simpleQ = "simpleQ";
 
     dbos.launch();
-    dbos.registerQueue(simpleQ, QueueOptions.empty());
+    dbos.registerQueue(simpleQ, new QueueOptions());
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout
@@ -393,7 +393,7 @@ public class TimeoutTest {
     var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
-    dbos.registerQueue("childQ", QueueOptions.empty());
+    dbos.registerQueue("childQ", new QueueOptions());
 
     var parentId = "wf-queued-parent";
     try (var o = new WorkflowOptions(parentId).withTimeout(Duration.ofMinutes(5)).setContext()) {
@@ -419,7 +419,7 @@ public class TimeoutTest {
     var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
-    dbos.registerQueue("childQ", QueueOptions.empty());
+    dbos.registerQueue("childQ", new QueueOptions());
     var queueService = DBOSTestAccess.getQueueService(dbos);
     queueService.pause();
 
@@ -447,7 +447,7 @@ public class TimeoutTest {
     var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
-    dbos.registerQueue("childQ", QueueOptions.empty());
+    dbos.registerQueue("childQ", new QueueOptions());
     var queueService = DBOSTestAccess.getQueueService(dbos);
     queueService.pause();
 
@@ -476,7 +476,7 @@ public class TimeoutTest {
     var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
-    dbos.registerQueue("childQ", QueueOptions.empty());
+    dbos.registerQueue("childQ", new QueueOptions());
     var queueService = DBOSTestAccess.getQueueService(dbos);
     queueService.pause();
 

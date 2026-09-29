@@ -54,7 +54,7 @@ public class MultiClassInstanceTest {
     bimpl1.setProxy(bproxy1);
 
     dbos.launch();
-    dbos.registerQueue("testQueue", QueueOptions.empty());
+    dbos.registerQueue("testQueue", new QueueOptions());
   }
 
   @Test

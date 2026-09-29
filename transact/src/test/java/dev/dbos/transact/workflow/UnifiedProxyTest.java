@@ -35,7 +35,7 @@ public class UnifiedProxyTest {
     String q = "simpleQ";
 
     dbos.launch();
-    dbos.registerQueue(q, QueueOptions.empty());
+    dbos.registerQueue(q, new QueueOptions());
 
     // synchronous
     String wfid1 = "wf-123";
@@ -85,7 +85,7 @@ public class UnifiedProxyTest {
 
     impl.setSelf(simpleService);
     dbos.launch();
-    dbos.registerQueue("childQ", QueueOptions.empty());
+    dbos.registerQueue("childQ", new QueueOptions());
 
     String wfid1 = "wf-123";
     WorkflowOptions options = new WorkflowOptions(wfid1);

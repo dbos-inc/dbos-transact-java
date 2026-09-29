@@ -327,7 +327,7 @@ public class InteropTest {
     String testQueue = "interopq";
     dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
-    dbos.registerQueue(testQueue, QueueOptions.empty());
+    dbos.registerQueue(testQueue, new QueueOptions());
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
@@ -404,7 +404,7 @@ public class InteropTest {
     String testQueue = "interopq";
     dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
-    dbos.registerQueue(testQueue, QueueOptions.empty());
+    dbos.registerQueue(testQueue, new QueueOptions());
 
     String workflowId = UUID.randomUUID().toString();
 
@@ -450,7 +450,7 @@ public class InteropTest {
     String testQueue = "interopq";
     dbos.registerProxy(NamedArgsService.class, new NamedArgsServiceImpl());
     dbos.launch();
-    dbos.registerQueue(testQueue, QueueOptions.empty());
+    dbos.registerQueue(testQueue, new QueueOptions());
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();

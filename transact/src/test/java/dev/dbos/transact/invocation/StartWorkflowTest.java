@@ -43,8 +43,8 @@ public class StartWorkflowTest {
     impl.setProxy(proxy);
 
     dbos.launch();
-    dbos.registerQueue("queue", QueueOptions.empty());
-    dbos.registerQueue("partitioned-queue", QueueOptions.empty().andPartitionQueue(true));
+    dbos.registerQueue("queue", new QueueOptions());
+    dbos.registerQueue("partitioned-queue", new QueueOptions().andPartitionQueue(true));
   }
 
   @Test

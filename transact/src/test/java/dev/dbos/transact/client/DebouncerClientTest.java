@@ -73,7 +73,7 @@ public class DebouncerClientTest {
     serviceImpl = new ClientTargetServiceImpl();
     dbos.registerProxy(ClientTargetService.class, serviceImpl);
     dbos.launch();
-    dbos.registerQueue(USER_QUEUE, QueueOptions.empty());
+    dbos.registerQueue(USER_QUEUE, new QueueOptions());
 
     dbosClient =
         new DBOSClient(pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());

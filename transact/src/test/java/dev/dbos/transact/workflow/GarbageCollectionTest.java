@@ -41,7 +41,7 @@ public class GarbageCollectionTest {
     gcQueue = "gcqueue";
 
     dbos.launch();
-    dbos.registerQueue(gcQueue, QueueOptions.empty());
+    dbos.registerQueue(gcQueue, new QueueOptions());
   }
 
   /**

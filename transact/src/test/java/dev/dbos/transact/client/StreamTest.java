@@ -41,7 +41,7 @@ public class StreamTest {
     proxy = dbos.registerProxy(StreamTestService.class, new StreamTestServiceImpl(dbos));
 
     dbos.launch();
-    dbos.registerQueue("testQueue", QueueOptions.empty());
+    dbos.registerQueue("testQueue", new QueueOptions());
   }
 
   @Test

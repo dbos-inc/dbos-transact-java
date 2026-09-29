@@ -973,7 +973,7 @@ public class StaticQueuesTest {
     qs.setSpeedupForTest();
 
     // Register same name as a dynamic queue — supervisor should ignore the DB entry.
-    dbos.registerQueue("q-shared", QueueOptions.setConcurrency(99));
+    dbos.registerQueue("q-shared", new QueueOptions().withConcurrency(99));
 
     // Workflow still executes — static listener handles it.
     var handle =

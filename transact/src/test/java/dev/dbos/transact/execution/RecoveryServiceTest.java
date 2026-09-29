@@ -66,7 +66,7 @@ class RecoveryServiceTest {
     try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
-      dbos.registerQueue(testQueue, QueueOptions.empty());
+      dbos.registerQueue(testQueue, new QueueOptions());
 
       var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -124,7 +124,7 @@ class RecoveryServiceTest {
     try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
-      dbos.registerQueue(testQueue, QueueOptions.empty());
+      dbos.registerQueue(testQueue, new QueueOptions());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 

@@ -178,22 +178,22 @@ public class QueueLimitResolutionTest {
 
     @Test
     void emptyStaysEmptyWithTheNewFields() {
-      assertTrue(QueueOptions.empty().isEmpty());
+      assertTrue(new QueueOptions().isEmpty());
     }
 
     @Test
     void eachPerPartitionFactorySetsOnlyItsOwnField() {
-      var c = QueueOptions.setPartitionConcurrency(4);
+      var c = new QueueOptions().withPartitionConcurrency(4);
       assertFalse(c.isEmpty());
       assertEquals(4, c.partitionConcurrency().get());
       assertFalse(c.partitionWorkerConcurrency().isPresent());
       assertFalse(c.concurrency().isPresent());
 
-      var w = QueueOptions.setPartitionWorkerConcurrency(2);
+      var w = new QueueOptions().withPartitionWorkerConcurrency(2);
       assertEquals(2, w.partitionWorkerConcurrency().get());
       assertFalse(w.partitionConcurrency().isPresent());
 
-      var r = QueueOptions.setPartitionRateLimit(5, Duration.ofSeconds(30));
+      var r = new QueueOptions().withPartitionRateLimit(5, Duration.ofSeconds(30));
       assertEquals(5, r.partitionRateLimitMax().get());
       assertEquals(Duration.ofSeconds(30), r.partitionRateLimitPeriod().get());
       assertFalse(r.rateLimitMax().isPresent(), "the queue-wide limit is untouched");
@@ -203,18 +203,18 @@ public class QueueLimitResolutionTest {
     void aPerPartitionFieldAloneMakesTheOptionsNonEmpty() {
       // isEmpty() gates updateQueue's early return, so a field it does not know about would
       // make an update that carries only that field silently do nothing.
-      assertFalse(QueueOptions.setPartitionConcurrency(1).isEmpty());
-      assertFalse(QueueOptions.setPartitionWorkerConcurrency(1).isEmpty());
-      assertFalse(QueueOptions.setPartitionRateLimit(1, Duration.ofSeconds(1)).isEmpty());
+      assertFalse(new QueueOptions().withPartitionConcurrency(1).isEmpty());
+      assertFalse(new QueueOptions().withPartitionWorkerConcurrency(1).isEmpty());
+      assertFalse(new QueueOptions().withPartitionRateLimit(1, Duration.ofSeconds(1)).isEmpty());
     }
 
     @Test
     void aFieldCanBeClearedAsDistinctFromLeftAlone() {
-      var cleared = QueueOptions.setPartitionConcurrency(null);
+      var cleared = new QueueOptions().withPartitionConcurrency((Integer) null);
       assertTrue(cleared.partitionConcurrency().isPresent(), "present, holding null");
       assertNull(cleared.partitionConcurrency().get());
       assertFalse(
-          QueueOptions.empty().partitionConcurrency().isPresent(), "absent, meaning unchanged");
+          new QueueOptions().partitionConcurrency().isPresent(), "absent, meaning unchanged");
     }
 
     @Test
