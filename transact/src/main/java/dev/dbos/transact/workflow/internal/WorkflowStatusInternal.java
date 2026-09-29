@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow.internal;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
+import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;

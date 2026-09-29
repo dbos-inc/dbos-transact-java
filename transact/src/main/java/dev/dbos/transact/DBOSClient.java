@@ -16,6 +16,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
+import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -32,7 +33,6 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.DebounceStamp;
 import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.time.Duration;

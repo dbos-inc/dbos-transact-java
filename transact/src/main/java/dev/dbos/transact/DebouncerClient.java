@@ -4,12 +4,12 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
+import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
-import dev.dbos.transact.workflow.internal.DebounceStamp;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
 import java.time.Duration;

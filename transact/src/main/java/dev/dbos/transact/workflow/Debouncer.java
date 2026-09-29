@@ -8,7 +8,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.workflow.internal.DebounceStamp;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
 import java.time.Duration;
@@ -76,6 +75,9 @@ public final class Debouncer<R> {
    * bounce and are kept as they are so that steps recorded by older versions still replay; a
    * component an older version did not record replays as null.
    *
+   * <p>Internal: not part of the public API. It is public only because other DBOS packages use it,
+   * and it stays here, under this name, because recorded steps name its class.
+   *
    * @param userWorkflowId the pre-assigned id of the workflow this call creates, if it creates one
    * @param messageId the idempotency key of the call, if it is forwarded to a service workflow
    * @param bouncedWorkflowId the debounced workflow the first bounce extended, or null
@@ -97,6 +99,18 @@ public final class Debouncer<R> {
           : new DebounceIds(userWorkflowId, messageId, null, serviceWorkflowId);
     }
   }
+
+  /**
+   * Marks an enqueue as a debounced workflow: the row is written DELAYED until {@code
+   * delayUntilEpochMs}, flagged {@code is_debounced}, and later bounces never push it past {@code
+   * deadlineEpochMs}. Only the debouncers set it; no public option exposes it.
+   *
+   * <p>Internal: not part of the public API. It is public only because other DBOS packages use it.
+   *
+   * @param delayUntilEpochMs when the row leaves DELAYED, already capped at the deadline
+   * @param deadlineEpochMs the latest a bounce may extend the delay to, or null for no cap
+   */
+  public record DebounceStamp(long delayUntilEpochMs, @Nullable Long deadlineEpochMs) {}
 
   private final DBOS dbos;
   private final DBOSExecutor executor;

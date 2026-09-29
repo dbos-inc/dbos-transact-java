@@ -5,9 +5,9 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.workflow.Debouncer.DebounceStamp;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.DebounceStamp;
 
 import java.time.Duration;
 import java.time.Instant;
