@@ -835,7 +835,8 @@ public class WorkflowDAO {
     // CASE rather than LEAST, for portability across the databases the DAO supports. An unclaimed
     // row is claimed for this application, as its dequeue would: left unclaimed, every peer
     // coalesces onto the one workflow and the last inputs win.
-    var claim = ctx.appName() == null ? "" : ",\n application_name = COALESCE(application_name, ?)";
+    var claimAppName =
+        ctx.appName() == null ? "" : ",\n application_name = COALESCE(application_name, ?)";
     var sql =
         """
           UPDATE "%1$s".workflow_status
@@ -854,7 +855,7 @@ public class WorkflowDAO {
              AND status = ?
              AND is_debounced = TRUE
         """
-                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS, claim)
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS, claimAppName)
             + ctx.andAppScope()
             + " RETURNING workflow_uuid";
     // The latest call's inputs win, in the payload table, in the same transaction. An upsert

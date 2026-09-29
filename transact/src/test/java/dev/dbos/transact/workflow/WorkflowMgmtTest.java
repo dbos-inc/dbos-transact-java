@@ -355,6 +355,9 @@ public class WorkflowMgmtTest {
     row = DBUtils.getWorkflowRow(dataSource, wfId);
     assertTrue(row.delayUntilEpochMs() >= before + 29_000);
     assertTrue(row.delayUntilEpochMs() <= before + 31_000);
+    // The delay counts from the database's clock, the one the promotion to ENQUEUED compares it
+    // against, in the same reading that stamps updated_at.
+    assertEquals(row.updatedAt() + 30_000, row.delayUntilEpochMs());
 
     // Clear the delay so the workflow can run
     dbos.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
@@ -513,7 +516,8 @@ public class WorkflowMgmtTest {
         """
           SELECT ws.inputs AS legacy_inputs, ws.output AS legacy_output, ws.error AS legacy_error,
                  wi.inputs AS inputs, wo.output AS output, wo.error AS error,
-                 ws.created_at, wi.retention_timestamp AS input_retention
+                 ws.created_at, wi.retention_timestamp AS input_retention,
+                 ws.completed_at, wo.retention_timestamp AS output_retention
           FROM "%1$s".workflow_status ws
           LEFT JOIN "%1$s".workflow_input wi ON wi.workflow_uuid = ws.workflow_uuid
           LEFT JOIN "%1$s".workflow_output wo ON wo.workflow_uuid = ws.workflow_uuid
@@ -539,6 +543,12 @@ public class WorkflowMgmtTest {
             rs.getLong("created_at"),
             rs.getLong("input_retention"),
             "the input's retention starts at the workflow's created_at");
+        // Likewise the output against completed_at: both come from the database's now() in the
+        // transaction that records the outcome.
+        assertEquals(
+            rs.getLong("completed_at"),
+            rs.getLong("output_retention"),
+            "the output's retention starts at the workflow's completed_at");
       }
     }
   }
