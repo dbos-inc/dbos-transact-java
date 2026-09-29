@@ -93,6 +93,8 @@ public record QueueOptions(
         Optional.empty());
   }
 
+  private static final QueueOptions EMPTY = new QueueOptions();
+
   /**
    * Constructs options with no per-partition limits.
    *
@@ -148,13 +150,13 @@ public record QueueOptions(
   }
 
   /**
-   * Returns options with every property absent.
+   * Returns the shared instance with every property absent.
    *
    * @deprecated Use {@link #QueueOptions()}, as with the other options types.
    */
   @Deprecated(since = "1.2", forRemoval = true)
   public static @NonNull QueueOptions empty() {
-    return new QueueOptions();
+    return EMPTY;
   }
 
   /** Returns {@code true} if all fields are absent — no property will be set or changed. */
@@ -576,7 +578,7 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code concurrency} set to the given value.
    *
-   * @param value the concurrency limit, or {@code null} to clear the column
+   * @param value the concurrency limit, or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withConcurrency(@Nullable Integer value) {
     return withConcurrency(Field.of(value));
@@ -585,7 +587,7 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code workerConcurrency} set to the given value.
    *
-   * @param value the per-worker concurrency limit, or {@code null} to clear the column
+   * @param value the per-worker concurrency limit, or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withWorkerConcurrency(@Nullable Integer value) {
     return withWorkerConcurrency(Field.of(value));
@@ -618,7 +620,8 @@ public record QueueOptions(
    * period carries over from the stored limit; where there is none, and at registration, a max
    * without a period is refused.
    *
-   * @param max max starts per window, or {@code null} to clear (which must clear the period too)
+   * @param max max starts per window, or {@code (Integer) null} to clear (which must clear the
+   *     period too)
    */
   public @NonNull QueueOptions withRateLimitMax(@Nullable Integer max) {
     return withRateLimitMax(Field.of(max));
@@ -629,8 +632,8 @@ public record QueueOptions(
    * the max carries over from the stored limit; where there is none, and at registration, a period
    * without a max is refused.
    *
-   * @param period length of the rolling window, or {@code null} to clear (which must clear the max
-   *     too)
+   * @param period length of the rolling window, or {@code (Duration) null} to clear (which must
+   *     clear the max too)
    */
   public @NonNull QueueOptions withRateLimitPeriod(@Nullable Duration period) {
     return withRateLimitPeriod(Field.of(period));
@@ -640,7 +643,7 @@ public record QueueOptions(
    * Returns a copy of these options with {@code partitionConcurrency} set to the given value.
    * Setting it is what partitions the queue.
    *
-   * @param value the per-partition concurrency limit, or {@code null} to clear the column
+   * @param value the per-partition concurrency limit, or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withPartitionConcurrency(@Nullable Integer value) {
     return withPartitionConcurrency(Field.of(value));
@@ -650,7 +653,7 @@ public record QueueOptions(
    * Returns a copy of these options with {@code partitionWorkerConcurrency} set to the given value.
    * Setting it is what partitions the queue.
    *
-   * @param value the per-partition, per-worker concurrency limit, or {@code null} to clear
+   * @param value the per-partition, per-worker limit, or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withPartitionWorkerConcurrency(@Nullable Integer value) {
     return withPartitionWorkerConcurrency(Field.of(value));
@@ -685,8 +688,8 @@ public record QueueOptions(
    * updateQueue} the period carries over from the stored limit; where there is none, and at
    * registration, a max without a period is refused.
    *
-   * @param max max starts per window per partition, or {@code null} to clear (which must clear the
-   *     period too)
+   * @param max max starts per window per partition, or {@code (Integer) null} to clear (which must
+   *     clear the period too)
    */
   public @NonNull QueueOptions withPartitionRateLimitMax(@Nullable Integer max) {
     return withPartitionRateLimitMax(Field.of(max));
@@ -697,8 +700,8 @@ public record QueueOptions(
    * updateQueue} the max carries over from the stored limit; where there is none, and at
    * registration, a period without a max is refused.
    *
-   * @param period length of the rolling window, or {@code null} to clear (which must clear the max
-   *     too)
+   * @param period length of the rolling window, or {@code (Duration) null} to clear (which must
+   *     clear the max too)
    */
   public @NonNull QueueOptions withPartitionRateLimitPeriod(@Nullable Duration period) {
     return withPartitionRateLimitPeriod(Field.of(period));

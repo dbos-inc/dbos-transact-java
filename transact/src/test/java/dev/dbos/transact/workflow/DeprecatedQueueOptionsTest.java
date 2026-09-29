@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -24,6 +25,7 @@ class DeprecatedQueueOptionsTest {
   void emptyMatchesTheNoArgConstructor() {
     assertEquals(new QueueOptions(), QueueOptions.empty());
     assertTrue(QueueOptions.empty().isEmpty());
+    assertSame(QueueOptions.empty(), QueueOptions.empty());
   }
 
   @Test
