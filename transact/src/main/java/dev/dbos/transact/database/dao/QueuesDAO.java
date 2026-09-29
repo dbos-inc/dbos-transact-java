@@ -175,10 +175,10 @@ public class QueuesDAO {
         var query =
             """
             SELECT workflow_uuid
-            FROM "%s".workflow_status
+            FROM "%1$s".workflow_status
             WHERE queue_name = ?
               AND status = ?
-              AND %s
+              AND %2$s
           """
                     .formatted(ctx.schema(), versionClause)
                 + ctx.andAppScope();
@@ -228,7 +228,7 @@ public class QueuesDAO {
 
         String updateQuery =
             """
-            UPDATE "%s".workflow_status
+            UPDATE "%1$s".workflow_status
             SET status = ?,
                 application_version = ?,
                 executor_id = ?,
@@ -323,10 +323,10 @@ public class QueuesDAO {
 
     final String sql =
         """
-          UPDATE "%s".workflow_status
+          UPDATE "%1$s".workflow_status
           SET status = ?,
               started_at_epoch_ms = NULL,
-              updated_at = %s,
+              updated_at = %2$s,
               queue_name = COALESCE(NULLIF(queue_name, ''), ?)
           WHERE status = ?
             AND executor_id = ANY(?)
@@ -407,19 +407,19 @@ public class QueuesDAO {
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
         """
-        INSERT INTO "%s".queues
+        INSERT INTO "%1$s".queues
           (name, concurrency, worker_concurrency, rate_limit_max, rate_limit_period_sec,
             partition_concurrency, partition_worker_concurrency,
             partition_rate_limit_max, partition_rate_limit_period_sec,
             priority_enabled, partition_queue, polling_interval_sec, updated_at, application_name)
         -- priority_enabled is vestigial: every queue dispatches in priority order.
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, %s, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, %2$s, ?)
         ON CONFLICT (name) DO NOTHING
         """
             .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
     final String updateSql =
         """
-        UPDATE "%s".queues SET
+        UPDATE "%1$s".queues SET
           concurrency                     = ?,
           worker_concurrency              = ?,
           rate_limit_max                  = ?,
@@ -431,7 +431,7 @@ public class QueuesDAO {
           priority_enabled                = TRUE,
           partition_queue                 = ?,
           polling_interval_sec            = ?,
-          updated_at                      = %s,
+          updated_at                      = %2$s,
           -- Claim only an unclaimed row, so a registration landing between the ownership
           -- check above and this write keeps the name it just took.
           application_name                = COALESCE(application_name, ?)
@@ -473,11 +473,11 @@ public class QueuesDAO {
     var sql =
         """
         SELECT COUNT(*)
-        FROM "%s".workflow_status
+        FROM "%1$s".workflow_status
         WHERE queue_name = ?
         AND rate_limited = true
         AND status NOT IN (?, ?)
-        AND started_at_epoch_ms > %s - ?
+        AND started_at_epoch_ms > %2$s - ?
       """
                 .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
             + ctx.andAppScope();
@@ -698,7 +698,7 @@ public class QueuesDAO {
         params.add(name);
 
         String sql =
-            "UPDATE \"%s\".queues SET %s WHERE name = ?"
+            "UPDATE \"%1$s\".queues SET %2$s WHERE name = ?"
                 .formatted(ctx.schema(), String.join(", ", setClauses));
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -745,7 +745,7 @@ public class QueuesDAO {
       var field = firstLimitSet(update);
       if (field != null) {
         throw new IllegalArgumentException(
-            ("cannot set %s on queue %s: it is registered with the deprecated partitionQueue"
+            ("cannot set %1$s on queue %2$s: it is registered with the deprecated partitionQueue"
                     + " option, under which concurrency, workerConcurrency and rateLimit apply per"
                     + " partition; re-register the queue with the partition limits instead")
                 .formatted(field, current.name()));
@@ -834,8 +834,8 @@ public class QueuesDAO {
     if (newMax == null && newPeriod == null) return null;
     if (newMax == null || newPeriod == null) {
       throw new IllegalArgumentException(
-          ("queue %s cannot have half of %s: %sMax and %sPeriod are set and cleared together")
-              .formatted(queue, name, name, name));
+          ("queue %1$s cannot have half of %2$s: %2$sMax and %2$sPeriod are set and cleared together")
+              .formatted(queue, name));
     }
     return new Queue.RateLimit(newMax, newPeriod);
   }
