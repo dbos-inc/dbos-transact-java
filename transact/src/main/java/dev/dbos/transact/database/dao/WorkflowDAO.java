@@ -344,7 +344,9 @@ public class WorkflowDAO {
       stmt.setString(7, status.deduplicationId());
       stmt.setInt(8, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(9, status.queuePartitionKey());
-      stmt.setObject(10, status.delayMs(), Types.BIGINT); // added to now; null stays null
+      // The statement writes delay_until_epoch_ms as the database's now() plus this delay. A start
+      // without a delay binds NULL, and now() + NULL is NULL, so the column stays NULL.
+      stmt.setObject(10, status.delayMs(), Types.BIGINT);
 
       stmt.setString(11, status.authenticatedUser());
       stmt.setString(12, status.assumedRole());
