@@ -308,14 +308,16 @@ public record QueueOptions(
     return new QueueOptions().withPollingInterval(value);
   }
 
-  // ── Builders for chaining ─────────────────────────────────────────────────
+  // ── Deprecated Field and Optional builders ────────────────────────────────
 
   /**
    * Returns a copy of these options with {@code concurrency} replaced.
    *
    * @param concurrency the new value; use {@link Field#absent()} to leave unchanged, or {@code
    *     Field.of(null)} to clear the column
+   * @deprecated Use {@link #withConcurrency(Integer)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withConcurrency(@NonNull Field<Integer> concurrency) {
     return new QueueOptions(
         concurrency,
@@ -336,7 +338,9 @@ public record QueueOptions(
    *
    * @param workerConcurrency the new value; use {@link Field#absent()} to leave unchanged, or
    *     {@code Field.of(null)} to clear the column
+   * @deprecated Use {@link #withWorkerConcurrency(Integer)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withWorkerConcurrency(@NonNull Field<Integer> workerConcurrency) {
     return new QueueOptions(
         concurrency,
@@ -357,7 +361,9 @@ public record QueueOptions(
    *
    * @param rateLimitMax the new value; use {@link Field#absent()} to leave unchanged, or {@code
    *     Field.of(null)} to clear the column
+   * @deprecated Use {@link #withRateLimitMax(Integer)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withRateLimitMax(@NonNull Field<Integer> rateLimitMax) {
     return new QueueOptions(
         concurrency,
@@ -378,7 +384,9 @@ public record QueueOptions(
    *
    * @param rateLimitPeriod the new value; use {@link Field#absent()} to leave unchanged, or {@code
    *     Field.of(null)} to clear the column
+   * @deprecated Use {@link #withRateLimitPeriod(Duration)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withRateLimitPeriod(@NonNull Field<Duration> rateLimitPeriod) {
     return new QueueOptions(
         concurrency,
@@ -399,7 +407,9 @@ public record QueueOptions(
    *
    * @param partitionConcurrency the new value; use {@link Field#absent()} to leave unchanged, or
    *     {@code Field.of(null)} to clear the column
+   * @deprecated Use {@link #withPartitionConcurrency(Integer)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withPartitionConcurrency(
       @NonNull Field<Integer> partitionConcurrency) {
     return new QueueOptions(
@@ -421,7 +431,10 @@ public record QueueOptions(
    *
    * @param partitionWorkerConcurrency the new value; use {@link Field#absent()} to leave unchanged,
    *     or {@code Field.of(null)} to clear the column
+   * @deprecated Use {@link #withPartitionWorkerConcurrency(Integer)}; {@code null} clears the
+   *     column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withPartitionWorkerConcurrency(
       @NonNull Field<Integer> partitionWorkerConcurrency) {
     return new QueueOptions(
@@ -443,7 +456,9 @@ public record QueueOptions(
    *
    * @param partitionRateLimitMax the new value; use {@link Field#absent()} to leave unchanged, or
    *     {@code Field.of(null)} to clear the column
+   * @deprecated Use {@link #withPartitionRateLimitMax(Integer)}; {@code null} clears the column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withPartitionRateLimitMax(
       @NonNull Field<Integer> partitionRateLimitMax) {
     return new QueueOptions(
@@ -465,7 +480,10 @@ public record QueueOptions(
    *
    * @param partitionRateLimitPeriod the new value; use {@link Field#absent()} to leave unchanged,
    *     or {@code Field.of(null)} to clear the column
+   * @deprecated Use {@link #withPartitionRateLimitPeriod(Duration)}; {@code null} clears the
+   *     column.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withPartitionRateLimitPeriod(
       @NonNull Field<Duration> partitionRateLimitPeriod) {
     return new QueueOptions(
@@ -508,8 +526,9 @@ public record QueueOptions(
    * Returns a copy of these options with {@code partitionQueue} replaced.
    *
    * @param partitionQueue the new value; use {@link Optional#empty()} to leave unchanged
-   * @deprecated Set {@link #withPartitionConcurrency}, {@link #withPartitionWorkerConcurrency} or
-   *     {@link #withPartitionRateLimitMax} instead, any of which partitions the queue.
+   * @deprecated Set {@link #withPartitionConcurrency(Integer)}, {@link
+   *     #withPartitionWorkerConcurrency(Integer)} or {@link #withPartitionRateLimit(Integer,
+   *     Duration)} instead, any of which partitions the queue.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public @NonNull QueueOptions withPartitionQueue(@NonNull Optional<Boolean> partitionQueue) {
@@ -531,7 +550,9 @@ public record QueueOptions(
    * Returns a copy of these options with {@code pollingInterval} replaced.
    *
    * @param pollingInterval the new value; use {@link Optional#empty()} to leave unchanged
+   * @deprecated Use {@link #withPollingInterval(Duration)}.
    */
+  @Deprecated(since = "1.2", forRemoval = true)
   public @NonNull QueueOptions withPollingInterval(@NonNull Optional<Duration> pollingInterval) {
     return new QueueOptions(
         concurrency,
@@ -549,9 +570,8 @@ public record QueueOptions(
 
   // ── Plain-value builders ──────────────────────────────────────────────────
   //
-  // Each of these overloads a Field- or Optional-typed builder above, so a bare null literal is
-  // ambiguous between them; clearing a column is written withConcurrency((Integer) null) or
-  // withConcurrency(Field.of(null)).
+  // Until the deprecated Field overloads above are removed, a bare null literal is ambiguous
+  // between them and these; clearing a column is written withConcurrency((Integer) null).
 
   /**
    * Returns a copy of these options with {@code concurrency} set to the given value.
@@ -591,6 +611,29 @@ public record QueueOptions(
    */
   public @NonNull QueueOptions withRateLimit(int max, long period, @NonNull TimeUnit unit) {
     return withRateLimit(max, Duration.of(period, unit.toChronoUnit()));
+  }
+
+  /**
+   * Returns a copy of these options with only the rate limit's max set. On {@code updateQueue} the
+   * period carries over from the stored limit; where there is none, and at registration, a max
+   * without a period is refused.
+   *
+   * @param max max starts per window, or {@code null} to clear (which must clear the period too)
+   */
+  public @NonNull QueueOptions withRateLimitMax(@Nullable Integer max) {
+    return withRateLimitMax(Field.of(max));
+  }
+
+  /**
+   * Returns a copy of these options with only the rate limit's period set. On {@code updateQueue}
+   * the max carries over from the stored limit; where there is none, and at registration, a period
+   * without a max is refused.
+   *
+   * @param period length of the rolling window, or {@code null} to clear (which must clear the max
+   *     too)
+   */
+  public @NonNull QueueOptions withRateLimitPeriod(@Nullable Duration period) {
+    return withRateLimitPeriod(Field.of(period));
   }
 
   /**
@@ -635,6 +678,30 @@ public record QueueOptions(
   public @NonNull QueueOptions withPartitionRateLimit(
       int max, long period, @NonNull TimeUnit unit) {
     return withPartitionRateLimit(max, Duration.of(period, unit.toChronoUnit()));
+  }
+
+  /**
+   * Returns a copy of these options with only the per-partition rate limit's max set. On {@code
+   * updateQueue} the period carries over from the stored limit; where there is none, and at
+   * registration, a max without a period is refused.
+   *
+   * @param max max starts per window per partition, or {@code null} to clear (which must clear the
+   *     period too)
+   */
+  public @NonNull QueueOptions withPartitionRateLimitMax(@Nullable Integer max) {
+    return withPartitionRateLimitMax(Field.of(max));
+  }
+
+  /**
+   * Returns a copy of these options with only the per-partition rate limit's period set. On {@code
+   * updateQueue} the max carries over from the stored limit; where there is none, and at
+   * registration, a period without a max is refused.
+   *
+   * @param period length of the rolling window, or {@code null} to clear (which must clear the max
+   *     too)
+   */
+  public @NonNull QueueOptions withPartitionRateLimitPeriod(@Nullable Duration period) {
+    return withPartitionRateLimitPeriod(Field.of(period));
   }
 
   /**

@@ -17,7 +17,6 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
-import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
@@ -258,12 +257,10 @@ public class DynamicQueuesTest {
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax(Field.of(0))));
+        () -> dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax(0)));
     assertThrows(
         IllegalArgumentException.class,
-        () ->
-            dbos.updateQueue(
-                "q-half", new QueueOptions().withRateLimitPeriod(Field.of(Duration.ZERO))));
+        () -> dbos.updateQueue("q-half", new QueueOptions().withRateLimitPeriod(Duration.ZERO)));
     assertNull(
         dbos.findQueue("q-half").orElseThrow().rateLimit(),
         "no half of a rate limit may have been written");
@@ -272,8 +269,7 @@ public class DynamicQueuesTest {
     // with the half-written column, computed from a limit this saw as absent.
     assertThrows(
         IllegalArgumentException.class,
-        () ->
-            dbos.updateQueue("q-half", new QueueOptions().withPartitionRateLimitMax(Field.of(2))));
+        () -> dbos.updateQueue("q-half", new QueueOptions().withPartitionRateLimitMax(2)));
     var afterPartitionHalf = dbos.findQueue("q-half").orElseThrow();
     assertNull(afterPartitionHalf.partitionRateLimit());
     assertFalse(
@@ -283,7 +279,7 @@ public class DynamicQueuesTest {
     // Both halves together are the supported way in, and one half of an existing limit may still
     // be changed on its own: the other half carries over from the row, so the pair stays whole.
     dbos.updateQueue("q-half", new QueueOptions().withRateLimit(5, Duration.ofSeconds(1)));
-    dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax(Field.of(7)));
+    dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax(7));
     var updated = dbos.findQueue("q-half").orElseThrow();
     assertEquals(7, updated.rateLimit().limit());
     assertEquals(Duration.ofSeconds(1), updated.rateLimit().period());
@@ -291,7 +287,7 @@ public class DynamicQueuesTest {
     // Clearing is a pair too: dropping only the max would leave the period behind in the row.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax(Field.of(null))));
+        () -> dbos.updateQueue("q-half", new QueueOptions().withRateLimitMax((Integer) null)));
     assertEquals(7, dbos.findQueue("q-half").orElseThrow().rateLimit().limit());
 
     dbos.updateQueue("q-half", new QueueOptions().withRateLimit(null, null));
@@ -305,7 +301,7 @@ public class DynamicQueuesTest {
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-reg-half", new QueueOptions().withRateLimitMax(Field.of(5))));
+        () -> dbos.registerQueue("q-reg-half", new QueueOptions().withRateLimitMax(5)));
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -315,7 +311,7 @@ public class DynamicQueuesTest {
         () ->
             dbos.registerQueue(
                 "q-reg-half",
-                new QueueOptions().withPartitionRateLimitPeriod(Field.of(Duration.ofSeconds(1)))));
+                new QueueOptions().withPartitionRateLimitPeriod(Duration.ofSeconds(1))));
     assertTrue(dbos.findQueue("q-reg-half").isEmpty(), "no refused registration may be written");
 
     // Both halves null is no limit, as it always was.
