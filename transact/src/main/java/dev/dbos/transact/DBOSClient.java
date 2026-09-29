@@ -1400,8 +1400,8 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /** See {@link InternalWorkflows#takeOverStrandedDebouncer}. Used by {@link DebouncerClient}. */
-  @Nullable String takeOverStrandedDebouncer(String serviceWorkflowId) {
-    return InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, serviceWorkflowId);
+  @Nullable String takeOverStrandedDebouncer(String debouncerWorkflowId) {
+    return InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, debouncerWorkflowId);
   }
 
   /** See {@link SystemDatabase#isDebouncedWorkflow}. Used by {@link DebouncerClient}. */

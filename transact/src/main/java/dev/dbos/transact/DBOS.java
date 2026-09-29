@@ -89,7 +89,7 @@ public class DBOS implements AutoCloseable {
     this.integration =
         new DBOSIntegration(
             this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
-    // Register the built-in debouncer service workflow directly (without a proxy). Debouncer no
+    // Register the built-in debouncer workflow directly (without a proxy). Debouncer no
     // longer starts it, but one an older SDK version enqueued can still be recovered here when the
     // application version is pinned across the upgrade.
     var internalWorkflows = new InternalWorkflows(this, dbosExecutor::get);

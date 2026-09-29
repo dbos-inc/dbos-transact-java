@@ -14,8 +14,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * Plants and reads the rows the debouncers leave behind: a debounced workflow -- the user workflow
  * itself, waiting DELAYED on its queue and holding its debounce key as its deduplication ID -- and
- * the debouncer service workflow SDK versions before 1.2 used instead, with the steps such a
- * version recorded for a workflow that debounced.
+ * the debouncer workflow SDK versions before 1.2 used instead, with the steps such a version
+ * recorded for a workflow that debounced.
  */
 public final class DebouncedRows {
 
@@ -71,13 +71,13 @@ public final class DebouncedRows {
   }
 
   /**
-   * Plants a debouncer service workflow as a version before 1.2 enqueued it: ENQUEUED on the
-   * internal queue, holding the debounce key, with its inputs. Under {@code applicationVersion} set
-   * to one no executor serves it is stranded -- nothing will ever run it, as once the last node of
-   * the SDK version that enqueued it is gone; under the executor's own version, this process runs
-   * it, as a live node of that version would.
+   * Plants a debouncer workflow as a version before 1.2 enqueued it: ENQUEUED on the internal
+   * queue, holding the debounce key, with its inputs. Under {@code applicationVersion} set to one
+   * no executor serves it is stranded -- nothing will ever run it, as once the last node of the SDK
+   * version that enqueued it is gone; under the executor's own version, this process runs it, as a
+   * live node of that version would.
    */
-  public static String insertService(
+  public static String insertDebouncerWorkflow(
       DataSource dataSource,
       String deduplicationId,
       String inputs,

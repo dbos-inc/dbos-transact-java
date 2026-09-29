@@ -24,7 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Built-in workflows registered by DBOS itself. Currently holds the debouncer service workflow.
+ * Built-in workflows registered by DBOS itself. Currently holds the debouncer workflow.
  *
  * <p>Not part of the public API.
  */
@@ -57,25 +57,25 @@ public class InternalWorkflows {
   }
 
   /**
-   * Takes over from a debouncer service workflow that stopped answering: cancels it, which frees
-   * its debounce key, and returns the user workflow id it pre-assigned, so the caller can create
-   * that workflow itself and the handles earlier callers were given resolve to the workflow that
-   * really runs.
+   * Takes over from a debouncer workflow that stopped answering: cancels it, which frees its
+   * debounce key, and returns the user workflow id it pre-assigned, so the caller can create that
+   * workflow itself and the handles earlier callers were given resolve to the workflow that really
+   * runs.
    *
-   * <p>A service workflow goes silent for good once the last node of the SDK version that enqueued
-   * it drains: the computed application version hashes the SDK version, so no remaining node ever
-   * dequeues or recovers it, and it holds its key forever.
+   * <p>A debouncer workflow goes silent for good once the last node of the SDK version that
+   * enqueued it drains: the computed application version hashes the SDK version, so no remaining
+   * node ever dequeues or recovers it, and it holds its key forever.
    *
-   * <p>Returns null, cancelling nothing, when the service workflow is no longer waiting. Returns
+   * <p>Returns null, cancelling nothing, when the debouncer workflow is no longer waiting. Returns
    * null after cancelling when its user workflow already exists -- it started that workflow and
    * then went silent, which the cancel cannot undo, but left alone it would hold the key forever
    * once its node is gone -- or when the inputs do not name one; the caller then creates its own. A
-   * live service workflow can still start its user workflow between this cancel and the caller's
+   * live debouncer workflow can still start its user workflow between this cancel and the caller's
    * create; the caller checks for that afterwards.
    */
   public static @Nullable String takeOverStrandedDebouncer(
-      SystemDatabase systemDatabase, String serviceWorkflowId) {
-    var status = systemDatabase.getWorkflowStatus(serviceWorkflowId);
+      SystemDatabase systemDatabase, String debouncerWorkflowId) {
+    var status = systemDatabase.getWorkflowStatus(debouncerWorkflowId);
     if (status == null
         || !(status.status() == WorkflowState.ENQUEUED
             || status.status() == WorkflowState.PENDING)) {
@@ -84,19 +84,19 @@ public class InternalWorkflows {
     var childId = preassignedChildId(status.input());
     if (childId != null && systemDatabase.getWorkflowStatus(childId) != null) {
       logger.warn(
-          "Cancelling debouncer service workflow {}, which stopped acknowledging calls after"
+          "Cancelling debouncer workflow {}, which stopped acknowledging calls after"
               + " starting its user workflow {}",
-          serviceWorkflowId,
+          debouncerWorkflowId,
           childId);
-      systemDatabase.cancelWorkflows(List.of(serviceWorkflowId), false);
+      systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
       return null;
     }
     logger.warn(
-        "Cancelling debouncer service workflow {}, which stopped acknowledging calls; its user"
+        "Cancelling debouncer workflow {}, which stopped acknowledging calls; its user"
             + " workflow {} is created by the caller instead",
-        serviceWorkflowId,
+        debouncerWorkflowId,
         childId);
-    systemDatabase.cancelWorkflows(List.of(serviceWorkflowId), false);
+    systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
     try {
       DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
     } catch (SQLException e) {
@@ -106,7 +106,7 @@ public class InternalWorkflows {
   }
 
   /**
-   * The user workflow id a service workflow's inputs pre-assign, from its {@link
+   * The user workflow id a debouncer workflow's inputs pre-assign, from its {@link
    * DebouncerContextOptions}; a serializer that drops Java types hands that back as a map.
    */
   private static @Nullable String preassignedChildId(Object @Nullable [] input) {

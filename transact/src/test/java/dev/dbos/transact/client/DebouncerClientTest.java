@@ -231,10 +231,10 @@ public class DebouncerClientTest {
     assertEquals("result:a", handle.getResult());
   }
 
-  // ==================== Service workflows of SDK versions before 1.2 ====================
+  // ==================== Debouncer workflows of SDK versions before 1.2 ====================
 
-  private String plantService(String key, String promisedId, String queue, String appVersion)
-      throws Exception {
+  private String plantDebouncerWorkflow(
+      String key, String promisedId, String queue, String appVersion) throws Exception {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     var options =
         new DebouncerOptions(
@@ -252,7 +252,7 @@ public class DebouncerClientTest {
             UUID.randomUUID().toString(), new Object[] {"stale"}, Duration.ofSeconds(2));
     var inputs =
         SerializationUtil.serializeArgs(new Object[] {options, ctx, initial}, null, null, null);
-    return DebouncedRows.insertService(
+    return DebouncedRows.insertDebouncerWorkflow(
         dataSource,
         "process-" + key,
         inputs.serializedValue(),
@@ -262,8 +262,9 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void forwardsToALiveServiceWorkflow() throws Exception {
-    plantService("svc", "promised-c1", null, DBOSTestAccess.getDbosExecutor(dbos).appVersion());
+  void forwardsToALiveDebouncerWorkflow() throws Exception {
+    plantDebouncerWorkflow(
+        "svc", "promised-c1", null, DBOSTestAccess.getDbosExecutor(dbos).appVersion());
 
     var handle = debouncer().debounce("svc", Duration.ofMillis(300), "fresh");
 
@@ -273,8 +274,8 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void forwardsToALiveServiceWorkflowForAUserQueue() throws Exception {
-    plantService(
+  void forwardsToALiveDebouncerWorkflowForAUserQueue() throws Exception {
+    plantDebouncerWorkflow(
         "svc", "promised-c2", USER_QUEUE, DBOSTestAccess.getDbosExecutor(dbos).appVersion());
 
     var handle =
@@ -288,8 +289,8 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void takesOverAStrandedServiceWorkflowUnderItsPromisedId() throws Exception {
-    var stranded = plantService("stranded", "promised-c3", null, "no-such-version");
+  void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
+    var stranded = plantDebouncerWorkflow("stranded", "promised-c3", null, "no-such-version");
 
     var handle = debouncer().debounce("stranded", Duration.ofMillis(300), "fresh");
 

@@ -795,8 +795,8 @@ public class WorkflowDAO {
    *
    * <p>With {@code ids}, the bounce is the debouncer's first step, which records the ids it assigns
    * with the outcome, as that step has always recorded them. When nothing was extended, the same
-   * transaction also looks for a debouncer service workflow of this application holding the key on
-   * the internal queue -- what a debouncer from before debounced workflows leaves there -- so the
+   * transaction also looks for a debouncer workflow of this application holding the key on the
+   * internal queue -- what a debouncer from before debounced workflows leaves there -- so the
    * caller can forward to it rather than create a second workflow beside it.
    *
    * <p>The return is what the step records -- the {@link DebounceResult}, or the ids completed with
@@ -848,7 +848,7 @@ public class WorkflowDAO {
                 ids == null
                     ? result
                     : ids.withBounced(
-                        result, serviceHolder(ctx, c, queueName, deduplicationId, result));
+                        result, findDebouncerWorkflow(ctx, c, queueName, deduplicationId, result));
             if (caller == null) {
               return recorded;
             }
@@ -872,28 +872,28 @@ public class WorkflowDAO {
   }
 
   /**
-   * The debouncer service workflow of this application holding {@code deduplicationId} on the
-   * internal queue, if nothing was bounced and one does; otherwise null. When the bounce itself ran
-   * on the internal queue, the holder it reported is that one.
+   * The debouncer workflow of this application holding {@code deduplicationId} on the internal
+   * queue, if nothing was bounced and one does; otherwise null. When the bounce itself ran on the
+   * internal queue, the holder it reported is that one.
    */
-  private static @Nullable String serviceHolder(
+  private static @Nullable String findDebouncerWorkflow(
       DbContext ctx,
       Connection conn,
       String queueName,
       String deduplicationId,
       DebounceResult result)
       throws SQLException {
-    if (!(result instanceof DebounceResult.NotBounced notBounced)) {
-      return null;
+    if (result instanceof DebounceResult.NotBounced notBounced) {
+      var holder =
+          Constants.DBOS_INTERNAL_QUEUE.equals(queueName)
+              ? notBounced.holder()
+              : findDeduplicationHolder(
+                  conn, ctx.schema(), Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+      if (holder != null && holder.isDebouncerWorkflow() && !holder.isForeignTo(ctx.appName())) {
+        return holder.workflowId();
+      }
     }
-    var holder =
-        Constants.DBOS_INTERNAL_QUEUE.equals(queueName)
-            ? notBounced.holder()
-            : findDeduplicationHolder(
-                conn, ctx.schema(), Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
-    return holder != null && holder.isDebouncerService() && !holder.isForeignTo(ctx.appName())
-        ? holder.workflowId()
-        : null;
+    return null;
   }
 
   private static DebounceResult bounce(

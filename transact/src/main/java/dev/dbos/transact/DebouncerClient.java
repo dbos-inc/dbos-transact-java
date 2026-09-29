@@ -287,8 +287,8 @@ public final class DebouncerClient<R> {
    * @param args positional arguments to pass to the user workflow
    * @return handle pointing to the user workflow that will run with the latest arguments. When
    *     another call already holds the key, that is the workflow it named: a debounced workflow
-   *     this call extended, or the child ID published by a debouncer service workflow of an older
-   *     SDK version.
+   *     this call extended, or the child ID published by a debouncer workflow of an older SDK
+   *     version.
    */
   public @NonNull WorkflowHandle<R, ?> debounce(
       @NonNull String debounceKey, @NonNull Duration debouncePeriod, Object... args) {
@@ -315,7 +315,7 @@ public final class DebouncerClient<R> {
     String deduplicationId = workflowName + "-" + debounceKey;
 
     // Not inside a workflow, so ids can be generated directly and nothing is recorded. The first
-    // bounce also looks for a service workflow of an older SDK version holding the key.
+    // bounce also looks for a debouncer workflow of an older SDK version holding the key.
     var ids =
         (DebounceIds)
             client.debounceDelayedWorkflow(
@@ -335,17 +335,17 @@ public final class DebouncerClient<R> {
 
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
-    String serviceWorkflowId = ids.serviceWorkflowId();
-    // Set while creating the workflow a stranded service workflow promised, under its id.
+    String debouncerWorkflowId = ids.debouncerWorkflowId();
+    // Set while creating the workflow a stranded debouncer workflow promised, under its id.
     boolean takingOver = false;
-    // Consecutive unacknowledged forwards to one service workflow; reset when the holder changes.
+    // Consecutive unacknowledged forwards to one debouncer workflow; reset when the holder changes.
     String silentHolderId = null;
     int silentAcks = 0;
 
     while (true) {
-      if (serviceWorkflowId != null) {
-        String holderId = serviceWorkflowId;
-        serviceWorkflowId = null;
+      if (debouncerWorkflowId != null) {
+        String holderId = debouncerWorkflowId;
+        debouncerWorkflowId = null;
         String childId = forward(holderId, messageId, args, debouncePeriod);
         if (childId != null) {
           return client.retrieveWorkflow(childId);
@@ -355,15 +355,15 @@ public final class DebouncerClient<R> {
         if (silentAcks < Constants.DEBOUNCER_MAX_SILENT_ACKS) {
           logger.debug("Debouncer {} did not ack message {}; retrying", holderId, messageId);
           if (userQueueName != null) {
-            // An enqueue on the user queue would not collide with the service workflow, which
+            // An enqueue on the user queue would not collide with the debouncer workflow, which
             // holds the key on the internal queue, so look there again. Without a queue the
             // enqueue below collides with it instead.
             var holder =
                 client.findDeduplicationHolder(Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
             if (holder != null
-                && holder.isDebouncerService()
+                && holder.isDebouncerWorkflow()
                 && !holder.isForeignTo(client.applicationName())) {
-              serviceWorkflowId = holder.workflowId();
+              debouncerWorkflowId = holder.workflowId();
               continue;
             }
           }
@@ -391,11 +391,11 @@ public final class DebouncerClient<R> {
       try {
         WorkflowHandle<R, ?> handle = client.enqueueDebounced(enqueueOpts, args, deadline);
         if (takingOver && !client.isDebouncedWorkflow(userWorkflowId)) {
-          // The service workflow was only slow: it started the promised workflow between the
+          // The debouncer workflow was only slow: it started the promised workflow between the
           // cancel and this enqueue, and this call's arguments went nowhere. Start over under this
           // call's own id.
           logger.debug(
-              "Debounced workflow {} was started by its service workflow; retrying",
+              "Debounced workflow {} was started by its debouncer workflow; retrying",
               userWorkflowId);
           takingOver = false;
           userWorkflowId = ids.userWorkflowId();
@@ -432,8 +432,8 @@ public final class DebouncerClient<R> {
         if (holder.isForeignTo(client.applicationName())) {
           throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
         }
-        if (holder.isDebouncerService()) {
-          serviceWorkflowId = holder.workflowId();
+        if (holder.isDebouncerWorkflow()) {
+          debouncerWorkflowId = holder.workflowId();
           continue;
         }
         if (holder.isDebouncedInstanceOf(workflowName, className, instanceName)) {
@@ -453,22 +453,22 @@ public final class DebouncerClient<R> {
   }
 
   /**
-   * Forwards this call's arguments to a debouncer service workflow and returns the user workflow id
-   * it publishes, or null if it did not acknowledge in time.
+   * Forwards this call's arguments to a debouncer workflow and returns the user workflow id it
+   * publishes, or null if it did not acknowledge in time.
    */
   private @Nullable String forward(
-      String serviceWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
+      String debouncerWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
     DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
-    client.send(serviceWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
-    var ack = client.getEvent(serviceWorkflowId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
+    client.send(debouncerWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
+    var ack = client.getEvent(debouncerWorkflowId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
     if (ack.isEmpty()) {
       return null;
     }
-    // The service workflow publishes the child id as its first action, before its receive loop.
+    // The debouncer workflow publishes the child id as its first action, before its receive loop.
     // If the ack arrived the event should be there; treat a miss as no ack, and send again.
     var childId =
         client.getEvent(
-            serviceWorkflowId, Constants.DEBOUNCER_CHILD_ID_KEY, Constants.DEBOUNCER_ACK_TIMEOUT);
+            debouncerWorkflowId, Constants.DEBOUNCER_CHILD_ID_KEY, Constants.DEBOUNCER_ACK_TIMEOUT);
     return childId.map(id -> (String) id).orElse(null);
   }
 

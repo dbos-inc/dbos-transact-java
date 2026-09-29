@@ -457,7 +457,7 @@ public class DBOSExecutor implements AutoCloseable {
    * <p>With a {@code stepName}, and called from a workflow, it is that step: replay returns what
    * the step recorded, and a first run bounces and checkpoints in one transaction. {@code ids},
    * when given, are returned completed with the outcome and, when nothing was extended, with any
-   * debouncer service workflow of this application holding the key; see {@link
+   * debouncer workflow of this application holding the key; see {@link
    * dev.dbos.transact.database.dao.WorkflowDAO#debounceDelayedWorkflow}. Outside a workflow, or
    * with no step name, it is the plain bounce.
    *
@@ -502,7 +502,7 @@ public class DBOSExecutor implements AutoCloseable {
    * delay}, capped at {@code debounceDeadline} if not null, holding {@code deduplicationId} as its
    * debounce key. Called from a workflow, it is a child enqueue, so a replay returns whatever child
    * that slot recorded -- which, for a debounce recorded before debounced workflows, is the
-   * debouncer service workflow, not {@code workflowId}.
+   * debouncer workflow, not {@code workflowId}.
    *
    * <p>The workflow takes {@code timeout}, timed from its dequeue, and no deadline: it may start
    * long after the call, so neither the caller's deadline nor its timeout carries over. The
@@ -546,7 +546,7 @@ public class DBOSExecutor implements AutoCloseable {
    * The workflow holding {@code deduplicationId} on {@code queueName}, reported as a bounce that
    * extended nothing. Called from a workflow, it is the {@code DBOS.lookupDebouncer} step, recorded
    * one slot after the next: the slot between is where SDK versions before 1.2 tried to enqueue
-   * their service workflow before looking up the holder, and a collision there records nothing.
+   * their debouncer workflow before looking up the holder, and a collision there records nothing.
    * Keeping the gap lets a debounce such a version recorded replay here.
    *
    * <p>Returns what the step records as {@code Object}, as {@link #debounceDelayedWorkflow} does.
@@ -569,9 +569,9 @@ public class DBOSExecutor implements AutoCloseable {
    * {@link InternalWorkflows#takeOverStrandedDebouncer}, as a step when called from a workflow, so
    * a replay neither cancels again nor loses the id it returned.
    */
-  public @Nullable String takeOverStrandedDebouncer(String serviceWorkflowId) {
+  public @Nullable String takeOverStrandedDebouncer(String debouncerWorkflowId) {
     return runDbosFunctionAsStep(
-        () -> InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, serviceWorkflowId),
+        () -> InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, debouncerWorkflowId),
         "DBOS.takeOverStrandedDebouncer",
         null);
   }

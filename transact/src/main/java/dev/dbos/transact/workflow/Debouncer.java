@@ -32,11 +32,11 @@ import org.slf4j.LoggerFactory;
  * first call. Once the delay expires the workflow is dequeued and runs with the latest arguments,
  * and the key is free: the next call starts a fresh workflow.
  *
- * <p>SDK versions before 1.2 debounced through a service workflow that absorbed calls for the key
+ * <p>SDK versions before 1.2 debounced through a debouncer workflow that absorbed calls for the key
  * and started the user workflow when the period elapsed. When a fleet mixes the two, a call here
- * that finds such a service workflow forwards to it, so every call on a key still coalesces into
- * one execution. A service workflow that stops answering -- its SDK version has left the fleet, so
- * nothing will ever run it -- is cancelled, and the user workflow it promised is created here
+ * that finds such a debouncer workflow forwards to it, so every call on a key still coalesces into
+ * one execution. A debouncer workflow that stops answering -- its SDK version has left the fleet,
+ * so nothing will ever run it -- is cancelled, and the user workflow it promised is created here
  * instead, under the id earlier callers were given.
  *
  * <p>The returned {@link WorkflowHandle} points to the user workflow that will eventually run with
@@ -79,24 +79,24 @@ public final class Debouncer<R> {
    * and it stays here, under this name, because recorded steps name its class.
    *
    * @param userWorkflowId the pre-assigned id of the workflow this call creates, if it creates one
-   * @param messageId the idempotency key of the call, if it is forwarded to a service workflow
+   * @param messageId the idempotency key of the call, if it is forwarded to a debouncer workflow
    * @param bouncedWorkflowId the debounced workflow the first bounce extended, or null
-   * @param serviceWorkflowId a debouncer service workflow of this application found holding the key
-   *     on the internal queue when nothing was extended, or null. Only an SDK version before
-   *     debounced workflows starts one; the call forwards to it rather than creating a second
-   *     workflow beside it.
+   * @param debouncerWorkflowId a debouncer workflow of this application found holding the key on
+   *     the internal queue when nothing was extended, or null. Only an SDK version before debounced
+   *     workflows starts one; the call forwards to it rather than creating a second workflow beside
+   *     it.
    */
   public record DebounceIds(
       String userWorkflowId,
       String messageId,
       @Nullable String bouncedWorkflowId,
-      @Nullable String serviceWorkflowId) {
+      @Nullable String debouncerWorkflowId) {
 
-    /** These ids, completed with what a bounce extended, or else the service holder found. */
-    public DebounceIds withBounced(DebounceResult bounce, @Nullable String serviceWorkflowId) {
+    /** These ids, completed with what a bounce extended, or else the debouncer workflow found. */
+    public DebounceIds withBounced(DebounceResult bounce, @Nullable String debouncerWorkflowId) {
       return bounce instanceof DebounceResult.Bounced bounced
           ? new DebounceIds(userWorkflowId, messageId, bounced.bouncedWorkflowId(), null)
-          : new DebounceIds(userWorkflowId, messageId, null, serviceWorkflowId);
+          : new DebounceIds(userWorkflowId, messageId, null, debouncerWorkflowId);
     }
   }
 
@@ -268,7 +268,7 @@ public final class Debouncer<R> {
     var workflowAttributes = callerCtx.resolveNextAttributes();
 
     // The first step assigns the ids and tries to extend a debounced workflow already waiting on
-    // the target queue. Failing that, it looks for a service workflow of an older SDK version
+    // the target queue. Failing that, it looks for a debouncer workflow of an older SDK version
     // holding the key on the internal queue. Inside a workflow the bounce, the look and the
     // checkpoint commit in one transaction, so a crash cannot leave a row extended but the step
     // unrecorded, which on replay would bounce again. Typed as Object so that replay does not cast
@@ -289,18 +289,18 @@ public final class Debouncer<R> {
 
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
-    // A service workflow to forward this call to before trying to create anything.
-    String serviceWorkflowId = ids.serviceWorkflowId();
-    // Set while creating the workflow a stranded service workflow promised, under its id.
+    // A debouncer workflow to forward this call to before trying to create anything.
+    String debouncerWorkflowId = ids.debouncerWorkflowId();
+    // Set while creating the workflow a stranded debouncer workflow promised, under its id.
     boolean takingOver = false;
-    // Consecutive unacknowledged forwards to one service workflow; reset when the holder changes.
+    // Consecutive unacknowledged forwards to one debouncer workflow; reset when the holder changes.
     String silentHolderId = null;
     int silentAcks = 0;
 
     while (true) {
-      if (serviceWorkflowId != null) {
-        String holderId = serviceWorkflowId;
-        serviceWorkflowId = null;
+      if (debouncerWorkflowId != null) {
+        String holderId = debouncerWorkflowId;
+        debouncerWorkflowId = null;
         String childId = forward(holderId, messageId, args, debouncePeriod);
         if (childId != null) {
           return dbos.retrieveWorkflow(childId);
@@ -310,7 +310,7 @@ public final class Debouncer<R> {
         if (silentAcks < Constants.DEBOUNCER_MAX_SILENT_ACKS) {
           logger.debug("Debouncer {} did not ack message {}; retrying", holderId, messageId);
           if (queueName != null) {
-            // An enqueue on the user queue would not collide with the service workflow, which
+            // An enqueue on the user queue would not collide with the debouncer workflow, which
             // holds the key on the internal queue, so look there again, as the previous release
             // did at this point. Without a queue the enqueue below collides with it instead.
             DebounceResult recheck =
@@ -324,9 +324,9 @@ public final class Debouncer<R> {
             }
             var holder = ((DebounceResult.NotBounced) recheck).holder();
             if (holder != null
-                && holder.isDebouncerService()
+                && holder.isDebouncerWorkflow()
                 && !holder.isForeignTo(executor.appName())) {
-              serviceWorkflowId = holder.workflowId();
+              debouncerWorkflowId = holder.workflowId();
               continue;
             }
           }
@@ -356,17 +356,17 @@ public final class Debouncer<R> {
                 workflowTimeout,
                 workflowAttributes);
         if (!handle.workflowId().equals(userWorkflowId)) {
-          // A replay of the previous release, which recorded its service workflow in this slot.
+          // A replay of the previous release, which recorded its debouncer workflow in this slot.
           // That workflow started the user workflow under the id the first step assigned.
           return dbos.retrieveWorkflow(userWorkflowId);
         }
         if (takingOver && !executor.isDebouncedWorkflow(userWorkflowId)) {
-          // The service workflow was only slow: it started the promised workflow between the
+          // The debouncer workflow was only slow: it started the promised workflow between the
           // cancel and this enqueue, with the arguments it had, and this call's arguments went
           // nowhere. Start over under this call's own id, as for any call that arrives after its
           // key's workflow has committed to run.
           logger.debug(
-              "Debounced workflow {} was started by its service workflow; retrying",
+              "Debounced workflow {} was started by its debouncer workflow; retrying",
               userWorkflowId);
           takingOver = false;
           userWorkflowId = ids.userWorkflowId();
@@ -411,8 +411,8 @@ public final class Debouncer<R> {
           throw new DBOSQueueDuplicatedException(
               userWorkflowId, targetQueue, debounceDeduplicationId);
         }
-        if (holder.isDebouncerService()) {
-          serviceWorkflowId = holder.workflowId();
+        if (holder.isDebouncerWorkflow()) {
+          debouncerWorkflowId = holder.workflowId();
           continue;
         }
         if (holder.isDebouncedInstanceOf(
@@ -434,29 +434,29 @@ public final class Debouncer<R> {
   }
 
   /**
-   * Forwards this call's arguments to a debouncer service workflow and returns the user workflow id
-   * it publishes, or null if it did not acknowledge in time.
+   * Forwards this call's arguments to a debouncer workflow and returns the user workflow id it
+   * publishes, or null if it did not acknowledge in time.
    */
   private @Nullable String forward(
-      String serviceWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
+      String debouncerWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
     DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
     // messageId is the idempotency key -- exactly-once delivery. Internal, because the service
     // workflow reads it back as a DebouncerMessage: it must not inherit a portable format from
     // whatever workflow called debounce().
-    executor.sendInternal(serviceWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
-    var ack = dbos.getEvent(serviceWorkflowId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
+    executor.sendInternal(debouncerWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
+    var ack = dbos.getEvent(debouncerWorkflowId, messageId, Constants.DEBOUNCER_ACK_TIMEOUT);
     if (ack.isEmpty()) {
       return null;
     }
-    // The service workflow publishes the child id as its first action, before its receive loop,
+    // The debouncer workflow publishes the child id as its first action, before its receive loop,
     // so once it has acked, the event is there.
     return dbos.<String>getEvent(
-            serviceWorkflowId, Constants.DEBOUNCER_CHILD_ID_KEY, Constants.DEBOUNCER_ACK_TIMEOUT)
+            debouncerWorkflowId, Constants.DEBOUNCER_CHILD_ID_KEY, Constants.DEBOUNCER_ACK_TIMEOUT)
         .orElseThrow(
             () ->
                 new IllegalStateException(
                     "Debouncer "
-                        + serviceWorkflowId
+                        + debouncerWorkflowId
                         + " acked but did not publish "
                         + Constants.DEBOUNCER_CHILD_ID_KEY));
   }
@@ -478,8 +478,8 @@ public final class Debouncer<R> {
    * Adapts a recorded {@code DBOS.assignDebounceIds} step to the shape this version expects.
    *
    * <p>Before this SDK bounced, the step recorded only the two ids; a replay of such a step means
-   * nothing was extended. Before 1.2 it recorded no service workflow either, and its replay goes on
-   * to the child-enqueue slot, where that release recorded the service workflow it started. A
+   * nothing was extended. Before 1.2 it recorded no debouncer workflow either, and its replay goes
+   * on to the child-enqueue slot, where that release recorded the debouncer workflow it started. A
    * serializer that does not carry Java type information hands back a map rather than the record,
    * so that shape is adapted too.
    */
@@ -494,7 +494,7 @@ public final class Debouncer<R> {
           userWorkflowId,
           messageId,
           map.get("bouncedWorkflowId") instanceof String bounced ? bounced : null,
-          map.get("serviceWorkflowId") instanceof String service ? service : null);
+          map.get("debouncerWorkflowId") instanceof String service ? service : null);
     }
     throw new IllegalStateException(
         "DBOS.assignDebounceIds recorded an unexpected %s"
@@ -512,7 +512,7 @@ public final class Debouncer<R> {
    *
    * <p>That older shape means nothing was bounced, and the holder it names was a debouncer service
    * workflow: nothing else held a debounce key then. {@link #toDeduplicationHolder} reports such a
-   * holder with no name, which {@link DeduplicationHolder#isDebouncerService} reads as exactly
+   * holder with no name, which {@link DeduplicationHolder#isDebouncerWorkflow} reads as exactly
    * that.
    *
    * <p>A serializer that does not carry Java type information hands back a map rather than the

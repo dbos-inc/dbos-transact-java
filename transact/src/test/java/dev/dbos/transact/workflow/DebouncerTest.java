@@ -710,15 +710,16 @@ public class DebouncerTest {
     assertEquals(0, countWorkflowsByName("process"));
   }
 
-  // ==================== Service workflows of SDK versions before 1.2 ====================
+  // ==================== Debouncer workflows of SDK versions before 1.2 ====================
   //
-  // Before 1.2 a service workflow on the internal queue held the key, absorbed calls over messages
-  // and started the user workflow when the period elapsed. The service workflow is still
+  // Before 1.2 a debouncer workflow on the internal queue held the key, absorbed calls over
+  // messages
+  // and started the user workflow when the period elapsed. The debouncer workflow is still
   // registered, so a planted row under this executor's version is run here exactly as a live node
   // of that version would run it; under a version nobody serves it is stranded.
 
-  private String plantService(String key, String promisedId, String queue, String appVersion)
-      throws SQLException {
+  private String plantDebouncerWorkflow(
+      String key, String promisedId, String queue, String appVersion) throws SQLException {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
     var options =
@@ -731,7 +732,7 @@ public class DebouncerTest {
     var inputs =
         SerializationUtil.serializeArgs(
             new Object[] {options, ctx, initial}, null, null, serializer);
-    return DebouncedRows.insertService(
+    return DebouncedRows.insertDebouncerWorkflow(
         pgContainer.dataSource(),
         "process-" + key,
         inputs.serializedValue(),
@@ -745,16 +746,16 @@ public class DebouncerTest {
   }
 
   @Test
-  public void forwardsToALiveServiceWorkflowOnTheInternalQueue() throws Exception {
+  public void forwardsToALiveDebouncerWorkflowOnTheInternalQueue() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
-    var service = plantService("svc", "promised-1", null, liveVersion());
+    var service = plantDebouncerWorkflow("svc", "promised-1", null, liveVersion());
 
     var handle =
         dbos.<String>debouncer()
             .debounce("svc", Duration.ofMillis(300), () -> svc.process("fresh"));
 
-    // The service workflow took our arguments and started the workflow it promised with them.
+    // The debouncer workflow took our arguments and started the workflow it promised with them.
     assertEquals("promised-1", handle.workflowId());
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), serviceImpl.callArgs());
@@ -763,14 +764,14 @@ public class DebouncerTest {
   }
 
   @Test
-  public void forwardsToALiveServiceWorkflowForAUserQueue() throws Exception {
+  public void forwardsToALiveDebouncerWorkflowForAUserQueue() throws Exception {
     String userQueue = "svc-user-queue";
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
     dbos.registerQueue(userQueue, new QueueOptions());
-    plantService("svc", "promised-2", userQueue, liveVersion());
+    plantDebouncerWorkflow("svc", "promised-2", userQueue, liveVersion());
 
-    // The new shape holds keys on the user queue, the service workflow on the internal one; the
+    // The new shape holds keys on the user queue, the debouncer workflow on the internal one; the
     // first step looks there too before creating anything.
     var handle =
         dbos.<String>debouncer()
@@ -784,11 +785,11 @@ public class DebouncerTest {
   }
 
   @Test
-  public void takesOverAStrandedServiceWorkflowUnderItsPromisedId() throws Exception {
+  public void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
     var dataSource = pgContainer.dataSource();
-    var stranded = plantService("stranded", "promised-3", null, "no-such-version");
+    var stranded = plantDebouncerWorkflow("stranded", "promised-3", null, "no-such-version");
 
     long start = System.currentTimeMillis();
     var handle =
@@ -809,12 +810,12 @@ public class DebouncerTest {
   }
 
   @Test
-  public void cancelsAStrandedServiceWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
+  public void cancelsAStrandedDebouncerWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
-    // Its node started the promised workflow, then died before the service workflow finished, so
+    // Its node started the promised workflow, then died before the debouncer workflow finished, so
     // it holds the key under a version nothing serves.
-    var stranded = plantService("started", "promised-8", null, "no-such-version");
+    var stranded = plantDebouncerWorkflow("started", "promised-8", null, "no-such-version");
     dbos.startWorkflow(
             () -> svc.process("from-service"),
             new StartWorkflowOptions().withWorkflowId("promised-8"))
@@ -832,13 +833,14 @@ public class DebouncerTest {
   }
 
   @Test
-  public void startsOverWhenASlowServiceWorkflowStartsThePromisedWorkflowFirst() throws Exception {
+  public void startsOverWhenASlowDebouncerWorkflowStartsThePromisedWorkflowFirst()
+      throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
-    var slow = plantService("slow", "promised-4", null, "no-such-version");
+    var slow = plantDebouncerWorkflow("slow", "promised-4", null, "no-such-version");
 
     // A node of the old version was alive after all: between the cancel and the create, its
-    // service workflow starts the promised workflow with the arguments it had.
+    // debouncer workflow starts the promised workflow with the arguments it had.
     DebugTriggers.setDebugTrigger(
         DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
         new DebugTriggers.DebugAction()
@@ -899,12 +901,12 @@ public class DebouncerTest {
   }
 
   @Test
-  public void recordsTheServiceWorkflowInTheFirstStep() throws Exception {
+  public void recordsTheDebouncerWorkflowInTheFirstStep() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
     dbos.launch();
-    var service = plantService("shape-key", "promised-5", null, liveVersion());
+    var service = plantDebouncerWorkflow("shape-key", "promised-5", null, liveVersion());
 
     var orchestratorId = "wf-shape-orchestrator";
     String joined;
@@ -971,7 +973,7 @@ public class DebouncerTest {
             null,
             DBOSTestAccess.getSystemDatabase(dbos).serializer());
     var output = serialized.serializedValue();
-    var legacy = output.replace(",\"serviceWorkflowId\":null", "");
+    var legacy = output.replace(",\"debouncerWorkflowId\":null", "");
     assertNotEquals(output, legacy, "not the expected encoding: " + output);
     return new DebouncedRows.Step(legacy, serialized.serialization());
   }
@@ -1009,13 +1011,13 @@ public class DebouncerTest {
   }
 
   /**
-   * 1.1 recorded the service workflow it started in the child slot. That slot now holds the
-   * debounced workflow's own enqueue, and replay returns the workflow the service workflow
+   * 1.1 recorded the debouncer workflow it started in the child slot. That slot now holds the
+   * debounced workflow's own enqueue, and replay returns the workflow the debouncer workflow
    * promised.
    */
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  public void replaysADebounceThatStartedAServiceWorkflow(boolean userQueue) throws Exception {
+  public void replaysADebounceThatStartedADebouncerWorkflow(boolean userQueue) throws Exception {
     String queue = userQueue ? "legacy-user-queue" : null;
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
@@ -1028,7 +1030,7 @@ public class DebouncerTest {
     var orchestratorId = "wf-legacy-fresh-" + userQueue;
     runAndClear(orchestratorId, orch, queue, "legacy");
 
-    var service = plantService("legacy", "promised-6", queue, "no-such-version");
+    var service = plantDebouncerWorkflow("legacy", "promised-6", queue, "no-such-version");
     var ids = legacyIds("promised-6", "msg-6");
     DebouncedRows.insertStep(
         dataSource,
@@ -1047,13 +1049,13 @@ public class DebouncerTest {
 
   /**
    * 1.1's join path: its enqueue collided and recorded nothing, DBOS.lookupDebouncer recorded the
-   * service workflow, and the send and two getEvent steps followed. The replay's enqueue collides
-   * again with the service workflow still holding the key, and every step after it replays. 1.0
+   * debouncer workflow, and the send and two getEvent steps followed. The replay's enqueue collides
+   * again with the debouncer workflow still holding the key, and every step after it replays. 1.0
    * recorded the lookup as the bare workflow id.
    */
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  public void replaysADebounceThatJoinedAServiceWorkflow(boolean bareId) throws Exception {
+  public void replaysADebounceThatJoinedADebouncerWorkflow(boolean bareId) throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
@@ -1063,7 +1065,7 @@ public class DebouncerTest {
     var orchestratorId = "wf-legacy-join-" + bareId;
     runAndClear(orchestratorId, orch, null, "joined");
 
-    var service = plantService("joined", "promised-7", null, "no-such-version");
+    var service = plantDebouncerWorkflow("joined", "promised-7", null, "no-such-version");
     var ids = legacyIds("never-created", "msg-7");
     var holder =
         recordedValue(
@@ -1120,7 +1122,7 @@ public class DebouncerTest {
   // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its
   // debounce key as its deduplication ID, and coalesces by extending that row. In a fleet mixing
   // that version with this one, this debouncer has to coalesce into such a row rather than start
-  // a service workflow beside it.
+  // a debouncer workflow beside it.
 
   private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -1159,7 +1161,7 @@ public class DebouncerTest {
             .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
 
     // The bounce extended the waiting row: the handle is that row, its delay moved to our period
-    // and its inputs are ours. No service workflow was started beside it.
+    // and its inputs are ours. No debouncer workflow was started beside it.
     assertEquals(waiting, handle.workflowId());
     var bounced = DebouncedRows.read(dataSource, waiting);
     assertTrue(bounced.delayUntilEpochMs() < planted);

@@ -6,8 +6,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Inputs to the debouncer service workflow that identify the user workflow to be eventually started
- * and configures how it should be enqueued.
+ * Inputs to the debouncer workflow that identify the user workflow to be eventually started and
+ * configures how it should be enqueued.
  *
  * <p>Not part of the public API.
  */
