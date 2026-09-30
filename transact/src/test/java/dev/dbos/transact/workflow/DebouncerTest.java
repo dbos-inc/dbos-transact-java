@@ -21,6 +21,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 import dev.dbos.transact.workflow.internal.DebouncerOptions;
+import dev.dbos.transact.workflow.internal.InternalWorkflows;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -807,6 +808,29 @@ public class DebouncerTest {
     assertTrue(row.isDebounced());
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), serviceImpl.callArgs());
+  }
+
+  /**
+   * Inside a workflow the takeover is a step whose checkpoint commits after its cancel, so a crash
+   * between the two runs it again. The second run must still hand back the promised id, or the
+   * workflow earlier callers hold handles to is never created.
+   */
+  @Test
+  public void aTakeoverRunAgainAfterItsCancelReturnsThePromisedIdAgain() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    var stranded = plantDebouncerWorkflow("rerun", "promised-9", null, "no-such-version");
+
+    assertEquals("promised-9", InternalWorkflows.takeOverStrandedDebouncer(sysdb, stranded));
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
+    assertEquals("promised-9", InternalWorkflows.takeOverStrandedDebouncer(sysdb, stranded));
+
+    // Once the promised workflow exists, a rerun has nothing left to hand over.
+    dbos.startWorkflow(
+            () -> svc.process("created"), new StartWorkflowOptions().withWorkflowId("promised-9"))
+        .getResult();
+    assertNull(InternalWorkflows.takeOverStrandedDebouncer(sysdb, stranded));
   }
 
   @Test

@@ -66,41 +66,54 @@ public class InternalWorkflows {
    * enqueued it drains: the computed application version hashes the SDK version, so no remaining
    * node ever dequeues or recovers it, and it holds its key forever.
    *
-   * <p>Returns null, cancelling nothing, when the debouncer workflow is no longer waiting. Returns
+   * <p>Returns null, cancelling nothing, when the debouncer workflow finished on its own. Returns
    * null after cancelling when its user workflow already exists -- it started that workflow and
    * then went silent, which the cancel cannot undo, but left alone it would hold the key forever
    * once its node is gone -- or when the inputs do not name one; the caller then creates its own. A
    * live debouncer workflow can still start its user workflow between this cancel and the caller's
    * create; the caller checks for that afterwards.
+   *
+   * <p>Running it again gives the same answer, as it must: inside a workflow it is a step whose
+   * checkpoint commits after the cancel, so a crash between the two runs it again. A debouncer
+   * workflow already cancelled, whose user workflow does not exist yet, is taken to be one this
+   * cancelled, and its id is returned again. Only such a rerun reaches a cancelled holder: the
+   * cancel clears its debounce key, so a live call never finds it holding one.
    */
   public static @Nullable String takeOverStrandedDebouncer(
       SystemDatabase systemDatabase, String debouncerWorkflowId) {
     var status = systemDatabase.getWorkflowStatus(debouncerWorkflowId);
-    if (status == null
-        || !(status.status() == WorkflowState.ENQUEUED
-            || status.status() == WorkflowState.PENDING)) {
+    if (status == null) {
+      return null;
+    }
+    boolean waiting =
+        status.status() == WorkflowState.ENQUEUED || status.status() == WorkflowState.PENDING;
+    if (!waiting && status.status() != WorkflowState.CANCELLED) {
       return null;
     }
     var childId = preassignedChildId(status.input());
     if (childId != null && systemDatabase.getWorkflowStatus(childId) != null) {
+      if (waiting) {
+        logger.warn(
+            "Cancelling debouncer workflow {}, which stopped acknowledging calls after"
+                + " starting its user workflow {}",
+            debouncerWorkflowId,
+            childId);
+        systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
+      }
+      return null;
+    }
+    if (waiting) {
       logger.warn(
-          "Cancelling debouncer workflow {}, which stopped acknowledging calls after"
-              + " starting its user workflow {}",
+          "Cancelling debouncer workflow {}, which stopped acknowledging calls; its user"
+              + " workflow {} is created by the caller instead",
           debouncerWorkflowId,
           childId);
       systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
-      return null;
-    }
-    logger.warn(
-        "Cancelling debouncer workflow {}, which stopped acknowledging calls; its user"
-            + " workflow {} is created by the caller instead",
-        debouncerWorkflowId,
-        childId);
-    systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
-    try {
-      DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
+      try {
+        DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
     }
     return childId;
   }
