@@ -105,20 +105,14 @@ public class DebouncerTest {
   }
 
   @Test
-  public void negativePriorityIsRejectedAtTheCall() throws Exception {
-    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+  public void negativePriorityIsRejectedWhenSet() throws Exception {
     dbos.launch();
+    var debouncer = dbos.<String>debouncer().withQueue("any-queue");
 
-    // The user workflow's options are only built inside the debouncer workflow, where the same
-    // value would fail durably; the debouncer refuses it up front instead.
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            dbos.<String>debouncer()
-                .withQueue("any-queue")
-                .withPriority(-1)
-                .debounce("user-neg", Duration.ofSeconds(1), () -> svc.process("v1")));
-    assertEquals(0, serviceImpl.callCount());
+    assertThrows(IllegalArgumentException.class, () -> debouncer.withPriority(-1));
+    // Zero is the default priority, and null clears one.
+    debouncer.withPriority(0);
+    debouncer.withPriority(null);
   }
 
   @Test

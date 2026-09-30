@@ -176,10 +176,14 @@ public final class Debouncer<R> {
 
   /**
    * Set the priority for the user workflow; lower values are dequeued first. A priority only means
-   * something on a queue of your own, so {@link #debounce} rejects one when no queue is configured,
-   * and it rejects a negative one.
+   * something on a queue of your own, so {@link #debounce} rejects one when no queue is configured.
+   *
+   * @throws IllegalArgumentException if {@code priority} is negative
    */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
+    }
     return new Debouncer<>(
         dbos, executor, queueName, debounceTimeout, appVersion, priority, workflowTimeout);
   }
@@ -262,9 +266,6 @@ public final class Debouncer<R> {
     if (priority != null && queueName == null) {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
-    }
-    if (priority != null && priority < 0) {
-      throw new IllegalArgumentException("priority must not be negative");
     }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);

@@ -198,10 +198,14 @@ public final class DebouncerClient<R> {
 
   /**
    * Set the priority for the user workflow; lower values are dequeued first. A priority only means
-   * something on a queue of your own, so {@link #debounce} rejects one when no queue is configured,
-   * and it rejects a negative one.
+   * something on a queue of your own, so {@link #debounce} rejects one when no queue is configured.
+   *
+   * @throws IllegalArgumentException if {@code priority} is negative
    */
   public @NonNull DebouncerClient<R> withPriority(@Nullable Integer priority) {
+    if (priority != null && priority < 0) {
+      throw new IllegalArgumentException("priority must not be negative");
+    }
     return new DebouncerClient<>(
         client,
         workflowName,
@@ -301,9 +305,6 @@ public final class DebouncerClient<R> {
     if (priority != null && userQueueName == null) {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
-    }
-    if (priority != null && priority < 0) {
-      throw new IllegalArgumentException("priority must not be negative");
     }
     // className is required: the debounced workflow's row names it, and the bounce matches on it.
     if (className == null) {

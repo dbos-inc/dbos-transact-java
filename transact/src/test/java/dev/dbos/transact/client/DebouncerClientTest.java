@@ -495,15 +495,12 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void rejectsANegativePriority() {
-    // Refused at the call, before anything is written.
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            debouncer()
-                .withQueue(QueueName.of(USER_QUEUE))
-                .withPriority(-1)
-                .debounce("prio-neg", Duration.ofMillis(500), "x"));
-    assertEquals(0, serviceImpl.callCount.get());
+  void rejectsANegativePriorityWhenSet() {
+    var debouncer = debouncer().withQueue(QueueName.of(USER_QUEUE));
+
+    assertThrows(IllegalArgumentException.class, () -> debouncer.withPriority(-1));
+    // Zero is the default priority, and null clears one.
+    debouncer.withPriority(0);
+    debouncer.withPriority(null);
   }
 }
