@@ -145,6 +145,32 @@ public class QueueServicePollTest {
   }
 
   @Test
+  @DisplayName("a batched sweep claims within the worker budget and dispatches every head")
+  public void theBatchedSweepSpendsTheWorkerBudget() {
+    when(dbosExecutor.queueActiveCount("q")).thenReturn(1L);
+    when(systemDatabase.startQueuedPartitionedWorkflows(any(), any(), any(), anyLong()))
+        .thenReturn(List.of("wf-a", "wf-b"));
+
+    taskFor(WORKER_BUDGETED).sweepPartitionHeads();
+
+    // A budget of three with one running leaves two, and no partition is listed one at a time.
+    verify(systemDatabase).startQueuedPartitionedWorkflows(any(), any(), any(), eq(2L));
+    verify(systemDatabase, never()).getQueuePartitions(any());
+    verify(dbosExecutor).executeWorkflowById("wf-a");
+    verify(dbosExecutor).executeWorkflowById("wf-b");
+  }
+
+  @Test
+  @DisplayName("a batched sweep with no worker budget left does not touch the database")
+  public void theBatchedSweepSkipsWhenTheBudgetIsSpent() {
+    when(dbosExecutor.queueActiveCount("q")).thenReturn(3L);
+
+    taskFor(WORKER_BUDGETED).sweepPartitionHeads();
+
+    verifyNoInteractions(systemDatabase);
+  }
+
+  @Test
   @DisplayName("a sweep stops at the partition that exhausts the queue-wide worker budget")
   public void theSweepStopsWhenTheBudgetIsSpent() {
     // Three partitions, a budget of three, and two workflows already running: the first partition

@@ -1060,6 +1060,20 @@ public class SystemDatabase implements AutoCloseable {
                 partitionLocalRunningCount));
   }
 
+  /** Claims every idle partition's head workflow in one transaction; see {@link QueuesDAO}. */
+  public List<String> startQueuedPartitionedWorkflows(
+      Queue queue, String executorId, String appVersion, long maxTasks) {
+    return dbRetry(
+        () ->
+            QueuesDAO.startQueuedPartitionedWorkflows(
+                ctx,
+                queue,
+                executorId,
+                appVersion,
+                maxTasks,
+                QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP));
+  }
+
   public void recordChildWorkflow(
       String parentId,
       String childId, // workflowId of the child
