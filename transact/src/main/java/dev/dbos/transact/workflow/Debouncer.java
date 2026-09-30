@@ -303,11 +303,14 @@ public final class Debouncer<R> {
     var workflowAttributes = callerCtx.resolveNextAttributes();
 
     // Step 1. The first step assigns the ids and tries to extend a debounced workflow already
-    // waiting on the target queue. Failing that (1.1 interop), it looks for a debouncer workflow
-    // holding the key on the internal queue. Inside a workflow the bounce, the look and the
-    // checkpoint commit in one transaction, so a crash cannot leave a row extended but the step
-    // unrecorded, which on replay would bounce again. Typed as Object so that replay does not cast
-    // the recorded value: a custom serializer that drops Java types hands back a map.
+    // waiting on the target queue. Inside a workflow the bounce and its checkpoint commit in one
+    // transaction, so a crash cannot leave a row extended but the step unrecorded, which on replay
+    // would bounce again. Typed as Object so that replay does not cast the recorded value: a custom
+    // serializer that drops Java types hands back a map.
+    //
+    // Passing the ids is what makes this the first step, and it does one more thing (1.1 interop):
+    // when nothing was extended, the same transaction looks for a debouncer workflow holding the
+    // key on the internal queue, returned as ids.debouncerWorkflowId().
     DebounceIds ids =
         toDebounceIds(
             executor.debounceDelayedWorkflow(
