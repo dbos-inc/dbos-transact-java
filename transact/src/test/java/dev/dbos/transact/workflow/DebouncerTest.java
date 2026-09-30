@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -860,6 +861,9 @@ public class DebouncerTest {
   }
 
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -890,6 +894,9 @@ public class DebouncerTest {
    * workflow earlier callers hold handles to is never created.
    */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void aTakeoverRunAgainAfterItsCancelReturnsThePromisedIdAgain() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -909,6 +916,9 @@ public class DebouncerTest {
 
   /** The realistic stranded holder: PENDING, its node gone while it ran. */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void takesOverAPendingDebouncerWorkflowWhoseNodeDied() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -935,6 +945,9 @@ public class DebouncerTest {
    * taken over as an ENQUEUED one is, even on the live version.
    */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void takesOverADelayedDebouncerWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -964,6 +977,9 @@ public class DebouncerTest {
    * on its key has to take it over.
    */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void takesOverADebouncerWorkflowThatAnUpgradeStranded() throws Exception {
     dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -1020,6 +1036,9 @@ public class DebouncerTest {
 
   /** Inputs that name no promised workflow: the holder is still cancelled, freeing the key. */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void aTakeoverOfAHolderWhoseInputsNameNoWorkflowCancelsIt() throws Exception {
     dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -1034,6 +1053,9 @@ public class DebouncerTest {
 
   /** A serializer that drops Java types hands the inputs back as maps. */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void aTakeoverReadsThePromisedIdFromInputsThatLostTheirJavaTypes() throws Exception {
     dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
@@ -1054,6 +1076,9 @@ public class DebouncerTest {
    * returns them rather than cancelling or creating again.
    */
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   public void aTakeoverInsideAWorkflowIsRecordedAndReplays() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =

@@ -35,6 +35,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
 interface ClientTargetService {
@@ -293,6 +294,9 @@ public class DebouncerClientTest {
   }
 
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
     var stranded = plantDebouncerWorkflow("stranded", "promised-c3", null, "no-such-version");
 
