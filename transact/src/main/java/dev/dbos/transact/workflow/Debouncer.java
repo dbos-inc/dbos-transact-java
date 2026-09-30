@@ -404,16 +404,14 @@ public final class Debouncer<R> {
                 workflowAttributes);
         if (!handle.workflowId().equals(userWorkflowId)) {
           // 1.1 interop: a replay of that release, which recorded its debouncer workflow in this
-          // slot.
-          // That workflow started the user workflow under the id the first step assigned.
+          // slot. That workflow started the user workflow under the id the first step assigned.
           return dbos.retrieveWorkflow(userWorkflowId);
         }
         if (takingOver && !executor.isDebouncedWorkflow(userWorkflowId)) {
-          // 1.1 interop: the debouncer workflow was only slow: it started the promised workflow
-          // between the
-          // cancel and this enqueue, with the arguments it had, and this call's arguments went
-          // nowhere. Start over under this call's own id, as for any call that arrives after its
-          // key's workflow has committed to run.
+          // 1.1 interop: the debouncer workflow was only slow. It started the promised workflow
+          // between the cancel and this enqueue, with the arguments it had, and this call's
+          // arguments went nowhere. Start over under this call's own id, as for any call that
+          // arrives after its key's workflow has committed to run.
           logger.debug(
               "Debounced workflow {} was started by its debouncer workflow; retrying",
               userWorkflowId);
