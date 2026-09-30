@@ -51,6 +51,8 @@ public class WorkflowStatusBuilder {
   private Map<String, Object> attributes;
   private String scheduleName;
   private String applicationName;
+  private boolean isDebounced;
+  private Instant debounceDeadline;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -86,7 +88,9 @@ public class WorkflowStatusBuilder {
         serialization,
         attributes,
         scheduleName,
-        applicationName);
+        applicationName,
+        isDebounced,
+        debounceDeadline);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -255,6 +259,16 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder scheduleName(String scheduleName) {
     this.scheduleName = scheduleName;
+    return this;
+  }
+
+  public WorkflowStatusBuilder isDebounced(boolean isDebounced) {
+    this.isDebounced = isDebounced;
+    return this;
+  }
+
+  public WorkflowStatusBuilder debounceDeadline(Instant debounceDeadline) {
+    this.debounceDeadline = debounceDeadline;
     return this;
   }
 }
