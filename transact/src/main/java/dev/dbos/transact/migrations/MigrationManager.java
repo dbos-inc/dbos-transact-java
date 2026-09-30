@@ -1305,7 +1305,7 @@ public class MigrationManager {
   }
 
   // The trailing workflow_uuid totalizes the dequeue order, which the v1 index left ambiguous.
-  // This is the index the partitioned dequeue in QueuesDAO.startQueuedWorkflows reads through:
+  // This is the index both partitioned dequeues in QueuesDAO read through:
   // queue_name, status and queue_partition_key are all equality-matched there, and priority and
   // created_at are its ordering.
   static String migration46(boolean isCockroach) {

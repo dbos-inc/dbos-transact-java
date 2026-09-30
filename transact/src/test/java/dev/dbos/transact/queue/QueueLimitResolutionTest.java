@@ -317,4 +317,23 @@ public class QueueLimitResolutionTest {
               .contains("partitionRateLimit period"));
     }
   }
+
+  @Test
+  @DisplayName(
+      "a batched partition dequeue needs partition concurrency 1 and no other shared limit")
+  public void batchedPartitionDequeueEligibility() {
+    assertTrue(queue(null, null, false, null, 1, null, null).canBatchPartitionedDequeue());
+    // A per-partition worker limit cannot exceed partition concurrency 1, so it does not matter.
+    assertTrue(queue(null, 4, false, null, 1, 1, null).canBatchPartitionedDequeue());
+    // The legacy flag enforces its queue-wide limits per partition, so concurrency 1 qualifies.
+    assertTrue(queue(1, null, true, null, null, null, null).canBatchPartitionedDequeue());
+
+    assertFalse(plain(1, null, null).canBatchPartitionedDequeue());
+    assertFalse(queue(null, null, true, null, null, null, null).canBatchPartitionedDequeue());
+    assertFalse(queue(null, null, false, null, 2, null, null).canBatchPartitionedDequeue());
+    assertFalse(queue(5, null, false, null, 1, null, null).canBatchPartitionedDequeue());
+    assertFalse(queue(null, null, false, LIMIT, 1, null, null).canBatchPartitionedDequeue());
+    assertFalse(
+        queue(null, null, false, null, 1, null, PARTITION_LIMIT).canBatchPartitionedDequeue());
+  }
 }

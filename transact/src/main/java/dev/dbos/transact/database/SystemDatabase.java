@@ -540,8 +540,8 @@ public class SystemDatabase implements AutoCloseable {
    * <p>Retrying one means replaying the whole transaction, so only a caller that knows its work is
    * safe to re-run may do it -- see {@link #retryOnSerializationError} for what that requires, and
    * {@link #dbRetryIncludingSerializationError} for the callers that opt in. {@link #dbRetry} does
-   * not, so any caller that has not opted in lets the conflict reach its own caller; the dequeue
-   * relies on that.
+   * not, so any caller that has not opted in lets the conflict reach its own caller; the dequeue,
+   * which does not retry at all ({@link #dbOnce}), relies on that.
    */
   public static boolean isSerializationError(Throwable t) {
     return anySqlState(t, state -> "40001".equals(state) || "40P01".equals(state));
@@ -627,8 +627,9 @@ public class SystemDatabase implements AutoCloseable {
    * underneath it, not merely safe because a rollback undid the first attempt. See {@link
    * #dbRetryIncludingSerializationError} for what qualifies.
    *
-   * <p>Only a caller that knows this may use it. {@link #dbRetry} deliberately does not, because a
-   * conflict on the dequeue is a signal the queue poll loop needs rather than one to sleep off.
+   * <p>Only a caller that knows this may use it. {@link #dbRetry} deliberately does not, and the
+   * dequeue does not retry at all ({@link #dbOnce}): a conflict on the dequeue is a signal the
+   * queue poll loop needs rather than one to sleep off.
    *
    * <p>Bounded, unlike {@link #dbRetry}: a conflict means a peer won, which is progress, so
    * spinning forever would only mean this caller never does. The schedule is Python's and
@@ -751,9 +752,7 @@ public class SystemDatabase implements AutoCloseable {
             if (evictsPool(e)) {
               logger.warn(
                   "Recoverable connection error (attempt {}), resetting client pool", attempt, e);
-              if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
-                hikariDataSource.getHikariPoolMXBean().softEvictConnections();
-              }
+              softEvictPool();
             } else {
               logger.warn(
                   "Recoverable connection error (attempt {}), retrying on the same pool",
@@ -775,6 +774,40 @@ public class SystemDatabase implements AutoCloseable {
         }
         backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
       }
+    }
+  }
+
+  /**
+   * Runs {@code supplier} once, adapting its {@link SQLException} as {@link #dbRetry} does but
+   * never retrying it.
+   *
+   * <p>For the queue poll. Its loop is already the retry: a failed poll is logged and the next one
+   * comes a polling interval later. Retrying inside a poll instead would hold the listener, and the
+   * poll pass {@code pause()} waits on, for as long as the database stays down. A connection
+   * failure that calls for a fresh pool still gets one, so the next poll does not draw the same
+   * dead connections.
+   *
+   * @throws DBOSSystemDatabaseException if the call fails
+   * @throws IllegalStateException if the system database has been closed
+   */
+  private <T> T dbOnce(SqlSupplier<T> supplier) {
+    if (closed.get()) {
+      throw new IllegalStateException("SystemDatabase is closed");
+    }
+    try {
+      return supplier.get();
+    } catch (SQLException e) {
+      if (classify(e) == Failure.CONNECTION && evictsPool(e)) {
+        logger.warn("Connection error on a queue poll, resetting client pool", e);
+        softEvictPool();
+      }
+      throw new DBOSSystemDatabaseException(e);
+    }
+  }
+
+  private void softEvictPool() {
+    if (ctx.dataSource() instanceof HikariDataSource hikariDataSource) {
+      hikariDataSource.getHikariPoolMXBean().softEvictConnections();
     }
   }
 
@@ -1008,7 +1041,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<String> getQueuePartitions(String queueName) {
-    return dbRetry(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
+    return dbOnce(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
   public boolean upsertQueue(
@@ -1085,7 +1118,7 @@ public class SystemDatabase implements AutoCloseable {
       String partitionKey,
       long localRunningCount,
       long partitionLocalRunningCount) {
-    return dbRetry(
+    return dbOnce(
         () ->
             QueuesDAO.startQueuedWorkflows(
                 ctx,
@@ -1095,6 +1128,20 @@ public class SystemDatabase implements AutoCloseable {
                 partitionKey,
                 localRunningCount,
                 partitionLocalRunningCount));
+  }
+
+  /** Claims every idle partition's head workflow in one transaction; see {@link QueuesDAO}. */
+  public List<String> startQueuedPartitionedWorkflows(
+      Queue queue, String executorId, String appVersion, long maxTasks) {
+    return dbOnce(
+        () ->
+            QueuesDAO.startQueuedPartitionedWorkflows(
+                ctx,
+                queue,
+                executorId,
+                appVersion,
+                maxTasks,
+                QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP));
   }
 
   public void recordChildWorkflow(
