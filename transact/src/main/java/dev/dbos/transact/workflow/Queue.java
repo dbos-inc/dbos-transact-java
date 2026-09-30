@@ -255,6 +255,25 @@ public record Queue(
   }
 
   /**
+   * Whether every partition's head can be claimed in one transaction rather than one partition at a
+   * time: the queue is partitioned, each partition runs one workflow at a time, and nothing is
+   * limited queue-wide or by rate.
+   *
+   * <p>A per-partition worker limit does not disqualify it: that limit cannot exceed a partition
+   * concurrency of 1, which the dequeue already enforces across every worker.
+   *
+   * @return true if the queue can be dequeued in one batched sweep across its partitions
+   */
+  public boolean canBatchPartitionedDequeue() {
+    var limits = resolveLimits();
+    return isPartitioned()
+        && Integer.valueOf(1).equals(limits.partitionConcurrency())
+        && limits.concurrency() == null
+        && limits.rateLimit() == null
+        && limits.partitionRateLimit() == null;
+  }
+
+  /**
    * Checks the rules that can only be applied to a queue being written, not to one being read.
    *
    * <p>Go, Python and TypeScript enforce these in the constructor. Java cannot, because its

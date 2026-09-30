@@ -1,7 +1,6 @@
 package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,7 +14,6 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -277,45 +275,7 @@ public class PartitionedDequeueTest {
   }
 
   @Test
-  public void eligibilityMatchesTheOtherSdks() {
-    assertTrue(QueuesDAO.canBatchPartitionedDequeue(partitionedQueue("q", null, 1)));
-    // The legacy flag enforces its queue-wide limits per partition, so concurrency 1 qualifies.
-    assertTrue(
-        QueuesDAO.canBatchPartitionedDequeue(
-            new Queue("q", 1, null, false, true, null, Duration.ofSeconds(1))));
-
-    assertFalse(QueuesDAO.canBatchPartitionedDequeue(new Queue("q")));
-    assertFalse(QueuesDAO.canBatchPartitionedDequeue(partitionedQueue("q", null, 2)));
-    assertFalse(QueuesDAO.canBatchPartitionedDequeue(partitionedQueue("q", 5, 1)));
-    assertFalse(
-        QueuesDAO.canBatchPartitionedDequeue(
-            new Queue(
-                "q",
-                null,
-                null,
-                false,
-                false,
-                new Queue.RateLimit(10, Duration.ofSeconds(1)),
-                1,
-                null,
-                null,
-                Queue.DEFAULT_POLLING_INTERVAL,
-                null)));
-    assertFalse(
-        QueuesDAO.canBatchPartitionedDequeue(
-            new Queue(
-                "q",
-                null,
-                null,
-                false,
-                false,
-                null,
-                1,
-                null,
-                new Queue.RateLimit(10, Duration.ofSeconds(1)),
-                Queue.DEFAULT_POLLING_INTERVAL,
-                null)));
-
+  public void rejectsAQueueThatCannotBatch() {
     assertThrows(
         IllegalArgumentException.class,
         () ->

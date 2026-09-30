@@ -287,22 +287,6 @@ public class QueuesDAO {
   public static final int PARTITIONED_DEQUEUE_SWEEP_CAP = 8192;
 
   /**
-   * Whether a partitioned queue can be dequeued by {@link #startQueuedPartitionedWorkflows}: every
-   * partition runs one workflow at a time, and nothing is limited queue-wide or by rate.
-   *
-   * <p>A per-partition worker limit needs no handling there: it cannot exceed a partition
-   * concurrency of 1, which the PENDING check already enforces across every worker.
-   */
-  public static boolean canBatchPartitionedDequeue(Queue queue) {
-    var limits = queue.resolveLimits();
-    return queue.isPartitioned()
-        && Integer.valueOf(1).equals(limits.partitionConcurrency())
-        && limits.concurrency() == null
-        && limits.rateLimit() == null
-        && limits.partitionRateLimit() == null;
-  }
-
-  /**
    * Claims the head workflow of every partition that has none running, in one transaction.
    *
    * <p>The per-partition sweep costs a transaction per partition per poll. This walks the distinct
@@ -314,12 +298,12 @@ public class QueuesDAO {
    * @param sweepCap the most heads one sweep claims; {@link #PARTITIONED_DEQUEUE_SWEEP_CAP} outside
    *     tests
    * @return the claimed workflow IDs, ordered by partition key
-   * @throws IllegalArgumentException if {@link #canBatchPartitionedDequeue} rejects the queue
+   * @throws IllegalArgumentException if {@link Queue#canBatchPartitionedDequeue} rejects the queue
    */
   public static List<String> startQueuedPartitionedWorkflows(
       DbContext ctx, Queue queue, String executorId, String appVersion, long maxTasks, int sweepCap)
       throws SQLException {
-    if (!canBatchPartitionedDequeue(queue)) {
+    if (!queue.canBatchPartitionedDequeue()) {
       throw new IllegalArgumentException(
           "Batched partitioned dequeue requires a partitioned queue with partition concurrency 1"
               + " and no queue-wide concurrency or rate limit: "

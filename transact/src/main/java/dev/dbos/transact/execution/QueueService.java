@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.database.dao.QueuesDAO;
 import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
@@ -394,7 +393,7 @@ public class QueueService implements AutoCloseable {
           return;
         }
 
-        if (QueuesDAO.canBatchPartitionedDequeue(queue)) {
+        if (queue.canBatchPartitionedDequeue()) {
           sweepPartitionHeads();
         } else if (queue.isPartitioned()) {
           sweepPartitions();
