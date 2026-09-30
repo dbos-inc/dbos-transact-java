@@ -322,6 +322,9 @@ public final class DebouncerClient<R> {
 
     String targetQueue = userQueueName != null ? userQueueName : Constants.DBOS_INTERNAL_QUEUE;
     String deduplicationId = workflowName + "-" + debounceKey;
+    // The absolute cap on the workflow this call creates, measured once from the call, so the
+    // retries below, a takeover's wait among them, do not push it out.
+    Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
 
     // Not inside a workflow, so ids can be generated directly and nothing is recorded. The first
     // bounce also looks for a debouncer workflow of an older SDK version holding the key.
@@ -386,7 +389,6 @@ public final class DebouncerClient<R> {
         }
       }
 
-      Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
       var enqueueOpts =
           new EnqueueOptions(workflowName, className, instanceName, QueueName.of(targetQueue))
               .withWorkflowId(userWorkflowId)

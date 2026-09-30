@@ -874,6 +874,7 @@ public class DebouncerTest {
     long start = System.currentTimeMillis();
     var handle =
         dbos.<String>debouncer()
+            .withDebounceTimeout(Duration.ofMinutes(1))
             .debounce("stranded", Duration.ofMillis(300), () -> svc.process("fresh"));
     long waited = System.currentTimeMillis() - start;
 
@@ -885,6 +886,9 @@ public class DebouncerTest {
     assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
     var row = DebouncedRows.read(dataSource, "promised-3");
     assertTrue(row.isDebounced());
+    // The debounce timeout counts from the call, not from the enqueue after the takeover's wait.
+    long measuredFrom = row.debounceDeadlineEpochMs() - Duration.ofMinutes(1).toMillis();
+    assertTrue(measuredFrom - start < 2_000, "measured " + (measuredFrom - start) + "ms in");
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), serviceImpl.callArgs());
   }

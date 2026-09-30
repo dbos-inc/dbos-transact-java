@@ -300,9 +300,17 @@ public class DebouncerClientTest {
   void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
     var stranded = plantDebouncerWorkflow("stranded", "promised-c3", null, "no-such-version");
 
-    var handle = debouncer().debounce("stranded", Duration.ofMillis(300), "fresh");
+    long start = System.currentTimeMillis();
+    var handle =
+        debouncer()
+            .withDebounceTimeout(Duration.ofMinutes(1))
+            .debounce("stranded", Duration.ofMillis(300), "fresh");
 
     assertEquals("promised-c3", handle.workflowId());
+    // The debounce timeout counts from the call, not from the enqueue after the takeover's wait.
+    var row = DebouncedRows.read(dataSource, "promised-c3");
+    long measuredFrom = row.debounceDeadlineEpochMs() - Duration.ofMinutes(1).toMillis();
+    assertTrue(measuredFrom - start < 2_000, "measured " + (measuredFrom - start) + "ms in");
     assertEquals(
         WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(stranded).orElseThrow().status());
     assertEquals("result:fresh", handle.getResult());

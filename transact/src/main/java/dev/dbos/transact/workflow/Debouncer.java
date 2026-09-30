@@ -301,6 +301,9 @@ public final class Debouncer<R> {
             ? this.workflowTimeout
             : callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
     var workflowAttributes = callerCtx.resolveNextAttributes();
+    // The absolute cap on the workflow this call creates, measured once from the call, so the
+    // retries below, a takeover's wait among them, do not push it out.
+    Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
 
     // Step 1. The first step assigns the ids and tries to extend a debounced workflow already
     // waiting on the target queue. Inside a workflow the bounce and its checkpoint commit in one
@@ -387,7 +390,6 @@ public final class Debouncer<R> {
       }
 
       // Create the debounced workflow, DELAYED by the period and holding the key.
-      Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
       try {
         WorkflowHandle<T, E> handle =
             executor.enqueueDebounced(
