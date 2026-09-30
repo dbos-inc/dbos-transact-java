@@ -320,8 +320,11 @@ public class QueuesDAO {
     try (Connection connection = ctx.getConnection()) {
       connection.setAutoCommit(false);
       // Set rather than inherited, since a user-supplied pool may default to another level.
-      // Nothing here spends a shared budget, so no stronger level is needed: the lock and the
-      // claim re-check each row's status against whatever a concurrent claim committed.
+      // Workers that pick the same head serialize on its row lock. Workers that pick different
+      // heads of one idle partition -- different versions mid-deploy, or a higher-priority row
+      // enqueued between their reads -- can both claim, and REPEATABLE READ would not stop that
+      // either, since the two claims write different rows. The per-partition dequeue has the same
+      // gap; only SERIALIZABLE would close it.
       connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
       try {
         String versionClause = versionClause(ctx, connection, appVersion);
