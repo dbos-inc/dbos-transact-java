@@ -44,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 public class DebouncerTest {
@@ -1342,23 +1343,35 @@ public class DebouncerTest {
 
   /**
    * 1.1's join path: its enqueue collided and recorded nothing, DBOS.lookupDebouncer recorded the
-   * debouncer workflow, and the send and two getEvent steps followed. The replay's enqueue collides
-   * again with the debouncer workflow still holding the key, and every step after it replays. 1.0
-   * recorded the lookup as the bare workflow id.
+   * debouncer workflow, and the send and two getEvent steps followed. 1.0 recorded the lookup as
+   * the bare workflow id. The replay must not enqueue in the empty slot: with a queue configured
+   * 1.2 enqueues on that queue, where the debouncer workflow never held the key, and once the
+   * debouncer workflow is gone the key is free on either queue. Every step after it replays.
    */
   @ParameterizedTest
-  @ValueSource(booleans = {false, true})
-  public void replaysADebounceThatJoinedADebouncerWorkflow(boolean bareId) throws Exception {
+  @CsvSource({
+    "false, false, false",
+    "true, false, false",
+    "false, true, false",
+    "false, false, true",
+    "false, true, true"
+  })
+  public void replaysADebounceThatJoinedADebouncerWorkflow(
+      boolean bareId, boolean userQueue, boolean holderGone) throws Exception {
+    String queue = userQueue ? "legacy-join-queue" : null;
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
     dbos.launch();
+    if (queue != null) {
+      dbos.registerQueue(queue, new QueueOptions());
+    }
     var dataSource = pgContainer.dataSource();
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var orchestratorId = "wf-legacy-join-" + bareId;
-    runAndClear(orchestratorId, orch, null, "joined");
+    var orchestratorId = "wf-legacy-join-%s-%s-%s".formatted(bareId, userQueue, holderGone);
+    runAndClear(orchestratorId, orch, queue, "joined");
 
-    var service = plantDebouncerWorkflow("joined", "promised-7", null, "no-such-version");
+    var service = plantDebouncerWorkflow("joined", "promised-7", queue, "no-such-version");
     var ids = legacyIds("never-created", "msg-7");
     var holder =
         recordedValue(
@@ -1405,9 +1418,54 @@ public class DebouncerTest {
         child.serialization(),
         null);
 
+    if (holderGone) {
+      DebouncedRows.deleteWorkflow(dataSource, service);
+    }
+
     assertEquals("promised-7", replay(orchestratorId));
     assertEquals(0, countWorkflowsByName("process"));
-    assertEquals(WorkflowState.ENQUEUED, dbos.retrieveWorkflow(service).getStatus().status());
+    if (!holderGone) {
+      assertEquals(WorkflowState.ENQUEUED, dbos.retrieveWorkflow(service).getStatus().status());
+    }
+  }
+
+  /**
+   * A debounce that lost the race to be first on its key: its enqueue collided and recorded
+   * nothing, and DBOS.lookupDebouncer recorded the bounce into the winner. By the time it replays
+   * the winner has run and freed the key, so an enqueue in the empty slot would succeed and start a
+   * second workflow. The replay returns the winner, as the first run did.
+   */
+  @Test
+  public void replaysADebounceThatLostTheRaceToCreate() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    var orchestratorId = "wf-lost-race";
+    runAndClear(orchestratorId, orch, null, "raced");
+
+    var ids = recordedValue(new Debouncer.DebounceIds("loser", "msg-lost", null, null));
+    var bounced = recordedValue(new DebounceResult.Bounced("winner"));
+    DebouncedRows.insertStep(
+        dataSource,
+        orchestratorId,
+        0,
+        "DBOS.assignDebounceIds",
+        ids.output(),
+        ids.serialization(),
+        null);
+    DebouncedRows.insertStep(
+        dataSource,
+        orchestratorId,
+        2,
+        "DBOS.lookupDebouncer",
+        bounced.output(),
+        bounced.serialization(),
+        null);
+
+    assertEquals("winner", replay(orchestratorId));
+    assertEquals(0, countWorkflowsByName("process"));
   }
 
   // ==================== Coalescing into a debounced workflow ====================

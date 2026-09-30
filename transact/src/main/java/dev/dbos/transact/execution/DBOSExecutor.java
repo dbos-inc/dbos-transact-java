@@ -22,6 +22,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
@@ -493,6 +494,12 @@ public class DBOSExecutor implements AutoCloseable {
    * that slot recorded -- which, for a debounce recorded before debounced workflows, is the
    * debouncer workflow, not {@code workflowId}.
    *
+   * <p>An enqueue that collided records nothing in its slot, so a replay alone cannot tell it from
+   * one that never ran. A collision is always followed by the {@code DBOS.lookupDebouncer} step in
+   * the next slot, in this release and the ones before it, so when that step is recorded the replay
+   * throws the collision again rather than enqueue for real: the key may be free by now, or held on
+   * another queue than the one it collided on.
+   *
    * <p>The workflow takes {@code timeout}, timed from its dequeue, and no deadline: it may start
    * long after the call, so neither the caller's deadline nor its timeout carries over. The
    * caller's authentication does.
@@ -511,6 +518,11 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable Map<String, Object> attributes) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
+    if (parent != null
+        && systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId()).isEmpty()
+        && lookupDebouncerRecordedAfter(parent)) {
+      throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
+    }
     var options =
         new ExecutionOptions(
                 workflowId,
@@ -529,6 +541,18 @@ public class DBOSExecutor implements AutoCloseable {
             .withAttributes(attributes)
             .withDebounce(debounceDeadline);
     return executeWorkflow(workflow, args, options, parent);
+  }
+
+  /** Whether the slot after {@code parent}'s is a recorded {@code DBOS.lookupDebouncer} step. */
+  private boolean lookupDebouncerRecordedAfter(WorkflowInfo parent) {
+    try {
+      return systemDatabase.checkStepResult(
+              parent.workflowId(), parent.functionId() + 1, "DBOS.lookupDebouncer")
+          != null;
+    } catch (DBOSUnexpectedStepException e) {
+      // Something else is recorded there; the enqueue's own replay reports the mismatch.
+      return false;
+    }
   }
 
   /**
