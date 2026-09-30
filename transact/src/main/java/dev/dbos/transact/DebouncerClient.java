@@ -347,7 +347,7 @@ public final class DebouncerClient<R> {
       if (debouncerWorkflowId != null) {
         String holderId = debouncerWorkflowId;
         debouncerWorkflowId = null;
-        String childId = forward(holderId, messageId, args, debouncePeriod);
+        String childId = forwardToDebouncerWorkflow(holderId, messageId, args, debouncePeriod);
         if (childId != null) {
           return client.retrieveWorkflow(childId);
         }
@@ -457,7 +457,7 @@ public final class DebouncerClient<R> {
    * Forwards this call's arguments to a debouncer workflow and returns the user workflow id it
    * publishes, or null if it did not acknowledge in time.
    */
-  private @Nullable String forward(
+  private @Nullable String forwardToDebouncerWorkflow(
       String debouncerWorkflowId, String messageId, Object[] args, Duration debouncePeriod) {
     DebouncerMessage msg = new DebouncerMessage(messageId, args, debouncePeriod);
     client.send(debouncerWorkflowId, msg, Constants.DEBOUNCER_TOPIC, messageId);
