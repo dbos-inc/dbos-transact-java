@@ -1399,14 +1399,35 @@ public class DBOSClient implements AutoCloseable {
     return new WorkflowHandleClient<>(workflowId);
   }
 
-  /** See {@link InternalWorkflows#takeOverStrandedDebouncer}. Used by {@link DebouncerClient}. */
-  @Nullable String takeOverStrandedDebouncer(String debouncerWorkflowId) {
-    return InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, debouncerWorkflowId);
-  }
-
-  /** See {@link SystemDatabase#isDebouncedWorkflow}. Used by {@link DebouncerClient}. */
-  boolean isDebouncedWorkflow(String workflowId) {
-    return systemDatabase.isDebouncedWorkflow(workflowId);
+  /**
+   * See {@link InternalWorkflows#takeOverStrandedDebouncer}. The promised workflow is created as
+   * {@link #enqueueDebounced} would enqueue {@code options} under that id. Used by {@link
+   * DebouncerClient}.
+   */
+  @Nullable String takeOverStrandedDebouncer(
+      String debouncerWorkflowId,
+      dev.dbos.transact.EnqueueOptions options,
+      Object[] args,
+      @Nullable Instant debounceDeadline) {
+    return InternalWorkflows.takeOverStrandedDebouncer(
+        systemDatabase,
+        debouncerWorkflowId,
+        promisedId ->
+            DBOSExecutor.workflowStatus(
+                systemDatabase,
+                options.workflowName(),
+                options.className(),
+                options.instanceName(),
+                args,
+                null,
+                null,
+                null,
+                null,
+                new ExecutionOptions(promisedId)
+                    .withOptions(options)
+                    .withDebounce(debounceDeadline),
+                options.applicationName()),
+        null);
   }
 
   /**

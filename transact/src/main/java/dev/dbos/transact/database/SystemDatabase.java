@@ -923,11 +923,27 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Whether the workflow exists and was written as a debounced workflow, which only the debouncers
-   * write. See {@link WorkflowDAO#isDebouncedWorkflow}.
+   * Cancels a debouncer workflow that stopped answering and creates the user workflow it promised,
+   * in one transaction; as the caller's step when one is given, checkpointed in the same
+   * transaction. Returns the promised workflow's id if this call created it, otherwise null, as
+   * {@code Object}. See {@link WorkflowDAO#takeOverDebouncerWorkflow}.
    */
-  public boolean isDebouncedWorkflow(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.isDebouncedWorkflow(ctx, workflowId));
+  public Object takeOverDebouncerWorkflow(
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable DebounceCaller caller) {
+    // The delay is resolved outside the retry, as in initWorkflowStatus, so a retry cannot push it
+    // later. An attempt that committed but lost its ack finds the holder cancelled on the retry and
+    // returns null; the caller then goes on to extend the promised workflow like any other call.
+    // Safe to replay after a peer committed, as a serialization error means one did: the holder is
+    // re-checked under its lock, the step is re-checked, and the insert keeps a row already there.
+    String ownerXid = UUID.randomUUID().toString();
+    Long delayUntilEpochMs = promised == null ? null : resolveDelayUntil(promised);
+    return dbRetryIncludingSerializationError(
+        "takeOverDebouncerWorkflow",
+        () ->
+            WorkflowDAO.takeOverDebouncerWorkflow(
+                ctx, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid, caller));
   }
 
   /**

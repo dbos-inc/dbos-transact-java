@@ -208,7 +208,7 @@ public final class DebugTriggers {
   // "DEBUG_TRIGGER_WORKFLOW_ENQUEUE";
   public static final String DEBUG_TRIGGER_STEP_COMMIT = "DEBUG_TRIGGER_STEP_COMMIT";
   public static final String DEBUG_TRIGGER_INITWF_COMMIT = "DEBUG_TRIGGER_INITWF_COMMIT";
-  // After a debouncer cancels a stranded debouncer workflow, before it creates the promised
-  // workflow.
+  // Inside a debouncer's takeover transaction, after it cancels a stranded debouncer workflow and
+  // before it creates the promised workflow.
   public static final String DEBUG_TRIGGER_DEBOUNCE_TAKEOVER = "DEBUG_TRIGGER_DEBOUNCE_TAKEOVER";
 }

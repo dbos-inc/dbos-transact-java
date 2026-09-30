@@ -752,23 +752,139 @@ public class WorkflowDAO {
   }
 
   /**
-   * Whether {@code workflowId} exists and was written as a debounced workflow. The flag is set when
-   * the row is created and never changes, unlike its deduplication ID, which clears when the row
-   * leaves DELAYED; so it still tells who created the row after that.
+   * Takes over a debouncer workflow that stopped answering, in one transaction: cancels it, which
+   * frees its debounce key, and creates the user workflow it promised as {@code promised}, a
+   * debounced workflow holding that key. The key passes straight from one to the other, so no other
+   * call can take it in between and leave the promised workflow uncreated, which would strand every
+   * handle to it. A call that tries waits on the transaction, then extends the promised workflow.
+   *
+   * <p>The debouncer workflow is locked first. One that is gone or no longer active is left alone:
+   * it finished on its own, or another call took it over first. An active one is cancelled. The
+   * promised workflow is then created unless it already exists -- the debouncer workflow started
+   * it, before it went silent or, on a node that was only slow, while this call waited -- or {@code
+   * promised} is null because its inputs named none.
+   *
+   * <p>Returns the promised workflow's id if this call created it, otherwise null. With a {@code
+   * caller}, it is that caller's step: if the step already ran, what it recorded is returned and
+   * nothing is touched; otherwise the takeover and its checkpoint commit together. The return is
+   * {@code Object}, as a replay hands back whatever the serializer preserved.
    */
-  public static boolean isDebouncedWorkflow(DbContext ctx, String workflowId) throws SQLException {
-    var sql =
+  public static Object takeOverDebouncerWorkflow(
+      DbContext ctx,
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable Long delayUntilEpochMs,
+      String ownerXid,
+      @Nullable DebounceCaller caller)
+      throws SQLException {
+    long startTime = System.currentTimeMillis();
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn,
+          c -> {
+            if (caller != null) {
+              var prev =
+                  StepsDAO.checkStepResult(
+                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+              if (prev != null) {
+                return prev.toResult(ctx.serializer());
+              }
+            }
+            String created =
+                takeOver(ctx, c, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid);
+            if (caller != null) {
+              var serialized = SerializationUtil.serializeValue(created, null, ctx.serializer());
+              StepsDAO.recordStepResult(
+                  ctx,
+                  c,
+                  new StepResult(
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      serialized.serializedValue(),
+                      null,
+                      created,
+                      serialized.serialization()),
+                  startTime,
+                  System.currentTimeMillis());
+            }
+            return created;
+          });
+    }
+  }
+
+  private static @Nullable String takeOver(
+      DbContext ctx,
+      Connection conn,
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable Long delayUntilEpochMs,
+      String ownerXid)
+      throws SQLException {
+    var lockSql =
         """
-          SELECT is_debounced FROM "%s".workflow_status WHERE workflow_uuid = ?
+          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ? FOR UPDATE
         """
             .formatted(ctx.schema());
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
+    WorkflowState status;
+    try (var stmt = conn.prepareStatement(lockSql)) {
+      stmt.setString(1, debouncerWorkflowId);
       try (var rs = stmt.executeQuery()) {
-        return rs.next() && rs.getBoolean("is_debounced");
+        if (!rs.next()) {
+          return null;
+        }
+        status = WorkflowState.valueOf(rs.getString("status"));
       }
     }
+    if (!status.isActive()) {
+      return null;
+    }
+    // As cancelWorkflows does, without cascading: a child the debouncer workflow already started
+    // is the promised workflow, and it runs.
+    var cancelSql =
+        """
+          UPDATE "%1$s".workflow_status
+          SET status = ?,
+              queue_name = NULL,
+              deduplication_id = NULL,
+              started_at_epoch_ms = NULL,
+              updated_at = %2$s,
+              completed_at = %2$s
+          WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
+    try (var stmt = conn.prepareStatement(cancelSql)) {
+      stmt.setString(1, WorkflowState.CANCELLED.name());
+      stmt.setString(2, debouncerWorkflowId);
+      stmt.executeUpdate();
+    }
+    DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
+    if (promised == null) {
+      logger.warn(
+          "Cancelled debouncer workflow {}, which stopped acknowledging calls and names no user"
+              + " workflow",
+          debouncerWorkflowId);
+      return null;
+    }
+    // A row already there -- the promised workflow the debouncer workflow started -- keeps its
+    // inputs: the insert writes them only for a row it creates.
+    var inserted =
+        insertWorkflowStatus(
+            conn, ctx.schema(), promised, delayUntilEpochMs, ownerXid, owner(ctx, promised));
+    if (!ownerXid.equals(inserted.ownerXid())) {
+      logger.warn(
+          "Cancelled debouncer workflow {}, which stopped acknowledging calls after starting its"
+              + " user workflow {}",
+          debouncerWorkflowId,
+          promised.workflowId());
+      return null;
+    }
+    logger.warn(
+        "Cancelled debouncer workflow {}, which stopped acknowledging calls, and created its user"
+            + " workflow {}",
+        debouncerWorkflowId,
+        promised.workflowId());
+    return promised.workflowId();
   }
 
   /**

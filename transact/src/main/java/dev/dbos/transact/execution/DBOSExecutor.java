@@ -524,23 +524,66 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
     }
     var options =
-        new ExecutionOptions(
-                workflowId,
-                Timeout.of(timeout),
-                null,
-                queueName,
-                deduplicationId,
-                priority,
-                null,
-                delay,
-                appVersion,
-                null)
-            .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
-            .withAssumedRole(ctx.resolveNextAssumedRole())
-            .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
-            .withAttributes(attributes)
-            .withDebounce(debounceDeadline);
+        debouncedOptions(
+            ctx,
+            workflowId,
+            queueName,
+            deduplicationId,
+            delay,
+            debounceDeadline,
+            priority,
+            appVersion,
+            timeout,
+            attributes);
     return executeWorkflow(workflow, args, options, parent);
+  }
+
+  /** The options {@link #enqueueDebounced} creates a debounced workflow with. */
+  private static ExecutionOptions debouncedOptions(
+      DBOSContext ctx,
+      String workflowId,
+      String queueName,
+      String deduplicationId,
+      Duration delay,
+      @Nullable Instant debounceDeadline,
+      @Nullable Integer priority,
+      @Nullable String appVersion,
+      @Nullable Duration timeout,
+      @Nullable Map<String, Object> attributes) {
+    return new ExecutionOptions(
+            workflowId,
+            Timeout.of(timeout),
+            null,
+            queueName,
+            deduplicationId,
+            priority,
+            null,
+            delay,
+            appVersion,
+            null)
+        .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
+        .withAssumedRole(ctx.resolveNextAssumedRole())
+        .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
+        .withAttributes(attributes)
+        .withDebounce(debounceDeadline);
+  }
+
+  /**
+   * Whether {@code slot} is an enqueue that collided when it first ran: nothing is recorded there,
+   * and {@code DBOS.lookupDebouncer} is recorded in the slot after.
+   */
+  private boolean collidedEnqueueRecordedAt(WorkflowInfo slot) {
+    try {
+      if (systemDatabase.checkStepResult(
+              slot.workflowId(), slot.functionId(), "DBOS.takeOverStrandedDebouncer")
+          != null) {
+        return false;
+      }
+    } catch (DBOSUnexpectedStepException e) {
+      // Something else is recorded there; the takeover's own replay reports the mismatch.
+      return false;
+    }
+    return lookupDebouncerRecordedAfter(slot);
   }
 
   /** Whether the slot after {@code parent}'s is a recorded {@code DBOS.lookupDebouncer} step. */
@@ -579,23 +622,86 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * {@link InternalWorkflows#takeOverStrandedDebouncer}, as a step when called from a workflow, so
-   * a replay neither cancels again nor loses the id it returned.
+   * {@link InternalWorkflows#takeOverStrandedDebouncer}, creating the promised workflow as {@link
+   * #enqueueDebounced} would enqueue it under that id. Called from a workflow, it is the {@code
+   * DBOS.takeOverStrandedDebouncer} step, checkpointed in the takeover's transaction with the
+   * promised workflow as its child.
    */
-  public @Nullable String takeOverStrandedDebouncer(String debouncerWorkflowId) {
-    return runDbosFunctionAsStep(
-        () -> InternalWorkflows.takeOverStrandedDebouncer(systemDatabase, debouncerWorkflowId),
-        "DBOS.takeOverStrandedDebouncer",
-        null);
-  }
-
-  /**
-   * Whether {@code workflowId} was written as a debounced workflow, as a step when called from a
-   * workflow. See {@link SystemDatabase#isDebouncedWorkflow}.
-   */
-  public boolean isDebouncedWorkflow(String workflowId) {
-    return runDbosFunctionAsStep(
-        () -> systemDatabase.isDebouncedWorkflow(workflowId), "DBOS.isDebouncedWorkflow", null);
+  public @Nullable String takeOverStrandedDebouncer(
+      RegisteredWorkflow workflow,
+      Object[] args,
+      String debouncerWorkflowId,
+      String queueName,
+      String deduplicationId,
+      Duration delay,
+      @Nullable Instant debounceDeadline,
+      @Nullable Integer priority,
+      @Nullable String appVersion,
+      @Nullable Duration timeout,
+      @Nullable Map<String, Object> attributes) {
+    var ctx = DBOSContextHolder.get();
+    DebounceCaller caller = null;
+    if (ctx.isInWorkflow()) {
+      // It creates a workflow, which a step cannot, as enqueueDebounced cannot.
+      if (ctx.isInStep()) {
+        throw new IllegalStateException("cannot invoke a workflow from a step");
+      }
+      if (HOOK_HOLDER.get() != null) {
+        throw new RuntimeException(
+            "@Step functions cannot be called from the startWorkflow lambda");
+      }
+      // A release before 1.2 never took over: on silence it tried to enqueue again, which
+      // collided and recorded nothing, and looked the holder up in the next slot. Replaying that,
+      // leave the slot to enqueueDebounced, which throws the collision again.
+      if (collidedEnqueueRecordedAt(
+          new WorkflowInfo(ctx.getWorkflowId(), ctx.getCurrentFunctionId()))) {
+        return null;
+      }
+      caller =
+          new DebounceCaller(
+              ctx.getWorkflowId(),
+              ctx.getAndIncrementFunctionId(),
+              "DBOS.takeOverStrandedDebouncer");
+    }
+    validateQueue(queueName, null);
+    var parentWorkflowId = caller != null ? caller.workflowId() : null;
+    return InternalWorkflows.takeOverStrandedDebouncer(
+        systemDatabase,
+        debouncerWorkflowId,
+        promisedId -> {
+          var options =
+              debouncedOptions(
+                  ctx,
+                  promisedId,
+                  queueName,
+                  deduplicationId,
+                  delay,
+                  debounceDeadline,
+                  priority,
+                  appVersion,
+                  timeout,
+                  attributes);
+          // The defaults executeWorkflow applies to an enqueue.
+          if (workflow.serializationStrategy() != null) {
+            options = options.withSerialization(workflow.serializationStrategy().formatName());
+          }
+          if (options.appVersion() == null) {
+            options = options.withAppVersion(appVersion());
+          }
+          return workflowStatus(
+              systemDatabase,
+              workflow.workflowName(),
+              workflow.className(),
+              workflow.instanceName(),
+              args,
+              null,
+              executorId(),
+              appId(),
+              parentWorkflowId,
+              options,
+              null);
+        },
+        caller);
   }
 
   QueueService getQueueService() {
@@ -2357,6 +2463,52 @@ public class DBOSExecutor implements AutoCloseable {
       ExecutionOptions options,
       @Nullable String applicationName) {
 
+    var workflowStatusInternal =
+        workflowStatus(
+            systemDatabase,
+            workflowName,
+            className,
+            instanceName,
+            positionalArgs,
+            namedArgs,
+            executorId,
+            appId,
+            parentWorkflow != null ? parentWorkflow.workflowId() : null,
+            options,
+            applicationName);
+    var startTime = System.currentTimeMillis();
+    final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
+    var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
+
+    if (parentWorkflow != null) {
+      systemDatabase.recordChildWorkflow(
+          parentWorkflow.workflowId(),
+          options.workflowId(),
+          parentWorkflow.functionId(),
+          workflowName,
+          startTime);
+    }
+
+    return initResult;
+  }
+
+  /**
+   * The status row a workflow is created with, its inputs serialized. Used by {@link
+   * #persistWorkflow}, and by a debouncer taking over a debouncer workflow, which creates the row
+   * in its own transaction.
+   */
+  public static WorkflowStatusInternal workflowStatus(
+      SystemDatabase systemDatabase,
+      String workflowName,
+      String className,
+      String instanceName,
+      Object[] positionalArgs,
+      Map<String, Object> namedArgs,
+      String executorId,
+      String appId,
+      @Nullable String parentWorkflowId,
+      ExecutionOptions options,
+      @Nullable String applicationName) {
     // The row is read back with the format it records, so the serializer is the one the system
     // database being written to was configured with -- never a second one passed in alongside it,
     // which could only match or be a bug.
@@ -2371,54 +2523,38 @@ public class DBOSExecutor implements AutoCloseable {
             serializer);
     String inputString = serializedArgs.serializedValue();
     String actualSerialization = serializedArgs.serialization();
-    var startTime = System.currentTimeMillis();
 
     Instant effectiveDeadline =
         (options.queueName() != null && options.timeoutDuration() != null)
             ? null
             : options.deadline();
 
-    final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
-    WorkflowStatusInternal workflowStatusInternal =
-        new WorkflowStatusInternal(
-            options.workflowId(),
-            workflowName,
-            className,
-            instanceName,
-            options.queueName(),
-            options.deduplicationId(),
-            options.priority(),
-            options.queuePartitionKey(),
-            options.delay(),
-            options.authenticatedUser(),
-            options.assumedRole(),
-            options.authenticatedRoles(),
-            inputString,
-            executorId,
-            options.appVersion(),
-            appId,
-            options.timeoutDuration(),
-            effectiveDeadline,
-            parentWorkflow != null ? parentWorkflow.workflowId() : null,
-            actualSerialization,
-            options.attributes(),
-            options.scheduleName(),
-            applicationName,
-            options.isDebounced(),
-            options.debounceDeadline());
-
-    var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
-
-    if (parentWorkflow != null) {
-      systemDatabase.recordChildWorkflow(
-          parentWorkflow.workflowId(),
-          options.workflowId(),
-          parentWorkflow.functionId(),
-          workflowName,
-          startTime);
-    }
-
-    return initResult;
+    return new WorkflowStatusInternal(
+        options.workflowId(),
+        workflowName,
+        className,
+        instanceName,
+        options.queueName(),
+        options.deduplicationId(),
+        options.priority(),
+        options.queuePartitionKey(),
+        options.delay(),
+        options.authenticatedUser(),
+        options.assumedRole(),
+        options.authenticatedRoles(),
+        inputString,
+        executorId,
+        options.appVersion(),
+        appId,
+        options.timeoutDuration(),
+        effectiveDeadline,
+        parentWorkflowId,
+        actualSerialization,
+        options.attributes(),
+        options.scheduleName(),
+        applicationName,
+        options.isDebounced(),
+        options.debounceDeadline());
   }
 
   private boolean persistWorkflowOutput(String workflowId, Object result, String serialization) {

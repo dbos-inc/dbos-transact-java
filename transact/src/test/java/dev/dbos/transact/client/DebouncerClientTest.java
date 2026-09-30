@@ -326,6 +326,9 @@ public class DebouncerClientTest {
   }
 
   @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
   void cancelsAStrandedDebouncerWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
     // Its node started the promised workflow, then died before the debouncer workflow finished.
     var stranded = plantDebouncerWorkflow("started", "promised-c4", null, "no-such-version");

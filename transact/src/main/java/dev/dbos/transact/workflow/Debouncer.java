@@ -337,8 +337,6 @@ public final class Debouncer<R> {
     String messageId = ids.messageId();
     // A debouncer workflow to forward this call to before trying to create anything (1.1 interop).
     String debouncerWorkflowId = ids.debouncerWorkflowId();
-    // Set while creating the workflow a stranded debouncer workflow promised, under its id.
-    boolean takingOver = false;
     // Consecutive unacknowledged forwards to one debouncer workflow; reset when the holder changes.
     String silentHolderId = null;
     int silentAcks = 0;
@@ -346,7 +344,7 @@ public final class Debouncer<R> {
     while (true) {
       // 1.1 interop: forward this call to the debouncer workflow holding the key. A live one acks
       // and publishes the user workflow it will start. One that stays silent is rechecked, and
-      // after enough silence taken over: cancelled, and its promised workflow created below.
+      // after enough silence taken over: cancelled, and its promised workflow created.
       if (debouncerWorkflowId != null) {
         String holderId = debouncerWorkflowId;
         debouncerWorkflowId = null;
@@ -381,10 +379,23 @@ public final class Debouncer<R> {
           }
         } else {
           silentHolderId = null;
-          String promisedId = executor.takeOverStrandedDebouncer(holderId);
+          // Cancels it and creates the workflow it promised, with this call's arguments, in one
+          // transaction. Failing that, this call goes on as any other on the key.
+          String promisedId =
+              executor.takeOverStrandedDebouncer(
+                  userWorkflow,
+                  args,
+                  holderId,
+                  targetQueue,
+                  debounceDeduplicationId,
+                  debouncePeriod,
+                  deadline,
+                  priority,
+                  appVersion,
+                  timeout,
+                  workflowAttributes);
           if (promisedId != null) {
-            userWorkflowId = promisedId;
-            takingOver = true;
+            return dbos.retrieveWorkflow(promisedId);
           }
         }
       }
@@ -409,18 +420,6 @@ public final class Debouncer<R> {
           // slot. That workflow started the user workflow under the id the first step assigned.
           return dbos.retrieveWorkflow(userWorkflowId);
         }
-        if (takingOver && !executor.isDebouncedWorkflow(userWorkflowId)) {
-          // 1.1 interop: the debouncer workflow was only slow. It started the promised workflow
-          // between the cancel and this enqueue, with the arguments it had, and this call's
-          // arguments went nowhere. Start over under this call's own id, as for any call that
-          // arrives after its key's workflow has committed to run.
-          logger.debug(
-              "Debounced workflow {} was started by its debouncer workflow; retrying",
-              userWorkflowId);
-          takingOver = false;
-          userWorkflowId = ids.userWorkflowId();
-          continue;
-        }
         return handle;
       } catch (DBOSQueueDuplicatedException dup) {
         // Someone took the key between the first step and this enqueue. If it is a debounced
@@ -428,10 +427,6 @@ public final class Debouncer<R> {
         // so we can coordinate with it or refuse. Recorded as a step, as the first one is, and
         // typed as Object for the same reason; a step recorded by a release before the bounce
         // holds a bare workflow id, and toDebounceResult adapts it.
-        //
-        // A takeover that loses the key here leaves the promised workflow uncreated, and handles
-        // earlier callers hold to it wait. That needs a third call to land in the milliseconds
-        // between the cancel and the enqueue.
         DebounceResult result =
             toDebounceResult(
                 executor.debounceDelayedWorkflow(

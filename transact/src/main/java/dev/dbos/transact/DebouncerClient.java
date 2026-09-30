@@ -348,8 +348,16 @@ public final class DebouncerClient<R> {
     String userWorkflowId = ids.userWorkflowId();
     String messageId = ids.messageId();
     String debouncerWorkflowId = ids.debouncerWorkflowId();
-    // Set while creating the workflow a stranded debouncer workflow promised, under its id.
-    boolean takingOver = false;
+    var enqueueOpts =
+        new EnqueueOptions(workflowName, className, instanceName, QueueName.of(targetQueue))
+            .withWorkflowId(userWorkflowId)
+            .withDeduplicationId(deduplicationId)
+            .withDelay(debouncePeriod)
+            .withPriority(priority)
+            .withAppVersion(appVersion)
+            .withTimeout(Timeout.of(workflowTimeout))
+            .withAttributes(attributes)
+            .withSerialization(serialization);
     // Consecutive unacknowledged forwards to one debouncer workflow; reset when the holder changes.
     String silentHolderId = null;
     int silentAcks = 0;
@@ -381,38 +389,18 @@ public final class DebouncerClient<R> {
           }
         } else {
           silentHolderId = null;
-          String promisedId = client.takeOverStrandedDebouncer(holderId);
+          // Cancels it and creates the workflow it promised, with this call's arguments, in one
+          // transaction. Failing that, this call goes on as any other on the key.
+          String promisedId =
+              client.takeOverStrandedDebouncer(holderId, enqueueOpts, args, deadline);
           if (promisedId != null) {
-            userWorkflowId = promisedId;
-            takingOver = true;
+            return client.retrieveWorkflow(promisedId);
           }
         }
       }
 
-      var enqueueOpts =
-          new EnqueueOptions(workflowName, className, instanceName, QueueName.of(targetQueue))
-              .withWorkflowId(userWorkflowId)
-              .withDeduplicationId(deduplicationId)
-              .withDelay(debouncePeriod)
-              .withPriority(priority)
-              .withAppVersion(appVersion)
-              .withTimeout(Timeout.of(workflowTimeout))
-              .withAttributes(attributes)
-              .withSerialization(serialization);
       try {
-        WorkflowHandle<R, ?> handle = client.enqueueDebounced(enqueueOpts, args, deadline);
-        if (takingOver && !client.isDebouncedWorkflow(userWorkflowId)) {
-          // The debouncer workflow was only slow: it started the promised workflow between the
-          // cancel and this enqueue, and this call's arguments went nowhere. Start over under this
-          // call's own id.
-          logger.debug(
-              "Debounced workflow {} was started by its debouncer workflow; retrying",
-              userWorkflowId);
-          takingOver = false;
-          userWorkflowId = ids.userWorkflowId();
-          continue;
-        }
-        return handle;
+        return client.enqueueDebounced(enqueueOpts, args, deadline);
       } catch (DBOSQueueDuplicatedException dup) {
         // Someone took the key between the first bounce and this enqueue. If it is a debounced
         // workflow waiting there, this bounce extends it; otherwise the result reports the holder.
