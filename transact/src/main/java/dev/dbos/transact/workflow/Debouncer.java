@@ -42,10 +42,10 @@ import org.slf4j.LoggerFactory;
  * <p>The returned {@link WorkflowHandle} points to the user workflow that will eventually run with
  * the latest arguments; polling it for {@code getResult()} waits for that workflow's outcome.
  *
- * <p>The user workflow takes only a timeout set with {@code WorkflowOptions} around the {@code
- * debounce} call, timed from when it is dequeued. It inherits neither the calling workflow's
- * timeout nor its deadline, and a deadline set with {@code WorkflowOptions} is ignored: the
- * workflow may start long after the call.
+ * <p>The user workflow takes the timeout set with {@link #withTimeout}, or failing that one set
+ * with {@code WorkflowOptions} around the {@code debounce} call, timed from when it is dequeued. It
+ * inherits neither the calling workflow's timeout nor its deadline, and a deadline set with {@code
+ * WorkflowOptions} is ignored: the workflow may start long after the call.
  *
  * <h2>Example</h2>
  *
@@ -106,9 +106,10 @@ public final class Debouncer<R> {
   private final @Nullable Duration debounceTimeout;
   private final @Nullable String appVersion;
   private final @Nullable Integer priority;
+  private final @Nullable Duration workflowTimeout;
 
   public Debouncer(@NonNull DBOS dbos, @NonNull DBOSExecutor executor) {
-    this(dbos, executor, null, null, null, null);
+    this(dbos, executor, null, null, null, null, null);
   }
 
   private Debouncer(
@@ -117,13 +118,15 @@ public final class Debouncer<R> {
       @Nullable String queueName,
       @Nullable Duration debounceTimeout,
       @Nullable String appVersion,
-      @Nullable Integer priority) {
+      @Nullable Integer priority,
+      @Nullable Duration workflowTimeout) {
     this.dbos = Objects.requireNonNull(dbos, "dbos must not be null");
     this.executor = Objects.requireNonNull(executor, "executor must not be null");
     this.queueName = queueName;
     this.debounceTimeout = debounceTimeout;
     this.appVersion = appVersion;
     this.priority = priority;
+    this.workflowTimeout = workflowTimeout;
   }
 
   /**
@@ -133,7 +136,8 @@ public final class Debouncer<R> {
     if (queueName != null && queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName must not be empty");
     }
-    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
+    return new Debouncer<>(
+        dbos, executor, queueName, debounceTimeout, appVersion, priority, workflowTimeout);
   }
 
   /**
@@ -160,12 +164,14 @@ public final class Debouncer<R> {
    * arriving.
    */
   public @NonNull Debouncer<R> withDebounceTimeout(@Nullable Duration debounceTimeout) {
-    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
+    return new Debouncer<>(
+        dbos, executor, queueName, debounceTimeout, appVersion, priority, workflowTimeout);
   }
 
   /** Target a specific application version for the user workflow. */
   public @NonNull Debouncer<R> withAppVersion(@Nullable String appVersion) {
-    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
+    return new Debouncer<>(
+        dbos, executor, queueName, debounceTimeout, appVersion, priority, workflowTimeout);
   }
 
   /**
@@ -174,7 +180,21 @@ public final class Debouncer<R> {
    * and it rejects a negative one.
    */
   public @NonNull Debouncer<R> withPriority(@Nullable Integer priority) {
-    return new Debouncer<>(dbos, executor, queueName, debounceTimeout, appVersion, priority);
+    return new Debouncer<>(
+        dbos, executor, queueName, debounceTimeout, appVersion, priority, workflowTimeout);
+  }
+
+  /**
+   * Set a timeout for every user workflow this debouncer starts, timed from when that workflow is
+   * dequeued. It takes precedence over a timeout set with {@code WorkflowOptions} around the {@code
+   * debounce} call; {@code null} leaves that one to apply.
+   */
+  public @NonNull Debouncer<R> withTimeout(@Nullable Duration timeout) {
+    if (timeout != null && (timeout.isNegative() || timeout.isZero())) {
+      throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+    }
+    return new Debouncer<>(
+        dbos, executor, queueName, debounceTimeout, appVersion, priority, timeout);
   }
 
   /**
@@ -260,11 +280,13 @@ public final class Debouncer<R> {
     String debounceDeduplicationId = invocation.workflowName() + "-" + debounceKey;
     Object[] args = invocation.args();
 
-    // Only a timeout the caller set for this call carries over, as in Python and TypeScript. The
-    // running workflow's own timeout is its budget, not the debounced workflow's (#561).
+    // The debouncer's own timeout, else only one the caller set for this call, as in Python and
+    // TypeScript. The running workflow's own timeout is its budget, not the debounced workflow's.
     var callerCtx = DBOSContextHolder.get();
-    Duration workflowTimeout =
-        callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
+    Duration timeout =
+        this.workflowTimeout != null
+            ? this.workflowTimeout
+            : callerCtx.getNextTimeout() instanceof Timeout.Explicit e ? e.value() : null;
     var workflowAttributes = callerCtx.resolveNextAttributes();
 
     // The first step assigns the ids and tries to extend a debounced workflow already waiting on
@@ -353,7 +375,7 @@ public final class Debouncer<R> {
                 deadline,
                 priority,
                 appVersion,
-                workflowTimeout,
+                timeout,
                 workflowAttributes);
         if (!handle.workflowId().equals(userWorkflowId)) {
           // A replay of the previous release, which recorded its debouncer workflow in this slot.

@@ -388,6 +388,8 @@ public class DebouncerTest {
     String debounceWithInheritedTimeout(String arg);
 
     String debounceWithOwnTimeout(String arg);
+
+    String debounceWithDebouncerTimeout(String arg);
   }
 
   public static class TimedOrchestratorImpl implements TimedOrchestrator {
@@ -399,7 +401,7 @@ public class DebouncerTest {
       this.svc = svc;
     }
 
-    // Both return the debounced workflow's ID, once it has finished.
+    // Each returns the debounced workflow's ID, once it has finished.
 
     @Override
     @Workflow
@@ -421,6 +423,17 @@ public class DebouncerTest {
         h.getResult();
         return h.workflowId();
       }
+    }
+
+    @Override
+    @Workflow
+    public String debounceWithDebouncerTimeout(String arg) {
+      var h =
+          dbos.<String>debouncer()
+              .withTimeout(Duration.ofMinutes(3))
+              .debounce("timed-debouncer", Duration.ofMillis(200), () -> svc.process(arg));
+      h.getResult();
+      return h.workflowId();
     }
   }
 
@@ -457,6 +470,55 @@ public class DebouncerTest {
     var own = dbos.retrieveWorkflow(ownId).getStatus();
     assertEquals(Duration.ofMinutes(2).toMillis(), own.timeoutMs());
     assertNotNull(own.deadlineEpochMs());
+  }
+
+  /**
+   * A timeout set on the debouncer reaches every workflow it debounces, inside a workflow or not,
+   * and takes precedence over one set with {@code WorkflowOptions} around the call (#585).
+   */
+  @Test
+  public void aTimeoutSetOnTheDebouncerReachesTheDebouncedWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch = dbos.registerProxy(TimedOrchestrator.class, new TimedOrchestratorImpl(dbos, svc));
+    dbos.launch();
+    var debouncer = dbos.<String>debouncer().withTimeout(Duration.ofMinutes(3));
+
+    var plain = debouncer.debounce("dt-plain", Duration.ofMillis(200), () -> svc.process("a"));
+    WorkflowHandle<String, RuntimeException> overAmbient;
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofMinutes(2)).setContext()) {
+      overAmbient =
+          debouncer.debounce("dt-ambient", Duration.ofMillis(200), () -> svc.process("b"));
+    }
+    String insideId;
+    try (var o = new WorkflowOptions("dt-parent").withTimeout(Duration.ofMinutes(5)).setContext()) {
+      insideId = orch.debounceWithDebouncerTimeout("c");
+    }
+    assertEquals("result:a", plain.getResult());
+    assertEquals("result:b", overAmbient.getResult());
+
+    for (var status :
+        List.of(
+            plain.getStatus(),
+            overAmbient.getStatus(),
+            dbos.retrieveWorkflow(insideId).getStatus())) {
+      assertEquals(Duration.ofMinutes(3).toMillis(), status.timeoutMs(), status.workflowId());
+      assertNotNull(status.deadlineEpochMs(), status.workflowId());
+    }
+
+    // Unset again, the ambient timeout applies, as it does with none set.
+    WorkflowHandle<String, RuntimeException> unset;
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofMinutes(2)).setContext()) {
+      unset =
+          debouncer
+              .withTimeout(null)
+              .debounce("dt-unset", Duration.ofMillis(200), () -> svc.process("d"));
+    }
+    assertEquals("result:d", unset.getResult());
+    assertEquals(Duration.ofMinutes(2).toMillis(), unset.getStatus().timeoutMs());
+
+    assertThrows(IllegalArgumentException.class, () -> debouncer.withTimeout(Duration.ZERO));
+    assertThrows(
+        IllegalArgumentException.class, () -> debouncer.withTimeout(Duration.ofSeconds(-1)));
   }
 
   /**
