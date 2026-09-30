@@ -30,6 +30,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -729,13 +730,16 @@ public class DebouncerTest {
 
   /** A debouncer workflow's inputs as a version before 1.2 wrote them. */
   private static Object[] debouncerInputs(String promisedId, String queue) {
+    return debouncerInputs(promisedId, queue, Duration.ofSeconds(2));
+  }
+
+  private static Object[] debouncerInputs(String promisedId, String queue, Duration period) {
     var options =
         new DebouncerOptions(
             "process", DebouncedServiceImpl.class.getName(), null, queue, null, null, null, null);
     var ctx = new DebouncerContextOptions(promisedId, null, null);
     var initial =
-        new DebouncerMessage(
-            UUID.randomUUID().toString(), new Object[] {"stale"}, Duration.ofSeconds(2));
+        new DebouncerMessage(UUID.randomUUID().toString(), new Object[] {"stale"}, period);
     return new Object[] {options, ctx, initial};
   }
 
@@ -867,6 +871,54 @@ public class DebouncerTest {
     assertEquals("promised-10", handle.workflowId());
     assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
     assertEquals("result:fresh", handle.getResult());
+  }
+
+  /**
+   * The upgrade itself, with no hand-built state: the 1.1 debouncer workflow runs here for real
+   * until it is waiting for calls, the process shuts down, and a process of a new application
+   * version takes over the database. That process never recovers it, so it is stranded holding
+   * everything 1.1 left -- its child-id event, its recorded steps, its executor -- and a debounce
+   * on its key has to take it over.
+   */
+  @Test
+  public void takesOverADebouncerWorkflowThatAnUpgradeStranded() throws Exception {
+    dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var running =
+        plantDebouncerWorkflow(
+            "upgrade",
+            liveVersion(),
+            WorkflowState.ENQUEUED,
+            debouncerInputs("promised-14", null, Duration.ofMinutes(5)),
+            null);
+    // Dequeued and running: it publishes the id it promises first, then waits for calls.
+    assertEquals(
+        Optional.of("promised-14"),
+        dbos.getEvent(running, Constants.DEBOUNCER_CHILD_ID_KEY, Duration.ofSeconds(30)));
+    assertEquals(WorkflowState.PENDING, dbos.retrieveWorkflow(running).getStatus().status());
+    Thread.sleep(500); // let it reach its receive loop
+    dbos.close();
+
+    dbos = new DBOS(pgContainer.dbosConfig().withAppVersion("upgraded"));
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var stranded = dbos.retrieveWorkflow(running).getStatus();
+    assertEquals(WorkflowState.PENDING, stranded.status());
+    assertNotEquals("upgraded", stranded.appVersion());
+    recordedStep(running, "DBOS.debouncerComputeDeadline");
+    recordedStep(running, "DBOS.debouncerNow");
+    assertEquals(0, countWorkflowsByName("process"));
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("upgrade", Duration.ofMillis(300), () -> svc.process("fresh"));
+
+    assertEquals("promised-14", handle.workflowId());
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(running).getStatus().status());
+    assertEquals("result:fresh", handle.getResult());
+    // Created by this version, so this process runs it.
+    assertEquals("upgraded", dbos.retrieveWorkflow("promised-14").getStatus().appVersion());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
   }
 
   @Test
