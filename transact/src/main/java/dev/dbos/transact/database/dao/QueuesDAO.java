@@ -583,7 +583,7 @@ public class QueuesDAO {
   }
 
   /**
-   * The partition keys with an ENQUEUED workflow on the queue, in key order.
+   * The partition keys with an ENQUEUED workflow on the queue, in no guaranteed order.
    *
    * <p>Walks them with {@link #partitionKeysCte}, so the cost grows with the number of partitions
    * rather than the backlog: SELECT DISTINCT reads every ENQUEUED row to find the same keys.

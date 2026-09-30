@@ -270,7 +270,10 @@ public class PartitionedDequeueTest {
     enqueue(other, "other", "e");
     DBUtils.setWorkflowState(dataSource, "running", WorkflowState.PENDING.name());
 
-    assertEquals(List.of("a", "b", "c"), QueuesDAO.getQueuePartitions(ctx, queue.name()));
+    // Sorted here because the listing promises no order: every caller shuffles it anyway.
+    assertEquals(
+        List.of("a", "b", "c"),
+        QueuesDAO.getQueuePartitions(ctx, queue.name()).stream().sorted().toList());
     assertEquals(List.of(), QueuesDAO.getQueuePartitions(ctx, "partition-list-empty"));
   }
 
