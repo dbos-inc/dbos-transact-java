@@ -230,8 +230,16 @@ public final class DebouncerClient<R> {
     return this;
   }
 
-  /** Set a timeout for the user workflow. */
+  /**
+   * Set a timeout for every user workflow this debouncer starts, timed from when that workflow is
+   * dequeued; {@code null} for none.
+   *
+   * @throws IllegalArgumentException if {@code timeout} is zero or negative
+   */
   public @NonNull DebouncerClient<R> withTimeout(@Nullable Duration timeout) {
+    if (timeout != null && (timeout.isNegative() || timeout.isZero())) {
+      throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+    }
     return new DebouncerClient<>(
         client,
         workflowName,

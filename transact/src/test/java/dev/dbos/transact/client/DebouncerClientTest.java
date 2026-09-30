@@ -499,6 +499,14 @@ public class DebouncerClientTest {
   }
 
   @Test
+  void rejectsANonPositiveTimeoutWhenSet() {
+    assertThrows(IllegalArgumentException.class, () -> debouncer().withTimeout(Duration.ZERO));
+    assertThrows(
+        IllegalArgumentException.class, () -> debouncer().withTimeout(Duration.ofSeconds(-1)));
+    debouncer().withTimeout(null);
+  }
+
+  @Test
   void rejectsANegativePriorityWhenSet() {
     var debouncer = debouncer().withQueue(QueueName.of(USER_QUEUE));
 
