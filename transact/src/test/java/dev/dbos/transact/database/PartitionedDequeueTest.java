@@ -261,6 +261,22 @@ public class PartitionedDequeueTest {
   }
 
   @Test
+  public void listsEachPartitionWithAnEnqueuedWorkflowOnce() throws Exception {
+    var queue = partitionedQueue("partition-list", null, 1);
+    var other = partitionedQueue("partition-list-other", null, 1);
+    enqueue(queue, "c-1", "c");
+    enqueue(queue, "a-1", "a");
+    enqueue(queue, "a-2", "a");
+    enqueue(queue, "b-1", "b");
+    enqueue(queue, "running", "d");
+    enqueue(other, "other", "e");
+    DBUtils.setWorkflowState(dataSource, "running", WorkflowState.PENDING.name());
+
+    assertEquals(List.of("a", "b", "c"), QueuesDAO.getQueuePartitions(ctx, queue.name()));
+    assertEquals(List.of(), QueuesDAO.getQueuePartitions(ctx, "partition-list-empty"));
+  }
+
+  @Test
   public void eligibilityMatchesTheOtherSdks() {
     assertTrue(QueuesDAO.canBatchPartitionedDequeue(partitionedQueue("q", null, 1)));
     // The legacy flag enforces its queue-wide limits per partition, so concurrency 1 qualifies.

@@ -340,18 +340,7 @@ public class QueuesDAO {
 
         var candidateQuery =
             """
-            WITH RECURSIVE partitions AS (
-              (SELECT MIN(queue_partition_key) AS pk
-               FROM "%1$s".workflow_status
-               WHERE queue_name = ? AND status = ? AND queue_partition_key IS NOT NULL%2$s)
-              UNION ALL
-              (SELECT (SELECT MIN(queue_partition_key)
-                       FROM "%1$s".workflow_status
-                       WHERE queue_name = ? AND status = ?
-                         AND queue_partition_key > partitions.pk%2$s)
-               FROM partitions
-               WHERE partitions.pk IS NOT NULL)
-            ),
+            %5$s,
             chosen AS (
               SELECT partitions.pk
               FROM partitions
@@ -384,17 +373,16 @@ public class QueuesDAO {
             -- Which partitions to claim is settled above; this orders the claim and its dispatch.
             ORDER BY chosen.pk ASC
             """
-                .formatted(ctx.schema(), ctx.andAppScope(), sweepOrder, versionClause);
+                .formatted(
+                    ctx.schema(),
+                    ctx.andAppScope(),
+                    sweepOrder,
+                    versionClause,
+                    partitionKeysCte(ctx));
 
         List<String> candidateIds = new ArrayList<>();
         try (var ps = connection.prepareStatement(candidateQuery)) {
-          int i = 1;
-          ps.setString(i++, queue.name());
-          ps.setString(i++, WorkflowState.ENQUEUED.name());
-          i = ctx.bindAppScope(ps, i);
-          ps.setString(i++, queue.name());
-          ps.setString(i++, WorkflowState.ENQUEUED.name());
-          i = ctx.bindAppScope(ps, i);
+          int i = bindPartitionKeysCte(ctx, ps, 1, queue.name());
           ps.setString(i++, queue.name());
           ps.setString(i++, WorkflowState.PENDING.name());
           ps.setLong(i++, sweepLimit);
@@ -603,35 +591,65 @@ public class QueuesDAO {
     }
   }
 
+  /**
+   * The partition keys with an ENQUEUED workflow on the queue, in key order.
+   *
+   * <p>Walks them with {@link #partitionKeysCte}, so the cost grows with the number of partitions
+   * rather than the backlog: SELECT DISTINCT reads every ENQUEUED row to find the same keys.
+   */
   public static List<String> getQueuePartitions(DbContext ctx, String queueName)
       throws SQLException {
 
-    final String sql =
-        """
-          SELECT DISTINCT queue_partition_key
-          FROM "%s".workflow_status
-          WHERE queue_name = ?
-            AND status = ?
-            AND queue_partition_key IS NOT NULL
-        """
-                .formatted(ctx.schema())
-            + ctx.andAppScope();
+    final String sql = partitionKeysCte(ctx) + " SELECT pk FROM partitions WHERE pk IS NOT NULL";
 
     try (Connection connection = ctx.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
-      stmt.setString(1, queueName);
-      stmt.setString(2, WorkflowState.ENQUEUED.name());
-      ctx.bindAppScope(stmt, 3);
+      bindPartitionKeysCte(ctx, stmt, 1, queueName);
 
       try (ResultSet rs = stmt.executeQuery()) {
         List<String> partitions = new ArrayList<>();
         while (rs.next()) {
-          String partitionKey = rs.getString("queue_partition_key");
-          partitions.add(partitionKey);
+          partitions.add(rs.getString(1));
         }
         return partitions;
       }
     }
+  }
+
+  /**
+   * A recursive CTE named {@code partitions} whose {@code pk} column lists the distinct partition
+   * keys with an ENQUEUED workflow this application may dequeue, ending in one NULL row.
+   *
+   * <p>It is a loose index scan: each step is one seek on idx_workflow_status_partition_dequeue_v2
+   * for the next key above the last, so it costs one seek per partition however deep each
+   * partition's backlog is. Bind its parameters with {@link #bindPartitionKeysCte}.
+   */
+  private static String partitionKeysCte(DbContext ctx) {
+    return """
+        WITH RECURSIVE partitions AS (
+          (SELECT MIN(queue_partition_key) AS pk
+           FROM "%1$s".workflow_status
+           WHERE queue_name = ? AND status = ? AND queue_partition_key IS NOT NULL%2$s)
+          UNION ALL
+          (SELECT (SELECT MIN(queue_partition_key)
+                   FROM "%1$s".workflow_status
+                   WHERE queue_name = ? AND status = ?
+                     AND queue_partition_key > partitions.pk%2$s)
+           FROM partitions
+           WHERE partitions.pk IS NOT NULL)
+        )"""
+        .formatted(ctx.schema(), ctx.andAppScope());
+  }
+
+  /** Binds {@link #partitionKeysCte}'s parameters from {@code index}; returns the next free one. */
+  private static int bindPartitionKeysCte(
+      DbContext ctx, PreparedStatement stmt, int index, String queueName) throws SQLException {
+    for (int step = 0; step < 2; step++) {
+      stmt.setString(index++, queueName);
+      stmt.setString(index++, WorkflowState.ENQUEUED.name());
+      index = ctx.bindAppScope(stmt, index);
+    }
+    return index;
   }
 
   /**
