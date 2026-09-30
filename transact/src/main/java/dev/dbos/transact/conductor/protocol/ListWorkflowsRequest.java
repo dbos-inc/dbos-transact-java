@@ -65,6 +65,10 @@ public class ListWorkflowsRequest extends BaseMessage {
     public Boolean load_output;
     public Boolean queues_only;
     public Boolean was_forked_from;
+
+    /** Whether the workflow is itself a fork; the opposite end of was_forked_from. */
+    public Boolean is_fork;
+
     public Boolean has_parent;
     public Map<String, Object> attributes;
   }
@@ -94,6 +98,7 @@ public class ListWorkflowsRequest extends BaseMessage {
         body.forked_from,
         body.parent_workflow_id,
         body.was_forked_from,
+        body.is_fork,
         body.has_parent,
         body.attributes,
         body.completed_after != null ? Instant.parse(body.completed_after) : null,

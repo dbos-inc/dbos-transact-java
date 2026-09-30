@@ -1265,6 +1265,13 @@ public class WorkflowDAO {
         whereConditions.add("was_forked_from = FALSE");
       }
     }
+    if (input.isFork() != null) {
+      if (input.isFork()) {
+        whereConditions.add("forked_from IS NOT NULL");
+      } else {
+        whereConditions.add("forked_from IS NULL");
+      }
+    }
     if (input.hasParent() != null) {
       if (input.hasParent()) {
         whereConditions.add("parent_workflow_id IS NOT NULL");

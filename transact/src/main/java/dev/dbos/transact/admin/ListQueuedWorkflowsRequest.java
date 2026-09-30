@@ -48,6 +48,7 @@ public record ListQueuedWorkflowsRequest(
         fork_from,
         parent_workflow_id,
         null, // wasForkedFrom
+        null, // isFork
         null, // hasParent
         null, // attributes
         null, // completedAfter
