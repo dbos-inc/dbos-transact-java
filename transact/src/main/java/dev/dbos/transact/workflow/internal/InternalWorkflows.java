@@ -76,8 +76,12 @@ public class InternalWorkflows {
    * <p>Running it again gives the same answer, as it must: inside a workflow it is a step whose
    * checkpoint commits after the cancel, so a crash between the two runs it again. A debouncer
    * workflow already cancelled, whose user workflow does not exist yet, is taken to be one this
-   * cancelled, and its id is returned again. Only such a rerun reaches a cancelled holder: the
-   * cancel clears its debounce key, so a live call never finds it holding one.
+   * cancelled, and its id is returned again.
+   *
+   * <p>A concurrent caller reaches a cancelled holder the same way: it found the holder before
+   * another caller cancelled it, and gets the same id. Both create the user workflow under it, and
+   * the second create gets the first's row, with the first's arguments. That is as if the second
+   * call had come just before the first, which calls this concurrent may do.
    */
   public static @Nullable String takeOverStrandedDebouncer(
       SystemDatabase systemDatabase, String debouncerWorkflowId) {
