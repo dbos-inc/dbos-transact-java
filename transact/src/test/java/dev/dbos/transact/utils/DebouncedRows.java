@@ -71,15 +71,17 @@ public final class DebouncedRows {
   }
 
   /**
-   * Plants a debouncer workflow as a version before 1.2 enqueued it: ENQUEUED on the internal
-   * queue, holding the debounce key, with its inputs. Under {@code applicationVersion} set to one
-   * no executor serves it is stranded -- nothing will ever run it, as once the last node of the SDK
-   * version that enqueued it is gone; under the executor's own version, this process runs it, as a
-   * live node of that version would.
+   * Plants a debouncer workflow as a version before 1.2 left it: on the internal queue in {@code
+   * status}, holding the debounce key, with its inputs. ENQUEUED is one never dequeued; PENDING is
+   * one whose node died while running it. Under {@code applicationVersion} set to one no executor
+   * serves it is stranded -- nothing will ever run it, as once the last node of the SDK version
+   * that enqueued it is gone; under the executor's own version, this process runs it, as a live
+   * node of that version would.
    */
   public static String insertDebouncerWorkflow(
       DataSource dataSource,
       String deduplicationId,
+      WorkflowState status,
       String inputs,
       @Nullable String serialization,
       String applicationVersion,
@@ -98,7 +100,7 @@ public final class DebouncedRows {
     try (Connection conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
-      stmt.setString(2, WorkflowState.ENQUEUED.name());
+      stmt.setString(2, status.name());
       stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
       stmt.setString(4, Constants.DEBOUNCER_CLASS_NAME);
       stmt.setString(5, Constants.DBOS_INTERNAL_QUEUE);

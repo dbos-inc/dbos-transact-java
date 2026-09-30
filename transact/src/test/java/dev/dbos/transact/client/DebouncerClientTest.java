@@ -10,6 +10,7 @@ import dev.dbos.transact.DebouncerClient;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
@@ -17,6 +18,7 @@ import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
@@ -33,6 +35,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 interface ClientTargetService {
   String process(String input);
@@ -255,6 +258,7 @@ public class DebouncerClientTest {
     return DebouncedRows.insertDebouncerWorkflow(
         dataSource,
         "process-" + key,
+        WorkflowState.ENQUEUED,
         inputs.serializedValue(),
         inputs.serialization(),
         appVersion,
@@ -299,6 +303,54 @@ public class DebouncerClientTest {
         WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(stranded).orElseThrow().status());
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  private void enqueuePromised(String promisedId) {
+    dbosClient.enqueueWorkflow(
+        new EnqueueOptions(
+                "process", ClientTargetServiceImpl.class.getName(), QueueName.of(USER_QUEUE))
+            .withWorkflowId(promisedId),
+        new Object[] {"from-debouncer"});
+  }
+
+  @Test
+  void cancelsAStrandedDebouncerWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
+    // Its node started the promised workflow, then died before the debouncer workflow finished.
+    var stranded = plantDebouncerWorkflow("started", "promised-c4", null, "no-such-version");
+    enqueuePromised("promised-c4");
+    assertEquals("result:from-debouncer", dbosClient.retrieveWorkflow("promised-c4").getResult());
+
+    var handle = debouncer().debounce("started", Duration.ofMillis(300), "fresh");
+
+    assertEquals(
+        WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(stranded).orElseThrow().status());
+    assertNotEquals("promised-c4", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(2, serviceImpl.callCount.get());
+  }
+
+  @Test
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER) // one global trigger slot
+  void startsOverWhenASlowDebouncerWorkflowStartsThePromisedWorkflowFirst() throws Exception {
+    var slow = plantDebouncerWorkflow("slow", "promised-c5", null, "no-such-version");
+
+    // A node of the old version was alive after all: between the cancel and the create, its
+    // debouncer workflow starts the promised workflow with the arguments it had.
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+        new DebugTriggers.DebugAction().setCallback(() -> enqueuePromised("promised-c5")));
+    WorkflowHandle<String, ?> handle;
+    try {
+      handle = debouncer().debounce("slow", Duration.ofMillis(300), "fresh");
+    } finally {
+      DebugTriggers.clearDebugTriggers();
+    }
+
+    assertNotEquals("promised-c5", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals("result:from-debouncer", dbosClient.retrieveWorkflow("promised-c5").getResult());
+    assertEquals(
+        WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(slow).orElseThrow().status());
   }
 
   // ==================== Coalescing into a debounced workflow ====================

@@ -16,6 +16,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -721,8 +723,12 @@ public class DebouncerTest {
 
   private String plantDebouncerWorkflow(
       String key, String promisedId, String queue, String appVersion) throws SQLException {
-    var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
+    return plantDebouncerWorkflow(
+        key, appVersion, WorkflowState.ENQUEUED, debouncerInputs(promisedId, queue), null);
+  }
+
+  /** A debouncer workflow's inputs as a version before 1.2 wrote them. */
+  private static Object[] debouncerInputs(String promisedId, String queue) {
     var options =
         new DebouncerOptions(
             "process", DebouncedServiceImpl.class.getName(), null, queue, null, null, null, null);
@@ -730,12 +736,20 @@ public class DebouncerTest {
     var initial =
         new DebouncerMessage(
             UUID.randomUUID().toString(), new Object[] {"stale"}, Duration.ofSeconds(2));
-    var inputs =
-        SerializationUtil.serializeArgs(
-            new Object[] {options, ctx, initial}, null, null, serializer);
+    return new Object[] {options, ctx, initial};
+  }
+
+  /** Plants a debouncer workflow in {@code status} with {@code args} in {@code format}. */
+  private String plantDebouncerWorkflow(
+      String key, String appVersion, WorkflowState status, Object[] args, String format)
+      throws SQLException {
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
+    var inputs = SerializationUtil.serializeArgs(args, null, format, serializer);
     return DebouncedRows.insertDebouncerWorkflow(
         pgContainer.dataSource(),
         "process-" + key,
+        status,
         inputs.serializedValue(),
         inputs.serialization(),
         appVersion,
@@ -833,6 +847,100 @@ public class DebouncerTest {
     assertNull(InternalWorkflows.takeOverStrandedDebouncer(sysdb, stranded));
   }
 
+  /** The realistic stranded holder: PENDING, its node gone while it ran. */
+  @Test
+  public void takesOverAPendingDebouncerWorkflowWhoseNodeDied() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var stranded =
+        plantDebouncerWorkflow(
+            "pending",
+            "no-such-version",
+            WorkflowState.PENDING,
+            debouncerInputs("promised-10", null),
+            null);
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("pending", Duration.ofMillis(300), () -> svc.process("fresh"));
+
+    assertEquals("promised-10", handle.workflowId());
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
+    assertEquals("result:fresh", handle.getResult());
+  }
+
+  @Test
+  public void aTakeoverLeavesAHolderThatIsGoneOrFinishedAlone() throws Exception {
+    dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+
+    assertNull(InternalWorkflows.takeOverStrandedDebouncer(sysdb, "no-such-workflow"));
+
+    var finished = plantDebouncerWorkflow("finished", "promised-11", null, "no-such-version");
+    DBUtils.setWorkflowState(pgContainer.dataSource(), finished, WorkflowState.SUCCESS.name());
+    assertNull(InternalWorkflows.takeOverStrandedDebouncer(sysdb, finished));
+    assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(finished).getStatus().status());
+  }
+
+  /** Inputs that name no promised workflow: the holder is still cancelled, freeing the key. */
+  @Test
+  public void aTakeoverOfAHolderWhoseInputsNameNoWorkflowCancelsIt() throws Exception {
+    dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    var odd =
+        plantDebouncerWorkflow(
+            "odd", "no-such-version", WorkflowState.ENQUEUED, new Object[] {"not-options"}, null);
+
+    assertNull(InternalWorkflows.takeOverStrandedDebouncer(sysdb, odd));
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(odd).getStatus().status());
+  }
+
+  /** A serializer that drops Java types hands the inputs back as maps. */
+  @Test
+  public void aTakeoverReadsThePromisedIdFromInputsThatLostTheirJavaTypes() throws Exception {
+    dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    var portable =
+        plantDebouncerWorkflow(
+            "portable",
+            "no-such-version",
+            WorkflowState.ENQUEUED,
+            debouncerInputs("promised-12", null),
+            SerializationStrategy.PORTABLE.formatName());
+
+    assertEquals("promised-12", InternalWorkflows.takeOverStrandedDebouncer(sysdb, portable));
+  }
+
+  /**
+   * Inside a workflow the takeover and the check after it are recorded as steps, and a replay
+   * returns them rather than cancelling or creating again.
+   */
+  @Test
+  public void aTakeoverInsideAWorkflowIsRecordedAndReplays() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var orch =
+        dbos.registerProxy(JoiningOrchestrator.class, new JoiningOrchestratorImpl(dbos, svc));
+    dbos.launch();
+    var stranded = plantDebouncerWorkflow("wf-stranded", "promised-13", null, "no-such-version");
+
+    var orchestratorId = "wf-takeover-orchestrator";
+    String created;
+    try (var o = new WorkflowOptions(orchestratorId).setContext()) {
+      created = orch.joinDebounce("wf-stranded", "fresh");
+    }
+    assertEquals("promised-13", created);
+    var takeover = recordedStep(orchestratorId, "DBOS.takeOverStrandedDebouncer");
+    assertTrue(takeover.output().contains("promised-13"), "recorded: " + takeover.output());
+    recordedStep(orchestratorId, "DBOS.isDebouncedWorkflow");
+
+    assertEquals("promised-13", replay(orchestratorId));
+    assertEquals(1, countWorkflowsByName("process"));
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
+  }
+
   @Test
   public void cancelsAStrandedDebouncerWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
@@ -857,6 +965,7 @@ public class DebouncerTest {
   }
 
   @Test
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER) // one global trigger slot
   public void startsOverWhenASlowDebouncerWorkflowStartsThePromisedWorkflowFirst()
       throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
