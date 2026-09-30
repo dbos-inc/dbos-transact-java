@@ -97,22 +97,27 @@ public final class DebouncedRows {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
         """;
     long now = System.currentTimeMillis();
-    try (Connection conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      stmt.setString(2, status.name());
-      stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
-      stmt.setString(4, Constants.DEBOUNCER_CLASS_NAME);
-      stmt.setString(5, Constants.DBOS_INTERNAL_QUEUE);
-      stmt.setString(6, deduplicationId);
-      stmt.setString(7, serialization);
-      stmt.setString(8, applicationVersion);
-      stmt.setString(9, applicationName);
-      stmt.setLong(10, now);
-      stmt.setLong(11, now);
-      stmt.executeUpdate();
+    // One transaction: a live-version ENQUEUED row committed without its inputs could be dequeued
+    // and run before they arrive.
+    try (Connection conn = dataSource.getConnection()) {
+      conn.setAutoCommit(false);
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, status.name());
+        stmt.setString(3, Constants.DEBOUNCER_WORKFLOW_NAME);
+        stmt.setString(4, Constants.DEBOUNCER_CLASS_NAME);
+        stmt.setString(5, Constants.DBOS_INTERNAL_QUEUE);
+        stmt.setString(6, deduplicationId);
+        stmt.setString(7, serialization);
+        stmt.setString(8, applicationVersion);
+        stmt.setString(9, applicationName);
+        stmt.setLong(10, now);
+        stmt.setLong(11, now);
+        stmt.executeUpdate();
+      }
+      insertInput(conn, workflowId, inputs);
+      conn.commit();
     }
-    insertInput(dataSource, workflowId, inputs);
     return workflowId;
   }
 
@@ -182,13 +187,19 @@ public final class DebouncedRows {
   /** Plants the payload-table copy of a workflow's inputs, which readers prefer when present. */
   public static void insertInput(DataSource dataSource, String workflowId, String inputs)
       throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+      insertInput(conn, workflowId, inputs);
+    }
+  }
+
+  private static void insertInput(Connection conn, String workflowId, String inputs)
+      throws SQLException {
     var sql =
         """
           INSERT INTO "dbos".workflow_input (workflow_uuid, inputs, retention_timestamp)
           VALUES (?, ?, ?)
         """;
-    try (Connection conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       stmt.setString(2, inputs);
       stmt.setLong(3, System.currentTimeMillis());
