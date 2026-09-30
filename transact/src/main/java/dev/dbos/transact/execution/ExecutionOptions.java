@@ -36,7 +36,11 @@ public record ExecutionOptions(
     // run must not insert one, and it carries the queue slot the run occupies.
     WorkflowStatus claimedStatus,
     // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
-    String scheduleName) {
+    String scheduleName,
+    // Set only by the debouncers, which enqueue their workflow flagged as debounced, its delay
+    // capped at the debounce deadline if there is one. No public option reaches either.
+    boolean isDebounced,
+    Instant debounceDeadline) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -105,6 +109,8 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
+        false,
         null);
   }
 
@@ -125,6 +131,8 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
+        false,
         null);
   }
 
@@ -145,6 +153,8 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
+        false,
         null);
   }
 
@@ -166,7 +176,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         claimed,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -187,7 +199,9 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         options.attributes(),
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -211,7 +225,9 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -231,7 +247,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -251,7 +269,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
@@ -271,7 +291,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withAssumedRole(String assumedRole) {
@@ -291,7 +313,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withAuthenticatedRoles(List<String> authenticatedRoles) {
@@ -311,7 +335,9 @@ public record ExecutionOptions(
         authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withAttributes(Map<String, Object> attributes) {
@@ -331,7 +357,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withQueueName(String queueName) {
@@ -351,7 +379,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withTimeout(Duration timeout) {
@@ -371,7 +401,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withDeadline(Instant deadline) {
@@ -391,7 +423,9 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        this.scheduleName);
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
   }
 
   public ExecutionOptions withScheduleName(String scheduleName) {
@@ -411,7 +445,32 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
-        scheduleName);
+        scheduleName,
+        this.isDebounced,
+        this.debounceDeadline);
+  }
+
+  /** Marks the workflow as debounced, its delay capped at {@code debounceDeadline} if not null. */
+  public ExecutionOptions withDebounce(Instant debounceDeadline) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.claimedStatus,
+        this.scheduleName,
+        true,
+        debounceDeadline);
   }
 
   public Duration timeoutDuration() {

@@ -4,7 +4,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -68,7 +67,6 @@ public class DBOS implements AutoCloseable {
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
-  private final RegisteredWorkflow debouncerWorkflow;
 
   private AlertHandler alertHandler;
 
@@ -91,16 +89,16 @@ public class DBOS implements AutoCloseable {
     this.integration =
         new DBOSIntegration(
             this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
-    // Register the built-in debouncer service workflow directly (without a proxy) so callers can
-    // use Debouncer without having to declare and wire the service themselves.
+    // Register the built-in debouncer workflow directly (without a proxy). Debouncer no
+    // longer starts it, but one an older SDK version enqueued can still be recovered here when the
+    // application version is pinned across the upgrade.
     var internalWorkflows = new InternalWorkflows(this, dbosExecutor::get);
     workflowRegistry.registerInternalInstance(internalWorkflows);
-    this.debouncerWorkflow =
-        workflowRegistry.registerInternalWorkflow(
-            Constants.DEBOUNCER_WORKFLOW_NAME,
-            Constants.DEBOUNCER_CLASS_NAME,
-            internalWorkflows,
-            InternalWorkflows.debouncerWorkflowMethod());
+    workflowRegistry.registerInternalWorkflow(
+        Constants.DEBOUNCER_WORKFLOW_NAME,
+        Constants.DEBOUNCER_CLASS_NAME,
+        internalWorkflows,
+        InternalWorkflows.debouncerWorkflowMethod());
   }
 
   /**
@@ -561,7 +559,7 @@ public class DBOS implements AutoCloseable {
    * @return a fresh debouncer bound to this DBOS instance
    */
   public <R> @NonNull Debouncer<R> debouncer() {
-    return new Debouncer<>(this, ensureLaunched("debouncer"), debouncerWorkflow);
+    return new Debouncer<>(this, ensureLaunched("debouncer"));
   }
 
   /**

@@ -19,6 +19,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -870,7 +871,7 @@ public class SystemDatabase implements AutoCloseable {
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus);
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
@@ -884,6 +885,16 @@ public class SystemDatabase implements AutoCloseable {
    */
   private static @Nullable Long resolveDelayUntil(@Nullable Duration delay) {
     return delay == null ? null : System.currentTimeMillis() + delay.toMillis();
+  }
+
+  /**
+   * The absolute end of a status's delay. A debounced workflow's is capped at its debounce
+   * deadline, as every later bounce caps it.
+   */
+  private static @Nullable Long resolveDelayUntil(WorkflowStatusInternal status) {
+    Long delayUntil = resolveDelayUntil(status.delay());
+    Long cap = status.debounceDeadlineEpochMs();
+    return delayUntil != null && cap != null && cap < delayUntil ? cap : delayUntil;
   }
 
   /**
@@ -915,7 +926,7 @@ public class SystemDatabase implements AutoCloseable {
    * See {@link WorkflowDAO#recordErrorForUnstartedWorkflow}.
    */
   public void recordErrorForUnstartedWorkflow(WorkflowStatusInternal initStatus, String error) {
-    Long delayUntilEpochMs = resolveDelayUntil(initStatus.delay());
+    Long delayUntilEpochMs = resolveDelayUntil(initStatus);
     dbRetry(
         () ->
             WorkflowDAO.recordErrorForUnstartedWorkflow(ctx, initStatus, delayUntilEpochMs, error));
@@ -945,6 +956,30 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
+   * Cancels a debouncer workflow that stopped answering and creates the user workflow it promised,
+   * in one transaction; as the caller's step when one is given, checkpointed in the same
+   * transaction. Returns the promised workflow's id if this call created it, otherwise null, as
+   * {@code Object}. See {@link WorkflowDAO#takeOverDebouncerWorkflow}.
+   */
+  public Object takeOverDebouncerWorkflow(
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable DebounceCaller caller) {
+    // The delay is resolved outside the retry, as in initWorkflowStatus, so a retry cannot push it
+    // later. An attempt that committed but lost its ack finds the holder cancelled on the retry and
+    // returns null; the caller then goes on to extend the promised workflow like any other call.
+    // Safe to replay after a peer committed, as a serialization error means one did: the holder is
+    // re-checked under its lock, the step is re-checked, and the insert keeps a row already there.
+    String ownerXid = UUID.randomUUID().toString();
+    Long delayUntilEpochMs = promised == null ? null : resolveDelayUntil(promised);
+    return dbRetryIncludingSerializationError(
+        "takeOverDebouncerWorkflow",
+        () ->
+            WorkflowDAO.takeOverDebouncerWorkflow(
+                ctx, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid, caller));
+  }
+
+  /**
    * Extends a debounced DELAYED workflow's delay and replaces its inputs, or reports who holds the
    * pair instead; as the caller's step when one is given, checkpointed in the same transaction. See
    * {@link WorkflowDAO#debounceDelayedWorkflow}.
@@ -958,6 +993,7 @@ public class SystemDatabase implements AutoCloseable {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable String serializationFormat,
+      @Nullable DebounceIds ids,
       @Nullable DebounceCaller caller) {
     return dbRetry(
         () ->
@@ -971,6 +1007,7 @@ public class SystemDatabase implements AutoCloseable {
                 delayUntilEpochMs,
                 args,
                 serializationFormat,
+                ids,
                 caller));
   }
 

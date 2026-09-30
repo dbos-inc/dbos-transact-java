@@ -169,6 +169,8 @@ public class WorkflowStatusInternalBuilder {
         serialization,
         attributes,
         scheduleName,
+        null,
+        false,
         null);
   }
 }

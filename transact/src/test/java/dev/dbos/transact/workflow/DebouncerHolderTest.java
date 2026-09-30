@@ -132,7 +132,7 @@ public class DebouncerHolderTest {
   // ==================== Telling the two kinds of holder apart ====================
 
   @Test
-  void aServiceWorkflowHolderIsAService() {
+  void aDebouncerWorkflowHolderIsOne() {
     var holder =
         new DeduplicationHolder(
             "wf-1",
@@ -143,12 +143,12 @@ public class DebouncerHolderTest {
             WorkflowState.PENDING,
             false);
 
-    assertTrue(holder.isDebouncerService());
+    assertTrue(holder.isDebouncerWorkflow());
     assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
   }
 
   @Test
-  void aUserWorkflowSharingTheServicesNameIsNotAService() {
+  void aUserWorkflowSharingItsNameIsNotOne() {
     var holder =
         new DeduplicationHolder(
             "wf-1",
@@ -159,15 +159,15 @@ public class DebouncerHolderTest {
             WorkflowState.ENQUEUED,
             false);
 
-    assertFalse(holder.isDebouncerService());
+    assertFalse(holder.isDebouncerWorkflow());
   }
 
   @Test
-  void aHolderOfUnknownNameCountsAsAService() {
+  void aHolderOfUnknownNameCountsAsOne() {
     // Recorded before debounced workflows existed, when nothing else held a debounce key.
     assertTrue(
         new DeduplicationHolder("wf-1", "app-a", null, null, null, null, false)
-            .isDebouncerService());
+            .isDebouncerWorkflow());
   }
 
   @Test
@@ -176,7 +176,7 @@ public class DebouncerHolderTest {
         new DeduplicationHolder(
             "wf-1", "app-a", "process", "com.example.Impl", null, WorkflowState.DELAYED, true);
 
-    assertFalse(holder.isDebouncerService());
+    assertFalse(holder.isDebouncerWorkflow());
     assertTrue(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
     // No instance is null, as the row spells it; an empty string is a different instance.
     assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", ""));
@@ -191,7 +191,7 @@ public class DebouncerHolderTest {
         new DeduplicationHolder(
             "wf-1", "app-a", "process", "com.example.Impl", null, WorkflowState.ENQUEUED, false);
 
-    assertFalse(holder.isDebouncerService());
+    assertFalse(holder.isDebouncerWorkflow());
     assertFalse(holder.isDebouncedInstanceOf("process", "com.example.Impl", null));
   }
 
@@ -203,7 +203,7 @@ public class DebouncerHolderTest {
 
     var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
     assertEquals("wf-123", holder.workflowId());
-    assertTrue(holder.isDebouncerService());
+    assertTrue(holder.isDebouncerWorkflow());
   }
 
   @Test
@@ -215,7 +215,7 @@ public class DebouncerHolderTest {
     var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
     assertEquals("wf-456", holder.workflowId());
     assertTrue(holder.isForeignTo("app-b"));
-    assertTrue(holder.isDebouncerService());
+    assertTrue(holder.isDebouncerWorkflow());
   }
 
   @Test
@@ -279,7 +279,7 @@ public class DebouncerHolderTest {
 
     var holder = assertInstanceOf(DebounceResult.NotBounced.class, result).holder();
     assertEquals("holder-wf", holder.workflowId());
-    assertTrue(holder.isDebouncerService());
+    assertTrue(holder.isDebouncerWorkflow());
     assertFalse(holder.isForeignTo("app-a"));
   }
 
@@ -333,14 +333,36 @@ public class DebouncerHolderTest {
   @Test
   void adaptsIdsRoundTrippedThroughThePortableSerializer() {
     var serializer = DBOSPortableSerializer.INSTANCE;
+    var bounced =
+        Debouncer.toDebounceIds(
+            serializer.deserialize(
+                serializer.serialize(new Debouncer.DebounceIds("user-2", "msg-2", "wf-2", null))));
+    var forwarded =
+        Debouncer.toDebounceIds(
+            serializer.deserialize(
+                serializer.serialize(new Debouncer.DebounceIds("user-3", "msg-3", null, "svc-3"))));
+
+    assertEquals("user-2", bounced.userWorkflowId());
+    assertEquals("wf-2", bounced.bouncedWorkflowId());
+    assertNull(bounced.debouncerWorkflowId());
+    assertEquals("user-3", forwarded.userWorkflowId());
+    assertNull(forwarded.bouncedWorkflowId());
+    assertEquals("svc-3", forwarded.debouncerWorkflowId());
+  }
+
+  @Test
+  void adaptsIdsRecordedBeforeDebouncerWorkflowsWereLookedFor() throws Exception {
+    // 1.1 recorded three components under the typed serializer; the fourth replays as null, and
+    // the replay goes on to the child slot, where 1.1 recorded its debouncer workflow.
     var recorded =
-        serializer.deserialize(
-            serializer.serialize(new Debouncer.DebounceIds("user-2", "msg-2", "wf-2")));
+        DBOSJavaSerializer.INSTANCE.deserialize(
+            "{\"@class\":\"dev.dbos.transact.workflow.Debouncer$DebounceIds\","
+                + "\"userWorkflowId\":\"user-4\",\"messageId\":\"msg-4\","
+                + "\"bouncedWorkflowId\":null}");
 
     var ids = Debouncer.toDebounceIds(recorded);
 
-    assertEquals("user-2", ids.userWorkflowId());
-    assertEquals("wf-2", ids.bouncedWorkflowId());
+    assertEquals(new Debouncer.DebounceIds("user-4", "msg-4", null, null), ids);
   }
 
   @Test

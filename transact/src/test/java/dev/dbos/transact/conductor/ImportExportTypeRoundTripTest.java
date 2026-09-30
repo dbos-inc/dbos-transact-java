@@ -3,6 +3,7 @@ package dev.dbos.transact.conductor;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,11 +12,14 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -111,6 +115,33 @@ public class ImportExportTypeRoundTripTest {
     List<ExportedWorkflow> imported = Conductor.deserializeExportedWorkflows(json, mapper);
     sysdb.deleteWorkflows(List.of(workflowId), false);
     sysdb.importWorkflow(imported);
+  }
+
+  /**
+   * A debounced workflow still waiting must come back debounced, with its debounce deadline, or
+   * later calls on its key stop coalescing into it and its key outlives its release.
+   */
+  @Test
+  void aWaitingDebouncedWorkflowComesBackDebounced() throws Exception {
+    var debouncer = dbos.<Order>debouncer().withDebounceTimeout(Duration.ofMinutes(10));
+    var handle =
+        debouncer.debounce("rt", Duration.ofMinutes(5), () -> service.fulfil(new Order("o-1", 1)));
+    var before = DebouncedRows.read(dataSource, handle.workflowId());
+    assertTrue(before.isDebounced());
+    assertNotNull(before.debounceDeadlineEpochMs());
+
+    roundTripThroughConductorJson(handle.workflowId());
+
+    var after = DebouncedRows.read(dataSource, handle.workflowId());
+    assertEquals(WorkflowState.DELAYED.name(), after.status());
+    assertTrue(after.isDebounced());
+    assertEquals(before.debounceDeadlineEpochMs(), after.debounceDeadlineEpochMs());
+    assertEquals(before.delayUntilEpochMs(), after.delayUntilEpochMs());
+    assertEquals(before.deduplicationId(), after.deduplicationId());
+    // And it still coalesces: the next call on the key bounces the imported row.
+    var again =
+        debouncer.debounce("rt", Duration.ofMinutes(5), () -> service.fulfil(new Order("o-2", 2)));
+    assertEquals(handle.workflowId(), again.workflowId());
   }
 
   @Test

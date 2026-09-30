@@ -19,6 +19,7 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.DebounceResult;
+import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -46,6 +47,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -89,7 +91,7 @@ public class WorkflowDAO {
         created_at, updated_at, completed_at, started_at_epoch_ms,
         recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
         forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name,
-        application_name
+        application_name, is_debounced, debounce_deadline_epoch_ms
       """;
 
   // Payloads moved off workflow_status in migration 109, so a status update no longer rewrites a
@@ -300,7 +302,7 @@ public class WorkflowDAO {
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
             parent_workflow_id, owner_xid, serialization, attributes, schedule_name,
-            application_name
+            application_name, is_debounced, debounce_deadline_epoch_ms
           ) VALUES (
             ?, ?,
             ?, ?, ?,
@@ -310,7 +312,7 @@ public class WorkflowDAO {
             %2$s, %2$s, ?,
             ?, ?,
             ?, ?, ?, ?::jsonb, ?,
-            ?
+            ?, ?, ?
           )
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
@@ -331,7 +333,7 @@ public class WorkflowDAO {
     var state =
         status.queueName() == null
             ? WorkflowState.PENDING
-            : status.delay() == null ? WorkflowState.ENQUEUED : WorkflowState.DELAYED;
+            : delayUntilEpochMs == null ? WorkflowState.ENQUEUED : WorkflowState.DELAYED;
     var recoveryAttempts =
         state == WorkflowState.ENQUEUED || state == WorkflowState.DELAYED ? 0 : 1;
 
@@ -373,6 +375,8 @@ public class WorkflowDAO {
       stmt.setString(23, attributesJson);
       stmt.setString(24, status.scheduleName());
       stmt.setString(25, appName);
+      stmt.setBoolean(26, status.isDebounced());
+      stmt.setObject(27, status.debounceDeadlineEpochMs(), Types.BIGINT);
 
       InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
@@ -748,6 +752,142 @@ public class WorkflowDAO {
   }
 
   /**
+   * Takes over a debouncer workflow that stopped answering, in one transaction: cancels it, which
+   * frees its debounce key, and creates the user workflow it promised as {@code promised}, a
+   * debounced workflow holding that key. The key passes straight from one to the other, so no other
+   * call can take it in between and leave the promised workflow uncreated, which would strand every
+   * handle to it. A call that tries waits on the transaction, then extends the promised workflow.
+   *
+   * <p>The debouncer workflow is locked first. One that is gone or no longer active is left alone:
+   * it finished on its own, or another call took it over first. An active one is cancelled. The
+   * promised workflow is then created unless it already exists -- the debouncer workflow started
+   * it, before it went silent or, on a node that was only slow, while this call waited -- or {@code
+   * promised} is null because its inputs named none.
+   *
+   * <p>Returns the promised workflow's id if this call created it, otherwise null. With a {@code
+   * caller}, it is that caller's step: if the step already ran, what it recorded is returned and
+   * nothing is touched; otherwise the takeover and its checkpoint commit together. The return is
+   * {@code Object}, as a replay hands back whatever the serializer preserved.
+   */
+  public static Object takeOverDebouncerWorkflow(
+      DbContext ctx,
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable Long delayUntilEpochMs,
+      String ownerXid,
+      @Nullable DebounceCaller caller)
+      throws SQLException {
+    long startTime = System.currentTimeMillis();
+    try (var conn = ctx.getConnection()) {
+      return SqlTransaction.call(
+          conn,
+          c -> {
+            if (caller != null) {
+              var prev =
+                  StepsDAO.checkStepResult(
+                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+              if (prev != null) {
+                return prev.toResult(ctx.serializer());
+              }
+            }
+            String created =
+                takeOver(ctx, c, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid);
+            if (caller != null) {
+              var serialized = SerializationUtil.serializeValue(created, null, ctx.serializer());
+              StepsDAO.recordStepResult(
+                  ctx,
+                  c,
+                  new StepResult(
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      serialized.serializedValue(),
+                      null,
+                      created,
+                      serialized.serialization()),
+                  startTime,
+                  System.currentTimeMillis());
+            }
+            return created;
+          });
+    }
+  }
+
+  private static @Nullable String takeOver(
+      DbContext ctx,
+      Connection conn,
+      String debouncerWorkflowId,
+      @Nullable WorkflowStatusInternal promised,
+      @Nullable Long delayUntilEpochMs,
+      String ownerXid)
+      throws SQLException {
+    var lockSql =
+        """
+          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ? FOR UPDATE
+        """
+            .formatted(ctx.schema());
+    WorkflowState status;
+    try (var stmt = conn.prepareStatement(lockSql)) {
+      stmt.setString(1, debouncerWorkflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) {
+          return null;
+        }
+        status = WorkflowState.valueOf(rs.getString("status"));
+      }
+    }
+    if (!status.isActive()) {
+      return null;
+    }
+    // As cancelWorkflows does, without cascading: a child the debouncer workflow already started
+    // is the promised workflow, and it runs.
+    var cancelSql =
+        """
+          UPDATE "%1$s".workflow_status
+          SET status = ?,
+              queue_name = NULL,
+              deduplication_id = NULL,
+              started_at_epoch_ms = NULL,
+              updated_at = %2$s,
+              completed_at = %2$s
+          WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
+    try (var stmt = conn.prepareStatement(cancelSql)) {
+      stmt.setString(1, WorkflowState.CANCELLED.name());
+      stmt.setString(2, debouncerWorkflowId);
+      stmt.executeUpdate();
+    }
+    DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
+    if (promised == null) {
+      logger.warn(
+          "Cancelled debouncer workflow {}, which stopped acknowledging calls and names no user"
+              + " workflow",
+          debouncerWorkflowId);
+      return null;
+    }
+    // A row already there -- the promised workflow the debouncer workflow started -- keeps its
+    // inputs: the insert writes them only for a row it creates.
+    var inserted =
+        insertWorkflowStatus(
+            conn, ctx.schema(), promised, delayUntilEpochMs, ownerXid, owner(ctx, promised));
+    if (!ownerXid.equals(inserted.ownerXid())) {
+      logger.warn(
+          "Cancelled debouncer workflow {}, which stopped acknowledging calls after starting its"
+              + " user workflow {}",
+          debouncerWorkflowId,
+          promised.workflowId());
+      return null;
+    }
+    logger.warn(
+        "Cancelled debouncer workflow {}, which stopped acknowledging calls, and created its user"
+            + " workflow {}",
+        debouncerWorkflowId,
+        promised.workflowId());
+    return promised.workflowId();
+  }
+
+  /**
    * Extends a debounced DELAYED workflow's delay and replaces its inputs, in one transaction.
    *
    * <p>A debounced workflow holds its debounce key as its deduplication ID while it is DELAYED;
@@ -767,9 +907,16 @@ public class WorkflowDAO {
    * <p>With a {@code caller}, the bounce is that caller's step: if the step already ran, what it
    * recorded is returned and nothing is touched; otherwise the bounce and its checkpoint commit
    * together, so a crash can never leave the row extended but the step unrecorded, which on replay
-   * would bounce again. The return is then what the step records -- the {@link DebounceResult}, or
-   * the caller's ids completed with it -- as {@code Object}, since a replay hands back whatever the
-   * serializer preserved. Without a caller, the {@link DebounceResult}.
+   * would bounce again.
+   *
+   * <p>With {@code ids}, the bounce is the debouncer's first step, which records the ids it assigns
+   * with the outcome, as that step has always recorded them. When nothing was extended, the same
+   * transaction also looks for a debouncer workflow of this application holding the key on the
+   * internal queue -- what a debouncer from before debounced workflows leaves there -- so the
+   * caller can forward to it rather than create a second workflow beside it.
+   *
+   * <p>The return is what the step records -- the {@link DebounceResult}, or the ids completed with
+   * it -- as {@code Object}, since a replay hands back whatever the serializer preserved.
    */
   public static Object debounceDelayedWorkflow(
       DbContext ctx,
@@ -781,6 +928,7 @@ public class WorkflowDAO {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable String serializationFormat,
+      @Nullable DebounceIds ids,
       @Nullable DebounceCaller caller)
       throws SQLException {
     long startTime = System.currentTimeMillis();
@@ -812,10 +960,14 @@ public class WorkflowDAO {
                     delayUntilEpochMs,
                     serializedArgs.serializedValue(),
                     serializedArgs.serialization());
+            Object recorded =
+                ids == null
+                    ? result
+                    : ids.withBounced(
+                        result, findDebouncerWorkflow(ctx, c, queueName, deduplicationId, result));
             if (caller == null) {
-              return result;
+              return recorded;
             }
-            Object recorded = caller.ids() == null ? result : caller.ids().withBounced(result);
             var serialized = SerializationUtil.serializeValue(recorded, null, ctx.serializer());
             StepsDAO.recordStepResult(
                 ctx,
@@ -833,6 +985,31 @@ public class WorkflowDAO {
             return recorded;
           });
     }
+  }
+
+  /**
+   * The debouncer workflow of this application holding {@code deduplicationId} on the internal
+   * queue, if nothing was bounced and one does; otherwise null. When the bounce itself ran on the
+   * internal queue, the holder it reported is that one.
+   */
+  private static @Nullable String findDebouncerWorkflow(
+      DbContext ctx,
+      Connection conn,
+      String queueName,
+      String deduplicationId,
+      DebounceResult result)
+      throws SQLException {
+    if (result instanceof DebounceResult.NotBounced notBounced) {
+      var holder =
+          Constants.DBOS_INTERNAL_QUEUE.equals(queueName)
+              ? notBounced.holder()
+              : findDeduplicationHolder(
+                  conn, ctx.schema(), Constants.DBOS_INTERNAL_QUEUE, deduplicationId);
+      if (holder != null && holder.isDebouncerWorkflow() && !holder.isForeignTo(ctx.appName())) {
+        return holder.workflowId();
+      }
+    }
+    return null;
   }
 
   private static DebounceResult bounce(
@@ -1602,7 +1779,9 @@ public class WorkflowDAO {
                 ? JsonUtility.fromJson(attributesJson, new TypeReference<Map<String, Object>>() {})
                 : null,
             rs.getString("schedule_name"),
-            rs.getString("application_name"));
+            rs.getString("application_name"),
+            rs.getBoolean("is_debounced"),
+            SystemDatabase.toInstant(rs.getObject("debounce_deadline_epoch_ms", Long.class)));
     return info;
   }
 
@@ -3173,9 +3352,10 @@ public class WorkflowDAO {
           workflow_timeout_ms, workflow_deadline_epoch_ms,
           recovery_attempts, forked_from, parent_workflow_id, serialization,
           delay_until_epoch_ms, completed_at, was_forked_from, attributes, schedule_name,
-          application_name
+          application_name, is_debounced, debounce_deadline_epoch_ms
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?,
+          ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -3322,6 +3502,9 @@ public class WorkflowDAO {
                 wfStmt.setString(28, attributesToJson(status.attributes()));
                 wfStmt.setString(29, status.scheduleName());
                 wfStmt.setString(30, status.applicationName());
+                // NOT NULL column: an export predating it carries no value, so fall back to false.
+                wfStmt.setBoolean(31, Boolean.TRUE.equals(status.isDebounced()));
+                wfStmt.setObject(32, status.debounceDeadlineEpochMs());
                 wfStmt.addBatch();
 
                 // Every workflow has an input row, as in Python; an output row only once there is

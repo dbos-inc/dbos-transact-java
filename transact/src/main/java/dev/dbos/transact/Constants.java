@@ -24,9 +24,13 @@ public class Constants {
   // Event key published by the debouncer-workflow so callers can retrieve the pre-assigned
   // user workflow id without relying on Jackson deserialization of workflow inputs.
   public static final String DEBOUNCER_CHILD_ID_KEY = "_dbos_debouncer_child_id";
-  // How long a debouncer waits for the service workflow to acknowledge a forwarded call before
+  // How long a debouncer waits for the debouncer workflow to acknowledge a forwarded call before
   // sending it again.
   public static final Duration DEBOUNCER_ACK_TIMEOUT = Duration.ofSeconds(1);
+  // How many times in a row one debouncer workflow may fail to acknowledge before it is taken to be
+  // stranded and taken over. A live one answers within milliseconds; one that holds the key and
+  // stays silent this long was enqueued by an SDK version no remaining node runs.
+  public static final int DEBOUNCER_MAX_SILENT_ACKS = 5;
 
   public static final String SYSTEM_JDBC_URL_ENV_VAR = "DBOS_SYSTEM_JDBC_URL";
 

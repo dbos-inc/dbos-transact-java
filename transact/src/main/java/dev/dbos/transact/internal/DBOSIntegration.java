@@ -195,7 +195,7 @@ public class DBOSIntegration {
 
   /**
    * Get all user-registered workflows. Internal/system workflows registered by DBOS itself (for
-   * example, the debouncer service workflow) are excluded.
+   * example, the debouncer workflow) are excluded.
    *
    * @return list of all user-registered workflow methods
    */
@@ -208,7 +208,7 @@ public class DBOSIntegration {
 
   /**
    * Get all user-registered workflow instances. Internal/system instances registered by DBOS itself
-   * (for example, the debouncer service) are excluded.
+   * (for example, the debouncer workflow) are excluded.
    *
    * @return list of all user-registered class instances containing workflow methods
    */

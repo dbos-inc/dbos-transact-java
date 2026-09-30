@@ -80,7 +80,14 @@ public record WorkflowStatus(
      * The application that owns this workflow, or null if it is unclaimed and so belongs to every
      * application sharing the system database.
      */
-    String applicationName) {
+    String applicationName,
+    /**
+     * Whether this is a debounced workflow, whose deduplication ID is a debounce key cleared when
+     * it leaves DELAYED; null when read from an export that predates the field.
+     */
+    Boolean isDebounced,
+    /** The latest a debounced workflow's delay may be extended to, or null for no cap. */
+    Instant debounceDeadline) {
 
   @JsonIgnore
   public Long timeoutMs() {
@@ -115,6 +122,11 @@ public record WorkflowStatus(
   @JsonIgnore
   public Long completedAtEpochMs() {
     return completedAt == null ? null : completedAt.toEpochMilli();
+  }
+
+  @JsonIgnore
+  public Long debounceDeadlineEpochMs() {
+    return debounceDeadline == null ? null : debounceDeadline.toEpochMilli();
   }
 
   /**
@@ -163,7 +175,10 @@ public record WorkflowStatus(
         && java.util.Objects.equals(completedAt, that.completedAt)
         && java.util.Objects.equals(serialization, that.serialization)
         && java.util.Objects.equals(attributes, that.attributes)
-        && java.util.Objects.equals(scheduleName, that.scheduleName);
+        && java.util.Objects.equals(scheduleName, that.scheduleName)
+        && java.util.Objects.equals(applicationName, that.applicationName)
+        && java.util.Objects.equals(isDebounced, that.isDebounced)
+        && java.util.Objects.equals(debounceDeadline, that.debounceDeadline);
   }
 
   /**
@@ -206,6 +221,9 @@ public record WorkflowStatus(
         completedAt,
         serialization,
         attributes,
-        scheduleName);
+        scheduleName,
+        applicationName,
+        isDebounced,
+        debounceDeadline);
   }
 }

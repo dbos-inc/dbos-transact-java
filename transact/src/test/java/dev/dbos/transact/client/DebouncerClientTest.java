@@ -10,6 +10,7 @@ import dev.dbos.transact.DebouncerClient;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
@@ -17,6 +18,7 @@ import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.DebouncerContextOptions;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
@@ -33,6 +35,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 interface ClientTargetService {
   String process(String input);
@@ -165,11 +169,206 @@ public class DebouncerClientTest {
     assertEquals(attributes, status.attributes());
   }
 
+  // ==================== The debounced workflow's row ====================
+
+  @Test
+  void writesTheDebouncedWorkflowDelayedOnTheInternalQueue() throws Exception {
+    long before = System.currentTimeMillis();
+    var handle =
+        debouncer().withTimeout(Duration.ofMinutes(2)).debounce("row", Duration.ofSeconds(30), "a");
+
+    var row = DebouncedRows.read(dataSource, handle.workflowId());
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
+    assertEquals("process-row", row.deduplicationId());
+    assertTrue(row.isDebounced());
+    assertTrue(row.delayUntilEpochMs() >= before + 30_000);
+    assertEquals(
+        Duration.ofMinutes(2).toMillis(),
+        dbosClient.getWorkflowStatus(handle.workflowId()).orElseThrow().timeoutMs());
+    assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+
+    var again = debouncer().debounce("row", Duration.ofSeconds(30), "b");
+    assertEquals(handle.workflowId(), again.workflowId());
+  }
+
+  @Test
+  void writesTheDebouncedWorkflowOnTheUserQueueWithItsPriority() throws Exception {
+    var handle =
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .withPriority(7)
+            .debounce("row", Duration.ofSeconds(30), "a");
+
+    var row = DebouncedRows.read(dataSource, handle.workflowId());
+    assertEquals(USER_QUEUE, row.queueName());
+    assertEquals("process-row", row.deduplicationId());
+    assertTrue(row.isDebounced());
+    assertEquals(7, row.priority());
+  }
+
+  @Test
+  void capsTheDelayAtTheDebounceDeadline() throws Exception {
+    var d = debouncer().withDebounceTimeout(Duration.ofSeconds(20));
+    var handle = d.debounce("cap", Duration.ofMinutes(5), "a");
+
+    var row = DebouncedRows.read(dataSource, handle.workflowId());
+    assertNotNull(row.debounceDeadlineEpochMs());
+    assertEquals(row.debounceDeadlineEpochMs(), row.delayUntilEpochMs());
+    d.debounce("cap", Duration.ofMinutes(5), "b");
+    assertEquals(
+        row.debounceDeadlineEpochMs(),
+        DebouncedRows.read(dataSource, handle.workflowId()).delayUntilEpochMs());
+  }
+
+  @Test
+  @SuppressWarnings("removal")
+  void ignoresTheDeduplicationId() throws Exception {
+    var handle =
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .withDeduplicationId("user-dedup")
+            .debounce("dd", Duration.ofSeconds(1), "a");
+
+    assertEquals(
+        "process-dd", DebouncedRows.read(dataSource, handle.workflowId()).deduplicationId());
+    assertEquals("result:a", handle.getResult());
+  }
+
+  // ==================== Debouncer workflows of SDK versions before 1.2 ====================
+
+  private String plantDebouncerWorkflow(
+      String key, String promisedId, String queue, String appVersion) throws Exception {
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var options =
+        new DebouncerOptions(
+            "process",
+            ClientTargetServiceImpl.class.getName(),
+            null,
+            queue,
+            null,
+            null,
+            null,
+            null);
+    var ctx = new DebouncerContextOptions(promisedId, null, null);
+    var initial =
+        new DebouncerMessage(
+            UUID.randomUUID().toString(), new Object[] {"stale"}, Duration.ofSeconds(2));
+    var inputs =
+        SerializationUtil.serializeArgs(new Object[] {options, ctx, initial}, null, null, null);
+    return DebouncedRows.insertDebouncerWorkflow(
+        dataSource,
+        "process-" + key,
+        WorkflowState.ENQUEUED,
+        inputs.serializedValue(),
+        inputs.serialization(),
+        appVersion,
+        executor.appName());
+  }
+
+  @Test
+  void forwardsToALiveDebouncerWorkflow() throws Exception {
+    plantDebouncerWorkflow(
+        "svc", "promised-c1", null, DBOSTestAccess.getDbosExecutor(dbos).appVersion());
+
+    var handle = debouncer().debounce("svc", Duration.ofMillis(300), "fresh");
+
+    assertEquals("promised-c1", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  @Test
+  void forwardsToALiveDebouncerWorkflowForAUserQueue() throws Exception {
+    plantDebouncerWorkflow(
+        "svc", "promised-c2", USER_QUEUE, DBOSTestAccess.getDbosExecutor(dbos).appVersion());
+
+    var handle =
+        debouncer()
+            .withQueue(QueueName.of(USER_QUEUE))
+            .debounce("svc", Duration.ofMillis(300), "fresh");
+
+    assertEquals("promised-c2", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(1, serviceImpl.callCount.get());
+  }
+
+  @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
+  void takesOverAStrandedDebouncerWorkflowUnderItsPromisedId() throws Exception {
+    var stranded = plantDebouncerWorkflow("stranded", "promised-c3", null, "no-such-version");
+
+    long start = System.currentTimeMillis();
+    var handle =
+        debouncer()
+            .withDebounceTimeout(Duration.ofMinutes(1))
+            .debounce("stranded", Duration.ofMillis(300), "fresh");
+
+    assertEquals("promised-c3", handle.workflowId());
+    // The debounce timeout counts from the call, not from the enqueue after the takeover's wait.
+    var row = DebouncedRows.read(dataSource, "promised-c3");
+    long measuredFrom = row.debounceDeadlineEpochMs() - Duration.ofMinutes(1).toMillis();
+    assertTrue(measuredFrom - start < 2_000, "measured " + (measuredFrom - start) + "ms in");
+    assertEquals(
+        WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(stranded).orElseThrow().status());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  private void enqueuePromised(String promisedId) {
+    dbosClient.enqueueWorkflow(
+        new EnqueueOptions(
+                "process", ClientTargetServiceImpl.class.getName(), QueueName.of(USER_QUEUE))
+            .withWorkflowId(promisedId),
+        new Object[] {"from-debouncer"});
+  }
+
+  @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
+  void cancelsAStrandedDebouncerWorkflowThatAlreadyStartedItsWorkflow() throws Exception {
+    // Its node started the promised workflow, then died before the debouncer workflow finished.
+    var stranded = plantDebouncerWorkflow("started", "promised-c4", null, "no-such-version");
+    enqueuePromised("promised-c4");
+    assertEquals("result:from-debouncer", dbosClient.retrieveWorkflow("promised-c4").getResult());
+
+    var handle = debouncer().debounce("started", Duration.ofMillis(300), "fresh");
+
+    assertEquals(
+        WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(stranded).orElseThrow().status());
+    assertNotEquals("promised-c4", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(2, serviceImpl.callCount.get());
+  }
+
+  @Test
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER) // one global trigger slot
+  void startsOverWhenASlowDebouncerWorkflowStartsThePromisedWorkflowFirst() throws Exception {
+    var slow = plantDebouncerWorkflow("slow", "promised-c5", null, "no-such-version");
+
+    // A node of the old version was alive after all: between the cancel and the create, its
+    // debouncer workflow starts the promised workflow with the arguments it had.
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+        new DebugTriggers.DebugAction().setCallback(() -> enqueuePromised("promised-c5")));
+    WorkflowHandle<String, ?> handle;
+    try {
+      handle = debouncer().debounce("slow", Duration.ofMillis(300), "fresh");
+    } finally {
+      DebugTriggers.clearDebugTriggers();
+    }
+
+    assertNotEquals("promised-c5", handle.workflowId());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals("result:from-debouncer", dbosClient.retrieveWorkflow("promised-c5").getResult());
+    assertEquals(
+        WorkflowState.CANCELLED, dbosClient.getWorkflowStatus(slow).orElseThrow().status());
+  }
+
   // ==================== Coalescing into a debounced workflow ====================
-  //
-  // A newer SDK version keeps a debounced workflow waiting DELAYED on its queue, holding its
-  // debounce key as its deduplication ID. The client has to coalesce into such a row rather than
-  // start a service workflow beside it.
 
   private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
     return debouncedRow(queue, workflowName, delayUntil, null);
@@ -311,16 +510,20 @@ public class DebouncerClientTest {
   }
 
   @Test
-  void rejectsANegativePriority() {
-    // Refused at the call: the user workflow's options are only built inside the debouncer
-    // workflow, where the same value would fail durably.
+  void rejectsANonPositiveTimeoutWhenSet() {
+    assertThrows(IllegalArgumentException.class, () -> debouncer().withTimeout(Duration.ZERO));
     assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            debouncer()
-                .withQueue(QueueName.of(USER_QUEUE))
-                .withPriority(-1)
-                .debounce("prio-neg", Duration.ofMillis(500), "x"));
-    assertEquals(0, serviceImpl.callCount.get());
+        IllegalArgumentException.class, () -> debouncer().withTimeout(Duration.ofSeconds(-1)));
+    debouncer().withTimeout(null);
+  }
+
+  @Test
+  void rejectsANegativePriorityWhenSet() {
+    var debouncer = debouncer().withQueue(QueueName.of(USER_QUEUE));
+
+    assertThrows(IllegalArgumentException.class, () -> debouncer.withPriority(-1));
+    // Zero is the default priority, and null clears one.
+    debouncer.withPriority(0);
+    debouncer.withPriority(null);
   }
 }

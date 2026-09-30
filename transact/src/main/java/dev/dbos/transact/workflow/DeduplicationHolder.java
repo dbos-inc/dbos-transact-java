@@ -16,10 +16,10 @@ import org.jspecify.annotations.Nullable;
  * holder may belong to a peer. Callers that mean to coordinate with the holder — the debouncers —
  * must check before they do, since a peer's holder answers to that peer alone.
  *
- * <p>A debounce key can be held by two kinds of workflow. A debouncer service workflow absorbs
- * calls for the key and starts the user workflow when the period elapses. A debounced user workflow
- * waits DELAYED on its own, holding the key until its delay expires. The debouncers tell them apart
- * with {@link #isDebouncerService()} and {@link #isDebouncedInstanceOf}.
+ * <p>A debounce key can be held by two kinds of workflow. A debouncer workflow absorbs calls for
+ * the key and starts the user workflow when the period elapses. A debounced user workflow waits
+ * DELAYED on its own, holding the key until its delay expires. The debouncers tell them apart with
+ * {@link #isDebouncerWorkflow()} and {@link #isDebouncedInstanceOf}.
  *
  * @param workflowId the holding workflow
  * @param applicationName the application that owns it, or null if the row is unclaimed
@@ -49,14 +49,14 @@ public record DeduplicationHolder(
   }
 
   /**
-   * Whether this holder is a debouncer service workflow: one that absorbs debounce calls for its
-   * key over messages and starts the user workflow itself. The service workflow has a fixed name
-   * and class, and both must match; a user workflow that shares its name is not one. A holder whose
-   * name is unknown was recorded before debounced workflows existed, when the service workflow was
-   * the only thing that ever held a debounce key, so it counts as one.
+   * Whether this holder is a debouncer workflow: one that absorbs debounce calls for its key over
+   * messages and starts the user workflow itself. The debouncer workflow has a fixed name and
+   * class, and both must match; a user workflow that shares its name is not one. A holder whose
+   * name is unknown was recorded before debounced workflows existed, when the debouncer workflow
+   * was the only thing that ever held a debounce key, so it counts as one.
    */
   @JsonIgnore // derived, not a component: keep it out of the recorded step
-  public boolean isDebouncerService() {
+  public boolean isDebouncerWorkflow() {
     return workflowName == null
         || (Constants.DEBOUNCER_WORKFLOW_NAME.equals(workflowName)
             && Constants.DEBOUNCER_CLASS_NAME.equals(className));

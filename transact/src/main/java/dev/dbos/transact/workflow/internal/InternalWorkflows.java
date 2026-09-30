@@ -3,6 +3,9 @@ package dev.dbos.transact.workflow.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.DebounceCaller;
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
@@ -10,14 +13,17 @@ import dev.dbos.transact.execution.RegisteredWorkflow;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Built-in workflows registered by DBOS itself. Currently holds the debouncer service workflow.
+ * Built-in workflows registered by DBOS itself. Currently holds the debouncer workflow.
  *
  * <p>Not part of the public API.
  */
@@ -47,6 +53,74 @@ public class InternalWorkflows {
     } catch (NoSuchMethodException e) {
       throw new IllegalStateException("debouncerWorkflow method missing", e);
     }
+  }
+
+  /**
+   * Takes over from a debouncer workflow that stopped answering: cancels it, which frees its
+   * debounce key, and creates the user workflow it pre-assigned, as {@code promised} builds it for
+   * that id, so the handles earlier callers were given resolve to the workflow that really runs.
+   * The cancel and the create commit together, so the key passes straight from one to the other;
+   * see {@link SystemDatabase#takeOverDebouncerWorkflow}.
+   *
+   * <p>A debouncer workflow goes silent for good once the last node of the SDK version that
+   * enqueued it drains: the computed application version hashes the SDK version, so no remaining
+   * node ever dequeues or recovers it, and it holds its key forever.
+   *
+   * <p>Returns the promised workflow's id if this call created it. Returns null, cancelling
+   * nothing, when the debouncer workflow is gone or no longer active: it finished on its own, or
+   * another call took it over. Returns null after cancelling when its user workflow already exists
+   * -- it started that workflow and then went silent, which the cancel cannot undo, but left alone
+   * it would hold the key forever once its node is gone -- or when the inputs do not name one.
+   * Either way the caller goes on as for any call on the key, and extends the promised workflow if
+   * it is still waiting.
+   *
+   * <p>With a {@code caller}, the takeover is that caller's step, checkpointed in the same
+   * transaction, so a replay neither cancels again nor loses the id it returned.
+   */
+  public static @Nullable String takeOverStrandedDebouncer(
+      SystemDatabase systemDatabase,
+      String debouncerWorkflowId,
+      Function<String, WorkflowStatusInternal> promised,
+      @Nullable DebounceCaller caller) {
+    var status = systemDatabase.getWorkflowStatus(debouncerWorkflowId);
+    var userWorkflowId = status == null ? null : getUserWorkflowId(status.input());
+    try {
+      return systemDatabase.takeOverDebouncerWorkflow(
+                  debouncerWorkflowId,
+                  userWorkflowId == null ? null : promised.apply(userWorkflowId),
+                  caller)
+              instanceof String id
+          ? id
+          : null;
+    } catch (DBOSQueueDuplicatedException e) {
+      // Something else holds the key where the promised workflow would go: a debounced workflow of
+      // a newer node, on a user queue, which the debouncer workflow's key on the internal queue
+      // never collided with. The transaction rolled back, cancel and all, and the caller extends
+      // that workflow as any other call on the key would.
+      logger.debug(
+          "Could not take over debouncer workflow {}: {} holds its key on queue {}",
+          debouncerWorkflowId,
+          e.deduplicationId(),
+          e.queueName());
+      return null;
+    }
+  }
+
+  /**
+   * The user workflow id a debouncer workflow's inputs pre-assign, from its {@link
+   * DebouncerContextOptions}; a serializer that drops Java types hands that back as a map.
+   */
+  private static @Nullable String getUserWorkflowId(Object @Nullable [] input) {
+    if (input == null || input.length < 2) {
+      return null;
+    }
+    if (input[1] instanceof DebouncerContextOptions ctx) {
+      return ctx.userWorkflowId();
+    }
+    if (input[1] instanceof Map<?, ?> map && map.get("userWorkflowId") instanceof String id) {
+      return id;
+    }
+    return null;
   }
 
   public void debouncerWorkflow(
