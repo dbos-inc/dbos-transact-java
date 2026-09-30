@@ -85,29 +85,28 @@ public class InternalWorkflows {
     if (status == null) {
       return null;
     }
-    boolean waiting =
-        status.status() == WorkflowState.ENQUEUED || status.status() == WorkflowState.PENDING;
-    if (!waiting && status.status() != WorkflowState.CANCELLED) {
+    boolean active = status.status().isActive();
+    if (!active && status.status() != WorkflowState.CANCELLED) {
       return null;
     }
-    var childId = preassignedChildId(status.input());
-    if (childId != null && systemDatabase.getWorkflowStatus(childId) != null) {
-      if (waiting) {
+    var userWorkflowId = getUserWorkflowId(status.input());
+    if (userWorkflowId != null && systemDatabase.getWorkflowStatus(userWorkflowId) != null) {
+      if (active) {
         logger.warn(
             "Cancelling debouncer workflow {}, which stopped acknowledging calls after"
                 + " starting its user workflow {}",
             debouncerWorkflowId,
-            childId);
+            userWorkflowId);
         systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
       }
       return null;
     }
-    if (waiting) {
+    if (active) {
       logger.warn(
           "Cancelling debouncer workflow {}, which stopped acknowledging calls; its user"
               + " workflow {} is created by the caller instead",
           debouncerWorkflowId,
-          childId);
+          userWorkflowId);
       systemDatabase.cancelWorkflows(List.of(debouncerWorkflowId), false);
       try {
         DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
@@ -115,14 +114,14 @@ public class InternalWorkflows {
         throw new RuntimeException(e);
       }
     }
-    return childId;
+    return userWorkflowId;
   }
 
   /**
    * The user workflow id a debouncer workflow's inputs pre-assign, from its {@link
    * DebouncerContextOptions}; a serializer that drops Java types hands that back as a map.
    */
-  private static @Nullable String preassignedChildId(Object @Nullable [] input) {
+  private static @Nullable String getUserWorkflowId(Object @Nullable [] input) {
     if (input == null || input.length < 2) {
       return null;
     }

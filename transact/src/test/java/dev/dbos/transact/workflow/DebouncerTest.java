@@ -874,6 +874,33 @@ public class DebouncerTest {
   }
 
   /**
+   * No release enqueues a debouncer workflow with a delay, but one enqueued by hand would wait
+   * DELAYED, unstarted, holding its key. With no delay to expire it never leaves, so it must be
+   * taken over as an ENQUEUED one is, even on the live version.
+   */
+  @Test
+  public void takesOverADelayedDebouncerWorkflow() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var stranded =
+        plantDebouncerWorkflow(
+            "delayed",
+            liveVersion(),
+            WorkflowState.DELAYED,
+            debouncerInputs("promised-15", null),
+            null);
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("delayed", Duration.ofMillis(300), () -> svc.process("fresh"));
+
+    assertEquals("promised-15", handle.workflowId());
+    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(stranded).getStatus().status());
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
+  }
+
+  /**
    * The upgrade itself, with no hand-built state: the 1.1 debouncer workflow runs here for real
    * until it is waiting for calls, the process shuts down, and a process of a new application
    * version takes over the database. That process never recovers it, so it is stranded holding
