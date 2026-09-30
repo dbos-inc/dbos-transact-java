@@ -176,6 +176,7 @@ public record WorkflowStatus(
         && java.util.Objects.equals(serialization, that.serialization)
         && java.util.Objects.equals(attributes, that.attributes)
         && java.util.Objects.equals(scheduleName, that.scheduleName)
+        && java.util.Objects.equals(applicationName, that.applicationName)
         && java.util.Objects.equals(isDebounced, that.isDebounced)
         && java.util.Objects.equals(debounceDeadline, that.debounceDeadline);
   }
@@ -221,6 +222,7 @@ public record WorkflowStatus(
         serialization,
         attributes,
         scheduleName,
+        applicationName,
         isDebounced,
         debounceDeadline);
   }
