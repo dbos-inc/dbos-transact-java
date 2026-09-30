@@ -2904,6 +2904,19 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testBatchedPartitionDequeueSetsReadCommitted() throws SQLException {
+    // Nothing in the batched sweep spends a shared budget, so READ COMMITTED is enough, but it is
+    // set rather than inherited: a user-supplied pool need not default to it.
+    Queue queue = partitionedQueue("iso-batched", null, 1);
+    var ds = new IsolationRecordingDataSource(dataSource);
+    ds.lastIsolationLevel = Connection.TRANSACTION_NONE;
+
+    QueuesDAO.startQueuedPartitionedWorkflows(recordingCtx(ds), queue, "exec", "v1", 1, 1);
+
+    assertEquals(Connection.TRANSACTION_READ_COMMITTED, ds.lastIsolationLevel);
+  }
+
+  @Test
   public void testQueueWideBudgetInAPartitionUsesSerializable() throws SQLException {
     // A queue-wide budget spent one partition at a time is a write skew: each partition's sweep
     // reads the same budget and claims against its own snapshot, so together they overshoot it.

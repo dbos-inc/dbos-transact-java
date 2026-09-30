@@ -319,6 +319,10 @@ public class QueuesDAO {
 
     try (Connection connection = ctx.getConnection()) {
       connection.setAutoCommit(false);
+      // Set rather than inherited, since a user-supplied pool may default to another level.
+      // Nothing here spends a shared budget, so no stronger level is needed: the lock and the
+      // claim re-check each row's status against whatever a concurrent claim committed.
+      connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
       try {
         String versionClause = versionClause(ctx, connection, appVersion);
 
