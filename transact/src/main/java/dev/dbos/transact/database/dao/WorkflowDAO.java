@@ -91,7 +91,7 @@ public class WorkflowDAO {
         created_at, updated_at, completed_at, started_at_epoch_ms,
         recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
         forked_from, parent_workflow_id, was_forked_from, attributes, schedule_name,
-        application_name
+        application_name, is_debounced, debounce_deadline_epoch_ms
       """;
 
   // Payloads moved off workflow_status in migration 109, so a status update no longer rewrites a
@@ -1663,7 +1663,9 @@ public class WorkflowDAO {
                 ? JsonUtility.fromJson(attributesJson, new TypeReference<Map<String, Object>>() {})
                 : null,
             rs.getString("schedule_name"),
-            rs.getString("application_name"));
+            rs.getString("application_name"),
+            rs.getBoolean("is_debounced"),
+            SystemDatabase.toInstant(rs.getObject("debounce_deadline_epoch_ms", Long.class)));
     return info;
   }
 
@@ -3234,9 +3236,10 @@ public class WorkflowDAO {
           workflow_timeout_ms, workflow_deadline_epoch_ms,
           recovery_attempts, forked_from, parent_workflow_id, serialization,
           delay_until_epoch_ms, completed_at, was_forked_from, attributes, schedule_name,
-          application_name
+          application_name, is_debounced, debounce_deadline_epoch_ms
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?,
+          ?, ?
         )
         """
             .formatted(ctx.schema());
@@ -3383,6 +3386,9 @@ public class WorkflowDAO {
                 wfStmt.setString(28, attributesToJson(status.attributes()));
                 wfStmt.setString(29, status.scheduleName());
                 wfStmt.setString(30, status.applicationName());
+                // NOT NULL column: an export predating it carries no value, so fall back to false.
+                wfStmt.setBoolean(31, Boolean.TRUE.equals(status.isDebounced()));
+                wfStmt.setObject(32, status.debounceDeadlineEpochMs());
                 wfStmt.addBatch();
 
                 // Every workflow has an input row, as in Python; an output row only once there is
