@@ -279,7 +279,7 @@ public class QueueService implements AutoCloseable {
       try {
         var workflowIds =
             systemDatabase.startQueuedPartitionedWorkflows(queue, executorId, appVersion, maxTasks);
-        dispatch(workflowIds, "<batched>");
+        startClaimedWorkflows(workflowIds, "<batched>");
       } finally {
         endPass();
       }
@@ -316,7 +316,7 @@ public class QueueService implements AutoCloseable {
         var workflowIds =
             systemDatabase.startQueuedWorkflows(
                 queue, executorId, appVersion, partition, running, partitionLocalRunningCount);
-        dispatch(workflowIds, partitionLog);
+        startClaimedWorkflows(workflowIds, partitionLog);
         return workflowIds.size();
       } finally {
         endPass();
@@ -324,7 +324,7 @@ public class QueueService implements AutoCloseable {
     }
 
     /** Starts workflows this worker has just claimed from the queue. */
-    private void dispatch(List<String> workflowIds, String partitionLog) {
+    private void startClaimedWorkflows(List<String> workflowIds, String partitionLog) {
       if (!workflowIds.isEmpty()) {
         logger.debug(
             "Retrieved {} workflows from {} partition of queue {}",
