@@ -66,7 +66,6 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     public Boolean load_output;
     public Boolean was_forked_from;
 
-    /** Whether the workflow is itself a fork; the opposite end of was_forked_from. */
     public Boolean is_fork;
 
     public Boolean has_parent;
