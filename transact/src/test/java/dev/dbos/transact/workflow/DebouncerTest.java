@@ -520,7 +520,7 @@ public class DebouncerTest {
 
   // The debounced workflow's inputs take the debounced workflow's format, not the caller's.
   @Test
-  public void debounceFromAPortableWorkflowDeliversItsControlMessage() throws Exception {
+  public void debounceFromAPortableWorkflowCoalescesIntoOneRun() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     var orch =
         dbos.registerProxy(

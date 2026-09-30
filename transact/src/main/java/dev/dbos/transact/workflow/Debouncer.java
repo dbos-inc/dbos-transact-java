@@ -315,7 +315,7 @@ public final class Debouncer<R> {
             // did at this point. Without a queue the enqueue below collides with it instead.
             DebounceResult recheck =
                 toDebounceResult(
-                    executor.lookUpDebounceHolder(
+                    executor.findDeduplicationHolder(
                         Constants.DBOS_INTERNAL_QUEUE, debounceDeduplicationId));
             if (recheck instanceof DebounceResult.Bounced bounced) {
               // Only a step the previous release recorded, when it found a debounced workflow

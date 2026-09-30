@@ -114,11 +114,6 @@ public record WorkflowStatusInternal(
   }
 
   @JsonIgnore
-  public Long delayMs() {
-    return delay == null ? null : delay.toMillis();
-  }
-
-  @JsonIgnore
   public Long debounceDeadlineEpochMs() {
     return debounceDeadline == null ? null : debounceDeadline.toEpochMilli();
   }

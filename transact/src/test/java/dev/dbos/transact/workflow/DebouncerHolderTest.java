@@ -132,7 +132,7 @@ public class DebouncerHolderTest {
   // ==================== Telling the two kinds of holder apart ====================
 
   @Test
-  void aDebouncerWorkflowHolderIsAService() {
+  void aDebouncerWorkflowHolderIsOne() {
     var holder =
         new DeduplicationHolder(
             "wf-1",
@@ -148,7 +148,7 @@ public class DebouncerHolderTest {
   }
 
   @Test
-  void aUserWorkflowSharingTheServicesNameIsNotAService() {
+  void aUserWorkflowSharingItsNameIsNotOne() {
     var holder =
         new DeduplicationHolder(
             "wf-1",
@@ -163,7 +163,7 @@ public class DebouncerHolderTest {
   }
 
   @Test
-  void aHolderOfUnknownNameCountsAsAService() {
+  void aHolderOfUnknownNameCountsAsOne() {
     // Recorded before debounced workflows existed, when nothing else held a debounce key.
     assertTrue(
         new DeduplicationHolder("wf-1", "app-a", null, null, null, null, false)

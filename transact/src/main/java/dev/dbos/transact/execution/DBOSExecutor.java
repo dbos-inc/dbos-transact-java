@@ -33,7 +33,6 @@ import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
-import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -440,16 +439,6 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase;
   }
 
-  public @Nullable String findWorkflowIdByDeduplicationId(
-      String queueName, String deduplicationId) {
-    return systemDatabase.findWorkflowIdByDeduplicationId(queueName, deduplicationId);
-  }
-
-  public @Nullable DeduplicationHolder findDeduplicationHolder(
-      String queueName, String deduplicationId) {
-    return systemDatabase.findDeduplicationHolder(queueName, deduplicationId);
-  }
-
   /**
    * Extends a debounced DELAYED instance of {@code workflow}'s delay and replaces its inputs with
    * {@code args} in the workflow's registered format, or reports who holds the pair instead.
@@ -551,7 +540,7 @@ public class DBOSExecutor implements AutoCloseable {
    *
    * <p>Returns what the step records as {@code Object}, as {@link #debounceDelayedWorkflow} does.
    */
-  public Object lookUpDebounceHolder(String queueName, String deduplicationId) {
+  public Object findDeduplicationHolder(String queueName, String deduplicationId) {
     var ctx = DBOSContextHolder.get();
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
       ctx.getAndIncrementFunctionId();
