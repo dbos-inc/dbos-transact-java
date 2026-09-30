@@ -9,7 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.Constants;
@@ -68,6 +71,7 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 // Builds Queue values as fixtures or mock stubs, never to register one: the type stays,
 // only authoring a Queue by hand is deprecated.
@@ -628,6 +632,52 @@ public class SystemDatabaseTest {
 
       assertSame(failure, thrown.getCause(), "the driver's failure is the cause, one level down");
       assertEquals("42P01", thrown.sqlState());
+    }
+  }
+
+  @Test
+  @Timeout(30)
+  @DisplayName("a queue poll fails on its first connection error rather than retrying it")
+  public void queuePollDoesNotRetry() throws SQLException {
+    // The poll loop is the retry: a failed poll is logged and the next comes a polling interval
+    // later. Retried inside dbRetry, a connection error would hold the listener for as long as the
+    // database stayed down. 08006 is a state dbRetry retries forever, so a regression hangs here
+    // until the timeout rather than passing.
+    var failure = new SQLException("connection failure", "08006");
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    when(conn.prepareStatement(anyString())).thenThrow(failure);
+    when(conn.createStatement()).thenThrow(failure);
+    var ds = mock(DataSource.class);
+    when(ds.getConnection()).thenReturn(conn);
+    var partitioned =
+        new Queue(
+            "q",
+            null,
+            null,
+            false,
+            false,
+            null,
+            1,
+            null,
+            null,
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+
+    try (var db = new SystemDatabase(ds, "dbos", null, false, "app")) {
+      List<Runnable> polls =
+          List.of(
+              () -> db.getQueuePartitions("q"),
+              () -> db.startQueuedWorkflows(new Queue("q"), "exec", "v1", null, 0, 0),
+              () -> db.startQueuedPartitionedWorkflows(partitioned, "exec", "v1", 1));
+      for (var poll : polls) {
+        clearInvocations(conn);
+        var thrown = assertThrows(DBOSSystemDatabaseException.class, poll::run);
+        assertSame(failure, thrown.getCause());
+        verify(conn, times(1)).prepareStatement(anyString());
+      }
     }
   }
 
@@ -2901,6 +2951,19 @@ public class SystemDatabaseTest {
         null,
         Queue.DEFAULT_POLLING_INTERVAL,
         null);
+  }
+
+  @Test
+  public void testBatchedPartitionDequeueSetsReadCommitted() throws SQLException {
+    // Nothing in the batched sweep spends a shared budget, so READ COMMITTED is enough, but it is
+    // set rather than inherited: a user-supplied pool need not default to it.
+    Queue queue = partitionedQueue("iso-batched", null, 1);
+    var ds = new IsolationRecordingDataSource(dataSource);
+    ds.lastIsolationLevel = Connection.TRANSACTION_NONE;
+
+    QueuesDAO.startQueuedPartitionedWorkflows(recordingCtx(ds), queue, "exec", "v1", 1, 1);
+
+    assertEquals(Connection.TRANSACTION_READ_COMMITTED, ds.lastIsolationLevel);
   }
 
   @Test

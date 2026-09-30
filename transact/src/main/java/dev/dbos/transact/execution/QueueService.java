@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -265,6 +266,26 @@ public class QueueService implements AutoCloseable {
     }
 
     /**
+     * Claims and dispatches the head of every idle partition in one transaction, for a queue that
+     * runs one workflow per partition and has no queue-wide limit.
+     *
+     * <p>Contention here is queue-wide, like a non-partitioned dequeue's, so it propagates and
+     * backs the whole queue off.
+     */
+    void sweepPartitionHeads() {
+      long maxTasks = workerBudget(dbosExecutor.queueActiveCount(queue.name()));
+      if (maxTasks <= 0) return;
+      if (!beginPass()) return;
+      try {
+        var workflowIds =
+            systemDatabase.startQueuedPartitionedWorkflows(queue, executorId, appVersion, maxTasks);
+        startClaimedWorkflows(workflowIds, "<batched>");
+      } finally {
+        endPass();
+      }
+    }
+
+    /**
      * Room left under this worker's queue-wide concurrency limit, given how many of its workflows
      * are already running or claimed. Unbounded when only a per-partition worker limit is set,
      * which the dequeue enforces within each partition instead.
@@ -295,36 +316,41 @@ public class QueueService implements AutoCloseable {
         var workflowIds =
             systemDatabase.startQueuedWorkflows(
                 queue, executorId, appVersion, partition, running, partitionLocalRunningCount);
-        if (!workflowIds.isEmpty()) {
-          logger.debug(
-              "Retrieved {} workflows from {} partition of queue {}",
-              workflowIds.size(),
-              partitionLog,
-              queue.name());
-        }
-        for (var workflowId : workflowIds) {
-          logger.debug(
-              "Starting workflow {} from {} partition of queue {}",
-              workflowId,
-              partitionLog,
-              queue.name());
-          try {
-            dbosExecutor.executeWorkflowById(workflowId);
-          } catch (Exception e) {
-            // A failed dispatch must not strand the rest of the batch, and its failure is not
-            // the dequeue contention the poll loop would read it as. A workflow out of attempts is
-            // dead-lettered here, and says so by throwing.
-            logger.error(
-                "Error starting workflow {} from {} partition of queue {}",
-                workflowId,
-                partitionLog,
-                queue.name(),
-                e);
-          }
-        }
+        startClaimedWorkflows(workflowIds, partitionLog);
         return workflowIds.size();
       } finally {
         endPass();
+      }
+    }
+
+    /** Starts workflows this worker has just claimed from the queue. */
+    private void startClaimedWorkflows(List<String> workflowIds, String partitionLog) {
+      if (!workflowIds.isEmpty()) {
+        logger.debug(
+            "Retrieved {} workflows from {} partition of queue {}",
+            workflowIds.size(),
+            partitionLog,
+            queue.name());
+      }
+      for (var workflowId : workflowIds) {
+        logger.debug(
+            "Starting workflow {} from {} partition of queue {}",
+            workflowId,
+            partitionLog,
+            queue.name());
+        try {
+          dbosExecutor.executeWorkflowById(workflowId);
+        } catch (Exception e) {
+          // A failed dispatch must not strand the rest of the batch, and its failure is not
+          // the dequeue contention the poll loop would read it as. A workflow out of attempts is
+          // dead-lettered here, and says so by throwing.
+          logger.error(
+              "Error starting workflow {} from {} partition of queue {}",
+              workflowId,
+              partitionLog,
+              queue.name(),
+              e);
+        }
       }
     }
 
@@ -367,7 +393,9 @@ public class QueueService implements AutoCloseable {
           return;
         }
 
-        if (queue.isPartitioned()) {
+        if (queue.canBatchPartitionedDequeue()) {
+          sweepPartitionHeads();
+        } else if (queue.isPartitioned()) {
           sweepPartitions();
         } else {
           processPartition(null, dbosExecutor.queueActiveCount(queue.name()));
