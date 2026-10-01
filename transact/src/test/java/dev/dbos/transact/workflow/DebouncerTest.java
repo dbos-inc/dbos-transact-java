@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -161,6 +162,7 @@ public class DebouncerTest {
     var dataSource = pgContainer.dataSource();
     var debouncer = dbos.<String>debouncer().withDebounceTimeout(Duration.ofMillis(1500));
 
+    long prevCalledAt = System.currentTimeMillis();
     var first = debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process("v0"));
     Long deadline = DebouncedRows.read(dataSource, first.workflowId()).debounceDeadlineEpochMs();
     assertNotNull(deadline);
@@ -173,12 +175,19 @@ public class DebouncerTest {
     for (int i = 1; ; i++) {
       String arg = "v" + i;
       long calledAt = System.currentTimeMillis();
+      // The row holds the key at least until the previous call's period or the deadline ends,
+      // whichever is first. A pause that used up that window would let this call start a fresh
+      // workflow, so this run cannot test the scenario.
+      assumeTrue(
+          calledAt < Math.min(prevCalledAt + 800, deadline) - 200,
+          "paused past the window in which the key is held");
       var handle = debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process(arg));
       assertEquals(first.workflowId(), handle.workflowId());
       lastArg = arg;
       if (calledAt + 800 > deadline) {
         break;
       }
+      prevCalledAt = calledAt;
       Thread.sleep(150);
     }
 
