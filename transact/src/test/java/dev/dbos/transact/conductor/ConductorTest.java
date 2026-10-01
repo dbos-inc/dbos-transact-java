@@ -1608,7 +1608,7 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
-  public void canListQueuedWorkflowsWithHasParent() throws Exception {
+  public void canListQueuedWorkflowsWithHasParentAndIsFork() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
     when(mockExec.listWorkflows(any())).thenReturn(List.of());
@@ -1617,7 +1617,7 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      Map<String, Object> body = Map.of("has_parent", true);
+      Map<String, Object> body = Map.of("has_parent", true, "is_fork", true);
       listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
@@ -1626,6 +1626,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertTrue(input.hasParent());
+      assertTrue(input.isFork());
       assertTrue(input.queuesOnly());
     }
   }

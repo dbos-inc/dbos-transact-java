@@ -605,6 +605,25 @@ public class ListWorkflowsTest {
   }
 
   @Test
+  public void testFilterByIsFork() throws Exception {
+
+    // isFork=true: only wf-forked-1, the fork itself (not wf-alpha-1, which it was forked from)
+    List<WorkflowStatus> forks = dbos.listWorkflows(new ListWorkflowsInput().withIsFork(true));
+    assertEquals(1, forks.size());
+    assertEquals("wf-forked-1", forks.get(0).workflowId());
+    assertEquals("wf-alpha-1", forks.get(0).forkedFrom());
+
+    // isFork=false: all other 10 workflows, including the fork source wf-alpha-1
+    List<WorkflowStatus> nonForks = dbos.listWorkflows(new ListWorkflowsInput().withIsFork(false));
+    assertEquals(10, nonForks.size());
+    nonForks.forEach(wf -> assertNull(wf.forkedFrom()));
+    assertTrue(nonForks.stream().anyMatch(wf -> wf.workflowId().equals("wf-alpha-1")));
+
+    // null (unset) does no filtering at all
+    assertEquals(11, dbos.listWorkflows(new ListWorkflowsInput()).size());
+  }
+
+  @Test
   public void testLimitAndOffset() throws Exception {
 
     // Default sort is ASC by created_at; wf-alpha-1 (+100 ms) is first

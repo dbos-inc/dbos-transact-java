@@ -56,6 +56,7 @@ public record ListWorkflowsRequest(
         fork_from,
         parent_workflow_id,
         null, // wasForkedFrom
+        null, // isFork
         null, // hasParent
         null, // attributes
         completed_after != null ? Instant.parse(completed_after) : null,
