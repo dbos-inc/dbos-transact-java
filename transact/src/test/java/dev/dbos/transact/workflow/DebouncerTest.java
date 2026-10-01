@@ -158,22 +158,33 @@ public class DebouncerTest {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();
 
+    var dataSource = pgContainer.dataSource();
     var debouncer = dbos.<String>debouncer().withDebounceTimeout(Duration.ofMillis(1500));
 
-    var first = debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process("v1"));
-    String firstId = first.workflowId();
+    var first = debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process("v0"));
+    Long deadline = DebouncedRows.read(dataSource, first.workflowId()).debounceDeadlineEpochMs();
+    assertNotNull(deadline);
 
-    // Keep extending the period — the absolute timeout should still kick in.
-    long deadline = System.currentTimeMillis() + 3000;
-    while (System.currentTimeMillis() < deadline && serviceImpl.callCount() == 0) {
-      debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process("vN"));
+    // Keep extending the period until a call's own period would end past the deadline, so the
+    // deadline, not that period, decides when the workflow runs. Stop there: the first sweep after
+    // the delay expires moves the workflow out of DELAYED and frees the key, and a call after that
+    // would start a fresh workflow.
+    String lastArg;
+    for (int i = 1; ; i++) {
+      String arg = "v" + i;
+      long calledAt = System.currentTimeMillis();
+      var handle = debouncer.debounce("user-3", Duration.ofMillis(800), () -> svc.process(arg));
+      assertEquals(first.workflowId(), handle.workflowId());
+      lastArg = arg;
+      if (calledAt + 800 > deadline) {
+        break;
+      }
       Thread.sleep(150);
     }
 
-    String result = first.getResult();
-    assertTrue(result.startsWith("result:"));
+    assertEquals("result:" + lastArg, first.getResult());
     assertEquals(1, serviceImpl.callCount());
-    assertEquals(firstId, first.workflowId());
+    assertEquals(deadline, DebouncedRows.read(dataSource, first.workflowId()).delayUntilEpochMs());
   }
 
   @Test
