@@ -83,6 +83,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
       - name: Checkout dbos-demo-apps
         uses: actions/checkout@v6
         with:
