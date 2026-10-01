@@ -32,16 +32,6 @@ import org.jspecify.annotations.Nullable;
  */
 public class DBOSIntegration {
 
-  /**
-   * Callback used during workflow registration to process each discovered workflow method.
-   * Implementations receive the {@link Workflow} annotation, the target object, the reflective
-   * {@link Method}, and the optional instance name.
-   */
-  @FunctionalInterface
-  public interface RegisteredWorkflowConsumer {
-    void register(Workflow wfTag, Object target, Method method, String instanceName);
-  }
-
   private final DBOSConfig config;
   private final WorkflowRegistry workflowRegistry;
   private final Supplier<DBOSExecutor> executorSupplier;

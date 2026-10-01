@@ -17,14 +17,6 @@ public record StepResult(
     this(workflowId, stepId, functionName, null, null, null, null);
   }
 
-  public StepResult withOutput(String v) {
-    return new StepResult(workflowId, stepId, stepName, v, error, childWorkflowId, serialization);
-  }
-
-  public StepResult withError(String v) {
-    return new StepResult(workflowId, stepId, stepName, output, v, childWorkflowId, serialization);
-  }
-
   public StepResult withChildWorkflowId(String v) {
     return new StepResult(workflowId, stepId, stepName, output, error, v, serialization);
   }
@@ -37,12 +29,6 @@ public record StepResult(
       String workflowId, int stepId, String stepName, SerializedResult result) {
     return new StepResult(
         workflowId, stepId, stepName, result.serializedValue(), null, null, result.serialization());
-  }
-
-  public static StepResult ofError(
-      String workflowId, int stepId, String stepName, SerializedResult result) {
-    return new StepResult(
-        workflowId, stepId, stepName, null, result.serializedValue(), null, result.serialization());
   }
 
   @SuppressWarnings("unchecked")

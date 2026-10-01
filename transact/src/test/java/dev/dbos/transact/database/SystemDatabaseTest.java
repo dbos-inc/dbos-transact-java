@@ -1262,6 +1262,7 @@ public class SystemDatabaseTest {
     assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key", 0));
   }
 
+  @Test
   public void testInsertWorkflowStatusValidation() throws Exception {
     // Test null workflowId
     assertThrows(

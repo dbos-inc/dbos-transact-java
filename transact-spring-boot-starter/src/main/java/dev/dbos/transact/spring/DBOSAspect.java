@@ -72,10 +72,6 @@ public class DBOSAspect {
         ((MethodSignature) pjp.getSignature()).getMethod(), pjp.getTarget().getClass());
   }
 
-  static String getMethodName(ProceedingJoinPoint pjp) {
-    return ((MethodSignature) pjp.getSignature()).getName();
-  }
-
   /**
    * Returns the DBOS instance name for the given target bean. Mirrors the naming logic in {@link
    * DBOSWorkflowRegistrar}: the sole bean of a class, or the {@code @Primary} one among several,
