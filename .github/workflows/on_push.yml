@@ -17,3 +17,7 @@ jobs:
       MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
       SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
       SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+  # Runs on main so its Gradle cache gets written; PR runs can only read caches from main.
+  test-demo-apps:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/test_demo_apps.yml
