@@ -255,39 +255,6 @@ public final class SerializationUtil {
   }
 
   /**
-   * Safely parse a value, returning the raw string if parsing fails. Used for introspection methods
-   * that may encounter old or undeserializable data.
-   */
-  public static Object safeParse(
-      String serializedValue, String serialization, DBOSSerializer customSerializer) {
-    try {
-      return deserializeValue(serializedValue, serialization, customSerializer);
-    } catch (Exception e) {
-      return serializedValue;
-    }
-  }
-
-  /** Safely parse arguments, returning the raw string if parsing fails. */
-  public static Object safeParseArgs(
-      String serializedValue, String serialization, DBOSSerializer customSerializer) {
-    try {
-      return deserializePositionalArgs(serializedValue, serialization, customSerializer);
-    } catch (Exception e) {
-      return serializedValue;
-    }
-  }
-
-  /** Safely parse an error, returning a RuntimeException with the raw message if parsing fails. */
-  public static Throwable safeParseError(
-      String serializedValue, String serialization, DBOSSerializer customSerializer) {
-    try {
-      return deserializeError(serializedValue, serialization, customSerializer);
-    } catch (Exception e) {
-      return new RuntimeException(serializedValue);
-    }
-  }
-
-  /**
    * Result of a serialization operation, containing both the serialized string and the name of the
    * serializer used (to be stored in the DB).
    */

@@ -16,61 +16,12 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import javax.sql.DataSource;
 
-import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class DBUtils {
-
-  private static final Logger logger = LoggerFactory.getLogger(DBUtils.class);
-
-  public static void clearTables(DataSource ds) throws SQLException {
-
-    try (Connection connection = ds.getConnection()) {
-      deleteAllOperationOutputs(connection);
-      deleteWorkflowsTestHelper(connection);
-    } catch (Exception e) {
-      logger.info("Error clearing tables" + e.getMessage());
-      throw e;
-    }
-  }
-
-  public static void deleteWorkflowsTestHelper(Connection connection) throws SQLException {
-
-    String sql = "delete from dbos.workflow_status";
-
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      int rowsAffected = pstmt.executeUpdate();
-      logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
-
-    } catch (SQLException e) {
-      logger.error("Error deleting workflows in test helper", e);
-      throw e;
-    }
-  }
-
-  public static void deleteAllOperationOutputs(Connection connection) throws SQLException {
-
-    String sql = "delete from dbos.operation_outputs;";
-
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      int rowsAffected = pstmt.executeUpdate();
-      logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.operation_outputs");
-
-    } catch (SQLException e) {
-      logger.error("Error deleting workflows in test helper", e);
-      throw e;
-    }
-  }
 
   public static int updateAllWorkflowStates(DataSource ds, String oldState, String newState)
       throws SQLException {
@@ -187,10 +138,6 @@ public class DBUtils {
     }
 
     return false;
-  }
-
-  public void closeDS(HikariDataSource ds) {
-    ds.close();
   }
 
   public static void recreateDB(DBOSConfig config) throws SQLException {
@@ -512,20 +459,6 @@ public class DBUtils {
         return rows;
       }
     }
-  }
-
-  public static List<Map<String, Object>> dumpResultSet(ResultSet rs) throws SQLException {
-    List<Map<String, Object>> results = new ArrayList<>();
-    var metaData = rs.getMetaData();
-    var columnCount = metaData.getColumnCount();
-    while (rs.next()) {
-      Map<String, Object> map = new HashMap<>();
-      for (var i = 1; i <= columnCount; i++) {
-        map.put(metaData.getColumnLabel(i), rs.getObject(i));
-      }
-      results.add(map);
-    }
-    return results;
   }
 
   public static Collection<String> getTables(PgContainer pg, String schema) throws SQLException {
