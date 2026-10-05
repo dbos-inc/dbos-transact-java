@@ -357,7 +357,7 @@ public class QueuesDAO {
                 AND queue_partition_key = chosen.pk
                 AND %4$s%2$s
               -- workflow_uuid breaks created_at ties, so every worker picks the same head, and it
-              -- ends idx_workflow_status_partition_dequeue_v2, so this stays a pure index probe.
+              -- ends idx_workflow_status_partition_dequeue_v3, so this stays a pure index probe.
               ORDER BY priority ASC, created_at ASC, workflow_uuid ASC
               LIMIT 1
             ) head ON TRUE
@@ -611,7 +611,7 @@ public class QueuesDAO {
    * A recursive CTE named {@code partitions} whose {@code pk} column lists the distinct partition
    * keys with an ENQUEUED workflow this application may dequeue, ending in one NULL row.
    *
-   * <p>It is a loose index scan: each step is one seek on idx_workflow_status_partition_dequeue_v2
+   * <p>It is a loose index scan: each step is one seek on idx_workflow_status_partition_dequeue_v3
    * for the next key above the last, so it costs one seek per partition however deep each
    * partition's backlog is. Bind its parameters with {@link #bindPartitionKeysCte}.
    */

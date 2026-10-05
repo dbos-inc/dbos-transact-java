@@ -23,7 +23,9 @@ public class MigrationManager {
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
 
   private static final Set<Integer> ONLINE_MIGRATIONS =
-      Set.of(22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114);
+      Set.of(
+          22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114, 115, 116,
+          117, 118, 119, 120);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -39,11 +41,12 @@ public class MigrationManager {
    * to a full scan and sort of the largest payload table per batch. That presents as a retention
    * round that never finishes rather than as an error, so 111 is the floor, not 110.
    *
-   * <p>Migrations 112 to 114 deliberately do not raise this. 112 drops a constraint rather than
+   * <p>Migrations 112 to 120 deliberately do not raise this. 112 drops a constraint rather than
    * adding anything to read, and every delete path clears the child tables by ID, so this SDK
    * behaves identically whether or not the cascade is still there. After 113 the shared enqueue
    * function writes inputs only to workflow_input, which every read here already COALESCEs over,
-   * and 114 drops an index that duplicates idx_workflow_topic.
+   * and 114 drops an index that duplicates idx_workflow_topic. 115 to 120 only rebuild indexes, so
+   * every query runs correctly either side of them.
    *
    * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
    * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
@@ -584,7 +587,13 @@ public class MigrationManager {
             migration111(isCockroach),
             MIGRATION_112,
             migration113(isCockroach),
-            migration114(isCockroach)));
+            migration114(isCockroach),
+            migration115(isCockroach),
+            migration116(isCockroach),
+            migration117(isCockroach),
+            migration118(isCockroach),
+            migration119(isCockroach),
+            migration120(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1677,5 +1686,57 @@ public class MigrationManager {
   // order.
   static String migration114(boolean isCockroach) {
     return "DROP INDEX " + concurrently(isCockroach) + " IF EXISTS \"%1$s\".\"idx_notifications\"";
+  }
+
+  // Migration 115: application_name is an INCLUDE column, not a key column, so app-scoped counts
+  // run index-only; as a key the planner could not BitmapOr on it.
+  static String migration115(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_in_flight_v2\""
+        + " ON \"%1$s\".\"workflow_status\" (\"queue_name\", \"status\", \"priority\", \"created_at\")"
+        + " INCLUDE (\"application_name\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING')";
+  }
+
+  // Migration 116: superseded by idx_workflow_status_in_flight_v2.
+  static String migration116(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_in_flight\"";
+  }
+
+  // Migration 117: matches idx_workflow_status_in_flight_v2.
+  static String migration117(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_partition_dequeue_v3\""
+        + " ON \"%1$s\".\"workflow_status\" (\"queue_name\", \"status\", \"queue_partition_key\","
+        + " \"priority\", \"created_at\", \"workflow_uuid\")"
+        + " INCLUDE (\"application_name\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING') AND \"queue_partition_key\" IS NOT NULL";
+  }
+
+  // Migration 118: superseded by idx_workflow_status_partition_dequeue_v3.
+  static String migration118(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_partition_dequeue_v2\"";
+  }
+
+  // Migration 119: matches idx_workflow_status_in_flight_v2.
+  static String migration119(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_operation_outputs_completed_at_function_name_v2\""
+        + " ON \"%1$s\".\"operation_outputs\" (\"completed_at_epoch_ms\", \"function_name\")"
+        + " INCLUDE (\"application_name\")";
+  }
+
+  // Migration 120: superseded by idx_operation_outputs_completed_at_function_name_v2.
+  static String migration120(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_operation_outputs_completed_at_function_name\"";
   }
 }
