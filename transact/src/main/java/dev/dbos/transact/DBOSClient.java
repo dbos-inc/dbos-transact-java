@@ -55,8 +55,8 @@ import org.jspecify.annotations.Nullable;
  * to the workflow Manage workflows - list, fork, cancel, etc.
  *
  * <p>A client never migrates the system database, so every constructor checks that the schema it is
- * pointed at is already at {@link MigrationManager#MINIMUM_SYSDB_VERSION} or later, and throws if
- * it is missing, unversioned, or too old.
+ * pointed at is already at {@link MigrationManager#latestMigrationVersion()} or later, and throws
+ * if it is missing, unversioned, or too old.
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {

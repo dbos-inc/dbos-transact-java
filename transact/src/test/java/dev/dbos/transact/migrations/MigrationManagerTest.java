@@ -789,7 +789,7 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(pgContainer.dbosConfig());
 
     var schema = Constants.DB_SCHEMA;
-    var tooOld = MigrationManager.MINIMUM_SYSDB_VERSION - 1;
+    var tooOld = MigrationManager.latestMigrationVersion() - 1;
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate(
@@ -802,7 +802,7 @@ class MigrationManagerTest {
             () -> MigrationManager.validateSysDbVersion(dataSource, schema));
     assertTrue(
         e.getMessage().contains(Integer.toString(tooOld))
-            && e.getMessage().contains(Integer.toString(MigrationManager.MINIMUM_SYSDB_VERSION)),
+            && e.getMessage().contains(Integer.toString(MigrationManager.latestMigrationVersion())),
         "Expected the message to report both versions, got: " + e.getMessage());
   }
 
@@ -812,18 +812,35 @@ class MigrationManagerTest {
 
     assertDoesNotThrow(
         () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA),
-        "A fully migrated schema must satisfy the minimum version check");
+        "A fully migrated schema must satisfy the version check");
   }
 
   @Test
-  void testValidateSysDbVersion_MinimumIsWithinTheLadder() {
-    var latest =
-        MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB)
-            .size();
-    assertTrue(
-        MigrationManager.MINIMUM_SYSDB_VERSION > 0
-            && MigrationManager.MINIMUM_SYSDB_VERSION <= latest,
-        "MINIMUM_SYSDB_VERSION must name a migration this SDK can actually apply");
+  void testValidateSysDbVersion_AcceptsASchemaAheadOfThisSdk() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    // Migrated by a newer SDK during a rolling upgrade.
+    var ahead = MigrationManager.latestMigrationVersion() + 5;
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(Constants.DB_SCHEMA, ahead));
+    }
+
+    assertDoesNotThrow(
+        () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
+  }
+
+  @Test
+  void testLatestMigrationVersionIsTheLastMigration() {
+    for (var useListenNotify : List.of(true, false)) {
+      for (var isCockroach : List.of(true, false)) {
+        assertEquals(
+            MigrationManager.getMigrations(Constants.DB_SCHEMA, useListenNotify, isCockroach)
+                .size(),
+            MigrationManager.latestMigrationVersion());
+      }
+    }
   }
 
   static int getVersion(Connection conn) throws Exception {

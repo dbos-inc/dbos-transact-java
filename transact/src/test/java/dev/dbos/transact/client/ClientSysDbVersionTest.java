@@ -52,7 +52,7 @@ class ClientSysDbVersionTest {
   void rejectsTooOldSchema() throws Exception {
     MigrationManager.runMigrations(pgContainer.dbosConfig());
 
-    var tooOld = MigrationManager.MINIMUM_SYSDB_VERSION - 1;
+    var tooOld = MigrationManager.latestMigrationVersion() - 1;
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate(
@@ -62,7 +62,7 @@ class ClientSysDbVersionTest {
     var e = assertThrows(IllegalStateException.class, () -> pgContainer.dbosClient());
     assertTrue(
         e.getMessage().contains(Integer.toString(tooOld))
-            && e.getMessage().contains(Integer.toString(MigrationManager.MINIMUM_SYSDB_VERSION)),
+            && e.getMessage().contains(Integer.toString(MigrationManager.latestMigrationVersion())),
         "Expected the message to report both versions, got: " + e.getMessage());
   }
 

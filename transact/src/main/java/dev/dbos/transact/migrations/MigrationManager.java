@@ -1,5 +1,6 @@
 package dev.dbos.transact.migrations;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
@@ -32,27 +33,16 @@ public class MigrationManager {
   public static final int SHARED_MIGRATION_BASE = 100;
 
   /**
-   * The oldest system database schema version this SDK can run against.
-   *
-   * <p>Migration 109 created the workflow_input and workflow_output tables, which every workflow
-   * status read now consults, so anything older fails those reads outright. Migrations 110 and 111
-   * add operation_outputs.retention_timestamp and its index, which the payload retention sweep
-   * probes once per batch; at 110 the column exists but its index does not, and the sweep degrades
-   * to a full scan and sort of the largest payload table per batch. That presents as a retention
-   * round that never finishes rather than as an error, so 111 is the floor, not 110.
-   *
-   * <p>Migrations 112 to 120 deliberately do not raise this. 112 drops a constraint rather than
-   * adding anything to read, and every delete path clears the child tables by ID, so this SDK
-   * behaves identically whether or not the cascade is still there. After 113 the shared enqueue
-   * function writes inputs only to workflow_input, which every read here already COALESCEs over,
-   * and 114 drops an index that duplicates idx_workflow_topic. 115 to 120 only rebuild indexes, so
-   * every query runs correctly either side of them.
+   * The system database schema version this SDK requires: its last migration.
    *
    * <p>This is a floor, not an equality: an executor here still reads a schema migrated ahead of
-   * it, which is what makes rolling upgrades work. Raise it whenever new code starts depending
-   * unconditionally on a later migration.
+   * it, which is what makes rolling upgrades work.
    */
-  public static final int MINIMUM_SYSDB_VERSION = 111;
+  public static int latestMigrationVersion() {
+    // The list length does not depend on either flag: a migration a configuration skips is still
+    // an empty slot.
+    return getMigrations(Constants.DB_SCHEMA, false, false).size();
+  }
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
   private static final int MIGRATION_LOCK_TIMEOUT_SEC = 30;
@@ -118,9 +108,8 @@ public class MigrationManager {
    * Verifies that the system database schema is new enough for this SDK, without modifying it.
    *
    * <p>Used when {@link DBOSConfig#migrate()} is false and the deployment owns schema management.
-   * Without this check the SDK never reads dbos_migrations at all, and a schema older than {@link
-   * #MINIMUM_SYSDB_VERSION} surfaces much later as a raw "relation does not exist" on the first
-   * workflow status read.
+   * Without this check the SDK never reads dbos_migrations at all, and a schema missing one of its
+   * migrations surfaces much later as a raw SQL error on the first query that needs it.
    *
    * @throws IllegalStateException if the schema is missing, unversioned, or too old
    */
@@ -174,29 +163,25 @@ public class MigrationManager {
             ("Schema \"%s\" has no dbos_migrations table, so its version cannot be determined."
                     + " DBOS requires system database schema version %d or later. Apply the DBOS"
                     + " schema to this database, or let DBOS migrate it, first.")
-                .formatted(schema, MINIMUM_SYSDB_VERSION),
+                .formatted(schema, latestMigrationVersion()),
             e);
       }
       throw new RuntimeException("Failed to read the system database schema version", e);
     }
 
-    if (version < MINIMUM_SYSDB_VERSION) {
+    var required = latestMigrationVersion();
+    if (version < required) {
       throw new IllegalStateException(
           ("Schema \"%s\" is at system database version %d, but this version of DBOS requires %d"
                   + " or later. Bring the schema up to date, or let DBOS migrate it, first.")
-              .formatted(schema, version, MINIMUM_SYSDB_VERSION));
+              .formatted(schema, version, required));
     }
 
     logger.debug(
-        "Schema {} is at system database version {} (minimum {})",
-        schema,
-        version,
-        MINIMUM_SYSDB_VERSION);
+        "Schema {} is at system database version {} (requires {})", schema, version, required);
   }
 
-  private static boolean shouldMigrate(
-      Connection conn, String schema, boolean useListenNotify, boolean isCockroach)
-      throws SQLException {
+  private static boolean shouldMigrate(Connection conn, String schema) throws SQLException {
     var schemaSql = "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?";
     try (var stmt = conn.prepareStatement(schemaSql)) {
       stmt.setString(1, schema);
@@ -206,8 +191,7 @@ public class MigrationManager {
     }
     if (!migrationTableExists(conn, schema)) return true;
     var currentVersion = getCurrentSysDbVersion(conn, schema);
-    var latestVersion = getMigrations(schema, useListenNotify, isCockroach).size();
-    return currentVersion < latestVersion;
+    return currentVersion < latestMigrationVersion();
   }
 
   private static void runMigrations(DataSource ds, String schema, boolean useListenNotify) {
@@ -219,13 +203,8 @@ public class MigrationManager {
     }
 
     try (var checkConn = ds.getConnection()) {
-      var isCockroach = SystemDatabase.isCockroach(checkConn);
-      if (isCockroach) {
-        useListenNotify = false;
-      }
-
       // Skip advisory lock and migration work entirely if already up-to-date.
-      if (!shouldMigrate(checkConn, schema, useListenNotify, isCockroach)) {
+      if (!shouldMigrate(checkConn, schema)) {
         return;
       }
     } catch (SQLException e) {
