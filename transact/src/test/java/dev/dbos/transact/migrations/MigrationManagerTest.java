@@ -681,9 +681,7 @@ class MigrationManagerTest {
       for (var index : REBUILT_INDEXES) {
         assertIndexExists(conn, index[1]);
         assertIndexAbsent(conn, index[0]);
-        if (!PgContainer.USE_COCKROACH_DB) {
-          assertIncludesApplicationName(conn, index[1]);
-        }
+        assertIncludesApplicationName(conn, index[1]);
       }
     }
 
@@ -694,25 +692,36 @@ class MigrationManagerTest {
     }
   }
 
-  // application_name is the one non-key column: present in the index, after the key columns.
+  // application_name is the one non-key column: stored in the index, after the key columns.
   private static void assertIncludesApplicationName(Connection conn, String indexName)
       throws Exception {
+    // CockroachDB reads INCLUDE as STORING, and also appends the primary key to every secondary
+    // index as implicit columns, so those are left out.
     var sql =
-        "SELECT a.attname FROM pg_index ix"
-            + " JOIN pg_class i ON i.oid = ix.indexrelid"
-            + " JOIN pg_namespace n ON n.oid = i.relnamespace"
-            + " JOIN pg_attribute a ON a.attrelid = ix.indrelid"
-            + "   AND a.attnum = ix.indkey[ix.indnkeyatts]"
-            + " WHERE n.nspname = ? AND i.relname = ? AND ix.indnatts = ix.indnkeyatts + 1";
+        PgContainer.USE_COCKROACH_DB
+            ? "SELECT column_name FROM information_schema.statistics"
+                + " WHERE index_schema = ? AND index_name = ? AND storing = 'YES'"
+                + " AND implicit = 'NO'"
+            : "SELECT a.attname FROM pg_index ix"
+                + " JOIN pg_class i ON i.oid = ix.indexrelid"
+                + " JOIN pg_namespace n ON n.oid = i.relnamespace"
+                + " JOIN pg_attribute a ON a.attrelid = ix.indrelid"
+                + "   AND a.attnum = ANY (ix.indkey[ix.indnkeyatts:ix.indnatts - 1])"
+                + " WHERE n.nspname = ? AND i.relname = ?";
+    var included = new ArrayList<String>();
     try (var ps = conn.prepareStatement(sql)) {
       ps.setString(1, Constants.DB_SCHEMA);
       ps.setString(2, indexName);
       try (var rs = ps.executeQuery()) {
-        assertTrue(
-            rs.next(), "Index %s should have exactly one INCLUDE column".formatted(indexName));
-        assertEquals("application_name", rs.getString(1));
+        while (rs.next()) {
+          included.add(rs.getString(1));
+        }
       }
     }
+    assertEquals(
+        List.of("application_name"),
+        included,
+        "Index %s should INCLUDE exactly application_name".formatted(indexName));
   }
 
   static void assertIndexExists(Connection conn, String indexName) throws Exception {
@@ -831,6 +840,8 @@ class MigrationManagerTest {
         () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
   }
 
+  // latestMigrationVersion() counts one configuration. A migration left out of another, instead
+  // of emptied, would make a database migrated in that configuration look permanently behind.
   @Test
   void testLatestMigrationVersionIsTheLastMigration() {
     for (var useListenNotify : List.of(true, false)) {

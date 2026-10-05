@@ -39,9 +39,14 @@ public class MigrationManager {
    * it, which is what makes rolling upgrades work.
    */
   public static int latestMigrationVersion() {
-    // The list length does not depend on either flag: a migration a configuration skips is still
-    // an empty slot.
-    return getMigrations(Constants.DB_SCHEMA, false, false).size();
+    return LatestMigration.VERSION;
+  }
+
+  // Computed once, on first use, after MigrationManager itself is initialized. A migration a
+  // configuration does not need is an empty slot, never left out, so the count is the same for
+  // every configuration.
+  private static final class LatestMigration {
+    static final int VERSION = getMigrations(Constants.DB_SCHEMA, false, false).size();
   }
 
   private static final long MIGRATION_LOCK_ID = 1234567890L;
@@ -1667,8 +1672,9 @@ public class MigrationManager {
     return "DROP INDEX " + concurrently(isCockroach) + " IF EXISTS \"%1$s\".\"idx_notifications\"";
   }
 
-  // Migration 115: application_name is an INCLUDE column, not a key column, so app-scoped counts
-  // run index-only; as a key the planner could not BitmapOr on it.
+  // Migration 115: recreate the main dequeue index with application_name INCLUDEd. INCLUDE, not a
+  // key column: app-scoped counts then run index-only, while the planner still cannot BitmapOr on
+  // application_name. Supersedes idx_workflow_status_in_flight (migration 32), dropped by 116.
   static String migration115(boolean isCockroach) {
     return "CREATE INDEX "
         + concurrently(isCockroach)
@@ -1678,14 +1684,17 @@ public class MigrationManager {
         + " WHERE \"status\" IN ('ENQUEUED', 'PENDING')";
   }
 
-  // Migration 116: superseded by idx_workflow_status_in_flight_v2.
+  // Migration 116: drop the v1 dequeue index (migration 32), superseded by
+  // idx_workflow_status_in_flight_v2 (migration 115).
   static String migration116(boolean isCockroach) {
     return "DROP INDEX "
         + concurrently(isCockroach)
         + " IF EXISTS \"%1$s\".\"idx_workflow_status_in_flight\"";
   }
 
-  // Migration 117: matches idx_workflow_status_in_flight_v2.
+  // Migration 117: recreate the partitioned-queue dequeue index with application_name INCLUDEd, as
+  // idx_workflow_status_in_flight_v2 does. Supersedes idx_workflow_status_partition_dequeue_v2
+  // (migration 46), dropped by 118.
   static String migration117(boolean isCockroach) {
     return "CREATE INDEX "
         + concurrently(isCockroach)
@@ -1696,14 +1705,17 @@ public class MigrationManager {
         + " WHERE \"status\" IN ('ENQUEUED', 'PENDING') AND \"queue_partition_key\" IS NOT NULL";
   }
 
-  // Migration 118: superseded by idx_workflow_status_partition_dequeue_v3.
+  // Migration 118: drop the v2 partitioned-queue dequeue index (migration 46), superseded by
+  // idx_workflow_status_partition_dequeue_v3 (migration 117).
   static String migration118(boolean isCockroach) {
     return "DROP INDEX "
         + concurrently(isCockroach)
         + " IF EXISTS \"%1$s\".\"idx_workflow_status_partition_dequeue_v2\"";
   }
 
-  // Migration 119: matches idx_workflow_status_in_flight_v2.
+  // Migration 119: recreate the step-completion index with application_name INCLUDEd, as
+  // idx_workflow_status_in_flight_v2 does. Supersedes
+  // idx_operation_outputs_completed_at_function_name (migration 19), dropped by 120.
   static String migration119(boolean isCockroach) {
     return "CREATE INDEX "
         + concurrently(isCockroach)
@@ -1712,7 +1724,8 @@ public class MigrationManager {
         + " INCLUDE (\"application_name\")";
   }
 
-  // Migration 120: superseded by idx_operation_outputs_completed_at_function_name_v2.
+  // Migration 120: drop the v1 step-completion index (migration 19), superseded by
+  // idx_operation_outputs_completed_at_function_name_v2 (migration 119).
   static String migration120(boolean isCockroach) {
     return "DROP INDEX "
         + concurrently(isCockroach)
