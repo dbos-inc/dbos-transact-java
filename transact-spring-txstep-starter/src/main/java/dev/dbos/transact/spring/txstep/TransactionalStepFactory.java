@@ -6,6 +6,7 @@ import static org.springframework.transaction.TransactionDefinition.PROPAGATION_
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
@@ -44,6 +45,8 @@ public class TransactionalStepFactory {
   private final PlatformTransactionManager txManager;
   private final String schema;
   private final DBOSSerializer serializer;
+  // One object, so registering again (a second initialize()) does not add a second entry.
+  private final StepCheckpointStore checkpointStore = this::deleteCheckpoints;
 
   public TransactionalStepFactory(
       DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager, String schema) {
@@ -66,6 +69,22 @@ public class TransactionalStepFactory {
       TxStepSchema.createTable(conn, schema);
     } catch (SQLException e) {
       throw new RuntimeException(e);
+    }
+
+    // Registered here rather than in the constructor: until now the table may not exist.
+    dbos.integration().registerStepCheckpointStore(checkpointStore);
+  }
+
+  private void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+    try (var conn = dataSource.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId);
+        conn.commit();
+      } catch (SQLException ex) {
+        conn.rollback();
+        throw ex;
+      }
     }
   }
 

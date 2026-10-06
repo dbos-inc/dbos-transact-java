@@ -1,6 +1,7 @@
 package dev.dbos.transact.txstep;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -26,6 +27,7 @@ public abstract class PostgresStepFactory {
   protected final DBOS dbos;
   protected final String schema;
   protected final DBOSSerializer serializer;
+  private final ConnectionOpener opener;
 
   @FunctionalInterface
   protected interface ConnectionOpener {
@@ -38,12 +40,28 @@ public abstract class PostgresStepFactory {
     var config = dbos.integration().config();
     this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
     this.serializer = serializer == null ? config.serializer() : serializer;
+    this.opener = opener;
 
     try (var conn = opener.open()) {
       TxStepSchema.verifyPostgres(conn);
       TxStepSchema.createTable(conn, this.schema);
     } catch (SQLException e) {
       throw new RuntimeException(e);
+    }
+
+    dbos.integration().registerStepCheckpointStore(this::deleteCheckpoints);
+  }
+
+  /**
+   * Deletes a workflow's checkpoints from {@code fromStepId} on, in a transaction of its own that
+   * commits before this returns. DBOS calls it when it discards the workflow's history.
+   *
+   * <p>This default opens a connection and commits explicitly. Subclasses override it to go through
+   * their database library's own transaction handling.
+   */
+  protected void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+    try (var conn = opener.open()) {
+      SqlTransaction.run(conn, c -> TxStepSchema.deleteFromStep(c, schema, workflowId, fromStepId));
     }
   }
 

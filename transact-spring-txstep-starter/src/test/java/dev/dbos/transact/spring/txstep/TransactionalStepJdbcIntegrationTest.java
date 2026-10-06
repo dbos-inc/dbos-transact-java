@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.spring.DBOSAutoConfiguration;
@@ -191,6 +192,30 @@ public class TransactionalStepJdbcIntegrationTest {
                 assertThat(rows).hasSize(1);
                 assertThat(rows.get(0).output()).isNotNull();
                 assertThat(rows.get(0).error()).isNull();
+              });
+    }
+  }
+
+  @Test
+  void deleteCheckpointsThroughDbos() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                var wfid = "wf-jdbc-int-delete";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  workflow.processOrder("ord-d", "Widget", 1);
+                }
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).hasSize(1);
+
+                // The registrar initialized the factory before launch, which registered its
+                // checkpoints with DBOS.
+                var executor = DBOSTestAccess.getDbosExecutor(ctx.getBean(DBOS.class));
+                executor.deleteStepCheckpoints(wfid, 0);
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).isEmpty();
               });
     }
   }

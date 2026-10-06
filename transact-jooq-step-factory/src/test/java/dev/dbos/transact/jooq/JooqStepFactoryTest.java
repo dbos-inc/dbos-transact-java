@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -216,6 +217,20 @@ public class JooqStepFactoryTest {
         return rs.next() ? rs.getInt("greet_count") : 0;
       }
     }
+  }
+
+  @Test
+  public void testDeleteCheckpointsThroughDbos() throws Exception {
+    var wfid = "wf-delete";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      proxy.insertWorkflow("deleteUser");
+    }
+    assertEquals(1, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    // DBOS reaches the factory's checkpoints through the store it registered, and the delete
+    // commits through the library's own transaction.
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(wfid, 0);
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
   }
 
   @Test

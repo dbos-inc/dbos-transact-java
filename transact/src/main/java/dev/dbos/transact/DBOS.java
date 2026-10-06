@@ -9,6 +9,7 @@ import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.Debouncer;
@@ -64,6 +65,7 @@ public class DBOS implements AutoCloseable {
   private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
   private final QueueRegistry queueRegistry = new QueueRegistry();
   private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
+  private final Set<StepCheckpointStore> stepCheckpointStores = ConcurrentHashMap.newKeySet();
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
@@ -88,7 +90,11 @@ public class DBOS implements AutoCloseable {
     this.config = new DBOSConfig(config);
     this.integration =
         new DBOSIntegration(
-            this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
+            this.config,
+            this.workflowRegistry,
+            dbosExecutor::get,
+            this::registerLifecycleListener,
+            this::registerStepCheckpointStore);
     // Register the built-in debouncer workflow directly (without a proxy). Debouncer no
     // longer starts it, but one an older SDK version enqueued can still be recovered here when the
     // application version is pinned across the upgrade.
@@ -354,6 +360,16 @@ public class DBOS implements AutoCloseable {
     return dbosExecutor.get();
   }
 
+  // The executor takes a snapshot of the stores at launch, so a factory created afterwards would
+  // never have its checkpoints deleted.
+  private void registerStepCheckpointStore(StepCheckpointStore store) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException(
+          "Transactional step factories must be created before DBOS is launched");
+    }
+    stepCheckpointStores.add(store);
+  }
+
   /** Launch DBOS, and start recovery. */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
@@ -377,6 +393,7 @@ public class DBOS implements AutoCloseable {
             workflowRegistry.getInternalWorkflowSnapshot(),
             workflowRegistry.getInternalInstanceSnapshot(),
             queueRegistry.getSnapshot(),
+            Set.copyOf(stepCheckpointStores),
             alertHandler);
       }
     }

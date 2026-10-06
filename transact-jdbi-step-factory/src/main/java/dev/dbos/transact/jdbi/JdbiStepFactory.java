@@ -232,6 +232,16 @@ public class JdbiStepFactory extends PostgresStepFactory {
     }
   }
 
+  @Override
+  protected void deleteCheckpoints(String workflowId, int fromStepId) {
+    jdbi.useTransaction(
+        h ->
+            h.createUpdate(TxStepSchema.deleteFromStepSql(schema))
+                .bind(0, workflowId)
+                .bind(1, fromStepId)
+                .execute());
+  }
+
   private void recordResult(
       Handle handle,
       String workflowId,

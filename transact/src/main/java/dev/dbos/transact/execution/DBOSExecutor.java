@@ -27,6 +27,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -62,6 +63,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -173,6 +175,7 @@ public class DBOSExecutor implements AutoCloseable {
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
   private AlertHandler alertHandler;
+  private Set<StepCheckpointStore> stepCheckpointStores = Set.of();
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -240,6 +243,7 @@ public class DBOSExecutor implements AutoCloseable {
       Map<String, RegisteredWorkflow> internalWorkflowMap,
       Map<String, RegisteredWorkflowInstance> internalInstanceMap,
       List<Queue> queues,
+      Set<StepCheckpointStore> stepCheckpointStores,
       AlertHandler alertHandler) {
 
     if (isRunning.compareAndSet(false, true)) {
@@ -251,6 +255,7 @@ public class DBOSExecutor implements AutoCloseable {
       this.queueMap =
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
+      this.stepCheckpointStores = stepCheckpointStores;
       this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
@@ -1036,6 +1041,27 @@ public class DBOSExecutor implements AutoCloseable {
         },
         "DBOS.updateWorkflowAttributes",
         null);
+  }
+
+  /** Whether any transactional step factory has registered its checkpoints. */
+  public boolean hasStepCheckpointStores() {
+    return !stepCheckpointStores.isEmpty();
+  }
+
+  /**
+   * Deletes a workflow's checkpoints from {@code fromStepId} on, in every registered transactional
+   * step factory. Each store commits its own delete, so a failure part way leaves the stores before
+   * it cleared; deleting again is safe.
+   */
+  public void deleteStepCheckpoints(String workflowId, int fromStepId) {
+    for (var store : stepCheckpointStores) {
+      try {
+        store.deleteCheckpoints(workflowId, fromStepId);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            "Failed to delete the transactional step checkpoints of workflow " + workflowId, e);
+      }
+    }
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(

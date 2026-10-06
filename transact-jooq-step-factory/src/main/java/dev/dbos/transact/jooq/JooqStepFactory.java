@@ -208,6 +208,12 @@ public class JooqStepFactory extends PostgresStepFactory {
     }
   }
 
+  @Override
+  protected void deleteCheckpoints(String workflowId, int fromStepId) {
+    dsl.transaction(
+        trx -> trx.dsl().execute(TxStepSchema.deleteFromStepSql(schema), workflowId, fromStepId));
+  }
+
   private void recordResult(
       DSLContext ctx,
       String workflowId,

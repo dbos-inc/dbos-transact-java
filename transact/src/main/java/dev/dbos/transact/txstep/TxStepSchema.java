@@ -38,6 +38,10 @@ public class TxStepSchema {
               .formatted(schema));
       stmt.executeBatch();
     }
+    // A pool configured without autocommit would otherwise roll the DDL back on close.
+    if (!conn.getAutoCommit()) {
+      conn.commit();
+    }
   }
 
   public static String checkSql(String schema) {
@@ -47,6 +51,25 @@ public class TxStepSchema {
         WHERE workflow_id = ? AND step_id = ?
         """
         .formatted(schema);
+  }
+
+  /** Deletes a workflow's checkpoints from a step on: parameters are the workflow and step IDs. */
+  public static String deleteFromStepSql(String schema) {
+    return """
+        DELETE FROM "%s".tx_step_outputs
+        WHERE workflow_id = ? AND step_id >= ?
+        """
+        .formatted(schema);
+  }
+
+  /** Runs {@link #deleteFromStepSql} on a connection; the caller owns the transaction. */
+  public static void deleteFromStep(
+      Connection conn, String schema, String workflowId, int fromStepId) throws SQLException {
+    try (var stmt = conn.prepareStatement(deleteFromStepSql(schema))) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, fromStepId);
+      stmt.executeUpdate();
+    }
   }
 
   public static String upsertSql(String schema) {

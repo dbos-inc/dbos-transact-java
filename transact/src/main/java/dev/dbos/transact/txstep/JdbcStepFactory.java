@@ -200,6 +200,16 @@ public class JdbcStepFactory extends PostgresStepFactory {
         options);
   }
 
+  @Override
+  protected void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+    executeTransaction(
+        dataSource,
+        (Connection conn) -> {
+          TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId);
+          return null;
+        });
+  }
+
   private static <R, X extends Exception> R executeTransaction(
       final DataSource ds, TransactionalFunction<R, X> func) throws X {
     return executeTransaction(ds, IsolationLevel.DEFAULT, func);
