@@ -365,7 +365,7 @@ public class DBOS implements AutoCloseable {
         if (config.migrate()) {
           MigrationManager.runMigrations(config);
         } else {
-          // The deployment owns the schema, but this SDK still requires a minimum version of it.
+          // The deployment owns the schema, but it must have every migration this SDK defines.
           MigrationManager.validateSysDbVersion(config);
         }
 

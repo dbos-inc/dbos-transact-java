@@ -448,8 +448,8 @@ class MigrationManagerTest {
       assertEquals(rewindTo, getVersion(conn));
     }
 
-    // Re-run with real migrations: IF NOT EXISTS guards make 32+ idempotent given the index
-    // still exists from the original full migration run above.
+    // Re-run with real migrations: 32 recreates the index 116 dropped, and the IF [NOT] EXISTS
+    // guards make everything after it idempotent against the original full migration run above.
     try (var conn = dataSource.getConnection()) {
       MigrationManager.runDbosMigrations(conn, schema, allMigrations);
     }
@@ -467,8 +467,8 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(dbosConfig);
 
     var schema = Constants.DB_SCHEMA;
-    String targetIndex = "idx_workflow_status_in_flight";
-    int rewindTo = 31; // one before migration 32 which creates targetIndex
+    String targetIndex = "idx_workflow_status_in_flight_v2";
+    int rewindTo = 114; // one before migration 115 which creates targetIndex
     int expectedFinal = MigrationManager.getMigrations(schema, true, false).size();
 
     // Drop the valid index, create a non-CONCURRENTLY copy with the same name, then mark it
@@ -480,7 +480,7 @@ class MigrationManagerTest {
         stmt.execute("DROP INDEX IF EXISTS \"%s\".\"%s\"".formatted(schema, targetIndex));
         stmt.execute(
             ("CREATE INDEX \"%s\" ON \"%s\".workflow_status"
-                    + " (queue_name, status, priority, created_at)"
+                    + " (queue_name, status, priority, created_at) INCLUDE (application_name)"
                     + " WHERE status IN ('ENQUEUED', 'PENDING')")
                 .formatted(targetIndex, schema));
         stmt.execute(
@@ -502,14 +502,14 @@ class MigrationManagerTest {
       }
     }
 
-    // Rewind version so the runner re-executes migration 32
+    // Rewind version so the runner re-executes migration 115
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate(
           "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(schema, rewindTo));
     }
 
-    // Re-run migrations: cleanupInvalidIndexes should drop the invalid index, then 32+ rebuild it
+    // Re-run migrations: cleanupInvalidIndexes should drop the invalid index, then 115 rebuild it
     assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
 
     // Index now exists and is valid
@@ -551,8 +551,10 @@ class MigrationManagerTest {
         assertTriggerExists(conn, "dbos_notifications_trigger");
       }
 
-      // 46 supersedes 45, and 47 drops it, leaving the one index the partitioned dequeue reads.
-      assertIndexExists(conn, "idx_workflow_status_partition_dequeue_v2");
+      // 46 supersedes 45, and 47 drops it. 117 and 118 then replace that with v3, leaving the one
+      // index the partitioned dequeue reads.
+      assertIndexExists(conn, "idx_workflow_status_partition_dequeue_v3");
+      assertIndexAbsent(conn, "idx_workflow_status_partition_dequeue_v2");
       assertIndexAbsent(conn, "idx_workflow_status_partition_dequeue");
     }
   }
@@ -593,7 +595,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(114, latest, "The shared history currently ends at migration 114");
+    assertEquals(120, latest, "The shared history currently ends at migration 120");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -631,7 +633,95 @@ class MigrationManagerTest {
 
       assertIndexAbsent(conn, "idx_notifications");
       assertIndexExists(conn, "idx_workflow_topic");
+
+      for (var index : REBUILT_INDEXES) {
+        assertIndexExists(conn, index[1]);
+        assertIndexAbsent(conn, index[0]);
+      }
     }
+  }
+
+  // Migrations 115 to 120: each {superseded, replacement} pair. The replacements carry
+  // application_name as an INCLUDE column.
+  static final String[][] REBUILT_INDEXES = {
+    {"idx_workflow_status_in_flight", "idx_workflow_status_in_flight_v2"},
+    {"idx_workflow_status_partition_dequeue_v2", "idx_workflow_status_partition_dequeue_v3"},
+    {
+      "idx_operation_outputs_completed_at_function_name",
+      "idx_operation_outputs_completed_at_function_name_v2"
+    },
+  };
+
+  @Test
+  void testMigrations115To120_RebuildTheHotIndexes() throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var dbosConfig = pgContainer.dbosConfig();
+    var useListenNotify = !PgContainer.USE_COCKROACH_DB;
+    var migrations =
+        MigrationManager.getMigrations(schema, useListenNotify, PgContainer.USE_COCKROACH_DB);
+
+    // A database last migrated by an SDK that stopped at 114.
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.ensureDbosSchema(conn, schema);
+      MigrationManager.ensureMigrationTable(conn, schema);
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 114));
+      assertEquals(114, getVersion(conn));
+      for (var index : REBUILT_INDEXES) {
+        assertIndexExists(conn, index[0]);
+        assertIndexAbsent(conn, index[1]);
+      }
+    }
+
+    MigrationManager.runMigrations(dbosConfig);
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(120, getVersion(conn));
+      for (var index : REBUILT_INDEXES) {
+        assertIndexExists(conn, index[1]);
+        assertIndexAbsent(conn, index[0]);
+        assertIncludesApplicationName(conn, index[1]);
+      }
+    }
+
+    // Re-running is a no-op.
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(120, getVersion(conn));
+    }
+  }
+
+  // application_name is the one non-key column: stored in the index, after the key columns.
+  private static void assertIncludesApplicationName(Connection conn, String indexName)
+      throws Exception {
+    // CockroachDB reads INCLUDE as STORING, and also appends the primary key to every secondary
+    // index as implicit columns, so those are left out.
+    var sql =
+        PgContainer.USE_COCKROACH_DB
+            ? "SELECT column_name FROM information_schema.statistics"
+                + " WHERE index_schema = ? AND index_name = ? AND storing = 'YES'"
+                + " AND implicit = 'NO'"
+            : "SELECT a.attname FROM pg_index ix"
+                + " JOIN pg_class i ON i.oid = ix.indexrelid"
+                + " JOIN pg_namespace n ON n.oid = i.relnamespace"
+                + " JOIN pg_attribute a ON a.attrelid = ix.indrelid"
+                + "   AND a.attnum = ANY (ix.indkey[ix.indnkeyatts:ix.indnatts - 1])"
+                + " WHERE n.nspname = ? AND i.relname = ?";
+    var included = new ArrayList<String>();
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      ps.setString(2, indexName);
+      try (var rs = ps.executeQuery()) {
+        while (rs.next()) {
+          included.add(rs.getString(1));
+        }
+      }
+    }
+    assertEquals(
+        List.of("application_name"),
+        included,
+        "Index %s should INCLUDE exactly application_name".formatted(indexName));
   }
 
   static void assertIndexExists(Connection conn, String indexName) throws Exception {
@@ -708,7 +798,7 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(pgContainer.dbosConfig());
 
     var schema = Constants.DB_SCHEMA;
-    var tooOld = MigrationManager.MINIMUM_SYSDB_VERSION - 1;
+    var tooOld = MigrationManager.latestMigrationVersion() - 1;
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate(
@@ -721,7 +811,7 @@ class MigrationManagerTest {
             () -> MigrationManager.validateSysDbVersion(dataSource, schema));
     assertTrue(
         e.getMessage().contains(Integer.toString(tooOld))
-            && e.getMessage().contains(Integer.toString(MigrationManager.MINIMUM_SYSDB_VERSION)),
+            && e.getMessage().contains(Integer.toString(MigrationManager.latestMigrationVersion())),
         "Expected the message to report both versions, got: " + e.getMessage());
   }
 
@@ -731,18 +821,37 @@ class MigrationManagerTest {
 
     assertDoesNotThrow(
         () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA),
-        "A fully migrated schema must satisfy the minimum version check");
+        "A fully migrated schema must satisfy the version check");
   }
 
   @Test
-  void testValidateSysDbVersion_MinimumIsWithinTheLadder() {
-    var latest =
-        MigrationManager.getMigrations(Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB)
-            .size();
-    assertTrue(
-        MigrationManager.MINIMUM_SYSDB_VERSION > 0
-            && MigrationManager.MINIMUM_SYSDB_VERSION <= latest,
-        "MINIMUM_SYSDB_VERSION must name a migration this SDK can actually apply");
+  void testValidateSysDbVersion_AcceptsASchemaAheadOfThisSdk() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    // Migrated by a newer SDK during a rolling upgrade.
+    var ahead = MigrationManager.latestMigrationVersion() + 5;
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate(
+          "UPDATE \"%s\".dbos_migrations SET version = %d".formatted(Constants.DB_SCHEMA, ahead));
+    }
+
+    assertDoesNotThrow(
+        () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
+  }
+
+  // latestMigrationVersion() counts one configuration. A migration left out of another, instead
+  // of emptied, would make a database migrated in that configuration look permanently behind.
+  @Test
+  void testLatestMigrationVersionIsTheLastMigration() {
+    for (var useListenNotify : List.of(true, false)) {
+      for (var isCockroach : List.of(true, false)) {
+        assertEquals(
+            MigrationManager.getMigrations(Constants.DB_SCHEMA, useListenNotify, isCockroach)
+                .size(),
+            MigrationManager.latestMigrationVersion());
+      }
+    }
   }
 
   static int getVersion(Connection conn) throws Exception {
