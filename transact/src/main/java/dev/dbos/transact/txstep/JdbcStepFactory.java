@@ -23,6 +23,10 @@ import javax.sql.DataSource;
  * User lambdas passed to {@code txStep} receive a {@link Connection} with a transaction already
  * started; they should not call {@code commit} or {@code close} themselves.
  *
+ * <p>Create the factory before calling {@link dev.dbos.transact.DBOS#launch()}: DBOS needs to know
+ * every factory when it launches, so the constructor throws {@link IllegalStateException} after
+ * launch.
+ *
  * <pre>{@code
  * JdbcStepFactory factory = new JdbcStepFactory(dbos, dataSource);
  *

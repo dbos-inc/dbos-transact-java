@@ -1057,7 +1057,7 @@ public class DBOSExecutor implements AutoCloseable {
     for (var store : stepCheckpointStores) {
       try {
         store.deleteCheckpoints(workflowId, fromStepId);
-      } catch (SQLException e) {
+      } catch (SQLException | RuntimeException e) {
         throw new RuntimeException(
             "Failed to delete the transactional step checkpoints of workflow " + workflowId, e);
       }
@@ -1073,11 +1073,23 @@ public class DBOSExecutor implements AutoCloseable {
     for (var store : stepCheckpointStores) {
       try {
         store.deleteCheckpoints(workflowIds);
-      } catch (SQLException e) {
+      } catch (SQLException | RuntimeException e) {
         throw new RuntimeException(
-            "Failed to delete the transactional step checkpoints of workflows " + workflowIds, e);
+            "Failed to delete the transactional step checkpoints of "
+                + describeWorkflows(workflowIds),
+            e);
       }
     }
+  }
+
+  // A retention batch can hold thousands of IDs, so name only the first few.
+  private static String describeWorkflows(Collection<String> workflowIds) {
+    var shown = workflowIds.stream().limit(5).toList();
+    var more = workflowIds.size() - shown.size();
+    return workflowIds.size()
+        + " workflows "
+        + shown
+        + (more > 0 ? " and %d more".formatted(more) : "");
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(

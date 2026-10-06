@@ -25,6 +25,10 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
  * Lambdas passed to {@link #inStep} or {@link #useStep} receive a {@link Handle} with a transaction
  * already open; they must not call {@code commit} or {@code close} themselves.
  *
+ * <p>Create the factory before calling {@link dev.dbos.transact.DBOS#launch()}: DBOS needs to know
+ * every factory when it launches, so the constructor throws {@link IllegalStateException} after
+ * launch.
+ *
  * <pre>{@code
  * JdbiStepFactory factory = new JdbiStepFactory(dbos, Jdbi.create(dataSource));
  *
@@ -235,7 +239,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
 
   @Override
   protected void deleteCheckpoints(String workflowId, int fromStepId) {
-    jdbi.useTransaction(
+    inOwnTransaction(
         h ->
             h.createUpdate(TxStepSchema.deleteFromStepSql(schema))
                 .bind(0, workflowId)
@@ -245,11 +249,31 @@ public class JdbiStepFactory extends PostgresStepFactory {
 
   @Override
   protected void deleteCheckpoints(Collection<String> workflowIds) {
-    jdbi.useTransaction(
+    inOwnTransaction(
         h ->
             h.createUpdate(TxStepSchema.deleteWorkflowsSql(schema))
                 .bindArray(0, String.class, workflowIds)
                 .execute());
+  }
+
+  // Jdbi's useTransaction does not commit a connection that arrives with autocommit off: it takes
+  // that for a transaction already in progress and leaves the commit to someone else. begin() and
+  // commit() on the handle commit either way.
+  private void inOwnTransaction(HandleConsumer<RuntimeException> work) {
+    try (var handle = jdbi.open()) {
+      handle.begin();
+      try {
+        work.useHandle(handle);
+        handle.commit();
+      } catch (RuntimeException e) {
+        try {
+          handle.rollback();
+        } catch (RuntimeException rollbackFailure) {
+          e.addSuppressed(rollbackFailure);
+        }
+        throw e;
+      }
+    }
   }
 
   private void recordResult(

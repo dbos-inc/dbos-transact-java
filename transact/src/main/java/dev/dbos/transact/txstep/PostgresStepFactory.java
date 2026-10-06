@@ -22,7 +22,13 @@ import java.util.Optional;
  * with the DBOS runtime.
  *
  * <p>The constructor verifies that the datasource is PostgreSQL and creates the {@code
- * tx_step_outputs} table (and its enclosing schema) if they do not already exist.
+ * tx_step_outputs} table (and its enclosing schema) if they do not already exist. It then registers
+ * the factory's checkpoints with DBOS, which must not be launched yet, so DBOS can delete them when
+ * it discards a workflow's history.
+ *
+ * <p>Subclasses: the factory is registered before the subclass constructor finishes, and stays
+ * registered even if that constructor then throws, so a subclass constructor should not fail after
+ * calling {@code super}.
  */
 public abstract class PostgresStepFactory {
 

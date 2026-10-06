@@ -63,8 +63,12 @@ public class TransactionalStepFactory {
 
   /**
    * Verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if it does
-   * not already exist. Called lazily by {@code TransactionalStepRegistrar} only when annotated
-   * methods are found — avoids any DB contact for applications that never use this starter.
+   * not already exist, then registers the factory's checkpoints with DBOS so it can delete them
+   * when it discards a workflow's history. Called lazily by {@code TransactionalStepRegistrar} only
+   * when annotated methods are found — avoids any DB contact for applications that never use this
+   * starter. The registrar runs before DBOS launches.
+   *
+   * @throws IllegalStateException if DBOS has already been launched
    */
   public void initialize() {
     try (var conn = dataSource.getConnection()) {

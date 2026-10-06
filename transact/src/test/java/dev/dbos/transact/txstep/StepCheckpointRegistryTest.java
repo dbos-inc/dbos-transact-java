@@ -133,7 +133,7 @@ public class StepCheckpointRegistryTest {
   @Test
   public void aStoreRegisteredTwiceHasOneEntry() {
     var deletes = new AtomicInteger();
-    var store = new RecordingStore(deletes, false);
+    var store = new RecordingStore(deletes, null);
     dbos.integration().registerStepCheckpointStore(store);
     dbos.integration().registerStepCheckpointStore(store);
     dbos.launch();
@@ -144,7 +144,9 @@ public class StepCheckpointRegistryTest {
 
   @Test
   public void aFailedDeleteNamesTheWorkflow() {
-    dbos.integration().registerStepCheckpointStore(new RecordingStore(new AtomicInteger(), true));
+    dbos.integration()
+        .registerStepCheckpointStore(
+            new RecordingStore(new AtomicInteger(), new SQLException("datasource down")));
     dbos.launch();
 
     var thrown =
@@ -153,6 +155,41 @@ public class StepCheckpointRegistryTest {
             () -> DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints("wf-down", 0));
     assertTrue(thrown.getMessage().contains("wf-down"), thrown.getMessage());
     assertEquals("datasource down", thrown.getCause().getMessage());
+  }
+
+  @Test
+  public void anUncheckedFailureNamesTheWorkflowToo() {
+    // Jdbi and jOOQ report database errors as unchecked exceptions.
+    dbos.integration()
+        .registerStepCheckpointStore(
+            new RecordingStore(new AtomicInteger(), new IllegalStateException("pool closed")));
+    dbos.launch();
+
+    var thrown =
+        assertThrows(
+            RuntimeException.class,
+            () -> DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints("wf-closed", 0));
+    assertTrue(thrown.getMessage().contains("wf-closed"), thrown.getMessage());
+    assertEquals("pool closed", thrown.getCause().getMessage());
+  }
+
+  @Test
+  public void aFailedBatchNamesOnlyTheFirstFewWorkflows() {
+    dbos.integration()
+        .registerStepCheckpointStore(
+            new RecordingStore(new AtomicInteger(), new SQLException("datasource down")));
+    dbos.launch();
+
+    var ids = java.util.stream.IntStream.range(0, 12).mapToObj(i -> "wf-" + i).toList();
+    var thrown =
+        assertThrows(
+            RuntimeException.class,
+            () -> DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(ids));
+    var message = thrown.getMessage();
+    assertTrue(message.contains("12 workflows"), message);
+    assertTrue(message.contains("wf-0") && message.contains("wf-4"), message);
+    assertFalse(message.contains("wf-5"), message);
+    assertTrue(message.contains("and 7 more"), message);
   }
 
   @Test
@@ -173,9 +210,25 @@ public class StepCheckpointRegistryTest {
     assertEquals(List.of(0, 1, 2), checkpoints("registry_batch", "wf-b"));
     assertEquals(List.of(), checkpoints("registry_batch", "wf-c"));
 
-    // An empty batch deletes nothing and does not reach the database.
     executor.deleteStepCheckpoints(List.of());
     assertEquals(List.of(0, 1, 2), checkpoints("registry_batch", "wf-b"));
+  }
+
+  @Test
+  public void anEmptyBatchDoesNotReachTheDatabase() {
+    var opens = new AtomicInteger();
+    new MinimalStepFactory(
+        dbos,
+        () -> {
+          opens.incrementAndGet();
+          return dataSource.getConnection();
+        },
+        "registry_empty");
+    dbos.launch();
+    var opensAfterCreate = opens.get();
+
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(List.of());
+    assertEquals(opensAfterCreate, opens.get());
   }
 
   @Test
@@ -196,14 +249,14 @@ public class StepCheckpointRegistryTest {
     assertEquals(List.of(0), checkpoints("registry_default_batch", "wf-c"));
   }
 
-  /** Counts its calls, or fails every one. */
+  /** Counts its calls, and fails every one with {@code failure} when it is not null. */
   static class RecordingStore implements StepCheckpointStore {
     private final AtomicInteger calls;
-    private final boolean fail;
+    private final Exception failure;
 
-    RecordingStore(AtomicInteger calls, boolean fail) {
+    RecordingStore(AtomicInteger calls, Exception failure) {
       this.calls = calls;
-      this.fail = fail;
+      this.failure = failure;
     }
 
     @Override
@@ -218,8 +271,11 @@ public class StepCheckpointRegistryTest {
 
     private void record() throws SQLException {
       calls.incrementAndGet();
-      if (fail) {
-        throw new SQLException("datasource down");
+      if (failure instanceof SQLException e) {
+        throw e;
+      }
+      if (failure instanceof RuntimeException e) {
+        throw e;
       }
     }
   }
@@ -227,7 +283,11 @@ public class StepCheckpointRegistryTest {
   /** The smallest PostgresStepFactory: it runs no steps, and only inherits the default delete. */
   static class MinimalStepFactory extends PostgresStepFactory {
     MinimalStepFactory(DBOS dbos, javax.sql.DataSource dataSource, String schema) {
-      super(dbos, schema, null, dataSource::getConnection);
+      this(dbos, dataSource::getConnection, schema);
+    }
+
+    MinimalStepFactory(DBOS dbos, ConnectionOpener opener, String schema) {
+      super(dbos, schema, null, opener);
     }
 
     @Override
