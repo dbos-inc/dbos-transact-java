@@ -1064,6 +1064,22 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  /**
+   * Deletes every checkpoint of the given workflows, in every registered transactional step
+   * factory. As with {@link #deleteStepCheckpoints(String, int)}, a failure part way leaves the
+   * stores before it cleared, and deleting again is safe.
+   */
+  public void deleteStepCheckpoints(Collection<String> workflowIds) {
+    for (var store : stepCheckpointStores) {
+      try {
+        store.deleteCheckpoints(workflowIds);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            "Failed to delete the transactional step checkpoints of workflows " + workflowIds, e);
+      }
+    }
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
       String workflowId, int startStep, ForkOptions options) {
 

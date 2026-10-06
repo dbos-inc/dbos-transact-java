@@ -9,6 +9,7 @@ import dev.dbos.transact.txstep.StepFactoryOptions;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -212,6 +213,16 @@ public class JooqStepFactory extends PostgresStepFactory {
   protected void deleteCheckpoints(String workflowId, int fromStepId) {
     dsl.transaction(
         trx -> trx.dsl().execute(TxStepSchema.deleteFromStepSql(schema), workflowId, fromStepId));
+  }
+
+  @Override
+  protected void deleteCheckpoints(Collection<String> workflowIds) {
+    dsl.transaction(
+        trx ->
+            trx.dsl()
+                .execute(
+                    TxStepSchema.deleteWorkflowsSql(schema),
+                    (Object) workflowIds.toArray(String[]::new)));
   }
 
   private void recordResult(

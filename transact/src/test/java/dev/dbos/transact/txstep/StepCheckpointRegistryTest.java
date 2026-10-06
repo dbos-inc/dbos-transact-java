@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -132,7 +133,7 @@ public class StepCheckpointRegistryTest {
   @Test
   public void aStoreRegisteredTwiceHasOneEntry() {
     var deletes = new AtomicInteger();
-    StepCheckpointStore store = (workflowId, fromStepId) -> deletes.incrementAndGet();
+    var store = new RecordingStore(deletes, false);
     dbos.integration().registerStepCheckpointStore(store);
     dbos.integration().registerStepCheckpointStore(store);
     dbos.launch();
@@ -143,11 +144,7 @@ public class StepCheckpointRegistryTest {
 
   @Test
   public void aFailedDeleteNamesTheWorkflow() {
-    dbos.integration()
-        .registerStepCheckpointStore(
-            (workflowId, fromStepId) -> {
-              throw new SQLException("datasource down");
-            });
+    dbos.integration().registerStepCheckpointStore(new RecordingStore(new AtomicInteger(), true));
     dbos.launch();
 
     var thrown =
@@ -156,6 +153,75 @@ public class StepCheckpointRegistryTest {
             () -> DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints("wf-down", 0));
     assertTrue(thrown.getMessage().contains("wf-down"), thrown.getMessage());
     assertEquals("datasource down", thrown.getCause().getMessage());
+  }
+
+  @Test
+  public void deletesEveryCheckpointOfTheGivenWorkflows() throws Exception {
+    var factory = new JdbcStepFactory(dbos, noAutoCommitDataSource, "registry_batch");
+    var proxy = dbos.registerProxy(CheckpointService.class, new CheckpointServiceImpl(factory));
+    dbos.launch();
+
+    for (var id : List.of("wf-a", "wf-b", "wf-c")) {
+      try (var o = new WorkflowOptions(id).setContext()) {
+        proxy.threeSteps();
+      }
+    }
+
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    executor.deleteStepCheckpoints(List.of("wf-a", "wf-c", "wf-missing"));
+    assertEquals(List.of(), checkpoints("registry_batch", "wf-a"));
+    assertEquals(List.of(0, 1, 2), checkpoints("registry_batch", "wf-b"));
+    assertEquals(List.of(), checkpoints("registry_batch", "wf-c"));
+
+    // An empty batch deletes nothing and does not reach the database.
+    executor.deleteStepCheckpoints(List.of());
+    assertEquals(List.of(0, 1, 2), checkpoints("registry_batch", "wf-b"));
+  }
+
+  @Test
+  public void theDefaultBatchDeleteCommits() throws Exception {
+    new MinimalStepFactory(dbos, noAutoCommitDataSource, "registry_default_batch");
+    dbos.launch();
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.execute(
+          "INSERT INTO registry_default_batch.tx_step_outputs (workflow_id, step_id) VALUES"
+              + " ('wf-a', 0), ('wf-a', 1), ('wf-b', 0), ('wf-c', 0)");
+    }
+
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(List.of("wf-a", "wf-b"));
+
+    assertEquals(List.of(), checkpoints("registry_default_batch", "wf-a"));
+    assertEquals(List.of(), checkpoints("registry_default_batch", "wf-b"));
+    assertEquals(List.of(0), checkpoints("registry_default_batch", "wf-c"));
+  }
+
+  /** Counts its calls, or fails every one. */
+  static class RecordingStore implements StepCheckpointStore {
+    private final AtomicInteger calls;
+    private final boolean fail;
+
+    RecordingStore(AtomicInteger calls, boolean fail) {
+      this.calls = calls;
+      this.fail = fail;
+    }
+
+    @Override
+    public void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+      record();
+    }
+
+    @Override
+    public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      record();
+    }
+
+    private void record() throws SQLException {
+      calls.incrementAndGet();
+      if (fail) {
+        throw new SQLException("datasource down");
+      }
+    }
   }
 
   /** The smallest PostgresStepFactory: it runs no steps, and only inherits the default delete. */

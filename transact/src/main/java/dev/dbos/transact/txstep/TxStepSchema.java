@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Optional;
 
 /** Shared SQL DDL and query constants for the {@code tx_step_outputs} table. */
@@ -69,6 +70,27 @@ public class TxStepSchema {
       stmt.setString(1, workflowId);
       stmt.setInt(2, fromStepId);
       stmt.executeUpdate();
+    }
+  }
+
+  /** Deletes every checkpoint of a set of workflows: the parameter is a text[] of workflow IDs. */
+  public static String deleteWorkflowsSql(String schema) {
+    return """
+        DELETE FROM "%s".tx_step_outputs
+        WHERE workflow_id = ANY(?)
+        """
+        .formatted(schema);
+  }
+
+  /** Runs {@link #deleteWorkflowsSql} on a connection; the caller owns the transaction. */
+  public static void deleteWorkflows(Connection conn, String schema, Collection<String> workflowIds)
+      throws SQLException {
+    var ids = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+    try (var stmt = conn.prepareStatement(deleteWorkflowsSql(schema))) {
+      stmt.setArray(1, ids);
+      stmt.executeUpdate();
+    } finally {
+      ids.free();
     }
   }
 

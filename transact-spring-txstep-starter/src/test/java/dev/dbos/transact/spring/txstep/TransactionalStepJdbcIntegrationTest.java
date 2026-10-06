@@ -216,6 +216,15 @@ public class TransactionalStepJdbcIntegrationTest {
                 var executor = DBOSTestAccess.getDbosExecutor(ctx.getBean(DBOS.class));
                 executor.deleteStepCheckpoints(wfid, 0);
                 assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).isEmpty();
+
+                // The batch form.
+                var batchId = wfid + "-batch";
+                try (var _o = new WorkflowOptions(batchId).setContext()) {
+                  workflow.processOrder("ord-d2", "Widget", 1);
+                }
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, batchId)).hasSize(1);
+                executor.deleteStepCheckpoints(java.util.List.of(batchId));
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, batchId)).isEmpty();
               });
     }
   }

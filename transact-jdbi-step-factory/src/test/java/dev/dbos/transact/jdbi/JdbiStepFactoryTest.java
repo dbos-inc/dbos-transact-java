@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -241,6 +242,16 @@ public class JdbiStepFactoryTest {
     // commits through the library's own transaction.
     DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(wfid, 0);
     assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    // The batch form, which binds the workflow IDs as an array.
+    for (var id : List.of("wf-batch-1", "wf-batch-2")) {
+      try (var _o = new WorkflowOptions(id).setContext()) {
+        proxy.insertWorkflow("deleteUser");
+      }
+    }
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(List.of("wf-batch-1", "wf-batch-2"));
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf-batch-1").size());
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf-batch-2").size());
   }
 
   @Test

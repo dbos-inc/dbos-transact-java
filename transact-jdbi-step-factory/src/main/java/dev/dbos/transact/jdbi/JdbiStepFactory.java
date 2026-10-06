@@ -7,6 +7,7 @@ import dev.dbos.transact.txstep.PostgresStepFactory;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -239,6 +240,15 @@ public class JdbiStepFactory extends PostgresStepFactory {
             h.createUpdate(TxStepSchema.deleteFromStepSql(schema))
                 .bind(0, workflowId)
                 .bind(1, fromStepId)
+                .execute());
+  }
+
+  @Override
+  protected void deleteCheckpoints(Collection<String> workflowIds) {
+    jdbi.useTransaction(
+        h ->
+            h.createUpdate(TxStepSchema.deleteWorkflowsSql(schema))
+                .bindArray(0, String.class, workflowIds)
                 .execute());
   }
 

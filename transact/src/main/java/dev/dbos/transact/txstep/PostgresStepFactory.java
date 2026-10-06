@@ -3,11 +3,13 @@ package dev.dbos.transact.txstep;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -28,6 +30,9 @@ public abstract class PostgresStepFactory {
   protected final String schema;
   protected final DBOSSerializer serializer;
   private final ConnectionOpener opener;
+  // The store DBOS calls. A private class rather than this factory implementing the interface, so
+  // the interface's methods do not become public methods of every factory.
+  private final StepCheckpointStore checkpointStore = new CheckpointStore();
 
   @FunctionalInterface
   protected interface ConnectionOpener {
@@ -49,7 +54,21 @@ public abstract class PostgresStepFactory {
       throw new RuntimeException(e);
     }
 
-    dbos.integration().registerStepCheckpointStore(this::deleteCheckpoints);
+    dbos.integration().registerStepCheckpointStore(checkpointStore);
+  }
+
+  private final class CheckpointStore implements StepCheckpointStore {
+    @Override
+    public void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+      PostgresStepFactory.this.deleteCheckpoints(workflowId, fromStepId);
+    }
+
+    @Override
+    public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      if (!workflowIds.isEmpty()) {
+        PostgresStepFactory.this.deleteCheckpoints(workflowIds);
+      }
+    }
   }
 
   /**
@@ -62,6 +81,19 @@ public abstract class PostgresStepFactory {
   protected void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
     try (var conn = opener.open()) {
       SqlTransaction.run(conn, c -> TxStepSchema.deleteFromStep(c, schema, workflowId, fromStepId));
+    }
+  }
+
+  /**
+   * Deletes every checkpoint of the given workflows, never empty, in a transaction of its own that
+   * commits before this returns. DBOS calls it when it deletes the workflows.
+   *
+   * <p>This default opens a connection and commits explicitly. Subclasses override it to go through
+   * their database library's own transaction handling.
+   */
+  protected void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+    try (var conn = opener.open()) {
+      SqlTransaction.run(conn, c -> TxStepSchema.deleteWorkflows(c, schema, workflowIds));
     }
   }
 

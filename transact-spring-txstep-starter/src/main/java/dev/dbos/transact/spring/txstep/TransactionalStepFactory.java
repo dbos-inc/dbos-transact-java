@@ -15,6 +15,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -45,8 +46,10 @@ public class TransactionalStepFactory {
   private final PlatformTransactionManager txManager;
   private final String schema;
   private final DBOSSerializer serializer;
-  // One object, so registering again (a second initialize()) does not add a second entry.
-  private final StepCheckpointStore checkpointStore = this::deleteCheckpoints;
+  // The store DBOS calls. A private class rather than this factory implementing the interface, so
+  // the interface's methods do not become public methods of the factory. One object, so a second
+  // initialize() does not add a second entry.
+  private final StepCheckpointStore checkpointStore = new CheckpointStore();
 
   public TransactionalStepFactory(
       DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager, String schema) {
@@ -75,11 +78,31 @@ public class TransactionalStepFactory {
     dbos.integration().registerStepCheckpointStore(checkpointStore);
   }
 
-  private void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+  private final class CheckpointStore implements StepCheckpointStore {
+    @Override
+    public void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+      inTransaction(conn -> TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId));
+    }
+
+    @Override
+    public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      if (!workflowIds.isEmpty()) {
+        inTransaction(conn -> TxStepSchema.deleteWorkflows(conn, schema, workflowIds));
+      }
+    }
+  }
+
+  @FunctionalInterface
+  private interface SqlWork {
+    void run(Connection conn) throws SQLException;
+  }
+
+  // A fresh connection with an explicit commit, as recordError does.
+  private void inTransaction(SqlWork work) throws SQLException {
     try (var conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
       try {
-        TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId);
+        work.run(conn);
         conn.commit();
       } catch (SQLException ex) {
         conn.rollback();

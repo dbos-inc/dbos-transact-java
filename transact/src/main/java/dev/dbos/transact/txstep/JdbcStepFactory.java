@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -206,6 +207,16 @@ public class JdbcStepFactory extends PostgresStepFactory {
         dataSource,
         (Connection conn) -> {
           TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId);
+          return null;
+        });
+  }
+
+  @Override
+  protected void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+    executeTransaction(
+        dataSource,
+        (Connection conn) -> {
+          TxStepSchema.deleteWorkflows(conn, schema, workflowIds);
           return null;
         });
   }
