@@ -595,7 +595,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(120, latest, "The shared history currently ends at migration 120");
+    assertEquals(121, latest, "The shared history currently ends at migration 121");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -633,6 +633,8 @@ class MigrationManagerTest {
 
       assertIndexAbsent(conn, "idx_notifications");
       assertIndexExists(conn, "idx_workflow_topic");
+
+      assertColumnExists(conn, "notifications", "consumed_by_function_id");
 
       for (var index : REBUILT_INDEXES) {
         assertIndexExists(conn, index[1]);
@@ -677,7 +679,7 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(dbosConfig);
 
     try (var conn = dataSource.getConnection()) {
-      assertEquals(120, getVersion(conn));
+      assertEquals(migrations.size(), getVersion(conn));
       for (var index : REBUILT_INDEXES) {
         assertIndexExists(conn, index[1]);
         assertIndexAbsent(conn, index[0]);
@@ -688,7 +690,34 @@ class MigrationManagerTest {
     // Re-running is a no-op.
     assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
     try (var conn = dataSource.getConnection()) {
+      assertEquals(migrations.size(), getVersion(conn));
+    }
+  }
+
+  @Test
+  void testMigration121_AddsConsumedByFunctionId() throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var dbosConfig = pgContainer.dbosConfig();
+    var useListenNotify = !PgContainer.USE_COCKROACH_DB;
+    var migrations =
+        MigrationManager.getMigrations(schema, useListenNotify, PgContainer.USE_COCKROACH_DB);
+
+    // A database last migrated by an SDK that stopped at 120.
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.ensureDbosSchema(conn, schema);
+      MigrationManager.ensureMigrationTable(conn, schema);
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 120));
       assertEquals(120, getVersion(conn));
+      assertColumnAbsent(conn, "notifications", "consumed_by_function_id");
+    }
+
+    MigrationManager.runMigrations(dbosConfig);
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(121, getVersion(conn));
+      assertColumnExists(conn, "notifications", "consumed_by_function_id");
     }
   }
 
@@ -750,6 +779,14 @@ class MigrationManagerTest {
     try (ResultSet rs =
         conn.getMetaData().getColumns(null, Constants.DB_SCHEMA, tableName, columnName)) {
       assertTrue(rs.next(), "Column %s.%s should exist".formatted(tableName, columnName));
+    }
+  }
+
+  static void assertColumnAbsent(Connection conn, String tableName, String columnName)
+      throws Exception {
+    try (ResultSet rs =
+        conn.getMetaData().getColumns(null, Constants.DB_SCHEMA, tableName, columnName)) {
+      assertFalse(rs.next(), "Column %s.%s should not exist".formatted(tableName, columnName));
     }
   }
 

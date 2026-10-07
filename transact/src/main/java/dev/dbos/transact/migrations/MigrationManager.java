@@ -577,7 +577,8 @@ public class MigrationManager {
             migration117(isCockroach),
             migration118(isCockroach),
             migration119(isCockroach),
-            migration120(isCockroach)));
+            migration120(isCockroach),
+            MIGRATION_121));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1731,4 +1732,12 @@ public class MigrationManager {
         + concurrently(isCockroach)
         + " IF EXISTS \"%1$s\".\"idx_operation_outputs_completed_at_function_name\"";
   }
+
+  // Migration 121: record which recv consumed a notification, so a rewind can delete the messages
+  // consumed by the steps it discards.
+  static final String MIGRATION_121 =
+      """
+      ALTER TABLE "%1$s"."notifications"
+          ADD COLUMN IF NOT EXISTS "consumed_by_function_id" INTEGER;
+      """;
 }

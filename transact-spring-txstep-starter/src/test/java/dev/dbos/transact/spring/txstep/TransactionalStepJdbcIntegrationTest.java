@@ -230,6 +230,33 @@ public class TransactionalStepJdbcIntegrationTest {
   }
 
   @Test
+  void rewindRerunsTheTransactionalStep() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                var dbos = ctx.getBean(DBOS.class);
+                var wfid = "wf-jdbc-int-rewind";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  workflow.processOrder("ord-r", "Widget", 1);
+                }
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).hasSize(1);
+
+                // Remove the order the first run placed: a step that runs again places it again,
+                // while one replayed from a leftover checkpoint does not.
+                new JdbcTemplate(db.dataSource).update("DELETE FROM orders WHERE id = ?", "ord-r");
+                dbos.rewindWorkflow(wfid, 0).getResult();
+
+                assertThat(orderCount(db.dataSource, "ord-r")).isEqualTo(1);
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).hasSize(1);
+              });
+    }
+  }
+
+  @Test
   void isolationLevel() {
     try (var db = new TransactionalStepTest.TestDatabase()) {
       runner(db)

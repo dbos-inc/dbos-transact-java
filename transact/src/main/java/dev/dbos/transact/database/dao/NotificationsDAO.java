@@ -291,7 +291,7 @@ public class NotificationsDAO {
     var updateSql =
         """
           UPDATE "%1$s".notifications
-          SET consumed = TRUE
+          SET consumed = TRUE, consumed_by_function_id = ?
           WHERE destination_uuid = ?
             AND topic = ?
             AND consumed = FALSE
@@ -321,10 +321,13 @@ public class NotificationsDAO {
                     String serializedMessage = null;
                     String serialization = null;
                     try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
-                      stmt.setString(1, workflowId);
-                      stmt.setString(2, recvTopic);
-                      stmt.setString(3, workflowId);
-                      stmt.setString(4, recvTopic);
+                      // The consuming step is recorded so a rewind can delete exactly the
+                      // messages consumed by the steps it discards.
+                      stmt.setInt(1, stepId);
+                      stmt.setString(2, workflowId);
+                      stmt.setString(3, recvTopic);
+                      stmt.setString(4, workflowId);
+                      stmt.setString(5, recvTopic);
 
                       // Note, if there are two executors running the same workflow waiting on the
                       // same recv, only the first one will return a row here. The second one gets

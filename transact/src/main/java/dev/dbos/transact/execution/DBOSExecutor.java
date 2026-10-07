@@ -41,6 +41,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -1107,6 +1108,33 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS.forkWorkflow",
             null);
     return retrieveWorkflow(forkedId);
+  }
+
+  public <T, E extends Exception> WorkflowHandle<T, E> rewindWorkflow(
+      String workflowId, int startStep, RewindOptions options) {
+    Objects.requireNonNull(workflowId);
+    Objects.requireNonNull(options);
+
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
+
+          validateQueue(options.queueName(), options.queuePartitionKey());
+
+          // The step factories' checkpoints go first and the system database last. If a delete
+          // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
+          // against a partly cleared history, and since a delete is idempotent the rewind can
+          // simply be retried. The checks run first so a running workflow keeps its checkpoints.
+          if (hasStepCheckpointStores()) {
+            systemDatabase.checkRewindable(workflowId, startStep);
+            deleteStepCheckpoints(workflowId, startStep);
+          }
+          systemDatabase.rewindWorkflow(workflowId, startStep, options);
+          return null; // void
+        },
+        "DBOS.rewindWorkflow",
+        null);
+    return retrieveWorkflow(workflowId);
   }
 
   public List<WorkflowHandle<Object, Exception>> forkFromFailure(

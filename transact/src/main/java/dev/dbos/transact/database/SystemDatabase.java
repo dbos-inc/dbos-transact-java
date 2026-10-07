@@ -30,6 +30,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepAggregateRow;
@@ -1243,6 +1244,15 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetryIncludingSerializationError(
         "forkWorkflow",
         () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+  }
+
+  public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
+    dbRetryIncludingSerializationError(
+        "rewindWorkflow", () -> WorkflowDAO.rewindWorkflow(ctx, workflowId, startStep, options));
+  }
+
+  public void checkRewindable(String workflowId, int startStep) {
+    dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
   }
 
   public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
