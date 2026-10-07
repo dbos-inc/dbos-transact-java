@@ -1636,6 +1636,11 @@ public class DBOSClient implements AutoCloseable {
    * @param startStep the first step to discard and run again; 0 re-runs the whole workflow
    * @param options Options for the rewind
    * @return `WorkflowHandle` for the rewound workflow
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
+   *     exist
+   * @throws IllegalArgumentException if {@code startStep} is negative
+   * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
+   *     while it was being rewound; in the second case, retry the rewind
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
       @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {

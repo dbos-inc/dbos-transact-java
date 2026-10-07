@@ -1057,6 +1057,10 @@ public class DBOS implements AutoCloseable {
    * yet; and removes its streams' close markers so the replay can write to them again. Stream
    * entries are kept. The workflow is then re-enqueued.
    *
+   * <p>A message consumed before the system database reached migration 121, or by a DBOS version
+   * that does not record which step consumed it, cannot be matched to a step. The rewind leaves it
+   * consumed, so a replayed {@code recv} past the cut waits for a new message instead.
+   *
    * <p>Called from a workflow, the rewind is a step, so a recovered caller does not rewind its
    * target again.
    *
@@ -1069,7 +1073,12 @@ public class DBOS implements AutoCloseable {
    * @return handle to the rewound workflow
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
    *     exist
-   * @throws IllegalStateException if the workflow is not in a terminal state
+   * @throws IllegalArgumentException if {@code startStep} is negative, the queue does not exist, or
+   *     the partition key does not match whether the queue is partitioned
+   * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
+   *     while it was being rewound; in the second case, retry the rewind
+   * @throws RuntimeException if a transactional step factory's checkpoints could not be deleted;
+   *     the workflow is not rewound, and the rewind can be retried
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
       @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
