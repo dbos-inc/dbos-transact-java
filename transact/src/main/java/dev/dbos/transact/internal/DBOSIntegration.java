@@ -36,16 +36,19 @@ public class DBOSIntegration {
   private final WorkflowRegistry workflowRegistry;
   private final Supplier<DBOSExecutor> executorSupplier;
   private final Consumer<DBOSLifecycleListener> listenerConsumer;
+  private final Consumer<StepCheckpointStore> checkpointStoreConsumer;
 
   public DBOSIntegration(
       @NonNull DBOSConfig config,
       @NonNull WorkflowRegistry workflowRegistry,
       @NonNull Supplier<DBOSExecutor> executorSupplier,
-      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer) {
+      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer,
+      @NonNull Consumer<StepCheckpointStore> checkpointStoreConsumer) {
     this.config = Objects.requireNonNull(config);
     this.workflowRegistry = Objects.requireNonNull(workflowRegistry);
     this.executorSupplier = Objects.requireNonNull(executorSupplier);
     this.listenerConsumer = Objects.requireNonNull(lifecycleConsumer);
+    this.checkpointStoreConsumer = Objects.requireNonNull(checkpointStoreConsumer);
   }
 
   private DBOSExecutor executor(String caller) {
@@ -73,6 +76,18 @@ public class DBOSIntegration {
    */
   public void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     listenerConsumer.accept(listener);
+  }
+
+  /**
+   * Register the checkpoints a transactional step factory keeps in its own database, so DBOS can
+   * delete a workflow's checkpoints there when it discards that workflow's history. Registering the
+   * same store again has no effect.
+   *
+   * @param store the factory's checkpoints; must not be {@code null}
+   * @throws IllegalStateException if called after DBOS is launched
+   */
+  public void registerStepCheckpointStore(@NonNull StepCheckpointStore store) {
+    checkpointStoreConsumer.accept(Objects.requireNonNull(store));
   }
 
   /**

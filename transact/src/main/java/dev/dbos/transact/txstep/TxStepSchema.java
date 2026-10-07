@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Optional;
 
 /** Shared SQL DDL and query constants for the {@code tx_step_outputs} table. */
@@ -38,6 +39,10 @@ public class TxStepSchema {
               .formatted(schema));
       stmt.executeBatch();
     }
+    // A pool configured without autocommit would otherwise roll the DDL back on close.
+    if (!conn.getAutoCommit()) {
+      conn.commit();
+    }
   }
 
   public static String checkSql(String schema) {
@@ -47,6 +52,46 @@ public class TxStepSchema {
         WHERE workflow_id = ? AND step_id = ?
         """
         .formatted(schema);
+  }
+
+  /** Deletes a workflow's checkpoints from a step on: parameters are the workflow and step IDs. */
+  public static String deleteFromStepSql(String schema) {
+    return """
+        DELETE FROM "%s".tx_step_outputs
+        WHERE workflow_id = ? AND step_id >= ?
+        """
+        .formatted(schema);
+  }
+
+  /** Runs {@link #deleteFromStepSql} on a connection; the caller owns the transaction. */
+  public static void deleteFromStep(
+      Connection conn, String schema, String workflowId, int fromStepId) throws SQLException {
+    try (var stmt = conn.prepareStatement(deleteFromStepSql(schema))) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, fromStepId);
+      stmt.executeUpdate();
+    }
+  }
+
+  /** Deletes every checkpoint of a set of workflows: the parameter is a text[] of workflow IDs. */
+  public static String deleteWorkflowsSql(String schema) {
+    return """
+        DELETE FROM "%s".tx_step_outputs
+        WHERE workflow_id = ANY(?)
+        """
+        .formatted(schema);
+  }
+
+  /** Runs {@link #deleteWorkflowsSql} on a connection; the caller owns the transaction. */
+  public static void deleteWorkflows(Connection conn, String schema, Collection<String> workflowIds)
+      throws SQLException {
+    var ids = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+    try (var stmt = conn.prepareStatement(deleteWorkflowsSql(schema))) {
+      stmt.setArray(1, ids);
+      stmt.executeUpdate();
+    } finally {
+      ids.free();
+    }
   }
 
   public static String upsertSql(String schema) {

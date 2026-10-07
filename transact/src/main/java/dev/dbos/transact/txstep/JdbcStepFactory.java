@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -21,6 +22,10 @@ import javax.sql.DataSource;
  * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
  * User lambdas passed to {@code txStep} receive a {@link Connection} with a transaction already
  * started; they should not call {@code commit} or {@code close} themselves.
+ *
+ * <p>Create the factory before calling {@link dev.dbos.transact.DBOS#launch()}: DBOS needs to know
+ * every factory when it launches, so the constructor throws {@link IllegalStateException} after
+ * launch.
  *
  * <pre>{@code
  * JdbcStepFactory factory = new JdbcStepFactory(dbos, dataSource);
@@ -198,6 +203,26 @@ public class JdbcStepFactory extends PostgresStepFactory {
           return null;
         },
         options);
+  }
+
+  @Override
+  protected void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+    executeTransaction(
+        dataSource,
+        (Connection conn) -> {
+          TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId);
+          return null;
+        });
+  }
+
+  @Override
+  protected void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+    executeTransaction(
+        dataSource,
+        (Connection conn) -> {
+          TxStepSchema.deleteWorkflows(conn, schema, workflowIds);
+          return null;
+        });
   }
 
   private static <R, X extends Exception> R executeTransaction(

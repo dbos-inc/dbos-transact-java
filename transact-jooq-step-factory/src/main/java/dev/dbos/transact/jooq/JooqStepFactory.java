@@ -9,6 +9,7 @@ import dev.dbos.transact.txstep.StepFactoryOptions;
 import dev.dbos.transact.txstep.TxStepSchema;
 import dev.dbos.transact.workflow.internal.StepResult;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -26,6 +27,10 @@ import org.jooq.exception.DataAccessException;
  * Lambdas passed to {@link #txStepResult} or {@link #txStep} receive a jOOQ {@link
  * org.jooq.Configuration} with a transaction already open; they must not commit or close the
  * underlying connection themselves.
+ *
+ * <p>Create the factory before calling {@link dev.dbos.transact.DBOS#launch()}: DBOS needs to know
+ * every factory when it launches, so the constructor throws {@link IllegalStateException} after
+ * launch.
  *
  * <pre>{@code
  * JooqStepFactory factory = new JooqStepFactory(dbos, dslContext);
@@ -206,6 +211,21 @@ public class JooqStepFactory extends PostgresStepFactory {
                   value.serialization()));
     } catch (StepConflictException ignored) {
     }
+  }
+
+  @Override
+  protected void deleteCheckpoints(String workflowId, int fromStepId) {
+    dsl.transaction(
+        trx -> trx.dsl().execute(TxStepSchema.deleteFromStepSql(schema), workflowId, fromStepId));
+  }
+
+  @Override
+  protected void deleteCheckpoints(Collection<String> workflowIds) {
+    // Bound on the JDBC connection: jOOQ can only bind an array when the dialect is set to one
+    // that has arrays, and the DSLContext may have been built without one.
+    dsl.transaction(
+        trx ->
+            trx.dsl().connection(conn -> TxStepSchema.deleteWorkflows(conn, schema, workflowIds)));
   }
 
   private void recordResult(

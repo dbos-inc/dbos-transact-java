@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -17,6 +18,7 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -226,6 +228,30 @@ public class JdbiStepFactoryTest {
         return rs.next() ? rs.getInt("greet_count") : 0;
       }
     }
+  }
+
+  @Test
+  public void testDeleteCheckpointsThroughDbos() throws Exception {
+    var wfid = "wf-delete";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      proxy.insertWorkflow("deleteUser");
+    }
+    assertEquals(1, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    // DBOS reaches the factory's checkpoints through the store it registered, and the delete
+    // commits through the library's own transaction.
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(wfid, 0);
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    // The batch form, which binds the workflow IDs as an array.
+    for (var id : List.of("wf-batch-1", "wf-batch-2")) {
+      try (var _o = new WorkflowOptions(id).setContext()) {
+        proxy.insertWorkflow("deleteUser");
+      }
+    }
+    DBOSTestAccess.getDbosExecutor(dbos).deleteStepCheckpoints(List.of("wf-batch-1", "wf-batch-2"));
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf-batch-1").size());
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf-batch-2").size());
   }
 
   @Test

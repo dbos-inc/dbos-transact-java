@@ -6,6 +6,7 @@ import static org.springframework.transaction.TransactionDefinition.PROPAGATION_
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
@@ -14,6 +15,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -44,6 +46,10 @@ public class TransactionalStepFactory {
   private final PlatformTransactionManager txManager;
   private final String schema;
   private final DBOSSerializer serializer;
+  // The store DBOS calls. A private class rather than this factory implementing the interface, so
+  // the interface's methods do not become public methods of the factory. One object, so a second
+  // initialize() does not add a second entry.
+  private final StepCheckpointStore checkpointStore = new CheckpointStore();
 
   public TransactionalStepFactory(
       DBOS dbos, DataSource dataSource, PlatformTransactionManager txManager, String schema) {
@@ -57,8 +63,12 @@ public class TransactionalStepFactory {
 
   /**
    * Verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if it does
-   * not already exist. Called lazily by {@code TransactionalStepRegistrar} only when annotated
-   * methods are found — avoids any DB contact for applications that never use this starter.
+   * not already exist, then registers the factory's checkpoints with DBOS so it can delete them
+   * when it discards a workflow's history. Called lazily by {@code TransactionalStepRegistrar} only
+   * when annotated methods are found — avoids any DB contact for applications that never use this
+   * starter. The registrar runs before DBOS launches.
+   *
+   * @throws IllegalStateException if DBOS has already been launched
    */
   public void initialize() {
     try (var conn = dataSource.getConnection()) {
@@ -66,6 +76,42 @@ public class TransactionalStepFactory {
       TxStepSchema.createTable(conn, schema);
     } catch (SQLException e) {
       throw new RuntimeException(e);
+    }
+
+    // Registered here rather than in the constructor: until now the table may not exist.
+    dbos.integration().registerStepCheckpointStore(checkpointStore);
+  }
+
+  private final class CheckpointStore implements StepCheckpointStore {
+    @Override
+    public void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+      inTransaction(conn -> TxStepSchema.deleteFromStep(conn, schema, workflowId, fromStepId));
+    }
+
+    @Override
+    public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      if (!workflowIds.isEmpty()) {
+        inTransaction(conn -> TxStepSchema.deleteWorkflows(conn, schema, workflowIds));
+      }
+    }
+  }
+
+  @FunctionalInterface
+  private interface SqlWork {
+    void run(Connection conn) throws SQLException;
+  }
+
+  // A fresh connection with an explicit commit, as recordError does.
+  private void inTransaction(SqlWork work) throws SQLException {
+    try (var conn = dataSource.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        work.run(conn);
+        conn.commit();
+      } catch (SQLException ex) {
+        conn.rollback();
+        throw ex;
+      }
     }
   }
 
