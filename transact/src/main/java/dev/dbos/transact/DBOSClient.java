@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -1617,6 +1618,49 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String originalWorkflowId, int startStep, @NonNull ForkOptions options) {
     var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
     return retrieveWorkflow(forkedWorkflowId);
+  }
+
+  /**
+   * Rewind a workflow: re-run it in place, under the same ID, from the step provided. Only a
+   * workflow in a terminal state can be rewound. See {@link DBOS#rewindWorkflow(String, int,
+   * RewindOptions)} for what a rewind discards.
+   *
+   * <p>A client cannot reach the application's databases, so unlike {@link DBOS#rewindWorkflow}, it
+   * does not delete the checkpoints transactional step factories keep there. A transactional step
+   * past the cut that still has one replays its recorded result instead of running again. To re-run
+   * those transactions, rewind from within the application.
+   *
+   * @param <T> Type of the workflow's return value
+   * @param <E> Type of any checked exception thrown by the workflow
+   * @param workflowId ID of the workflow to rewind
+   * @param startStep the first step to discard and run again; 0 re-runs the whole workflow
+   * @param options Options for the rewind
+   * @return `WorkflowHandle` for the rewound workflow
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
+   *     exist
+   * @throws IllegalArgumentException if {@code startStep} is negative
+   * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
+   *     while it was being rewound; in the second case, retry the rewind
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
+      @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
+    systemDatabase.rewindWorkflow(workflowId, startStep, options);
+    return retrieveWorkflow(workflowId);
+  }
+
+  /**
+   * Rewind a workflow: re-run it in place, under the same ID, from the step provided. See {@link
+   * #rewindWorkflow(String, int, RewindOptions)}.
+   *
+   * @param <T> Type of the workflow's return value
+   * @param <E> Type of any checked exception thrown by the workflow
+   * @param workflowId ID of the workflow to rewind
+   * @param startStep the first step to discard and run again; 0 re-runs the whole workflow
+   * @return `WorkflowHandle` for the rewound workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
+      @NonNull String workflowId, int startStep) {
+    return rewindWorkflow(workflowId, startStep, new RewindOptions());
   }
 
   /**

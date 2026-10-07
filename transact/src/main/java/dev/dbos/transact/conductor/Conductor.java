@@ -805,6 +805,7 @@ public class Conductor implements AutoCloseable {
       case RESUME -> handleResume(this, (ResumeRequest) message);
       case RESUME_SCHEDULE -> handleResumeSchedule(this, (ResumeScheduleRequest) message);
       case RETENTION -> handleRetention(this, (RetentionRequest) message);
+      case REWIND_WORKFLOW -> handleRewind(this, (RewindWorkflowRequest) message);
       case SET_LATEST_APPLICATION_VERSION ->
           handleSetLatestApplicationVersion(this, (SetLatestApplicationVersionRequest) message);
       case TRIGGER_SCHEDULE -> handleTriggerSchedule(this, (TriggerScheduleRequest) message);
@@ -924,6 +925,25 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when forking workflow {}", request, e);
             return new ForkWorkflowResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleRewind(
+      Conductor conductor, RewindWorkflowRequest request) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          if (request.body == null || request.body.workflow_id == null) {
+            return new SuccessResponse(
+                request, new IllegalArgumentException("Invalid Rewind Workflow Request"));
+          }
+          try {
+            conductor.dbosExecutor.rewindWorkflow(
+                request.body.workflow_id, request.startStep(), request.toOptions());
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error("Exception encountered when rewinding workflow {}", request, e);
+            return new SuccessResponse(request, e);
           }
         });
   }

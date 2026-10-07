@@ -32,6 +32,7 @@ public enum MessageType {
   RESUME("resume"),
   RESUME_SCHEDULE("resume_schedule"),
   RETENTION("retention"),
+  REWIND_WORKFLOW("rewind_workflow"),
   SET_LATEST_APPLICATION_VERSION("set_latest_application_version"),
   TRIGGER_SCHEDULE("trigger_schedule");
 

@@ -255,6 +255,23 @@ public class JdbiStepFactoryTest {
   }
 
   @Test
+  public void testRewindRerunsTheTransaction() throws Exception {
+    var wfid = "wf-rewind";
+    var user = "rewindUser";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(1, proxy.insertWorkflow(user).greetCount());
+    }
+
+    // The rewind deletes the step's checkpoint, so the transaction runs again rather than
+    // replaying its recorded result.
+    WorkflowHandle<FactoryTestService.TestResult, RuntimeException> handle =
+        dbos.rewindWorkflow(wfid, 0);
+    assertEquals(new FactoryTestService.TestResult(user, 2), handle.getResult());
+    assertEquals(2, getGreetCount(user));
+    assertEquals(1, DBUtils.getTxStepRows(dataSource, wfid).size());
+  }
+
+  @Test
   public void testInsert() throws Exception {
     var wfid = "wf1";
     var user = "testUser";

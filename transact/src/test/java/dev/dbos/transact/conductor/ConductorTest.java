@@ -38,6 +38,7 @@ import dev.dbos.transact.workflow.GetStepAggregatesInput;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -1604,6 +1605,118 @@ public class ConductorTest {
       assertEquals(List.of(WorkflowState.SUCCESS), input.status());
       assertEquals(List.of("q1"), input.queueName());
       assertTrue(input.queuesOnly());
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @RetryingTest(3)
+  public void canRewind() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockHandle.workflowId()).thenReturn(workflowId);
+    when(mockExec.rewindWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "start_step",
+              3,
+              "application_version",
+              "appver-12345",
+              "queue_name",
+              "custom-queue",
+              "queue_partition_key",
+              "partition-key",
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.REWIND_WORKFLOW, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<RewindOptions> optionsCaptor = ArgumentCaptor.forClass(RewindOptions.class);
+      verify(mockExec).rewindWorkflow(eq(workflowId), eq(3), optionsCaptor.capture());
+      RewindOptions options = optionsCaptor.getValue();
+      assertEquals("appver-12345", options.applicationVersion());
+      assertEquals("custom-queue", options.queueName());
+      assertEquals("partition-key", options.queuePartitionKey());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("rewind_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertTrue(jsonNode.get("success").asBoolean());
+      assertNull(jsonNode.get("error_message"));
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @RetryingTest(3)
+  public void canRewindWithoutAStartStep() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockExec.rewindWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.REWIND_WORKFLOW, "12345", Map.of("body", Map.of("workflow_id", workflowId)));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      // An omitted start step rewinds the whole history.
+      ArgumentCaptor<RewindOptions> optionsCaptor = ArgumentCaptor.forClass(RewindOptions.class);
+      verify(mockExec).rewindWorkflow(eq(workflowId), eq(0), optionsCaptor.capture());
+      RewindOptions options = optionsCaptor.getValue();
+      assertNull(options.applicationVersion());
+      assertNull(options.queueName());
+      assertNull(options.queuePartitionKey());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canRewindThrow() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    String errorMessage = "canRewindThrow error";
+    doThrow(new IllegalStateException(errorMessage))
+        .when(mockExec)
+        .rewindWorkflow(eq(workflowId), anyInt(), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.REWIND_WORKFLOW,
+          "12345",
+          Map.of("body", Map.of("workflow_id", workflowId, "start_step", 1)));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).rewindWorkflow(eq(workflowId), eq(1), any());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("rewind_workflow", jsonNode.get("type").stringValue());
+      assertEquals("12345", jsonNode.get("request_id").stringValue());
+      assertFalse(jsonNode.get("success").asBoolean());
+      assertEquals(errorMessage, jsonNode.get("error_message").stringValue());
     }
   }
 

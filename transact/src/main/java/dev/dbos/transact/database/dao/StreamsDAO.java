@@ -102,6 +102,29 @@ public class StreamsDAO {
     }
   }
 
+  /**
+   * Deletes the close sentinels a workflow wrote from {@code fromStepId} on, so a rewound workflow
+   * can append to its streams again. A leftover sentinel would end every reader before the replay's
+   * entries.
+   */
+  static void deleteCloseSentinels(
+      Connection conn, String schema, String workflowId, int fromStepId) throws SQLException {
+    var closed = SerializationUtil.serializeValue(STREAM_CLOSED_SENTINEL, "portable_json", null);
+    var sql =
+        """
+        DELETE FROM "%s".streams
+        WHERE workflow_uuid = ? AND function_id >= ? AND value = ? AND serialization = ?
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, fromStepId);
+      stmt.setString(3, closed.serializedValue());
+      stmt.setString(4, closed.serialization());
+      stmt.executeUpdate();
+    }
+  }
+
   private static int getNextOffsetTx(Connection conn, String schema, String workflowId, String key)
       throws SQLException {
     String sql =

@@ -45,6 +45,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = ResumeRequest.class, name = "resume"),
   @JsonSubTypes.Type(value = ResumeScheduleRequest.class, name = "resume_schedule"),
   @JsonSubTypes.Type(value = RetentionRequest.class, name = "retention"),
+  @JsonSubTypes.Type(value = RewindWorkflowRequest.class, name = "rewind_workflow"),
   @JsonSubTypes.Type(
       value = SetLatestApplicationVersionRequest.class,
       name = "set_latest_application_version"),

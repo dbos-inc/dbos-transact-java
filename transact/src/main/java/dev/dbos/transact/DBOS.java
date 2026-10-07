@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueConflictResolution;
 import dev.dbos.transact.workflow.QueueOptions;
+import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -1042,6 +1043,61 @@ public class DBOS implements AutoCloseable {
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep) {
     return forkWorkflow(workflowId, startStep, new ForkOptions());
+  }
+
+  /**
+   * Rewind a workflow: re-run it in place, under the same ID, from the step provided. Steps before
+   * {@code startStep} are replayed from their checkpoints; everything from {@code startStep} on is
+   * discarded and runs again. Only a workflow in a terminal state can be rewound, so cancel a
+   * running one first.
+   *
+   * <p>From {@code startStep} on, the rewind deletes the workflow's step checkpoints, including
+   * those of registered transactional step factories; rolls back the events it published to their
+   * last value from before the cut; deletes the messages it consumed, and any it has not consumed
+   * yet; and removes its streams' close markers so the replay can write to them again. Stream
+   * entries are kept. The workflow is then re-enqueued.
+   *
+   * <p>A message consumed before the system database reached migration 121, or by a DBOS version
+   * that does not record which step consumed it, cannot be matched to a step. The rewind leaves it
+   * consumed, so a replayed {@code recv} past the cut waits for a new message instead.
+   *
+   * <p>Called from a workflow, the rewind is a step, so a recovered caller does not rewind its
+   * target again.
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to rewind
+   * @param startStep the first step to discard and run again; 0 re-runs the whole workflow
+   * @param options {@link RewindOptions} containing the queue, partition key and application
+   *     version to re-enqueue the workflow with
+   * @return handle to the rewound workflow
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
+   *     exist
+   * @throws IllegalArgumentException if {@code startStep} is negative, the queue does not exist, or
+   *     the partition key does not match whether the queue is partitioned
+   * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
+   *     while it was being rewound; in the second case, retry the rewind
+   * @throws RuntimeException if a transactional step factory's checkpoints could not be deleted;
+   *     the workflow is not rewound, and the rewind can be retried
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
+      @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
+    return ensureLaunched("rewindWorkflow").rewindWorkflow(workflowId, startStep, options);
+  }
+
+  /**
+   * Rewind a workflow: re-run it in place, under the same ID, from the step provided. See {@link
+   * #rewindWorkflow(String, int, RewindOptions)}.
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to rewind
+   * @param startStep the first step to discard and run again; 0 re-runs the whole workflow
+   * @return handle to the rewound workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
+      @NonNull String workflowId, int startStep) {
+    return rewindWorkflow(workflowId, startStep, new RewindOptions());
   }
 
   /**
