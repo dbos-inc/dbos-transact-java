@@ -1738,6 +1738,6 @@ public class MigrationManager {
   static final String MIGRATION_121 =
       """
       ALTER TABLE "%1$s"."notifications"
-          ADD COLUMN IF NOT EXISTS "consumed_by_function_id" INTEGER;
+          ADD COLUMN IF NOT EXISTS "consumed_by_function_id" INT4;
       """;
 }
