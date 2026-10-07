@@ -557,14 +557,6 @@ public class RewindTest {
   }
 
   @Test
-  public void aStatusThisSdkDoesNotKnowCountsAsTerminal() throws Exception {
-    // A status a newer SDK wrote is not one of the active ones, so the rewind goes ahead.
-    var workflowId = start(() -> proxy.counter("future-status"));
-    DBUtils.setWorkflowState(dataSource, workflowId, "SOME_FUTURE_STATUS");
-    assertEquals(2, dbos.<Integer, RuntimeException>rewindWorkflow(workflowId, 0).getResult());
-  }
-
-  @Test
   public void clientRewind() throws Exception {
     var workflowId = start(() -> proxy.counter("client"));
     try (var client = pgContainer.dbosClient()) {

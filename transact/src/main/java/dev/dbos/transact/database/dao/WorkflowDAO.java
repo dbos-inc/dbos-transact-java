@@ -2157,7 +2157,7 @@ public class WorkflowDAO {
       SqlTransaction.run(
           txConn,
           conn -> {
-            var status = readRewindableStatus(conn, schema, workflowId);
+            var state = readRewindableState(conn, schema, workflowId);
 
             // Whether a key was published at or past the cut. %2$s is the key column the
             // correlated subquery compares against.
@@ -2277,7 +2277,7 @@ public class WorkflowDAO {
                 stmt.setString(i++, options.applicationVersion());
               }
               stmt.setString(i++, workflowId);
-              stmt.setString(i++, status);
+              stmt.setString(i++, state.name());
               if (stmt.executeUpdate() != 1) {
                 throw new IllegalStateException(
                     "Workflow %s changed status while being rewound; retry the rewind"
@@ -2299,42 +2299,23 @@ public class WorkflowDAO {
       throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
     }
     try (var conn = ctx.getConnection()) {
-      readRewindableStatus(conn, ctx.schema(), workflowId);
+      readRewindableState(conn, ctx.schema(), workflowId);
     }
   }
 
-  private static final Set<String> ACTIVE_STATUSES =
-      Set.of(
-          WorkflowState.PENDING.name(),
-          WorkflowState.ENQUEUED.name(),
-          WorkflowState.DELAYED.name());
-
-  private static String readRewindableStatus(Connection conn, String schema, String workflowId)
-      throws SQLException {
-    var sql =
-        """
-          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-    String status;
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        if (!rs.next()) {
-          throw new DBOSNonExistentWorkflowException(workflowId);
-        }
-        status = rs.getString("status");
-      }
+  private static WorkflowState readRewindableState(
+      Connection conn, String schema, String workflowId) throws SQLException {
+    var state = getWorkflowState(conn, schema, workflowId);
+    if (state == null) {
+      throw new DBOSNonExistentWorkflowException(workflowId);
     }
-    // Compared as strings, so a status this SDK does not know (one a newer SDK wrote) counts as
-    // terminal rather than failing the rewind.
-    if (ACTIVE_STATUSES.contains(status)) {
+    if (state.isActive()) {
       throw new IllegalStateException(
           ("Cannot rewind %s (%s): only a workflow in a terminal state can be rewound, so cancel it"
                   + " first")
-              .formatted(workflowId, status));
+              .formatted(workflowId, state));
     }
-    return status;
+    return state;
   }
 
   public static List<String> forkFromFailure(
