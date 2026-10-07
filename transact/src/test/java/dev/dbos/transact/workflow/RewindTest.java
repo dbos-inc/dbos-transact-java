@@ -268,6 +268,52 @@ public class RewindTest {
   }
 
   @Test
+  public void rewindKeepsAMessageConsumedWithoutAConsumingStep() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    WorkflowHandle<String, RuntimeException> handle =
+        dbos.startWorkflow(
+            () -> proxy.receiver("unmarked-consume"), new StartWorkflowOptions(workflowId));
+    dbos.send(workflowId, "a", "cmd");
+    dbos.send(workflowId, "b", "cmd");
+    assertEquals("ab:1", handle.getResult());
+    var firstRecv = stepIdOf(workflowId, "DBOS.recv", 0);
+    var secondRecv = stepIdOf(workflowId, "DBOS.recv", 1);
+
+    // A recv that predates migration 121 consumes a message without recording its step.
+    var sql =
+        """
+        UPDATE "%s".notifications SET consumed_by_function_id = NULL
+        WHERE destination_uuid = ? AND consumed_by_function_id = ?
+        """
+            .formatted(SCHEMA);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, secondRecv);
+      assertEquals(1, stmt.executeUpdate());
+    }
+
+    try (var q = pausedQueue("rewind_unmarked_gate")) {
+      dbos.rewindWorkflow(
+          workflowId, secondRecv, new RewindOptions().withQueue("rewind_unmarked_gate"));
+      // Nothing ties the second message to a step past the cut, so it stays consumed.
+      assertEquals(
+          List.of(new MailboxRow("a", true, firstRecv), new MailboxRow("b", true, null)),
+          mailbox(workflowId));
+      // The replayed recv cannot take it again and gets the next message instead.
+      dbos.send(workflowId, "c", "cmd");
+    }
+
+    assertEquals("ac:2", dbos.retrieveWorkflow(workflowId).getResult());
+    assertEquals(
+        List.of(
+            new MailboxRow("a", true, firstRecv),
+            new MailboxRow("b", true, null),
+            new MailboxRow("c", true, secondRecv)),
+        mailbox(workflowId));
+  }
+
+  @Test
   public void rewindUnpublishesEvents() throws Exception {
     var workflowId = start(() -> proxy.publisher("events"));
     assertEquals(
