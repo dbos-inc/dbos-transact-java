@@ -1334,6 +1334,11 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delayUntilEpochMs));
   }
 
+  /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */
+  public List<String> cancelTimedOutWorkflows(int limit) {
+    return dbRetry(() -> WorkflowDAO.cancelTimedOutWorkflows(ctx, limit));
+  }
+
   public void transitionDelayedWorkflows() {
     dbRetry(() -> WorkflowDAO.transitionDelayedWorkflows(ctx));
   }

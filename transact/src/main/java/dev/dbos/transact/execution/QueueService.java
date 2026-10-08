@@ -36,6 +36,8 @@ public class QueueService implements AutoCloseable {
   private static final double BACKOFF_GROWTH_FACTOR = 2.0;
   private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
+  private static final long TIMEOUT_SWEEP_INTERVAL_MS = 1_000;
+  private static final int TIMEOUT_SWEEP_BATCH_SIZE = 1_000;
   // One claim round trip plus dispatching what it claimed, with room for a slow database.
   private static final Duration PAUSE_DRAIN_TIMEOUT = Duration.ofSeconds(30);
   private static final long PAUSE_DRAIN_POLL_MS = 5;
@@ -66,10 +68,10 @@ public class QueueService implements AutoCloseable {
   }
 
   /**
-   * Stops claiming queued workflows and transitioning delayed ones, and waits for any pass that
-   * could still do either to finish. Once that wait completes, a row enqueued afterwards stays put
-   * until {@link #unpause()}; workflows already dispatched keep running. Only tests pause the
-   * service.
+   * Stops claiming queued workflows, transitioning delayed ones and cancelling timed-out ones, and
+   * waits for any pass that could still do any of these to finish. Once that wait completes, a row
+   * enqueued afterwards stays put until {@link #unpause()}; workflows already dispatched keep
+   * running. Only tests pause the service.
    *
    * <p>The wait is bounded. It lasts at most 30 seconds, and ends early if the thread is
    * interrupted (the interrupt is restored) or if {@link #unpause()} supersedes it. After a timeout
@@ -102,7 +104,7 @@ public class QueueService implements AutoCloseable {
   }
 
   /**
-   * Registers a pass that may claim or transition rows, unless the service is paused.
+   * Registers a pass that may claim, transition or cancel rows, unless the service is paused.
    *
    * @return false if paused, in which case the caller must do nothing and not call {@link
    *     #endPass()}
@@ -127,6 +129,8 @@ public class QueueService implements AutoCloseable {
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         this.listenQueues = listenQueues;
         scheduler.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(
+            this::cancelTimedOutWorkflows, 0, TIMEOUT_SWEEP_INTERVAL_MS, TimeUnit.MILLISECONDS);
         scheduler.scheduleAtFixedRate(
             this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
         for (var queue : staticQueues) {
@@ -470,6 +474,35 @@ public class QueueService implements AutoCloseable {
       systemDatabase.transitionDelayedWorkflows();
     } catch (Throwable e) {
       logger.error("Exception transitioning delayed workflows", e);
+    } finally {
+      endPass();
+    }
+  }
+
+  /**
+   * Cancels this application's workflows once they are past their deadline, whether they are
+   * running, waiting on a queue, delayed, or were left PENDING by an executor that died.
+   *
+   * <p>Every executor runs the sweep, and the database decides which rows have expired, on its own
+   * clock. A workflow running in this process is also cancelled by its own timer in {@link
+   * DBOSExecutor}, which measures from a reading of the same clock, so the two agree; the timer
+   * only makes the cancellation prompt between sweeps.
+   */
+  void cancelTimedOutWorkflows() {
+    if (!beginPass()) return;
+    try {
+      // A full batch may have left more behind, so sweep again at once rather than a second later.
+      List<String> cancelled;
+      do {
+        cancelled = systemDatabase.cancelTimedOutWorkflows(TIMEOUT_SWEEP_BATCH_SIZE);
+        for (var workflowId : cancelled) {
+          logger.info("Workflow {} timed out", workflowId);
+        }
+      } while (cancelled.size() == TIMEOUT_SWEEP_BATCH_SIZE && !paused.get() && !isStopped());
+    } catch (Throwable e) {
+      if (!isStopped()) {
+        logger.warn("Failed to cancel timed-out workflows", e);
+      }
     } finally {
       endPass();
     }

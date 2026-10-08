@@ -1218,6 +1218,62 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Cancels up to {@code limit} of this application's active workflows whose deadline has passed on
+   * the database's clock, oldest deadline first, whichever executor they belong to and whether or
+   * not anything is running them.
+   *
+   * <p>A row that a dequeue or a peer's sweep holds is skipped and left for the next sweep. So, on
+   * CockroachDB, is a row that a transaction which just committed wrote or locked, until its locks
+   * are cleaned up a moment later. The status values are literals rather than parameters, so the
+   * planner can match idx_workflow_status_deadline's predicate under a generic plan.
+   *
+   * @return the IDs of the workflows cancelled
+   */
+  public static List<String> cancelTimedOutWorkflows(DbContext ctx, int limit) throws SQLException {
+    var sql =
+        """
+          UPDATE "%1$s".workflow_status
+             SET status = ?,
+                 queue_name = NULL,
+                 deduplication_id = NULL,
+                 started_at_epoch_ms = NULL,
+                 updated_at = %2$s,
+                 completed_at = %2$s
+           WHERE workflow_uuid IN (
+               SELECT workflow_uuid FROM "%1$s".workflow_status
+                WHERE status IN ('%3$s', '%4$s', '%5$s')
+                  AND workflow_deadline_epoch_ms IS NOT NULL
+                  AND workflow_deadline_epoch_ms <= %2$s%6$s
+                ORDER BY workflow_deadline_epoch_ms
+                LIMIT ?
+                FOR UPDATE SKIP LOCKED)
+           RETURNING workflow_uuid
+        """
+            .formatted(
+                ctx.schema(),
+                SystemDatabase.NOW_EPOCH_MS,
+                WorkflowState.ENQUEUED.name(),
+                WorkflowState.PENDING.name(),
+                WorkflowState.DELAYED.name(),
+                ctx.andAppScope());
+
+    var cancelled = new ArrayList<String>();
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      int i = 1;
+      stmt.setString(i++, WorkflowState.CANCELLED.name());
+      i = ctx.bindAppScope(stmt, i);
+      stmt.setInt(i, limit);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          cancelled.add(rs.getString(1));
+        }
+      }
+    }
+    return cancelled;
+  }
+
   public static List<WorkflowStatus> listWorkflows(DbContext ctx, ListWorkflowsInput input)
       throws SQLException {
 
