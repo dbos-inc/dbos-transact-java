@@ -1198,22 +1198,23 @@ public class WorkflowDAO {
   public static void transitionDelayedWorkflows(DbContext ctx) throws SQLException {
     var sql =
         """
-          UPDATE "%s".workflow_status
+          UPDATE "%1$s".workflow_status
              SET status = ?,
-                 deduplication_id = CASE WHEN is_debounced THEN NULL ELSE deduplication_id END
+                 deduplication_id = CASE WHEN is_debounced THEN NULL ELSE deduplication_id END,
+                 updated_at = %2$s
            WHERE status = ?
-             AND delay_until_epoch_ms <= ?
+             AND delay_until_epoch_ms <= %2$s
         """
-                .formatted(ctx.schema())
+                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
             + ctx.andAppScope();
 
+    // Released against the database's clock, which every executor shares, rather than this JVM's:
+    // whichever executor runs the release, a delay ends at the same instant.
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
       stmt.setString(2, WorkflowState.DELAYED.name());
-      // This JVM's clock, the one delays are counted from, as in Python and TypeScript.
-      stmt.setLong(3, System.currentTimeMillis());
-      ctx.bindAppScope(stmt, 4);
+      ctx.bindAppScope(stmt, 3);
 
       stmt.executeUpdate();
     }
