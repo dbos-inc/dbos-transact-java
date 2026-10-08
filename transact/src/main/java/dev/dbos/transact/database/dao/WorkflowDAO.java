@@ -333,9 +333,10 @@ public class WorkflowDAO {
                   ELSE workflow_status.executor_id
               END,
               application_name = COALESCE(workflow_status.application_name, EXCLUDED.application_name)
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization, %2$s AS db_now
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization, %3$s AS db_now
         """
-            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
+            .formatted(
+                schema, SystemDatabase.NOW_EPOCH_MS, SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS);
 
     Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
@@ -679,7 +680,7 @@ public class WorkflowDAO {
             + ", "
             + OUTPUT_COLUMNS
             + ", serialization, "
-            + SystemDatabase.NOW_EPOCH_MS
+            + SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS
             + " AS db_now")
         + " FROM \"%s\".workflow_status ".formatted(schema)
         + inputsJoin(schema)

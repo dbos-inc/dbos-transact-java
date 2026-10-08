@@ -14,6 +14,12 @@ import java.util.concurrent.TimeUnit;
  * setting of this JVM's wall clock moves: a host whose clock is off waits exactly as long as one
  * whose clock is right.
  *
+ * <p>A reading is taken from {@link SystemDatabase#CLOCK_TIMESTAMP_EPOCH_MS}, the clock as the
+ * statement that returns it evaluates it, not from the transaction's start. So a statement that
+ * waited on a lock before returning does not hand back time the wait already used. What it misses
+ * is the trip back from the database, which makes a deadline measured from it fire a few
+ * milliseconds late, never early.
+ *
  * @param epochMs the database's clock when it was read, in epoch milliseconds
  * @param nanoTime {@link System#nanoTime()} when the reading arrived
  */

@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
@@ -76,6 +77,52 @@ public class TimeoutTest {
     var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     assertEquals("1234512345", handle.getResult());
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+  }
+
+  @Test
+  public void aStartWhoseInsertWaitsPastItsTimeoutIsCancelledAtDispatch() throws Exception {
+    assumeFalse(PgContainer.USE_COCKROACH_DB, "relies on Postgres waiting on the conflicting row");
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+
+    // Another transaction inserts the same workflow ID and holds it uncommitted, so the start's
+    // insert waits on it. The start's transaction, and with it the deadline, began before the wait.
+    var workflowId = "wf-insert-waits";
+    var blocker = dataSource.getConnection();
+    blocker.setAutoCommit(false);
+    try (var stmt =
+        blocker.prepareStatement(
+            """
+            INSERT INTO "dbos".workflow_status
+                (workflow_uuid, status, name, class_name, executor_id, recovery_attempts, priority)
+            VALUES (?, 'PENDING', 'blocker', 'com.example.Blocker', 'blocker', 0, 0)
+            """)) {
+      stmt.setString(1, workflowId);
+      stmt.executeUpdate();
+    }
+    var release =
+        new Thread(
+            () -> {
+              try (blocker) {
+                Thread.sleep(1_500);
+                blocker.rollback();
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+            });
+    release.start();
+
+    var handle =
+        dbos.startWorkflow(
+            () -> simpleService.workWithString("late"),
+            new StartWorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(1)));
+    release.join();
+
+    // The insert came back after the deadline, so the dispatch check cancels instead of running.
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
+    assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
   }
 
   @Test

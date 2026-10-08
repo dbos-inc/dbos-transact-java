@@ -831,6 +831,16 @@ public class SystemDatabase implements AutoCloseable {
    */
   public static final String NOW_EPOCH_MS = "(EXTRACT(epoch FROM now()) * 1000.0)::bigint";
 
+  /**
+   * The database's clock in epoch milliseconds as the statement evaluates it, for a {@link
+   * DatabaseTime} reading. Unlike {@link #NOW_EPOCH_MS}, which is the transaction's start, it
+   * includes the time the statement spent before returning, such as a wait on a lock, so a deadline
+   * measured from the reading is not pushed out by that wait. Never stamped into a row: rows take
+   * {@link #NOW_EPOCH_MS}, so one transaction's stamps agree.
+   */
+  public static final String CLOCK_TIMESTAMP_EPOCH_MS =
+      "(EXTRACT(epoch FROM clock_timestamp()) * 1000.0)::bigint";
+
   public static Instant toInstant(Long epochMs) {
     return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
   }
