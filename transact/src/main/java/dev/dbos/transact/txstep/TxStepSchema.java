@@ -29,7 +29,7 @@ public class TxStepSchema {
           """
           CREATE TABLE IF NOT EXISTS "%1$s".tx_step_outputs (
             workflow_id TEXT NOT NULL,
-            step_id INT NOT NULL,
+            step_id INT4 NOT NULL,
             output TEXT,
             error TEXT,
             serialization TEXT,
