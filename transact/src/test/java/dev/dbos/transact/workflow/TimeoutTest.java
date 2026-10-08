@@ -64,6 +64,21 @@ public class TimeoutTest {
   }
 
   @Test
+  public void aTimeoutCenturiesAwayStartsAndRuns() throws Exception {
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+
+    // Further away than a long count of nanoseconds reaches (about 292 years).
+    var options =
+        new StartWorkflowOptions("wf-far-timeout").withTimeout(Duration.ofDays(365L * 1_000));
+    var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    assertEquals("1234512345", handle.getResult());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+  }
+
+  @Test
   @SuppressWarnings("removal") // exercises the deprecated deadline option
   public void asyncTimedOut() {
 
