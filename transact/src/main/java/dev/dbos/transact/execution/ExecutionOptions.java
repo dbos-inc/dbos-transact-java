@@ -5,6 +5,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
@@ -35,6 +36,8 @@ public record ExecutionOptions(
     // fresh invocation. Its presence means the claim already wrote this workflow's status, so the
     // run must not insert one, and it carries the queue slot the run occupies.
     WorkflowStatus claimedStatus,
+    // The database's clock as the claimed row was read, which its deadline is measured against.
+    DatabaseTime claimedAt,
     // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
     String scheduleName,
     // Set only by the debouncers, which enqueue their workflow flagged as debounced, its delay
@@ -110,6 +113,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         null);
   }
@@ -117,6 +121,7 @@ public record ExecutionOptions(
   public ExecutionOptions(String workflowId) {
     this(
         workflowId,
+        null,
         null,
         null,
         null,
@@ -154,12 +159,16 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         null);
   }
 
-  /** The options for running a workflow from a row the queue has already claimed. */
-  public ExecutionOptions asClaimed(WorkflowStatus claimed) {
+  /**
+   * The options for running a workflow from a row the queue has already claimed, read when the
+   * database's clock read {@code readAt}.
+   */
+  public ExecutionOptions asClaimed(WorkflowStatus claimed, DatabaseTime readAt) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
@@ -176,6 +185,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         claimed,
+        readAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -199,6 +209,7 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         options.attributes(),
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -225,6 +236,7 @@ public record ExecutionOptions(
         options.authenticatedRoles(),
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -247,6 +259,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -269,6 +282,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -291,6 +305,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -313,6 +328,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -335,6 +351,7 @@ public record ExecutionOptions(
         authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -357,6 +374,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -379,6 +397,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -401,6 +420,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -423,6 +443,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -445,6 +466,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -468,6 +490,7 @@ public record ExecutionOptions(
         this.authenticatedRoles,
         this.attributes,
         this.claimedStatus,
+        this.claimedAt,
         this.scheduleName,
         true,
         debounceDeadline);
