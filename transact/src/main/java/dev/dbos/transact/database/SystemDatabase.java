@@ -815,15 +815,16 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * The database's clock in epoch milliseconds, for inlining into SQL. The workflow_status and
    * queues times that executors compare with each other are stamped and compared on this clock:
-   * created_at, updated_at, completed_at, started_at_epoch_ms, the rate-limit window, and a
-   * workflow's deadline. Executors sharing a system database would otherwise write those rows on as
-   * many clocks as there are hosts, and FIFO order, rate limits, timeouts and retention would all
-   * inherit the skew between them. Where an executor acts on a deadline itself, it measures the
-   * time left from a {@link DatabaseTime} reading with its monotonic clock.
+   * created_at, updated_at, completed_at, started_at_epoch_ms, the rate-limit window, a workflow's
+   * deadline, and the release of a delayed workflow. Executors sharing a system database would
+   * otherwise write those rows on as many clocks as there are hosts, and FIFO order, rate limits,
+   * timeouts, delays and retention would all inherit the skew between them. Where an executor acts
+   * on a deadline itself, it measures the time left from a {@link DatabaseTime} reading with its
+   * monotonic clock.
    *
    * <p>Times that only the writing executor reads stay on the JVM's clock: step timings and the
-   * durable sleep, recv and getEvent timeouts. So, for now, do delays and their promotion to
-   * ENQUEUED, and debounce deadlines.
+   * durable sleep, recv and getEvent timeouts. So, for now, do the end of a relative delay, which
+   * the enqueuing JVM resolves, and debounce deadlines.
    *
    * <p>now() is the transaction's start time on Postgres and CockroachDB alike, so every statement
    * in one transaction reads the same value. It matches the column defaults, which is what keeps a
