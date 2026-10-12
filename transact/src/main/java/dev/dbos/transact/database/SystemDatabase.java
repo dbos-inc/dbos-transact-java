@@ -814,21 +814,32 @@ public class SystemDatabase implements AutoCloseable {
 
   /**
    * The database's clock in epoch milliseconds, for inlining into SQL. The workflow_status and
-   * queues timestamps that executors compare with each other are stamped and compared on this
-   * clock: created_at, updated_at, completed_at, started_at_epoch_ms, and the rate-limit window.
-   * Executors sharing a system database would otherwise write those rows on as many clocks as there
-   * are hosts, and FIFO order, rate limits, delays and retention would all inherit the skew between
-   * them.
+   * queues times that executors compare with each other are stamped and compared on this clock:
+   * created_at, updated_at, completed_at, started_at_epoch_ms, the rate-limit window, and a
+   * workflow's deadline. Executors sharing a system database would otherwise write those rows on as
+   * many clocks as there are hosts, and FIFO order, rate limits, timeouts and retention would all
+   * inherit the skew between them. Where an executor acts on a deadline itself, it measures the
+   * time left from a {@link DatabaseTime} reading with its monotonic clock.
    *
-   * <p>Times that only the writing executor reads stay on the JVM's clock: step timings, durable
-   * sleep and timeout deadlines, and workflow deadlines, which the executor enforces against its
-   * own clock. So do delays and their promotion to ENQUEUED, as in Python and TypeScript.
+   * <p>Times that only the writing executor reads stay on the JVM's clock: step timings and the
+   * durable sleep, recv and getEvent timeouts. So, for now, do delays and their promotion to
+   * ENQUEUED, and debounce deadlines.
    *
    * <p>now() is the transaction's start time on Postgres and CockroachDB alike, so every statement
    * in one transaction reads the same value. It matches the column defaults, which is what keeps a
    * payload row's retention_timestamp from landing before its status row's created_at.
    */
   public static final String NOW_EPOCH_MS = "(EXTRACT(epoch FROM now()) * 1000.0)::bigint";
+
+  /**
+   * The database's clock in epoch milliseconds as the statement evaluates it, for a {@link
+   * DatabaseTime} reading. Unlike {@link #NOW_EPOCH_MS}, which is the transaction's start, it
+   * includes the time the statement spent before returning, such as a wait on a lock, so a deadline
+   * measured from the reading is not pushed out by that wait. Never stamped into a row: rows take
+   * {@link #NOW_EPOCH_MS}, so one transaction's stamps agree.
+   */
+  public static final String CLOCK_TIMESTAMP_EPOCH_MS =
+      "(EXTRACT(epoch FROM clock_timestamp()) * 1000.0)::bigint";
 
   public static Instant toInstant(Long epochMs) {
     return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
@@ -873,6 +884,9 @@ public class SystemDatabase implements AutoCloseable {
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
     Long delayUntilEpochMs = resolveDelayUntil(initStatus);
+    // The insert sets a directly started workflow's deadline on the database's clock, so a retry
+    // measures it from the attempt that commits. One that committed but lost its ack finds its own
+    // row, and keeps the deadline that row was written with.
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
@@ -935,6 +949,11 @@ public class SystemDatabase implements AutoCloseable {
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowStatus(ctx, workflowId));
+  }
+
+  /** A workflow's status, with the database's clock as it was read; null if there is none. */
+  public @Nullable TimedWorkflowStatus getTimedWorkflowStatus(String workflowId) {
+    return dbRetry(() -> WorkflowDAO.getTimedWorkflowStatus(ctx, workflowId));
   }
 
   public String getWorkflowSerialization(String workflowId) {
@@ -1323,6 +1342,11 @@ public class SystemDatabase implements AutoCloseable {
       throw new IllegalArgumentException("Unexpected WorkflowDelay value");
     }
     dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delayUntilEpochMs));
+  }
+
+  /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */
+  public List<String> cancelTimedOutWorkflows(int limit) {
+    return dbRetry(() -> WorkflowDAO.cancelTimedOutWorkflows(ctx, limit));
   }
 
   public void transitionDelayedWorkflows() {

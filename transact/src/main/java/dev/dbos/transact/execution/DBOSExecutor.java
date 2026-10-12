@@ -17,6 +17,7 @@ import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.TimedWorkflowStatus;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
@@ -2049,9 +2050,9 @@ public class DBOSExecutor implements AutoCloseable {
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
     logger.debug("executeWorkflowById {}", workflowId);
 
-    WorkflowStatus status;
+    TimedWorkflowStatus timedStatus;
     try {
-      status = systemDatabase.getWorkflowStatus(workflowId);
+      timedStatus = systemDatabase.getTimedWorkflowStatus(workflowId);
     } catch (Exception e) {
       logger.error("Failed to load workflow status for {}", workflowId, e);
       // The serialization column is likely fine — it's the inputs that failed to parse.
@@ -2069,10 +2070,11 @@ public class DBOSExecutor implements AutoCloseable {
       throw new RuntimeException("Failed to load workflow " + workflowId, e);
     }
 
-    if (status == null) {
+    if (timedStatus == null) {
       logger.error("Workflow not found {}", workflowId);
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
+    var status = timedStatus.status();
 
     // The claim wrote this executor's id. A row naming another has been re-enqueued and taken by a
     // peer since -- a recovery request naming a live executor does that -- so this dispatch no
@@ -2131,7 +2133,7 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(status.authenticatedUser())
             .withAssumedRole(status.assumedRole())
             .withAuthenticatedRoles(status.authenticatedRoles());
-    return executeWorkflow(workflow, inputs, options.asClaimed(status), null);
+    return executeWorkflow(workflow, inputs, options.asClaimed(status, timedStatus.readAt()), null);
   }
 
   // helper workflow execution methods
@@ -2297,7 +2299,11 @@ public class DBOSExecutor implements AutoCloseable {
       // PENDING, so it executes.
       initResult =
           new WorkflowInitResult(
-              claimed.status(), claimed.deadline(), true, claimed.serialization());
+              claimed.status(),
+              claimed.deadline(),
+              true,
+              claimed.serialization(),
+              options.claimedAt());
     } else {
       initResult =
           persistWorkflow(
@@ -2364,7 +2370,7 @@ public class DBOSExecutor implements AutoCloseable {
                 new DBOSContext(
                     workflowId,
                     parent,
-                    finalOptions.deadline(),
+                    initResult.deadline(),
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),
                     finalOptions.authenticatedRoles(),
@@ -2443,13 +2449,17 @@ public class DBOSExecutor implements AutoCloseable {
           return awaitWorkflowResult(workflowId, true);
         };
 
-    if (initResult.deadline() != null && Instant.now().isAfter(initResult.deadline())) {
+    // The deadline is on the database's clock, and so is the reading the row came back with, so
+    // the time left is measured from that reading on this JVM's monotonic clock.
+    var timeLeft =
+        initResult.deadline() == null ? null : initResult.clock().until(initResult.deadline());
+    if (timeLeft != null && (timeLeft.isNegative() || timeLeft.isZero())) {
       systemDatabase.cancelWorkflows(List.of(workflowId), false);
       return retrieveWorkflow(workflowId);
     }
 
     var future = CompletableFuture.supplyAsync(task, executorService);
-    if (initResult.deadline() != null) {
+    if (timeLeft != null) {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
@@ -2457,7 +2467,7 @@ public class DBOSExecutor implements AutoCloseable {
               future.cancel(true);
             }
           },
-          Math.max(0, Duration.between(Instant.now(), initResult.deadline()).toMillis()),
+          timeLeft.toMillis(),
           TimeUnit.MILLISECONDS);
     }
 

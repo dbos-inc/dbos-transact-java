@@ -26,7 +26,7 @@ public class MigrationManager {
   private static final Set<Integer> ONLINE_MIGRATIONS =
       Set.of(
           22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114, 115, 116,
-          117, 118, 119, 120);
+          117, 118, 119, 120, 122);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -578,7 +578,8 @@ public class MigrationManager {
             migration118(isCockroach),
             migration119(isCockroach),
             migration120(isCockroach),
-            MIGRATION_121));
+            MIGRATION_121,
+            migration122(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1740,4 +1741,15 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."notifications"
           ADD COLUMN IF NOT EXISTS "consumed_by_function_id" INT4;
       """;
+
+  // Migration 122: index the deadlines of active workflows, so the workflow-timeout sweep reads
+  // only the ones that have expired.
+  static String migration122(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_deadline\""
+        + " ON \"%1$s\".\"workflow_status\" (\"workflow_deadline_epoch_ms\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING', 'DELAYED')"
+        + " AND \"workflow_deadline_epoch_ms\" IS NOT NULL";
+  }
 }

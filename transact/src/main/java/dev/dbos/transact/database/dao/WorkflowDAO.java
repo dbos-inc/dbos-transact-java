@@ -1,12 +1,14 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.TimedWorkflowStatus;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSConflictingWorkflowException;
@@ -214,12 +216,14 @@ public class WorkflowDAO {
                 initStatus.workflowId(),
                 Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS));
           }
-          return new WorkflowInitResult(state, resRow.deadline(), false, resRow.serialization());
+          return new WorkflowInitResult(
+              state, resRow.deadline(), false, resRow.serialization(), resRow.clock());
         }
 
         shouldCommit = true;
 
-        return new WorkflowInitResult(state, resRow.deadline(), true, resRow.serialization());
+        return new WorkflowInitResult(
+            state, resRow.deadline(), true, resRow.serialization(), resRow.clock());
 
       } finally {
         if (shouldCommit) {
@@ -270,15 +274,19 @@ public class WorkflowDAO {
       String queueName,
       Instant deadline,
       String serialization,
-      String ownerXid) {}
+      String ownerXid,
+      DatabaseTime clock) {}
 
   /**
    * Insert into the workflow_status table
    *
+   * <p>A workflow started directly with a timeout and no deadline gets its deadline that long after
+   * the insert, on the database's clock. A queued workflow's timeout starts at its claim instead.
+   *
    * @param status WorkflowStatusInternal holds the data for a workflow_status row
    * @param delayUntilEpochMs the absolute end of the status's delay, resolved by the caller, or
    *     null when it has none
-   * @return InsertWorkflowResult some of the column inserted
+   * @return InsertWorkflowResult some of the column inserted, and the database's clock
    * @throws SQLException
    */
   static InsertWorkflowResult insertWorkflowStatus(
@@ -311,7 +319,7 @@ public class WorkflowDAO {
             ?, ?, ?,
             ?, ?, ?,
             %2$s, %2$s, ?,
-            ?, ?,
+            ?, COALESCE(?::bigint, %2$s + ?::bigint),
             ?, ?, ?, ?::jsonb, ?,
             ?, ?, ?
           )
@@ -325,9 +333,10 @@ public class WorkflowDAO {
                   ELSE workflow_status.executor_id
               END,
               application_name = COALESCE(workflow_status.application_name, EXCLUDED.application_name)
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization, %3$s AS db_now
         """
-            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
+            .formatted(
+                schema, SystemDatabase.NOW_EPOCH_MS, SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS);
 
     Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
@@ -343,6 +352,9 @@ public class WorkflowDAO {
             ? JsonUtility.toJson(status.authenticatedRoles())
             : null;
     var attributesJson = attributesToJson(status.attributes());
+    // Only a directly started workflow's timeout runs from the insert.
+    Long deadlineTimeoutMs =
+        status.queueName() == null && status.deadlineEpochMs() == null ? status.timeoutMs() : null;
     try (var stmt = conn.prepareStatement(insertSQL)) {
 
       stmt.setString(1, status.workflowId());
@@ -367,17 +379,18 @@ public class WorkflowDAO {
 
       stmt.setInt(17, recoveryAttempts);
 
-      stmt.setObject(18, status.timeoutMs());
-      stmt.setObject(19, status.deadlineEpochMs());
-      stmt.setString(20, status.parentWorkflowId());
+      stmt.setObject(18, status.timeoutMs(), Types.BIGINT);
+      stmt.setObject(19, status.deadlineEpochMs(), Types.BIGINT);
+      stmt.setObject(20, deadlineTimeoutMs, Types.BIGINT);
+      stmt.setString(21, status.parentWorkflowId());
 
-      stmt.setObject(21, ownerXid);
-      stmt.setString(22, status.serialization());
-      stmt.setString(23, attributesJson);
-      stmt.setString(24, status.scheduleName());
-      stmt.setString(25, appName);
-      stmt.setBoolean(26, status.isDebounced());
-      stmt.setObject(27, status.debounceDeadlineEpochMs(), Types.BIGINT);
+      stmt.setObject(22, ownerXid);
+      stmt.setString(23, status.serialization());
+      stmt.setString(24, attributesJson);
+      stmt.setString(25, status.scheduleName());
+      stmt.setString(26, appName);
+      stmt.setBoolean(27, status.isDebounced());
+      stmt.setObject(28, status.debounceDeadlineEpochMs(), Types.BIGINT);
 
       InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
@@ -392,7 +405,8 @@ public class WorkflowDAO {
                   rs.getString("queue_name"),
                   SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
                   rs.getString("serialization"),
-                  rs.getString("owner_xid"));
+                  rs.getString("owner_xid"),
+                  DatabaseTime.read(rs, "db_now"));
         } else {
           throw new RuntimeException(
               "Attempt to insert workflow " + status.workflowId() + " failed: No rows returned.");
@@ -620,6 +634,20 @@ public class WorkflowDAO {
   public static WorkflowStatus getWorkflowStatus(
       Connection conn, String schema, DBOSSerializer serializer, String workflowId)
       throws SQLException {
+    var timedStatus = getTimedWorkflowStatus(conn, schema, serializer, workflowId);
+    return timedStatus == null ? null : timedStatus.status();
+  }
+
+  public static @Nullable TimedWorkflowStatus getTimedWorkflowStatus(
+      DbContext ctx, String workflowId) throws SQLException {
+    try (var conn = ctx.getConnection()) {
+      return getTimedWorkflowStatus(conn, ctx.schema(), ctx.serializer(), workflowId);
+    }
+  }
+
+  private static @Nullable TimedWorkflowStatus getTimedWorkflowStatus(
+      Connection conn, String schema, DBOSSerializer serializer, String workflowId)
+      throws SQLException {
     if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
@@ -628,7 +656,11 @@ public class WorkflowDAO {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return resultsToWorkflowStatus(rs, true, true, serializer);
+          // Read the clock before deserializing the row, so the reading isn't stamped late by
+          // the time that takes.
+          var readAt = DatabaseTime.read(rs, "db_now");
+          return new TimedWorkflowStatus(
+              resultsToWorkflowStatus(rs, true, true, serializer), readAt);
         }
       }
     }
@@ -636,7 +668,10 @@ public class WorkflowDAO {
     return null;
   }
 
-  /** One workflow's status row with its payloads, read through both payload shapes. */
+  /**
+   * One workflow's status row with its payloads, read through both payload shapes, and the
+   * database's clock as {@code db_now}.
+   */
   private static String workflowStatusByIdSql(String schema) {
     return ("SELECT "
             + WORKFLOW_STATUS_COLUMNS
@@ -644,7 +679,9 @@ public class WorkflowDAO {
             + INPUTS_COLUMN
             + ", "
             + OUTPUT_COLUMNS
-            + ", serialization")
+            + ", serialization, "
+            + SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS
+            + " AS db_now")
         + " FROM \"%s\".workflow_status ".formatted(schema)
         + inputsJoin(schema)
         + " "
@@ -1180,6 +1217,62 @@ public class WorkflowDAO {
 
       stmt.executeUpdate();
     }
+  }
+
+  /**
+   * Cancels up to {@code limit} of this application's active workflows whose deadline has passed on
+   * the database's clock, oldest deadline first, whichever executor they belong to and whether or
+   * not anything is running them.
+   *
+   * <p>A row that a dequeue or a peer's sweep holds is skipped and left for the next sweep. So, on
+   * CockroachDB, is a row that a transaction which just committed wrote or locked, until its locks
+   * are cleaned up a moment later. The status values are literals rather than parameters, so the
+   * planner can match idx_workflow_status_deadline's predicate under a generic plan.
+   *
+   * @return the IDs of the workflows cancelled
+   */
+  public static List<String> cancelTimedOutWorkflows(DbContext ctx, int limit) throws SQLException {
+    var sql =
+        """
+          UPDATE "%1$s".workflow_status
+             SET status = ?,
+                 queue_name = NULL,
+                 deduplication_id = NULL,
+                 started_at_epoch_ms = NULL,
+                 updated_at = %2$s,
+                 completed_at = %2$s
+           WHERE workflow_uuid IN (
+               SELECT workflow_uuid FROM "%1$s".workflow_status
+                WHERE status IN ('%3$s', '%4$s', '%5$s')
+                  AND workflow_deadline_epoch_ms IS NOT NULL
+                  AND workflow_deadline_epoch_ms <= %2$s%6$s
+                ORDER BY workflow_deadline_epoch_ms
+                LIMIT ?
+                FOR UPDATE SKIP LOCKED)
+           RETURNING workflow_uuid
+        """
+            .formatted(
+                ctx.schema(),
+                SystemDatabase.NOW_EPOCH_MS,
+                WorkflowState.ENQUEUED.name(),
+                WorkflowState.PENDING.name(),
+                WorkflowState.DELAYED.name(),
+                ctx.andAppScope());
+
+    var cancelled = new ArrayList<String>();
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      int i = 1;
+      stmt.setString(i++, WorkflowState.CANCELLED.name());
+      i = ctx.bindAppScope(stmt, i);
+      stmt.setInt(i, limit);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          cancelled.add(rs.getString(1));
+        }
+      }
+    }
+    return cancelled;
   }
 
   public static List<WorkflowStatus> listWorkflows(DbContext ctx, ListWorkflowsInput input)

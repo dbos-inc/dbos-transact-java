@@ -192,8 +192,9 @@ public class DBOSContext {
       return new TimeoutAndDeadline(null, nextDeadline);
     }
     if (nextTimeout instanceof Timeout.Explicit e) {
-      var childDeadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-      return new TimeoutAndDeadline(e.value(), childDeadline);
+      // No deadline yet: the system database sets it from the timeout on its own clock, at the
+      // insert for a workflow started directly and at the claim for a queued one.
+      return new TimeoutAndDeadline(e.value(), null);
     }
     if (nextTimeout instanceof Timeout.None) {
       return new TimeoutAndDeadline(null, null);

@@ -220,11 +220,10 @@ public class QueuesDAO {
                 -- Left unclaimed, the row is PENDING and still visible to every peer's
                 -- recovery and global-timeout sweeps until it starts executing here.
                 application_name = COALESCE(application_name, ?),
-                -- The JVM's clock, not the database's: this executor enforces the deadline
-                -- against its own clock, as it does a directly started workflow's.
+                -- The timeout runs from the claim, on the database's clock like every deadline.
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN ? + workflow_timeout_ms
+                    THEN %2$s + workflow_timeout_ms
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE workflow_uuid = ?
@@ -237,7 +236,6 @@ public class QueuesDAO {
 
         List<String> updatedWorkflowIds = new ArrayList<>();
         try (var ps = connection.prepareStatement(updateQuery)) {
-          var now = System.currentTimeMillis();
           // No rate-limit cutoff here: the candidate SELECT above is already bounded by the
           // limiter's remaining slots.
           for (var id : dequeuedWorkflowIds) {
@@ -249,10 +247,9 @@ public class QueuesDAO {
             // own claims and hand back the full limit every poll.
             ps.setBoolean(4, limits.rateLimit() != null || limits.partitionRateLimit() != null);
             ps.setString(5, ctx.appName());
-            ps.setLong(6, now);
-            ps.setString(7, id);
-            ps.setString(8, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 9);
+            ps.setString(6, id);
+            ps.setString(7, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 8);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
@@ -444,10 +441,10 @@ public class QueuesDAO {
                 recovery_attempts = recovery_attempts + 1,
                 -- Claim it as it is taken, as the per-partition dequeue does.
                 application_name = COALESCE(application_name, ?),
-                -- The JVM's clock, as in the per-partition dequeue.
+                -- The database's clock, as in the per-partition dequeue.
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN ? + workflow_timeout_ms
+                    THEN %2$s + workflow_timeout_ms
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE %3$s
@@ -461,12 +458,11 @@ public class QueuesDAO {
           ps.setString(2, appVersion);
           ps.setString(3, executorId);
           ps.setString(4, ctx.appName());
-          ps.setLong(5, System.currentTimeMillis());
-          ps.setArray(6, connection.createArrayOf("text", claimIds.toArray()));
-          ps.setString(7, WorkflowState.ENQUEUED.name());
-          ps.setString(8, queue.name());
-          ps.setString(9, appVersion);
-          ctx.bindAppScope(ps, 10);
+          ps.setArray(5, connection.createArrayOf("text", claimIds.toArray()));
+          ps.setString(6, WorkflowState.ENQUEUED.name());
+          ps.setString(7, queue.name());
+          ps.setString(8, appVersion);
+          ctx.bindAppScope(ps, 9);
           try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
               flippedIds.add(rs.getString(1));

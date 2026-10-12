@@ -595,7 +595,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(121, latest, "The shared history currently ends at migration 121");
+    assertEquals(122, latest, "The shared history currently ends at migration 122");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -635,6 +635,7 @@ class MigrationManagerTest {
       assertIndexExists(conn, "idx_workflow_topic");
 
       assertColumnExists(conn, "notifications", "consumed_by_function_id");
+      assertIndexExists(conn, "idx_workflow_status_deadline");
 
       for (var index : REBUILT_INDEXES) {
         assertIndexExists(conn, index[1]);
@@ -716,9 +717,39 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(dbosConfig);
 
     try (var conn = dataSource.getConnection()) {
-      assertEquals(121, getVersion(conn));
+      assertEquals(migrations.size(), getVersion(conn));
       assertColumnExists(conn, "notifications", "consumed_by_function_id");
     }
+  }
+
+  @Test
+  void testMigration122_IndexesActiveDeadlines() throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var dbosConfig = pgContainer.dbosConfig();
+    var useListenNotify = !PgContainer.USE_COCKROACH_DB;
+    var migrations =
+        MigrationManager.getMigrations(schema, useListenNotify, PgContainer.USE_COCKROACH_DB);
+
+    // A database last migrated by an SDK that stopped at 121.
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.ensureDbosSchema(conn, schema);
+      MigrationManager.ensureMigrationTable(conn, schema);
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 121));
+      assertEquals(121, getVersion(conn));
+      assertIndexAbsent(conn, "idx_workflow_status_deadline");
+    }
+
+    MigrationManager.runMigrations(dbosConfig);
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(122, getVersion(conn));
+      assertIndexExists(conn, "idx_workflow_status_deadline");
+    }
+
+    // Re-running is a no-op.
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
   }
 
   // application_name is the one non-key column: stored in the index, after the key columns.
