@@ -1524,7 +1524,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   // A missing row normally means the workflow just hasn't been inserted yet (an unchecked
   // retrieve, or a debounced workflow whose row appears only after the debounce period), so
-  // polling is correct. Callers that know the row must already exist (a run parking on an
+  // polling is correct. Callers that know the row must already exist (a run waiting for an
   // outcome it just failed to write) pass failIfMissing to fail fast instead of polling
   // forever.
   private <T, E extends Exception> T awaitWorkflowResult(String workflowId, boolean failIfMissing)
@@ -2360,8 +2360,8 @@ public class DBOSExecutor implements AutoCloseable {
               finalOptions.claimedStatus() != null
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
-          // The warning to park under, set by whichever site found that this run does not
-          // own the workflow's outcome.
+          // The warning logged when this run stops to adopt the recorded outcome, set by
+          // whichever site found that this run does not own the workflow's outcome.
           String pendingAdopt;
           try (var active = new ActiveWorkflowGuard(workflowId, bucket)) {
             logger.debug(
@@ -2435,7 +2435,7 @@ public class DBOSExecutor implements AutoCloseable {
               // The run observed its own cancellation (checkWorkflow only throws this after
               // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
               // the row, and adopt the recorded outcome: normally the row is still CANCELLED
-              // and the park throws DBOSAwaitedWorkflowCancelledException, but a concurrent
+              // and the wait throws DBOSAwaitedWorkflowCancelledException, but a concurrent
               // resume may have taken the workflow back, in which case the recorded outcome
               // is the truth.
               pendingAdopt =
@@ -2456,10 +2456,10 @@ public class DBOSExecutor implements AutoCloseable {
           }
 
           // Reached only when a refusal above set pendingAdopt: this run does not own the
-          // workflow's outcome. Park the execution and deliver the recorded outcome through
-          // this run's own future. The row is known to have existed (this run inserted or
-          // read it), so failIfMissing: a missing row means it was deleted, and the park
-          // surfaces DBOSNonExistentWorkflowException instead of polling forever.
+          // workflow's outcome. Stop executing it, wait for the recorded outcome, and deliver
+          // that through this run's own future. The row is known to have existed (this run
+          // inserted or read it), so failIfMissing: a missing row means it was deleted, and the
+          // wait surfaces DBOSNonExistentWorkflowException instead of polling forever.
           logger.warn("{} workflowId {}", pendingAdopt, workflowId);
           return awaitWorkflowResult(workflowId, true);
         };
