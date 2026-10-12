@@ -1780,8 +1780,9 @@ public class DBOSExecutor implements AutoCloseable {
   private static boolean isConflictFor(Throwable e, String workflowId) {
     var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
     for (Throwable t = e; t != null && seen.add(t); t = t.getCause()) {
-      if (t instanceof DBOSWorkflowExecutionConflictException conflict) {
-        return workflowId.equals(conflict.workflowId());
+      if (t instanceof DBOSWorkflowExecutionConflictException conflict
+          && workflowId.equals(conflict.workflowId())) {
+        return true;
       }
     }
     return false;
