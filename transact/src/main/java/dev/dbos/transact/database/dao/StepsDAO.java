@@ -52,16 +52,28 @@ public class StepsDAO {
       throws SQLException {
 
     String schema = Objects.requireNonNull(ctx.schema());
+    // On a conflict, the update applies only when the row already there is the one this call is
+    // writing: then it is this call's own, committed by an attempt whose acknowledgement was lost,
+    // and RETURNING hands it back. A row that differs was written by another execution of the
+    // workflow; the update leaves it untouched and RETURNING comes back empty.
     String sql =
         """
-          INSERT INTO "%s".operation_outputs
+          INSERT INTO "%s".operation_outputs AS oo
             (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, application_name, serialization)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT DO NOTHING RETURNING completed_at_epoch_ms
+          ON CONFLICT (workflow_uuid, function_id)
+            DO UPDATE SET completed_at_epoch_ms = oo.completed_at_epoch_ms
+            WHERE oo.function_name IS NOT DISTINCT FROM EXCLUDED.function_name
+              AND oo.output IS NOT DISTINCT FROM EXCLUDED.output
+              AND oo.error IS NOT DISTINCT FROM EXCLUDED.error
+              AND oo.child_workflow_id IS NOT DISTINCT FROM EXCLUDED.child_workflow_id
+              AND oo.started_at_epoch_ms IS NOT DISTINCT FROM EXCLUDED.started_at_epoch_ms
+              AND oo.completed_at_epoch_ms IS NOT DISTINCT FROM EXCLUDED.completed_at_epoch_ms
+              AND oo.serialization IS NOT DISTINCT FROM EXCLUDED.serialization
+          RETURNING oo.function_id
         """
             .formatted(schema);
 
-    boolean won = false;
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, result.workflowId());
       stmt.setInt(2, result.stepId());
@@ -91,32 +103,18 @@ public class StepsDAO {
       stmt.setString(10, result.serialization());
 
       try (ResultSet rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          won = true;
-          if (endTimeEpochMs != null) {
-            long completedAt = rs.getLong("completed_at_epoch_ms");
-            if (completedAt != endTimeEpochMs) {
-              logger.warn(
-                  String.format(
-                      "Step output for %s:%d-%s was already recorded",
-                      result.workflowId(), result.stepId(), result.stepName()));
-              throw new DBOSWorkflowExecutionConflictException(result.workflowId());
-            }
-          }
+        if (!rs.next()) {
+          logger.warn(
+              "Step output for {}:{}-{} was already recorded by another execution",
+              result.workflowId(),
+              result.stepId(),
+              result.stepName());
+          throw new DBOSWorkflowExecutionConflictException(result.workflowId());
         }
-      }
-    } catch (SQLException e) {
-      logger.debug("recordStepResultTxn error", e);
-      if ("23505".equals(e.getSQLState())) {
-        throw new DBOSWorkflowExecutionConflictException(result.workflowId());
-      } else {
-        throw e;
       }
     }
 
-    if (won) {
-      WorkflowDAO.restampExecutorId(conn, schema, result.workflowId(), ctx.executorId());
-    }
+    WorkflowDAO.restampExecutorId(conn, schema, result.workflowId(), ctx.executorId());
   }
 
   static StepResult checkStepResult(
@@ -397,23 +395,22 @@ public class StepsDAO {
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
 
       var endTime = System.currentTimeMillis() + duration.toMillis();
-      try {
-        var serializedValue =
-            SerializationUtil.serializeValue(
-                endTime, serializer != null ? serializer.name() : null, serializer);
-        StepResult output =
-            new StepResult(
-                workflowUuid,
-                functionId,
-                functionName,
-                serializedValue.serializedValue(),
-                null,
-                null,
-                serializedValue.serialization());
-        recordStepResult(ctx, output, startTime, (long) endTime);
-      } catch (DBOSWorkflowExecutionConflictException e) {
-        logger.error("Error recording sleep", e);
-      }
+      var serializedValue =
+          SerializationUtil.serializeValue(
+              endTime, serializer != null ? serializer.name() : null, serializer);
+      StepResult output =
+          new StepResult(
+              workflowUuid,
+              functionId,
+              functionName,
+              serializedValue.serializedValue(),
+              null,
+              null,
+              serializedValue.serialization());
+      // A conflict means another execution recorded this sleep first. It propagates, so this
+      // run stops and adopts the workflow's recorded outcome rather than sleeping to a wake
+      // time the workflow never recorded.
+      recordStepResult(ctx, output, startTime, (long) endTime);
       return Instant.ofEpochMilli(endTime);
     }
   }

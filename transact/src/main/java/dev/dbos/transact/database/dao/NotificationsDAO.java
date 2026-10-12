@@ -235,9 +235,10 @@ public class NotificationsDAO {
     if (result != null) {
       logger.debug(
           "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
-      if (result.output() != null) {
-        return result.toResult(ctx.serializer());
-      }
+      // A NULL output is a recv that claimed no message (a peer took it) and returned null.
+      // Replay that rather than receiving again: a second run would record a different result
+      // for this step.
+      return result.output() != null ? result.toResult(ctx.serializer()) : null;
     }
 
     logger.debug(

@@ -71,6 +71,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -1773,6 +1775,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  // Whether a conflict on this workflow is anywhere in the cause chain: workflow code may have
+  // caught it and rethrown it wrapped, in a checked exception as well as an unchecked one.
+  private static boolean isConflictFor(Throwable e, String workflowId) {
+    var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+    for (Throwable t = e; t != null && seen.add(t); t = t.getCause()) {
+      if (t instanceof DBOSWorkflowExecutionConflictException conflict) {
+        return workflowId.equals(conflict.workflowId());
+      }
+    }
+    return false;
+  }
+
   // Workflow Execution Methods
 
   // helper method to validate that @Workflow methods are not invoked from the startWorkflow lambda
@@ -2396,12 +2410,6 @@ public class DBOSExecutor implements AutoCloseable {
             // may have been cancelled, dead-lettered, completed by a concurrent execution,
             // or handed back to the queue by a resume.
             pendingAdopt = notRecordedWarning;
-          } catch (DBOSWorkflowExecutionConflictException e) {
-            // Another execution owns this workflow (a concurrent run recorded a step
-            // checkpoint, or the workflow is already active on this executor). Never
-            // persist the conflict: park the execution instead.
-            pendingAdopt =
-                "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
           } catch (Exception e) {
             Throwable actual = e;
 
@@ -2415,7 +2423,14 @@ public class DBOSExecutor implements AutoCloseable {
               }
             }
 
-            if (actual instanceof DBOSWorkflowCancelledException cancelled
+            if (isConflictFor(e, workflowId)) {
+              // Another execution owns this workflow (a concurrent run recorded a step
+              // checkpoint, or the workflow is already active on this executor). Never persist
+              // the conflict, even when workflow code caught it and rethrew it wrapped: stop
+              // this run and adopt the outcome the workflow records instead.
+              pendingAdopt =
+                  "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
+            } else if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
               // The run observed its own cancellation (checkWorkflow only throws this after
               // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
