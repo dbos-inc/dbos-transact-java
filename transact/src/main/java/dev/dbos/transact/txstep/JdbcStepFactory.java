@@ -77,6 +77,11 @@ public class JdbcStepFactory extends PostgresStepFactory {
   }
 
   @Override
+  protected DataSource dataSource() {
+    return dataSource;
+  }
+
+  @Override
   protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(TxStepSchema.checkSql(schema))) {
@@ -142,7 +147,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
                 c -> {
                   var result = callback.execute(c);
                   recordOutput(c, wfId, stepId, result);
-                  checkStillOwned(wfId);
+                  checkStillOwned(wfId, c);
                   return result;
                 });
           } catch (StepConflictException e) {

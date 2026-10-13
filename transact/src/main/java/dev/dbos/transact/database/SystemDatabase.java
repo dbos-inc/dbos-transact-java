@@ -1021,6 +1021,39 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /** The token of the execution that owns the workflow, read without a lock; null if none. */
+  /**
+   * Whether {@code dataSource} draws from the pool this system database uses, seen through wrappers
+   * such as a transaction-aware proxy. A caller holding a connection from that pool must not take a
+   * second one: concurrent callers doing so can exhaust the pool waiting on each other.
+   */
+  public boolean sharesPool(DataSource dataSource) {
+    return poolOf(dataSource) == poolOf(ctx.dataSource());
+  }
+
+  private static DataSource poolOf(DataSource dataSource) {
+    try {
+      if (dataSource.isWrapperFor(HikariDataSource.class)) {
+        return dataSource.unwrap(HikariDataSource.class);
+      }
+    } catch (SQLException e) {
+      // Not unwrappable: compare the object itself.
+    }
+    return dataSource;
+  }
+
+  /**
+   * {@link WorkflowDAO#checkOwner} on {@code conn}, inside its caller's transaction, for a caller
+   * whose connection comes from this system database's pool. Not retried: a failure rolls back the
+   * caller's transaction, and retrying it is the caller's.
+   */
+  public void checkOwner(Connection conn, String workflowId, String ownerXid) {
+    try {
+      WorkflowDAO.checkOwner(conn, ctx.schema(), workflowId, ownerXid);
+    } catch (SQLException e) {
+      throw new DBOSSystemDatabaseException(e);
+    }
+  }
+
   public @Nullable String getWorkflowOwner(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowOwner(ctx, workflowId));
   }

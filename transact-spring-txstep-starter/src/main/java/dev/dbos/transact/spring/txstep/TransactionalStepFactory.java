@@ -234,7 +234,7 @@ public class TransactionalStepFactory {
               Connection conn = DataSourceUtils.getConnection(dataSource);
               recordOutput(conn, workflowId, stepId, result);
               // Before committing, so an execution that has lost its workflow commits nothing.
-              PostgresStepFactory.checkStillOwned(dbos, workflowId);
+              PostgresStepFactory.checkStillOwned(dbos, workflowId, dataSource, conn);
               txManager.commit(status);
               return result;
             } catch (PostgresStepFactory.StepConflictException conflict) {

@@ -14,6 +14,8 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
+import javax.sql.DataSource;
+
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -110,14 +112,24 @@ public abstract class PostgresStepFactory {
       String workflowId, int stepId, String stepName);
 
   /**
+   * The pool this factory's connections come from, when the factory can tell; null otherwise. When
+   * it is the pool the system database uses, the ownership check runs on the step's own connection
+   * instead of taking a second one from that pool.
+   */
+  protected @Nullable DataSource dataSource() {
+    return null;
+  }
+
+  /**
    * Throws {@link DBOSWorkflowExecutionConflictException} unless this step's workflow execution
-   * still owns the workflow. Subclasses call it inside the step's transaction, after recording the
-   * result and before committing, so an execution that has lost its workflow commits nothing.
+   * still owns the workflow. Subclasses call it inside the step's transaction, on its connection,
+   * after recording the result and before committing, so an execution that has lost its workflow
+   * commits nothing.
    *
    * @throws OwnershipUnknownException if ownership could not be checked at all
    */
-  protected void checkStillOwned(String workflowId) {
-    checkStillOwned(dbos, workflowId);
+  protected void checkStillOwned(String workflowId, Connection conn) {
+    checkStillOwned(dbos, workflowId, dataSource(), conn);
   }
 
   /**
@@ -132,14 +144,17 @@ public abstract class PostgresStepFactory {
   }
 
   /**
-   * As {@link #checkStillOwned(String)}, for a factory that does not extend this class.
+   * As {@link #checkStillOwned(String, Connection)}, for a factory that does not extend this class.
    *
+   * @param dataSource the pool {@code conn} came from, if known
+   * @param conn the step's connection, or null outside its transaction
    * @throws DBOSWorkflowExecutionConflictException if the execution no longer owns the workflow
    * @throws OwnershipUnknownException if ownership could not be checked at all
    */
-  public static void checkStillOwned(DBOS dbos, String workflowId) {
+  public static void checkStillOwned(
+      DBOS dbos, String workflowId, @Nullable DataSource dataSource, @Nullable Connection conn) {
     try {
-      dbos.integration().checkStillOwned(workflowId);
+      dbos.integration().checkStillOwned(workflowId, dataSource, conn);
     } catch (DBOSWorkflowExecutionConflictException e) {
       throw e;
     } catch (RuntimeException e) {
@@ -176,7 +191,7 @@ public abstract class PostgresStepFactory {
    */
   public static boolean mayRecordFailure(DBOS dbos, String workflowId) {
     try {
-      checkStillOwned(dbos, workflowId);
+      checkStillOwned(dbos, workflowId, null, null);
       return true;
     } catch (DBOSWorkflowExecutionConflictException | OwnershipUnknownException e) {
       return false;

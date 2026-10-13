@@ -67,6 +67,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -97,6 +98,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import javax.sql.DataSource;
 
 import com.cronutils.model.time.ExecutionTime;
 import org.jspecify.annotations.NonNull;
@@ -1818,15 +1821,23 @@ public class DBOSExecutor implements AutoCloseable {
    * Throws {@link DBOSWorkflowExecutionConflictException} unless the execution running on this
    * thread still owns {@code workflowId}. Does nothing outside that workflow's execution.
    *
-   * <p>For a transactional step on a database other than the system database, which cannot hold the
-   * system database's lock across its own commit, so the read takes none. Ownership can still move
-   * between this read and the commit; the step's result is then the owner's to replay, which holds
-   * because the step must be deterministic.
+   * <p>For a transactional step, called inside its transaction on {@code conn}, drawn from {@code
+   * dataSource}. When that is the system database's own pool, the check runs on {@code conn} and
+   * locks the workflow's row until the step commits: taking a second connection from the pool while
+   * holding one could exhaust it. Otherwise the read takes a system database connection and no
+   * lock, as the step's database cannot hold the system database's lock across its own commit.
+   * Ownership can then still move between this read and the commit; the step's result is the
+   * owner's to replay, which holds because the step must be deterministic.
    */
-  public void checkStillOwned(String workflowId) {
+  public void checkStillOwned(
+      String workflowId, @Nullable DataSource dataSource, @Nullable Connection conn) {
     var ctx = DBOSContextHolder.get();
     var ownerXid = ctx.getOwnerXid();
     if (ownerXid == null || !workflowId.equals(ctx.getWorkflowId())) {
+      return;
+    }
+    if (conn != null && dataSource != null && systemDatabase.sharesPool(dataSource)) {
+      systemDatabase.checkOwner(conn, workflowId, ownerXid);
       return;
     }
     if (!ownerXid.equals(systemDatabase.getWorkflowOwner(workflowId))) {
