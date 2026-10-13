@@ -64,7 +64,8 @@ public class StreamsDAO {
           txConn,
           conn -> {
             StepResult recordedOutput =
-                StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
+                StepsDAO.checkStepResult(
+                    conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
 
             if (recordedOutput != null) {
               logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);

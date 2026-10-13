@@ -134,7 +134,12 @@ public class NotificationsDAO {
             if (caller instanceof SendCaller.FromWorkflow step) {
               StepResult recorded =
                   StepsDAO.checkStepResult(
-                      conn, ctx.schema(), step.workflowId(), step.stepId(), functionName);
+                      conn,
+                      ctx.schema(),
+                      step.workflowId(),
+                      step.stepId(),
+                      functionName,
+                      step.ownerXid());
               if (recorded != null) {
                 logger.debug(
                     "Replaying sendBulk, workflowId: {}, stepId: {}",
@@ -245,7 +250,7 @@ public class NotificationsDAO {
     var stepName = "DBOS.recv";
     final var recvTopic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
-    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName, ownerXid);
     if (result != null) {
       logger.debug(
           "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
@@ -282,7 +287,7 @@ public class NotificationsDAO {
               break;
             }
           }
-          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId);
+          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
         }
 
         var duration = Duration.between(Instant.now(), timeoutAt);
@@ -302,7 +307,7 @@ public class NotificationsDAO {
     }
 
     ctx.checkClosed();
-    WorkflowDAO.checkWorkflow(ctx, workflowId);
+    WorkflowDAO.checkWorkflow(ctx, workflowId, ownerXid);
 
     var updateSql =
         """
@@ -448,7 +453,7 @@ public class NotificationsDAO {
               if (asStep) {
                 var recordedOutput =
                     StepsDAO.checkStepResult(
-                        conn, ctx.schema(), workflowId, functionId, functionName);
+                        conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
                 if (recordedOutput != null) {
                   logger.debug(
                       "Replaying setEvent, workflow: {}, step: {}, key: {}",
@@ -545,7 +550,8 @@ public class NotificationsDAO {
 
     if (caller != null) {
       var prevResult =
-          StepsDAO.checkStepResult(ctx, caller.workflowId(), caller.stepId(), stepName);
+          StepsDAO.checkStepResult(
+              ctx, caller.workflowId(), caller.stepId(), stepName, caller.ownerXid());
       if (prevResult != null) {
         logger.debug(
             "Replaying getEvent, workflowId: {}, stepId: {}, key: {}",
@@ -583,7 +589,7 @@ public class NotificationsDAO {
           }
 
           if (caller != null) {
-            WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId());
+            WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId(), caller.ownerXid());
           }
         }
 

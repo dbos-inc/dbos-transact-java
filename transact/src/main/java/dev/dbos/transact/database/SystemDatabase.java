@@ -1084,7 +1084,12 @@ public class SystemDatabase implements AutoCloseable {
       @Nullable String serializationFormat,
       @Nullable DebounceIds ids,
       @Nullable DebounceCaller caller) {
-    return dbRetry(
+    // The bounce locks the delayed workflow's row and the caller's step checkpoint then locks the
+    // caller's, so it can deadlock with a bulk cancel, resume or recovery taking both the other
+    // way. Safe to replay: the step is re-checked first, and the delay and inputs it writes are
+    // fixed before the first attempt.
+    return dbRetryIncludingSerializationError(
+        "debounceDelayedWorkflow",
         () ->
             WorkflowDAO.debounceDelayedWorkflow(
                 ctx,
@@ -1164,13 +1169,14 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> QueuesDAO.deleteQueue(ctx, name));
   }
 
-  public StepResult checkStepResult(String workflowId, int functionId, String functionName) {
+  public StepResult checkStepResult(
+      String workflowId, int functionId, String functionName, @Nullable String ownerXid) {
 
     return dbRetry(
         () -> {
           try (Connection connection = ctx.getConnection()) {
             return StepsDAO.checkStepResult(
-                connection, ctx.schema(), workflowId, functionId, functionName);
+                connection, ctx.schema(), workflowId, functionId, functionName, ownerXid);
           }
         });
   }
@@ -1327,10 +1333,10 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Cancels a workflow on behalf of the execution holding {@code ownerXid}, as its own deadline
    * does, and only while that execution still owns it: once the workflow has changed hands, the
-   * stale execution's timer no longer reaches it.
+   * stale execution's timer no longer reaches it. Returns whether it cancelled the workflow.
    */
-  public void cancelOwnedWorkflow(String workflowId, String ownerXid) {
-    dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
+  public boolean cancelOwnedWorkflow(String workflowId, String ownerXid) {
+    return dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {

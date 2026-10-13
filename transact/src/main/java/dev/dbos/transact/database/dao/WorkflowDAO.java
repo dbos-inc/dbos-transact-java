@@ -737,23 +737,50 @@ public class WorkflowDAO {
         + " WHERE workflow_status.workflow_uuid = ?";
   }
 
-  public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
+  public static void checkWorkflow(DbContext ctx, String workflowId, @Nullable String ownerXid)
+      throws SQLException {
     try (var conn = ctx.getConnection()) {
-      checkWorkflow(conn, ctx.schema(), workflowId);
+      checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
     }
   }
 
-  public static void checkWorkflow(Connection conn, String schema, String workflowId)
+  /**
+   * Fails if the workflow does not exist or is cancelled and, given an {@code ownerXid}, with
+   * {@link DBOSWorkflowExecutionConflictException} if that execution no longer owns it.
+   *
+   * <p>The read takes no lock, so it does not replace the {@link #checkOwner} a write makes. It
+   * stops an execution that has lost the workflow before it runs a step or keeps waiting, rather
+   * than at the write that follows.
+   */
+  public static void checkWorkflow(
+      Connection conn, String schema, String workflowId, @Nullable String ownerXid)
       throws SQLException {
-    var workflowState =
-        WorkflowDAO.getWorkflowState(
-            conn, Objects.requireNonNull(schema), Objects.requireNonNull(workflowId));
+    var sql =
+        """
+        SELECT status, owner_xid FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(Objects.requireNonNull(schema));
+    WorkflowState workflowState = null;
+    String currentOwner = null;
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          workflowState = WorkflowState.valueOf(rs.getString("status"));
+          currentOwner = rs.getString("owner_xid");
+        }
+      }
+    }
     if (workflowState == null) {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
     if (workflowState == WorkflowState.CANCELLED) {
       throw new DBOSWorkflowCancelledException(workflowId);
+    }
+
+    if (ownerXid != null && !ownerXid.equals(currentOwner)) {
+      throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
     }
   }
 
@@ -925,7 +952,12 @@ public class WorkflowDAO {
             if (caller != null) {
               var prev =
                   StepsDAO.checkStepResult(
-                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+                      c,
+                      ctx.schema(),
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      caller.ownerXid());
               if (prev != null) {
                 return prev.toResult(ctx.serializer());
               }
@@ -1081,7 +1113,12 @@ public class WorkflowDAO {
             if (caller != null) {
               var prev =
                   StepsDAO.checkStepResult(
-                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+                      c,
+                      ctx.schema(),
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      caller.ownerXid());
               if (prev != null) {
                 return prev.toResult(ctx.serializer());
               }
@@ -2130,9 +2167,9 @@ public class WorkflowDAO {
 
   /**
    * Cancels {@code workflowId} only while the execution holding {@code ownerXid} still owns it. The
-   * condition is the fence, so no lock is taken first.
+   * condition is the fence, so no lock is taken first. Returns whether it cancelled the workflow.
    */
-  public static void cancelOwnedWorkflow(DbContext ctx, String workflowId, String ownerXid)
+  public static boolean cancelOwnedWorkflow(DbContext ctx, String workflowId, String ownerXid)
       throws SQLException {
     String sql =
         """
@@ -2157,7 +2194,7 @@ public class WorkflowDAO {
       stmt.setString(3, WorkflowState.SUCCESS.name());
       stmt.setString(4, WorkflowState.ERROR.name());
       stmt.setString(5, ownerXid);
-      stmt.executeUpdate();
+      return stmt.executeUpdate() > 0;
     }
   }
 

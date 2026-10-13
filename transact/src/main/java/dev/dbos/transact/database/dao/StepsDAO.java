@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,17 +120,32 @@ public class StepsDAO {
   }
 
   static StepResult checkStepResult(
-      DbContext ctx, String workflowId, int functionId, String functionName) throws SQLException {
+      DbContext ctx,
+      String workflowId,
+      int functionId,
+      String functionName,
+      @Nullable String ownerXid)
+      throws SQLException {
     try (var conn = ctx.getConnection()) {
-      return checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
+      return checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
     }
   }
 
+  /**
+   * The step recorded at {@code stepId}, or null if none. Given an {@code ownerXid}, fails with
+   * {@link dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException} once that execution
+   * no longer owns the workflow, so it stops before running the step.
+   */
   public static StepResult checkStepResult(
-      Connection conn, String schema, String workflowId, int stepId, String stepName)
+      Connection conn,
+      String schema,
+      String workflowId,
+      int stepId,
+      String stepName,
+      @Nullable String ownerXid)
       throws SQLException {
 
-    WorkflowDAO.checkWorkflow(conn, schema, workflowId);
+    WorkflowDAO.checkWorkflow(conn, schema, workflowId, ownerXid);
 
     String sql =
         """
@@ -382,7 +398,8 @@ public class StepsDAO {
     StepResult recordedOutput;
 
     try (var conn = ctx.getConnection()) {
-      recordedOutput = checkStepResult(conn, ctx.schema(), workflowUuid, functionId, functionName);
+      recordedOutput =
+          checkStepResult(conn, ctx.schema(), workflowUuid, functionId, functionName, ownerXid);
     }
 
     if (recordedOutput != null) {

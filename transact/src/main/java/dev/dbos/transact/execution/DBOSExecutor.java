@@ -596,7 +596,7 @@ public class DBOSExecutor implements AutoCloseable {
   private boolean collidedEnqueueRecordedAt(WorkflowInfo slot) {
     try {
       if (systemDatabase.checkStepResult(
-              slot.workflowId(), slot.functionId(), "DBOS.takeOverStrandedDebouncer")
+              slot.workflowId(), slot.functionId(), "DBOS.takeOverStrandedDebouncer", null)
           != null) {
         return false;
       }
@@ -611,7 +611,7 @@ public class DBOSExecutor implements AutoCloseable {
   private boolean lookupDebouncerRecordedAfter(WorkflowInfo parent) {
     try {
       return systemDatabase.checkStepResult(
-              parent.workflowId(), parent.functionId() + 1, "DBOS.lookupDebouncer")
+              parent.workflowId(), parent.functionId() + 1, "DBOS.lookupDebouncer", null)
           != null;
     } catch (DBOSUnexpectedStepException e) {
       // Something else is recorded there; the enqueue's own replay reports the mismatch.
@@ -1701,7 +1701,8 @@ public class DBOSExecutor implements AutoCloseable {
     var stepId = ctx.getAndIncrementFunctionId();
     logger.debug("executeStep #{} ({}) for workflow {}", stepId, options.name(), workflowId);
 
-    var prevResult = systemDatabase.checkStepResult(workflowId, stepId, options.name());
+    var prevResult =
+        systemDatabase.checkStepResult(workflowId, stepId, options.name(), ctx.getOwnerXid());
     if (prevResult != null) {
       if (prevResult.error() != null) {
         var t =
@@ -2548,8 +2549,9 @@ public class DBOSExecutor implements AutoCloseable {
     if (timeLeft != null) {
       timeoutScheduler.schedule(
           () -> {
-            if (!future.isDone()) {
-              systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
+            // A run that lost the workflow is left to reach the fence and report the owner's
+            // outcome; cancelling its future would report a cancellation that never happened.
+            if (!future.isDone() && systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid)) {
               future.cancel(true);
             }
           },
