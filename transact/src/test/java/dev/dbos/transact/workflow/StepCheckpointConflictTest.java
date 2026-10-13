@@ -3,8 +3,11 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.exceptions.DBOSStepNondeterminismException;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
@@ -26,9 +29,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Two executions of one workflow race on a step: the other one checkpoints it first. The loser must
- * not carry on with its own step result. It stops, runs no later step, records nothing as the
- * workflow's outcome, and reports the outcome the winner records.
+ * Two executions of one workflow race on a step: the workflow changes hands while one is inside the
+ * step, and the new owner checkpoints it first. The old execution must not carry on with its own
+ * step result. It stops, runs no later step, records nothing as the workflow's outcome, and reports
+ * the outcome the new owner records.
  */
 public class StepCheckpointConflictTest {
 
@@ -51,8 +55,16 @@ public class StepCheckpointConflictTest {
     dbos.launch();
   }
 
-  // Writes step 0's checkpoint as another execution of the workflow would.
+  // Takes the workflow over, as a resume or recovery and the claim after it would, and writes step
+  // 0's checkpoint as the new owner.
   private void recordStepElsewhere(String workflowId, String output) throws SQLException {
+    DBTestAccess.takeOwnership(DBOSTestAccess.getSystemDatabase(dbos), workflowId);
+    insertStep(workflowId, output);
+  }
+
+  // Writes step 0's checkpoint without taking the workflow over, as only an executor that does not
+  // fence its writes could.
+  private void insertStep(String workflowId, String output) throws SQLException {
     var serialized = SerializationUtil.serializeValue(output, null, null);
     var sql =
         "INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output,"
@@ -70,11 +82,11 @@ public class StepCheckpointConflictTest {
     }
   }
 
-  // Records the workflow's outcome as the winning execution would.
+  // Records the workflow's outcome as the new owner would, releasing it.
   private void recordSuccessElsewhere(String workflowId, String output) throws SQLException {
     var sql =
-        "UPDATE dbos.workflow_status SET status = 'SUCCESS', output = ?, updated_at = ?"
-            + " WHERE workflow_uuid = ?";
+        "UPDATE dbos.workflow_status SET status = 'SUCCESS', output = ?, updated_at = ?,"
+            + " owner_xid = NULL WHERE workflow_uuid = ?";
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, SerializationUtil.serializeValue(output, null, null).serializedValue());
@@ -145,7 +157,7 @@ public class StepCheckpointConflictTest {
   }
 
   @Test
-  public void aStepCheckpointedElsewhereStopsTheLoser() throws Exception {
+  public void aStepCheckpointedByANewOwnerStopsTheOldExecution() throws Exception {
     var workflowId = "step-conflict-%d".formatted(System.nanoTime());
     var handle = startBlockedInStep(workflowId, proxy::raceWorkflow);
 
@@ -175,6 +187,22 @@ public class StepCheckpointConflictTest {
     impl.releaseLatches.get(workflowId).countDown();
 
     assertLoserStopsAndAdopts(workflowId, handle);
+  }
+
+  // A different checkpoint at the step, written while this execution still owns the workflow, can
+  // only be its own doing: nondeterminism, recorded as the workflow's error rather than waited out.
+  @Test
+  public void aDifferentCheckpointUnderTheSameOwnerIsNondeterminism() throws Exception {
+    var workflowId = "step-conflict-nondeterminism-%d".formatted(System.nanoTime());
+    var handle = startBlockedInStep(workflowId, proxy::raceWorkflow);
+
+    insertStep(workflowId, "other-step");
+    impl.releaseLatches.get(workflowId).countDown();
+
+    var e = assertThrows(DBOSStepNondeterminismException.class, handle::getResult);
+    assertEquals(workflowId, e.workflowId());
+    assertEquals("ERROR", readStatus(workflowId));
+    assertFalse(impl.ranAfterStep.contains(workflowId), "no later step may run");
   }
 
   // A recv that claimed no message records a NULL output and returns null. Its replay must

@@ -34,6 +34,9 @@ public class DBOSContext {
   private final String assumedRole;
   private final List<String> authenticatedRoles;
   private SerializationStrategy serialization;
+  // The token of the execution running this workflow. Every checkpoint it writes is checked against
+  // the workflow's owner_xid, so a run that no longer owns the workflow cannot record anything.
+  private final String ownerXid;
 
   // private StepStatus stepStatus;
 
@@ -46,6 +49,7 @@ public class DBOSContext {
     assumedRole = null;
     authenticatedRoles = null;
     serialization = SerializationStrategy.DEFAULT;
+    ownerXid = null;
   }
 
   public DBOSContext(
@@ -55,7 +59,8 @@ public class DBOSContext {
       String authenticatedUser,
       String assumedRole,
       List<String> authenticatedRoles,
-      SerializationStrategy serialization) {
+      SerializationStrategy serialization,
+      String ownerXid) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
@@ -64,6 +69,7 @@ public class DBOSContext {
     this.assumedRole = assumedRole;
     this.authenticatedRoles = authenticatedRoles;
     this.serialization = serialization;
+    this.ownerXid = ownerXid;
   }
 
   public DBOSContext(
@@ -87,6 +93,7 @@ public class DBOSContext {
     this.assumedRole = other.assumedRole;
     this.authenticatedRoles = other.authenticatedRoles;
     this.serialization = other.serialization;
+    this.ownerXid = other.ownerXid;
   }
 
   public boolean isInWorkflow() {
@@ -115,6 +122,11 @@ public class DBOSContext {
 
   public void resetStepFunctionId() {
     stepFunctionId = null;
+  }
+
+  /** The token of the execution running this workflow, or null outside a workflow. */
+  public String getOwnerXid() {
+    return ownerXid;
   }
 
   public WorkflowInfo getParent() {

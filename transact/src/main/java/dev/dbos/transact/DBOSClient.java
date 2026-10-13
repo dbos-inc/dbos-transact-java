@@ -1249,7 +1249,6 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.sendBulk(
         List.of(new SendMessage(destinationId, message, topic, idempotencyKey)),
         null,
-        -1,
         "DBOS.send",
         sendToForks,
         serializationFormat);
@@ -1277,7 +1276,7 @@ public class DBOSClient implements AutoCloseable {
             ? options.serialization().formatName()
             : null;
     boolean sendToForks = options != null && options.sendToForks();
-    systemDatabase.sendBulk(messages, null, -1, "DBOS.sendBulk", sendToForks, serializationFormat);
+    systemDatabase.sendBulk(messages, null, "DBOS.sendBulk", sendToForks, serializationFormat);
   }
 
   /**

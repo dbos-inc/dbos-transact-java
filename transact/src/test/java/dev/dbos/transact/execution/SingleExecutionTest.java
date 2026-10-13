@@ -306,7 +306,7 @@ public class SingleExecutionTest {
 
   WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
     DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.name());
-    return DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(id);
+    return DBOSExecutorTestAccess.executeWorkflowById(DBOSTestAccess.getDbosExecutor(dbos), id);
   }
 
   @Test
@@ -330,12 +330,15 @@ public class SingleExecutionTest {
     assertEquals(1, execImpl.maxConc);
     assertEquals(1, execImpl.maxWf);
 
+    // Two dispatches of one ID: each takes ownership in turn, so the first stops at its next
+    // checkpoint and adopts the second's outcome. Their bodies may overlap, but the step was
+    // already checkpointed, so neither runs it again.
     var wfh1r = reexecuteWorkflowById(workflowUUID);
     var wfh2r = reexecuteWorkflowById(workflowUUID);
     wfh1r.getResult();
     wfh2r.getResult();
     assertEquals(1, execImpl.maxConc);
-    assertEquals(1, execImpl.maxWf);
+    assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(workflowUUID).getStatus().status());
   }
 
   @Test

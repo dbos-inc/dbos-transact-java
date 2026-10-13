@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -76,14 +77,16 @@ public class QueueServicePollTest {
   @DisplayName("a contended partition costs its own turn, not the rest of the sweep")
   public void contendedPartitionDoesNotStrandTheOthers() {
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), eq("a"), anyLong(), anyLong(), anyString()))
         .thenThrow(contention("55P03"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), eq("b"), anyLong(), anyLong(), anyString()))
         .thenReturn(List.of("wf-b"));
 
     taskFor(PARTITIONED).sweepPartitions();
 
-    verify(dbosExecutor).executeWorkflowById("wf-b");
+    verify(dbosExecutor).executeWorkflowById(eq("wf-b"), anyString());
   }
 
   @Test
@@ -93,7 +96,8 @@ public class QueueServicePollTest {
     // partition throws, and the assertion is that the sweep stopped at the first rather than
     // carrying on through the rest.
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
         .thenThrow(new RuntimeException(new SQLException("disk on fire", "58030")));
 
     var task = taskFor(PARTITIONED);
@@ -105,19 +109,20 @@ public class QueueServicePollTest {
     }
 
     verify(systemDatabase, times(1))
-        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
   }
 
   @Test
   @DisplayName("a workflow that will not start does not strand the rest of the batch")
   public void failedDispatchDoesNotStrandTheBatch() {
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq(null), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), eq(null), anyLong(), anyLong(), anyString()))
         .thenReturn(List.of("wf-1", "wf-2"));
-    when(dbosExecutor.executeWorkflowById("wf-1")).thenThrow(contention("40001"));
+    when(dbosExecutor.executeWorkflowById(eq("wf-1"), anyString())).thenThrow(contention("40001"));
 
     taskFor(PLAIN).processPartition(null, 0);
 
-    verify(dbosExecutor).executeWorkflowById("wf-2");
+    verify(dbosExecutor).executeWorkflowById(eq("wf-2"), anyString());
   }
 
   @Test
@@ -129,35 +134,41 @@ public class QueueServicePollTest {
     // claims in `claimed` and adds them to the count it snapshotted once.
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
     when(dbosExecutor.queueActiveCount("q")).thenReturn(1L);
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("a"), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), eq("a"), anyLong(), anyLong(), anyString()))
         .thenReturn(List.of("wf-a"));
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), eq("b"), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), eq("b"), anyLong(), anyLong(), anyString()))
         .thenReturn(List.of("wf-b"));
 
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
     // One already running, so the first partition swept is told 1 and the second 2: the claim the
     // first made, counted before the second is given its budget.
-    verify(systemDatabase).startQueuedWorkflows(any(), any(), any(), any(), eq(1L), anyLong());
-    verify(systemDatabase).startQueuedWorkflows(any(), any(), any(), any(), eq(2L), anyLong());
-    verify(dbosExecutor).executeWorkflowById("wf-a");
-    verify(dbosExecutor).executeWorkflowById("wf-b");
+    verify(systemDatabase)
+        .startQueuedWorkflows(any(), any(), any(), any(), eq(1L), anyLong(), anyString());
+    verify(systemDatabase)
+        .startQueuedWorkflows(any(), any(), any(), any(), eq(2L), anyLong(), anyString());
+    verify(dbosExecutor).executeWorkflowById(eq("wf-a"), anyString());
+    verify(dbosExecutor).executeWorkflowById(eq("wf-b"), anyString());
   }
 
   @Test
   @DisplayName("a batched sweep claims within the worker budget and dispatches every head")
   public void theBatchedSweepSpendsTheWorkerBudget() {
     when(dbosExecutor.queueActiveCount("q")).thenReturn(1L);
-    when(systemDatabase.startQueuedPartitionedWorkflows(any(), any(), any(), anyLong()))
+    when(systemDatabase.startQueuedPartitionedWorkflows(
+            any(), any(), any(), anyLong(), anyString()))
         .thenReturn(List.of("wf-a", "wf-b"));
 
     taskFor(WORKER_BUDGETED).sweepPartitionHeads();
 
     // A budget of three with one running leaves two, and no partition is listed one at a time.
-    verify(systemDatabase).startQueuedPartitionedWorkflows(any(), any(), any(), eq(2L));
+    verify(systemDatabase)
+        .startQueuedPartitionedWorkflows(any(), any(), any(), eq(2L), anyString());
     verify(systemDatabase, never()).getQueuePartitions(any());
-    verify(dbosExecutor).executeWorkflowById("wf-a");
-    verify(dbosExecutor).executeWorkflowById("wf-b");
+    verify(dbosExecutor).executeWorkflowById(eq("wf-a"), anyString());
+    verify(dbosExecutor).executeWorkflowById(eq("wf-b"), anyString());
   }
 
   @Test
@@ -178,14 +189,15 @@ public class QueueServicePollTest {
     // be dequeued at all -- not dequeued and discarded, not visited.
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
     when(dbosExecutor.queueActiveCount("q")).thenReturn(2L);
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
         .thenReturn(List.of("wf-1"));
 
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
     verify(systemDatabase, times(1))
-        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
-    verify(dbosExecutor, times(1)).executeWorkflowById("wf-1");
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+    verify(dbosExecutor, times(1)).executeWorkflowById(eq("wf-1"), anyString());
   }
 
   @Test
@@ -197,7 +209,7 @@ public class QueueServicePollTest {
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
     verify(systemDatabase, never())
-        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong());
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
   }
 
   @Test
@@ -229,7 +241,8 @@ public class QueueServicePollTest {
    */
   private void blockTheClaim(
       CountDownLatch claiming, CountDownLatch release, List<String> claimed) {
-    when(systemDatabase.startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong()))
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
         .thenAnswer(
             inv -> {
               claiming.countDown();
@@ -267,7 +280,7 @@ public class QueueServicePollTest {
     var release = new CountDownLatch(1);
     blockTheClaim(claiming, release, List.of("wf-1"));
     var events = new ConcurrentLinkedQueue<String>();
-    when(dbosExecutor.executeWorkflowById("wf-1"))
+    when(dbosExecutor.executeWorkflowById(eq("wf-1"), anyString()))
         .thenAnswer(
             inv -> {
               events.add("dispatched wf-1");

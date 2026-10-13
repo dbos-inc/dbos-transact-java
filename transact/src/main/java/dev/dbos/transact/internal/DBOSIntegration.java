@@ -91,6 +91,19 @@ public class DBOSIntegration {
   }
 
   /**
+   * Throws {@link dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException} unless the
+   * workflow execution running on this thread still owns {@code workflowId}; does nothing outside
+   * that workflow's execution. A transactional step factory calls it inside its transaction, after
+   * recording the step's result and before committing, so an execution that has lost its workflow
+   * commits nothing.
+   *
+   * @param workflowId the workflow the step belongs to
+   */
+  public void checkStillOwned(@NonNull String workflowId) {
+    executor("checkStillOwned").checkStillOwned(workflowId);
+  }
+
+  /**
    * Register a workflow method with DBOS. This method is used internally by the proxy registration
    * process and should not typically be called directly by application code.
    *

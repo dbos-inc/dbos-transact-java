@@ -103,7 +103,7 @@ public class PartitionedDequeueTest {
   private List<String> claimOnce(Queue queue, long maxTasks, int sweepCap) throws SQLException {
     var claimed =
         QueuesDAO.startQueuedPartitionedWorkflows(
-            ctx, queue, "exec", APP_VERSION, maxTasks, sweepCap);
+            ctx, queue, "exec", APP_VERSION, maxTasks, sweepCap, "test-claim");
     assertEquals(
         claimed.stream().sorted(Comparator.comparing(partitionOf::get)).toList(),
         claimed,
@@ -283,6 +283,6 @@ public class PartitionedDequeueTest {
         IllegalArgumentException.class,
         () ->
             QueuesDAO.startQueuedPartitionedWorkflows(
-                ctx, partitionedQueue("q", null, 2), "exec", APP_VERSION, 1, 1));
+                ctx, partitionedQueue("q", null, 2), "exec", APP_VERSION, 1, 1, "test-claim"));
   }
 }

@@ -15,6 +15,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -103,7 +104,7 @@ public class ClientTest {
     var e =
         assertThrows(
             DBOSWorkflowFunctionNotFoundException.class,
-            () -> executor.executeWorkflowById(workflowId));
+            () -> DBOSExecutorTestAccess.executeWorkflowById(executor, workflowId));
     assertEquals(workflowId, e.workflowId());
     assertEquals("enqueueTest//", e.workflowName());
     assertEquals(

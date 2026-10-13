@@ -224,7 +224,7 @@ public class SystemDatabase implements AutoCloseable {
       boolean useListenNotify,
       @Nullable String appName) {
     this(
-        createDataSource(url, user, password),
+        createDataSource(url, user, password, null),
         schema,
         true,
         serializer,
@@ -255,9 +255,7 @@ public class SystemDatabase implements AutoCloseable {
       DBOSConfig config, @Nullable String executorId, @Nullable String appName) {
     var dataSource = config.dataSource();
     return new SystemDatabase(
-        dataSource != null
-            ? dataSource
-            : createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword()),
+        dataSource != null ? dataSource : createDataSource(config),
         config.databaseSchema(),
         dataSource == null,
         config.serializer(),
@@ -277,6 +275,11 @@ public class SystemDatabase implements AutoCloseable {
     return ctx.appName();
   }
 
+  // For tests in this package.
+  DbContext context() {
+    return ctx;
+  }
+
   Optional<HikariConfig> getConfig() {
     if (ctx.dataSource() instanceof HikariDataSource hds) {
       return Optional.of(hds);
@@ -284,11 +287,27 @@ public class SystemDatabase implements AutoCloseable {
     return Optional.empty();
   }
 
+  /** The pool for {@code config}'s database, with its idle-in-transaction timeout. */
   public static HikariDataSource createDataSource(DBOSConfig config) {
-    return createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
+    return createDataSource(
+        config.databaseUrl(),
+        config.dbUser(),
+        config.dbPassword(),
+        config.systemDatabaseIdleTransactionTimeout());
   }
 
-  public static HikariDataSource createDataSource(String url, String user, String password) {
+  /**
+   * A pool on a DBOS database. Every connection it opens gets {@code idleTransactionTimeout} as its
+   * {@code idle_in_transaction_session_timeout}: the owner check on every checkpoint write locks
+   * the workflow's row until the write commits, and a session that stalls inside that transaction
+   * must not hold the lock forever.
+   *
+   * @param idleTransactionTimeout null for {@link
+   *     DBOSConfig#DEFAULT_SYSTEM_DATABASE_IDLE_TRANSACTION_TIMEOUT}; zero or negative, or a URL
+   *     that sets {@code idle_in_transaction_session_timeout} itself, leaves the setting alone
+   */
+  public static HikariDataSource createDataSource(
+      String url, String user, String password, @Nullable Duration idleTransactionTimeout) {
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl(url);
     config.setUsername(user);
@@ -307,7 +326,21 @@ public class SystemDatabase implements AutoCloseable {
     config.addDataSourceProperty("socketTimeout", "60");
     config.addDataSourceProperty("reWriteBatchedInserts", "true");
 
+    var timeout =
+        Objects.requireNonNullElse(
+            idleTransactionTimeout, DBOSConfig.DEFAULT_SYSTEM_DATABASE_IDLE_TRANSACTION_TIMEOUT);
+    if (!timeout.isNegative() && !timeout.isZero() && !setsIdleTransactionTimeout(url)) {
+      // Rounded up, so a sub-millisecond timeout does not become 0, which Postgres reads as none.
+      long ms = Math.max(1, (timeout.toNanos() + 999_999) / 1_000_000);
+      config.setConnectionInitSql("SET idle_in_transaction_session_timeout = " + ms);
+    }
     return new HikariDataSource(config);
+  }
+
+  /** Whether the connection URL already sets the timeout, in its options or as a parameter. */
+  static boolean setsIdleTransactionTimeout(@Nullable String url) {
+    return url != null
+        && url.toLowerCase(Locale.ROOT).contains("idle_in_transaction_session_timeout");
   }
 
   public static boolean isCockroach(DataSource dataSource) throws SQLException {
@@ -481,9 +514,15 @@ public class SystemDatabase implements AutoCloseable {
     return e instanceof SQLTransientException ? Failure.TRANSIENT : Failure.CALLERS;
   }
 
-  /** Class 08 connection_exception or class 57 operator_intervention, anywhere in the chains. */
+  /**
+   * Class 08 connection_exception, class 57 operator_intervention, or 25P03
+   * idle_in_transaction_session_timeout, anywhere in the chains. The last is the server ending a
+   * session that sat idle inside a transaction; the transaction is gone, and a retry runs on
+   * another connection.
+   */
   static boolean isConnectionState(Throwable t) {
-    return anySqlState(t, state -> state.startsWith("08") || state.startsWith("57"));
+    return anySqlState(
+        t, state -> state.startsWith("08") || state.startsWith("57") || "25P03".equals(state));
   }
 
   /**
@@ -863,10 +902,11 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Initializes the status of a workflow.
    *
-   * <p>Only the first writer of a row owns its execution: a caller that finds a row someone else
-   * inserted gets {@code shouldExecuteOnThisExecutor() == false} and polls for the outcome instead.
-   * A workflow the queue has already claimed never comes through here -- the claim wrote everything
-   * this would, so the dispatch path runs from the claimed row directly.
+   * <p>Only the call that created a row owns its execution, with the token returned in {@link
+   * WorkflowInitResult#ownerXid()}: a caller that finds a row someone else inserted gets {@code
+   * shouldExecuteOnThisExecutor() == false} and polls for the outcome instead. A workflow the queue
+   * has already claimed never comes through here -- the claim wrote everything this would, so the
+   * dispatch path runs from the claimed row directly.
    *
    * @param initStatus The initial workflow status details.
    * @param maxRetries The workflow's configured attempt budget, reported if it is already
@@ -878,20 +918,37 @@ public class SystemDatabase implements AutoCloseable {
    */
   public WorkflowInitResult initWorkflowStatus(
       WorkflowStatusInternal initStatus, @Nullable Integer maxRetries) {
+    return initWorkflowStatus(initStatus, maxRetries, null);
+  }
 
-    // This ID will be used to tell if we are the first writer of the record, or if
-    // there is an existing one.
-    // Note that it is generated outside of the DB retry loop, in case commit acks
-    // get lost and we do not know if we committed or not
-    String ownerXid = UUID.randomUUID().toString();
+  /**
+   * As {@link #initWorkflowStatus(WorkflowStatusInternal, Integer)}, for a child workflow: the
+   * child's row and its parent's step recording it are written in one transaction, and only while
+   * the parent's execution still owns the parent, so a parent that has lost its workflow can
+   * neither start a child nor record one.
+   */
+  public WorkflowInitResult initChildWorkflowStatus(
+      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries, ChildOf parent) {
+    return initWorkflowStatus(initStatus, maxRetries, parent);
+  }
+
+  private WorkflowInitResult initWorkflowStatus(
+      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries, @Nullable ChildOf parent) {
+    // The token tells this call whether it created the row or found one already there. Generated
+    // outside the retry loop, so an attempt that committed but lost its acknowledgement recognizes
+    // its own row on the retry. A row created PENDING is also owned by it.
+    String creatorXid = UUID.randomUUID().toString();
     Long delayUntilEpochMs = resolveDelayUntil(initStatus);
     // The insert sets a directly started workflow's deadline on the database's clock, so a retry
     // measures it from the attempt that commits. One that committed but lost its ack finds its own
-    // row, and keeps the deadline that row was written with.
-    return dbRetry(
+    // row, and keeps the deadline that row was written with. A child's start locks two status rows,
+    // the child's and then its parent's, so it can deadlock with a multi-row write; replaying it is
+    // safe, as the insert keeps a row already there and the parent's step re-checks its owner.
+    return dbRetryIncludingSerializationError(
+        "initWorkflowStatus",
         () ->
             WorkflowDAO.initWorkflowStatus(
-                ctx, initStatus, delayUntilEpochMs, maxRetries, ownerXid));
+                ctx, initStatus, delayUntilEpochMs, maxRetries, creatorXid, parent));
   }
 
   /**
@@ -918,11 +975,14 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
+   * @param ownerXid the token of the execution recording it
    * @return true if the outcome was recorded, false if the row is no longer PENDING and this
    *     execution no longer owns the workflow's outcome
    */
-  public boolean recordWorkflowOutput(String workflowId, String result) {
-    return dbRetry(() -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result));
+  public boolean recordWorkflowOutput(String workflowId, String result, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "recordWorkflowOutput",
+        () -> WorkflowDAO.recordWorkflowOutput(ctx, workflowId, result, ownerXid));
   }
 
   /**
@@ -930,11 +990,14 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
+   * @param ownerXid the token of the execution recording it
    * @return true if the outcome was recorded, false if the row is no longer PENDING and this
    *     execution no longer owns the workflow's outcome
    */
-  public boolean recordWorkflowError(String workflowId, String error) {
-    return dbRetry(() -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error));
+  public boolean recordWorkflowError(String workflowId, String error, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "recordWorkflowError",
+        () -> WorkflowDAO.recordWorkflowError(ctx, workflowId, error, ownerXid));
   }
 
   /**
@@ -955,6 +1018,11 @@ public class SystemDatabase implements AutoCloseable {
   /** A workflow's status, with the database's clock as it was read; null if there is none. */
   public @Nullable TimedWorkflowStatus getTimedWorkflowStatus(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getTimedWorkflowStatus(ctx, workflowId));
+  }
+
+  /** The token of the execution that owns the workflow, read without a lock; null if none. */
+  public @Nullable String getWorkflowOwner(String workflowId) {
+    return dbRetry(() -> WorkflowDAO.getWorkflowOwner(ctx, workflowId));
   }
 
   public String getWorkflowSerialization(String workflowId) {
@@ -1107,9 +1175,16 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void recordStepResult(StepResult result, long startTime) {
+  /**
+   * Records a step of the execution holding {@code ownerXid}, if it still owns the workflow. See
+   * {@link StepsDAO#recordStepResult(DbContext, Connection, StepResult, Long, Long, String)}.
+   */
+  public void recordStepResult(StepResult result, long startTime, String ownerXid) {
     var et = System.currentTimeMillis();
-    dbRetry(() -> StepsDAO.recordStepResult(ctx, result, startTime, et));
+    // The owner check locks the workflow's row, so the record can deadlock with a multi-row write.
+    // Replaying it is safe: the check runs again, and the same row written twice is accepted.
+    dbRetryIncludingSerializationError(
+        "recordStepResult", () -> StepsDAO.recordStepResult(ctx, result, startTime, et, ownerXid));
   }
 
   public List<StepInfo> listWorkflowSteps(
@@ -1138,7 +1213,8 @@ public class SystemDatabase implements AutoCloseable {
       String appVersion,
       String partitionKey,
       long localRunningCount,
-      long partitionLocalRunningCount) {
+      long partitionLocalRunningCount,
+      String ownerXid) {
     return dbOnce(
         () ->
             QueuesDAO.startQueuedWorkflows(
@@ -1148,12 +1224,13 @@ public class SystemDatabase implements AutoCloseable {
                 appVersion,
                 partitionKey,
                 localRunningCount,
-                partitionLocalRunningCount));
+                partitionLocalRunningCount,
+                ownerXid));
   }
 
   /** Claims every idle partition's head workflow in one transaction; see {@link QueuesDAO}. */
   public List<String> startQueuedPartitionedWorkflows(
-      Queue queue, String executorId, String appVersion, long maxTasks) {
+      Queue queue, String executorId, String appVersion, long maxTasks, String ownerXid) {
     return dbOnce(
         () ->
             QueuesDAO.startQueuedPartitionedWorkflows(
@@ -1162,29 +1239,22 @@ public class SystemDatabase implements AutoCloseable {
                 executorId,
                 appVersion,
                 maxTasks,
-                QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP));
-  }
-
-  public void recordChildWorkflow(
-      String parentId,
-      String childId, // workflowId of the child
-      int functionId, // func id in the parent
-      String functionName,
-      long startTime) {
-    dbRetry(
-        () ->
-            WorkflowDAO.recordChildWorkflow(
-                ctx, parentId, childId, functionId, functionName, startTime));
+                QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP,
+                ownerXid));
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
     return dbRetry(() -> WorkflowDAO.checkChildWorkflow(ctx, workflowUuid, functionId));
   }
 
+  /**
+   * Sends messages from {@code caller}, or from outside any workflow when it is null. A send from
+   * inside a step records nothing of its own, but its caller is still checked, after the messages
+   * are written and before they commit: a step whose execution has lost its workflow sends nothing.
+   */
   public void sendBulk(
       List<SendMessage> messages,
-      String workflowId,
-      int stepId,
+      @Nullable SendCaller caller,
       String functionName,
       boolean sendToForks,
       String serialization) {
@@ -1192,11 +1262,16 @@ public class SystemDatabase implements AutoCloseable {
         "sendBulk",
         () ->
             NotificationsDAO.sendBulk(
-                ctx, messages, workflowId, stepId, functionName, sendToForks, serialization));
+                ctx, messages, caller, functionName, sendToForks, serialization));
   }
 
   public Object recv(
-      String workflowId, int stepId, int timeoutStepId, String topic, Duration timeout) {
+      String workflowId,
+      int stepId,
+      int timeoutStepId,
+      String topic,
+      Duration timeout,
+      String ownerXid) {
     return dbRetry(
         () ->
             NotificationsDAO.recv(
@@ -1207,7 +1282,8 @@ public class SystemDatabase implements AutoCloseable {
                 timeoutStepId,
                 topic,
                 notificationRecheckInterval(),
-                createSubscription));
+                createSubscription,
+                ownerXid));
   }
 
   public void setEvent(
@@ -1216,12 +1292,13 @@ public class SystemDatabase implements AutoCloseable {
       String key,
       Object message,
       boolean asStep,
-      String serialization) {
+      String serialization,
+      String ownerXid) {
     dbRetryIncludingSerializationError(
         "setEvent",
         () ->
             NotificationsDAO.setEvent(
-                ctx, workflowId, functionId, key, message, asStep, serialization));
+                ctx, workflowId, functionId, key, message, asStep, serialization, ownerXid));
     signal(new SignalKey.Event(workflowId, key));
   }
 
@@ -1238,12 +1315,22 @@ public class SystemDatabase implements AutoCloseable {
                 createSubscription));
   }
 
-  public void sleep(String workflowId, int functionId, Duration duration) {
-    dbRetry(() -> StepsDAO.sleep(ctx, workflowId, functionId, duration));
+  public void sleep(String workflowId, int functionId, Duration duration, String ownerXid) {
+    dbRetryIncludingSerializationError(
+        "sleep", () -> StepsDAO.sleep(ctx, workflowId, functionId, duration, ownerXid));
   }
 
   public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds, cancelChildren));
+  }
+
+  /**
+   * Cancels a workflow on behalf of the execution holding {@code ownerXid}, as its own deadline
+   * does, and only while that execution still owns it: once the workflow has changed hands, the
+   * stale execution's timer no longer reaches it.
+   */
+  public void cancelOwnedWorkflow(String workflowId, String ownerXid) {
+    dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {
@@ -1430,8 +1517,9 @@ public class SystemDatabase implements AutoCloseable {
         "getMetrics", () -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
   }
 
-  public boolean patch(String workflowId, int functionId, String patchName) {
-    return dbRetry(() -> StepsDAO.patch(ctx, workflowId, functionId, patchName));
+  public boolean patch(String workflowId, int functionId, String patchName, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "patch", () -> StepsDAO.patch(ctx, workflowId, functionId, patchName, ownerXid));
   }
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
@@ -1460,27 +1548,38 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void writeStreamFromStep(
-      String workflowId, int functionId, String key, Object value, String serializationFormat) {
-    dbRetry(
+      String workflowId,
+      int functionId,
+      String key,
+      Object value,
+      String serializationFormat,
+      String ownerXid) {
+    dbRetryIncludingSerializationError(
+        "writeStreamFromStep",
         () ->
             StreamsDAO.writeStreamFromStep(
-                ctx, workflowId, functionId, key, value, serializationFormat));
+                ctx, workflowId, functionId, key, value, serializationFormat, ownerXid));
     signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void writeStreamFromWorkflow(
-      String workflowId, int functionId, String key, Object value, String serializationFormat) {
+      String workflowId,
+      int functionId,
+      String key,
+      Object value,
+      String serializationFormat,
+      String ownerXid) {
     dbRetryIncludingSerializationError(
         "writeStreamFromWorkflow",
         () ->
             StreamsDAO.writeStreamFromWorkflow(
-                ctx, workflowId, functionId, key, value, serializationFormat));
+                ctx, workflowId, functionId, key, value, serializationFormat, ownerXid));
     signal(new SignalKey.Stream(workflowId, key));
   }
 
-  public void closeStream(String workflowId, int functionId, String key) {
+  public void closeStream(String workflowId, int functionId, String key, String ownerXid) {
     dbRetryIncludingSerializationError(
-        "closeStream", () -> StreamsDAO.closeStream(ctx, workflowId, functionId, key));
+        "closeStream", () -> StreamsDAO.closeStream(ctx, workflowId, functionId, key, ownerXid));
     // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
     signal(new SignalKey.Stream(workflowId, key));
   }

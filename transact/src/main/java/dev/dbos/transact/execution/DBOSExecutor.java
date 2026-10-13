@@ -11,10 +11,12 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.SendCaller;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.TimedWorkflowStatus;
@@ -123,25 +125,32 @@ public class DBOSExecutor implements AutoCloseable {
 
   private record QueueBucket(String queueName, String partitionKey) {}
 
-  // Owns this executor's active-ID entry for a workflow. Construction acquires the entry
-  // (throwing on conflict); release is idempotent, so the try-with-resources backstop never
-  // removes an entry a resumed execution re-acquired after an explicit release().
+  // One execution of a workflow. A workflow resumed or recovered while a run of it is still going
+  // here is dispatched here again under a new token, and the two coexist until the stale one
+  // reaches its next checkpoint and stops; keyed by workflow ID alone, the new run would be turned
+  // away, and both would wait on each other forever.
+  private record ActiveExecution(String workflowId, String ownerXid) {}
+
+  // Owns this executor's active entry for one execution of a workflow. Construction acquires the
+  // entry (throwing on conflict); release is idempotent, so the try-with-resources backstop never
+  // removes an entry acquired again after an explicit release().
   private final class ActiveWorkflowGuard implements AutoCloseable {
     private final AtomicBoolean released = new AtomicBoolean(false);
-    private final String workflowId;
+    private final ActiveExecution execution;
 
-    ActiveWorkflowGuard(String workflowId, QueueBucket bucket) {
-      if (activeWorkflows.putIfAbsent(workflowId, bucket) != null) {
+    ActiveWorkflowGuard(String workflowId, String ownerXid, QueueBucket bucket) {
+      var execution = new ActiveExecution(workflowId, ownerXid);
+      if (activeWorkflows.putIfAbsent(execution, bucket) != null) {
         throw new DBOSWorkflowExecutionConflictException(workflowId);
       }
-      this.workflowId = workflowId;
+      this.execution = execution;
     }
 
-    // Must run before a terminal outcome write becomes durable: once it is visible, a resume
-    // can re-dispatch this workflow to this executor, and a stale entry would reject it.
+    // Releases the execution's queue slot. Runs before the outcome write, and before a run that
+    // lost the workflow waits for the recorded outcome, so a waiting run holds no slot.
     void release() {
       if (released.compareAndSet(false, true)) {
-        activeWorkflows.remove(workflowId);
+        activeWorkflows.remove(execution);
       }
     }
 
@@ -157,7 +166,8 @@ public class DBOSExecutor implements AutoCloseable {
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
-  private final ConcurrentHashMap<String, QueueBucket> activeWorkflows = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ActiveExecution, QueueBucket> activeWorkflows =
+      new ConcurrentHashMap<>();
 
   private final boolean dbosCloud;
   private final String appId;
@@ -479,7 +489,9 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(
             "@Step functions cannot be called from the startWorkflow lambda");
       }
-      caller = new DebounceCaller(ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName);
+      caller =
+          new DebounceCaller(
+              ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), stepName, ctx.getOwnerXid());
     }
     return systemDatabase.debounceDelayedWorkflow(
         workflow.workflowName(),
@@ -663,14 +675,15 @@ public class DBOSExecutor implements AutoCloseable {
       // collided and recorded nothing, and looked the holder up in the next slot. Replaying that,
       // leave the slot to enqueueDebounced, which throws the collision again.
       if (collidedEnqueueRecordedAt(
-          new WorkflowInfo(ctx.getWorkflowId(), ctx.getCurrentFunctionId()))) {
+          new WorkflowInfo(ctx.getWorkflowId(), ctx.getCurrentFunctionId(), ctx.getOwnerXid()))) {
         return null;
       }
       caller =
           new DebounceCaller(
               ctx.getWorkflowId(),
               ctx.getAndIncrementFunctionId(),
-              "DBOS.takeOverStrandedDebouncer");
+              "DBOS.takeOverStrandedDebouncer",
+              ctx.getOwnerXid());
     }
     validateQueue(queueName, null);
     var parentWorkflowId = caller != null ? caller.workflowId() : null;
@@ -868,13 +881,17 @@ public class DBOSExecutor implements AutoCloseable {
       String functionName) {
 
     DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepId = ctx.getAndIncrementFunctionId();
-      systemDatabase.sendBulk(
-          messages, ctx.getWorkflowId(), stepId, functionName, sendToForks, serializationFormat);
-    } else {
-      systemDatabase.sendBulk(messages, null, -1, functionName, sendToForks, serializationFormat);
+    // A send from a workflow is its step; one from inside a step records nothing, but is still
+    // made only while the step's execution owns the workflow.
+    SendCaller caller = null;
+    if (ctx.isInWorkflow()) {
+      caller =
+          ctx.isInStep()
+              ? new SendCaller.FromStep(ctx.getWorkflowId(), ctx.getOwnerXid())
+              : new SendCaller.FromWorkflow(
+                  ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), ctx.getOwnerXid());
     }
+    systemDatabase.sendBulk(messages, caller, functionName, sendToForks, serializationFormat);
   }
 
   /**
@@ -932,7 +949,7 @@ public class DBOSExecutor implements AutoCloseable {
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
     return systemDatabase.recv(
-        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
+        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout, ctx.getOwnerXid());
   }
 
   public void setEvent(String key, Object value, SerializationStrategy serialization) {
@@ -954,7 +971,13 @@ public class DBOSExecutor implements AutoCloseable {
     var asStep = !ctx.isInStep();
     var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
     systemDatabase.setEvent(
-        ctx.getWorkflowId(), stepId, key, value, asStep, serialization.formatName());
+        ctx.getWorkflowId(),
+        stepId,
+        key,
+        value,
+        asStep,
+        serialization.formatName(),
+        ctx.getOwnerXid());
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -965,7 +988,8 @@ public class DBOSExecutor implements AutoCloseable {
     if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepId = ctx.getAndIncrementFunctionId();
       int timeoutStepId = ctx.getAndIncrementFunctionId();
-      GetEventCaller caller = new GetEventCaller(ctx.getWorkflowId(), stepId, timeoutStepId);
+      GetEventCaller caller =
+          new GetEventCaller(ctx.getWorkflowId(), stepId, timeoutStepId, ctx.getOwnerXid());
       return systemDatabase.getEvent(workflowId, key, timeout, caller);
     }
 
@@ -984,7 +1008,11 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
-    systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
+    systemDatabase.sleep(
+        context.getWorkflowId(),
+        context.getAndIncrementFunctionId(),
+        duration,
+        context.getOwnerXid());
   }
 
   public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
@@ -1194,11 +1222,21 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (ctx.isInStep()) {
       systemDatabase.writeStreamFromStep(
-          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
+          ctx.getWorkflowId(),
+          ctx.getCurrentFunctionId(),
+          key,
+          value,
+          serialization.formatName(),
+          ctx.getOwnerXid());
     } else {
       int functionId = ctx.getAndIncrementFunctionId();
       systemDatabase.writeStreamFromWorkflow(
-          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
+          ctx.getWorkflowId(),
+          functionId,
+          key,
+          value,
+          serialization.formatName(),
+          ctx.getOwnerXid());
     }
   }
 
@@ -1216,7 +1254,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     int functionId = ctx.getAndIncrementFunctionId();
-    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
+    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key, ctx.getOwnerXid());
   }
 
   public Iterator<Object> readStream(String workflowId, String key) {
@@ -1546,7 +1584,7 @@ public class DBOSExecutor implements AutoCloseable {
     var workflowId = ctx.getWorkflowId();
     var functionId = ctx.getCurrentFunctionId();
     patchName = "DBOS.patch-%s".formatted(patchName);
-    var patched = systemDatabase.patch(workflowId, functionId, patchName);
+    var patched = systemDatabase.patch(workflowId, functionId, patchName, ctx.getOwnerXid());
     if (patched) {
       ctx.getAndIncrementFunctionId();
     }
@@ -1755,7 +1793,7 @@ public class DBOSExecutor implements AutoCloseable {
               serializedException.serializedValue(),
               childWorkflowId,
               serializedException.serialization());
-      systemDatabase.recordStepResult(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
       throw (E) exception;
     } else {
       logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
@@ -1770,8 +1808,28 @@ public class DBOSExecutor implements AutoCloseable {
               null,
               childWorkflowId,
               serializedOutput.serialization());
-      systemDatabase.recordStepResult(stepResult, startTime);
+      systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
       return output;
+    }
+  }
+
+  /**
+   * Throws {@link DBOSWorkflowExecutionConflictException} unless the execution running on this
+   * thread still owns {@code workflowId}. Does nothing outside that workflow's execution.
+   *
+   * <p>For a transactional step on a database other than the system database, which cannot hold the
+   * system database's lock across its own commit, so the read takes none. Ownership can still move
+   * between this read and the commit; the step's result is then the owner's to replay, which holds
+   * because the step must be deterministic.
+   */
+  public void checkStillOwned(String workflowId) {
+    var ctx = DBOSContextHolder.get();
+    var ownerXid = ctx.getOwnerXid();
+    if (ownerXid == null || !workflowId.equals(ctx.getWorkflowId())) {
+      return;
+    }
+    if (!ownerXid.equals(systemDatabase.getWorkflowOwner(workflowId))) {
+      throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
     }
   }
 
@@ -2056,13 +2114,18 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * Runs the workflow described by an already-claimed row.
+   * Runs the workflow described by a row the queue has just claimed with {@code ownerXid}.
    *
    * <p>The claim -- the queue's ENQUEUED -> PENDING transition -- wrote this workflow's status,
-   * executor, deadline and attempt count, so the run reads them back rather than writing them
-   * again, and nothing here inserts a status row.
+   * executor, deadline, attempt count and owner, so the run reads them back rather than writing
+   * them again, and nothing here inserts a status row.
+   *
+   * <p>The run owns the workflow with {@code ownerXid}, and so does every write this makes before
+   * the run starts, failures included: once a later claim has taken the workflow, none of them
+   * lands.
    */
-  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
+      String workflowId, String ownerXid) {
     logger.debug("executeWorkflowById {}", workflowId);
 
     TimedWorkflowStatus timedStatus;
@@ -2081,7 +2144,8 @@ public class DBOSExecutor implements AutoCloseable {
       persistWorkflowError(
           workflowId,
           new RuntimeException("Failed to deserialize workflow inputs: " + e.getMessage(), e),
-          serialization);
+          serialization,
+          ownerXid);
       throw new RuntimeException("Failed to load workflow " + workflowId, e);
     }
 
@@ -2116,7 +2180,7 @@ public class DBOSExecutor implements AutoCloseable {
       // we cannot write either, and serializing the error into it would throw and leave the
       // workflow PENDING forever — the hang this refusal exists to prevent. The status is the
       // part that has to land.
-      persistWorkflowError(workflowId, e, null);
+      persistWorkflowError(workflowId, e, null, ownerXid);
       throw e;
     }
 
@@ -2138,7 +2202,7 @@ public class DBOSExecutor implements AutoCloseable {
       inputs = JsonUtility.coerceArguments(inputs, workflow.workflowMethod());
     } catch (IllegalArgumentException e) {
       logger.error("Argument coercion failed for workflow {}", workflowId, e);
-      persistWorkflowError(workflowId, e, status.serialization());
+      persistWorkflowError(workflowId, e, status.serialization(), ownerXid);
       throw e;
     }
 
@@ -2148,7 +2212,8 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(status.authenticatedUser())
             .withAssumedRole(status.assumedRole())
             .withAuthenticatedRoles(status.authenticatedRoles());
-    return executeWorkflow(workflow, inputs, options.asClaimed(status, timedStatus.readAt()), null);
+    return executeWorkflow(
+        workflow, inputs, options.asClaimed(status, timedStatus.readAt(), ownerXid), null);
   }
 
   // helper workflow execution methods
@@ -2161,7 +2226,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       var workflowId = ctx.getWorkflowId();
       var functionId = ctx.getAndIncrementFunctionId();
-      return new WorkflowInfo(workflowId, functionId);
+      return new WorkflowInfo(workflowId, functionId, ctx.getOwnerXid());
     }
     return null;
   }
@@ -2318,7 +2383,8 @@ public class DBOSExecutor implements AutoCloseable {
               claimed.deadline(),
               true,
               claimed.serialization(),
-              options.claimedAt());
+              options.claimedAt(),
+              options.claimedOwnerXid());
     } else {
       initResult =
           persistWorkflow(
@@ -2338,18 +2404,18 @@ public class DBOSExecutor implements AutoCloseable {
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
-    if (initResult.status().equals(WorkflowState.SUCCESS)) {
-      // The workflow already completed: its recorded outcome is this call's result. The row
-      // is known to have existed (persistWorkflow just read this status from it), so
-      // failIfMissing: a row deleted in the meantime surfaces
-      // DBOSNonExistentWorkflowException instead of polling forever.
+    if (!initResult.status().equals(WorkflowState.PENDING)) {
+      // This call created the row, but it has moved on since: a start whose acknowledgement was
+      // lost finds it on the retry already completed, or cancelled by its deadline. There is
+      // nothing left to run, and this call owns nothing; its result is the recorded outcome. The
+      // row is known to have existed (persistWorkflow just read this status from it), so
+      // failIfMissing: a row deleted in the meantime surfaces DBOSNonExistentWorkflowException
+      // instead of polling forever.
       return new WorkflowHandleDBPoll<>(this, workflowId, true);
-    } else if (initResult.status().equals(WorkflowState.ERROR)) {
-      logger.warn("Idempotency check not impl for error");
-    } else if (initResult.status().equals(WorkflowState.CANCELLED)) {
-      logger.warn("Idempotency check not impl for cancelled");
     }
 
+    // The token this run owns the workflow with: the claim's, or the direct start's own.
+    final String ownerXid = Objects.requireNonNull(initResult.ownerXid(), "ownerXid");
     final var finalOptions = options;
     final String notRecordedWarning =
         "Workflow outcome was not recorded: the workflow is no longer owned by this execution."
@@ -2364,7 +2430,7 @@ public class DBOSExecutor implements AutoCloseable {
           // The warning logged when this run stops to adopt the recorded outcome, set by
           // whichever site found that this run does not own the workflow's outcome.
           String pendingAdopt;
-          try (var active = new ActiveWorkflowGuard(workflowId, bucket)) {
+          try (var active = new ActiveWorkflowGuard(workflowId, ownerXid, bucket)) {
             logger.debug(
                 "executeWorkflow task {}({}) {}",
                 workflow.fullyQualifiedName(),
@@ -2389,7 +2455,8 @@ public class DBOSExecutor implements AutoCloseable {
                     finalOptions.authenticatedUser(),
                     finalOptions.assumedRole(),
                     finalOptions.authenticatedRoles(),
-                    serializationStrategy));
+                    serializationStrategy,
+                    ownerXid));
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
@@ -2404,7 +2471,7 @@ public class DBOSExecutor implements AutoCloseable {
             }
 
             active.release();
-            if (persistWorkflowOutput(workflowId, output, initResult.serialization())) {
+            if (persistWorkflowOutput(workflowId, output, initResult.serialization(), ownerXid)) {
               return output;
             }
             // The row was not PENDING: this run no longer owns the workflow's outcome. It
@@ -2425,12 +2492,12 @@ public class DBOSExecutor implements AutoCloseable {
             }
 
             if (isConflictFor(e, workflowId)) {
-              // Another execution owns this workflow (a concurrent run recorded a step
-              // checkpoint, or the workflow is already active on this executor). Never persist
-              // the conflict, even when workflow code caught it and rethrew it wrapped: stop
-              // this run and adopt the outcome the workflow records instead.
+              // This run no longer owns the workflow: a cancel, resume, recovery or another claim
+              // took it, and one of its writes was refused. Never persist the conflict, even when
+              // workflow code caught it and rethrew it wrapped: stop this run and adopt the
+              // outcome the workflow records instead.
               pendingAdopt =
-                  "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
+                  "Workflow is no longer owned by this execution. Waiting for the recorded outcome.";
             } else if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
               // The run observed its own cancellation (checkWorkflow only throws this after
@@ -2441,7 +2508,8 @@ public class DBOSExecutor implements AutoCloseable {
               // is the truth.
               pendingAdopt =
                   "Workflow was cancelled during execution. Waiting for the recorded outcome.";
-            } else if (persistWorkflowError(workflowId, actual, initResult.serialization())) {
+            } else if (persistWorkflowError(
+                workflowId, actual, initResult.serialization(), ownerXid)) {
               // active is already closed here: try-with-resources closes before catch runs,
               // so the entry is released before this terminal write becomes durable.
               logger.error("executeWorkflow {}", workflowId, actual);
@@ -2469,8 +2537,10 @@ public class DBOSExecutor implements AutoCloseable {
     // the time left is measured from that reading on this JVM's monotonic clock.
     var timeLeft =
         initResult.deadline() == null ? null : initResult.clock().until(initResult.deadline());
+    // The run's own deadline cancels it only while this run owns the workflow: a timer outliving
+    // a hand-off must not cancel the run that took over.
     if (timeLeft != null && (timeLeft.isNegative() || timeLeft.isZero())) {
-      systemDatabase.cancelWorkflows(List.of(workflowId), false);
+      systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
       return retrieveWorkflow(workflowId);
     }
 
@@ -2479,7 +2549,7 @@ public class DBOSExecutor implements AutoCloseable {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
-              systemDatabase.cancelWorkflows(List.of(workflowId), false);
+              systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
               future.cancel(true);
             }
           },
@@ -2540,11 +2610,14 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           options,
           applicationName);
-    } catch (DBOSWorkflowExecutionConflictException e) {
-      logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
+      throw e;
+    } catch (DBOSWorkflowExecutionConflictException e) {
+      // A parent that no longer owns its workflow was refused: the fence working, not a failure.
+      // The parent stops and waits for the recorded outcome.
+      logger.debug("Child enqueue refused for workflowId {}", options.workflowId(), e);
       throw e;
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
@@ -2583,20 +2656,18 @@ public class DBOSExecutor implements AutoCloseable {
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             options,
             applicationName);
-    var startTime = System.currentTimeMillis();
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
-    var initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
-
-    if (parentWorkflow != null) {
-      systemDatabase.recordChildWorkflow(
-          parentWorkflow.workflowId(),
-          options.workflowId(),
-          parentWorkflow.functionId(),
-          workflowName,
-          startTime);
+    if (parentWorkflow == null) {
+      return systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
     }
-
-    return initResult;
+    return systemDatabase.initChildWorkflowStatus(
+        workflowStatusInternal,
+        retries,
+        new ChildOf(
+            parentWorkflow.workflowId(),
+            parentWorkflow.functionId(),
+            workflowName,
+            parentWorkflow.ownerXid()));
   }
 
   /**
@@ -2664,14 +2735,16 @@ public class DBOSExecutor implements AutoCloseable {
         options.debounceDeadline());
   }
 
-  private boolean persistWorkflowOutput(String workflowId, Object result, String serialization) {
+  private boolean persistWorkflowOutput(
+      String workflowId, Object result, String serialization, String ownerXid) {
     var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
-    return systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
+    return systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue(), ownerXid);
   }
 
-  private boolean persistWorkflowError(String workflowId, Throwable error, String serialization) {
+  private boolean persistWorkflowError(
+      String workflowId, Throwable error, String serialization, String ownerXid) {
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
-    return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
+    return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue(), ownerXid);
   }
 
   /**

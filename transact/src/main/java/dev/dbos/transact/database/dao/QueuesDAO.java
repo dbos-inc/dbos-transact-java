@@ -35,7 +35,8 @@ public class QueuesDAO {
       String appVersion,
       String partitionKey,
       long localRunningCount,
-      long partitionLocalRunningCount)
+      long partitionLocalRunningCount,
+      String ownerXid)
       throws SQLException {
 
     if (partitionKey != null && partitionKey.isEmpty()) {
@@ -211,6 +212,8 @@ public class QueuesDAO {
             SET status = ?,
                 application_version = ?,
                 executor_id = ?,
+                -- The claim's token: the execution it dispatches owns the workflow with it.
+                owner_xid = ?,
                 started_at_epoch_ms = %2$s,
                 updated_at = %2$s,
                 rate_limited = ?,
@@ -242,14 +245,15 @@ public class QueuesDAO {
             ps.setString(1, WorkflowState.PENDING.name());
             ps.setString(2, appVersion);
             ps.setString(3, executorId);
+            ps.setString(4, ownerXid);
             // Whichever scope the limiter is at: rateLimitRemaining counts only rows marked
             // here, so a queue limited solely per partition would otherwise count none of its
             // own claims and hand back the full limit every poll.
-            ps.setBoolean(4, limits.rateLimit() != null || limits.partitionRateLimit() != null);
-            ps.setString(5, ctx.appName());
-            ps.setString(6, id);
-            ps.setString(7, WorkflowState.ENQUEUED.name());
-            ctx.bindAppScope(ps, 8);
+            ps.setBoolean(5, limits.rateLimit() != null || limits.partitionRateLimit() != null);
+            ps.setString(6, ctx.appName());
+            ps.setString(7, id);
+            ps.setString(8, WorkflowState.ENQUEUED.name());
+            ctx.bindAppScope(ps, 9);
             if (ps.executeUpdate() > 0) {
               updatedWorkflowIds.add(id);
             }
@@ -294,11 +298,19 @@ public class QueuesDAO {
    *     sweepCap}
    * @param sweepCap the most heads one sweep claims; {@link #PARTITIONED_DEQUEUE_SWEEP_CAP} outside
    *     tests
+   * @param ownerXid the token the claim installs on every workflow it takes, which the executions
+   *     it dispatches own them with
    * @return the claimed workflow IDs, ordered by partition key
    * @throws IllegalArgumentException if {@link Queue#canBatchPartitionedDequeue} rejects the queue
    */
   public static List<String> startQueuedPartitionedWorkflows(
-      DbContext ctx, Queue queue, String executorId, String appVersion, long maxTasks, int sweepCap)
+      DbContext ctx,
+      Queue queue,
+      String executorId,
+      String appVersion,
+      long maxTasks,
+      int sweepCap,
+      String ownerXid)
       throws SQLException {
     if (!queue.canBatchPartitionedDequeue()) {
       throw new IllegalArgumentException(
@@ -434,6 +446,8 @@ public class QueuesDAO {
             SET status = ?,
                 application_version = ?,
                 executor_id = ?,
+                -- The claim's token, as in the per-partition dequeue.
+                owner_xid = ?,
                 started_at_epoch_ms = %2$s,
                 updated_at = %2$s,
                 rate_limited = FALSE,
@@ -457,12 +471,13 @@ public class QueuesDAO {
           ps.setString(1, WorkflowState.PENDING.name());
           ps.setString(2, appVersion);
           ps.setString(3, executorId);
-          ps.setString(4, ctx.appName());
-          ps.setArray(5, connection.createArrayOf("text", claimIds.toArray()));
-          ps.setString(6, WorkflowState.ENQUEUED.name());
-          ps.setString(7, queue.name());
-          ps.setString(8, appVersion);
-          ctx.bindAppScope(ps, 9);
+          ps.setString(4, ownerXid);
+          ps.setString(5, ctx.appName());
+          ps.setArray(6, connection.createArrayOf("text", claimIds.toArray()));
+          ps.setString(7, WorkflowState.ENQUEUED.name());
+          ps.setString(8, queue.name());
+          ps.setString(9, appVersion);
+          ctx.bindAppScope(ps, 10);
           try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
               flippedIds.add(rs.getString(1));
@@ -549,6 +564,9 @@ public class QueuesDAO {
           SET status = ?,
               started_at_epoch_ms = NULL,
               updated_at = %2$s,
+              -- Released: an execution still running on the named executor stops at its next
+              -- checkpoint, and the claim that picks the workflow up installs its own token.
+              owner_xid = NULL,
               queue_name = COALESCE(NULLIF(queue_name, ''), ?)
           WHERE status = ?
             AND executor_id = ANY(?)

@@ -208,7 +208,7 @@ public class ChaosTest {
 
         try (var directDs =
                 dev.dbos.transact.database.SystemDatabase.createDataSource(
-                    directUrl, pg.getUsername(), pg.getPassword());
+                    directUrl, pg.getUsername(), pg.getPassword(), null);
             var dbos = new DBOS(dbosConfig)) {
 
           var impl = new ChaosServiceImpl(dbos, directDs);

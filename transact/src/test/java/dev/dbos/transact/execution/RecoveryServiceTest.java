@@ -220,7 +220,7 @@ class RecoveryServiceTest {
       // Recover workflow
       // This should use checkpointed step values
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-      h = dbosExecutor.executeWorkflowById(wfid);
+      h = DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, wfid);
       assertNull(h.getStatus().error());
       assertNull(h.getResult());
 
@@ -228,7 +228,7 @@ class RecoveryServiceTest {
       // This should use 1 checkpointed step value
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
-      h = dbosExecutor.executeWorkflowById(wfid);
+      h = DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, wfid);
       assertNull(h.getStatus().error());
       assertNull(h.getResult());
     }
@@ -414,7 +414,7 @@ class RecoveryServiceTest {
       // The cancellation lands in the window between the claim and the dispatch below.
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
 
-      dbosExecutor.executeWorkflowById(wfid);
+      DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, wfid);
 
       // The run would go to a virtual thread, so wait well past the point it would have entered
       // the body -- roughly 40ms without the guard.
@@ -456,7 +456,7 @@ class RecoveryServiceTest {
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       setExecutorId(dataSource, wfid, "some-other-executor");
 
-      dbosExecutor.executeWorkflowById(wfid);
+      DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, wfid);
 
       for (var i = 0; i < 20 && impl.workflowBodyCount == 0; i++) {
         Thread.sleep(100);

@@ -8,5 +8,7 @@ package dev.dbos.transact.database;
  * @param workflowId the calling workflow
  * @param stepId the function id the step replays under
  * @param stepName the step's name
+ * @param ownerXid the token of the calling workflow's execution, which must still own the workflow
+ *     for the step to be recorded
  */
-public record DebounceCaller(String workflowId, int stepId, String stepName) {}
+public record DebounceCaller(String workflowId, int stepId, String stepName, String ownerXid) {}

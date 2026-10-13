@@ -524,7 +524,8 @@ public class SystemDatabaseTest {
     long deadline = System.currentTimeMillis() + 5_000;
     while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
       claimed =
-          sysdb.startQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0);
+          sysdb.startQueuedWorkflows(
+              queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
       if (claimed.isEmpty()) Thread.sleep(100);
     }
     assertEquals(List.of(wfid), claimed);
@@ -670,8 +671,8 @@ public class SystemDatabaseTest {
       List<Runnable> polls =
           List.of(
               () -> db.getQueuePartitions("q"),
-              () -> db.startQueuedWorkflows(new Queue("q"), "exec", "v1", null, 0, 0),
-              () -> db.startQueuedPartitionedWorkflows(partitioned, "exec", "v1", 1));
+              () -> db.startQueuedWorkflows(new Queue("q"), "exec", "v1", null, 0, 0, "test-claim"),
+              () -> db.startQueuedPartitionedWorkflows(partitioned, "exec", "v1", 1, "test-claim"));
       for (var poll : polls) {
         clearInvocations(conn);
         var thrown = assertThrows(DBOSSystemDatabaseException.class, poll::run);
@@ -1154,8 +1155,20 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5);
     int functionId = 1;
 
-    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
-    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+    sysdb.writeStreamFromStep(
+        workflowId,
+        functionId,
+        "key1",
+        "value1",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
+    sysdb.writeStreamFromStep(
+        workflowId,
+        functionId,
+        "key1",
+        "value2",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
 
     Object result = sysdb.readStream(workflowId, "key1", 0);
     assertEquals("value1", result);
@@ -1171,7 +1184,13 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5);
     int functionId = 1;
 
-    sysdb.writeStreamFromWorkflow(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromWorkflow(
+        workflowId,
+        functionId,
+        "key1",
+        "value1",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
 
     Object result = sysdb.readStream(workflowId, "key1", 0);
     assertEquals("value1", result);
@@ -1183,8 +1202,14 @@ public class SystemDatabaseTest {
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5);
 
-    sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
-    sysdb.closeStream(workflowId, 2, "key1");
+    sysdb.writeStreamFromWorkflow(
+        workflowId,
+        1,
+        "key1",
+        "value1",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
+    sysdb.closeStream(workflowId, 2, "key1", DBTestAccess.takeOwnership(sysdb, workflowId));
 
     assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key1", 1));
   }
@@ -1197,7 +1222,7 @@ public class SystemDatabaseTest {
     String workflowId = "stream-wf-drain";
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5);
-    sysdb.recordWorkflowOutput(workflowId, null);
+    sysdb.recordWorkflowOutput(workflowId, null, DBTestAccess.takeOwnership(sysdb, workflowId));
 
     var ctx =
         new DbContext(dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0));
@@ -1210,7 +1235,13 @@ public class SystemDatabaseTest {
     Function<SignalKey, Subscription> subscribeRacingAWrite =
         key -> {
           if (passes.incrementAndGet() == 2) {
-            sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "late", "portable_json");
+            sysdb.writeStreamFromWorkflow(
+                workflowId,
+                1,
+                "key1",
+                "late",
+                "portable_json",
+                DBTestAccess.takeOwnership(sysdb, workflowId));
           }
           return signals.subscribe(key.toString());
         };
@@ -1228,7 +1259,7 @@ public class SystemDatabaseTest {
     String workflowId = "stream-wf-drain-empty";
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5);
-    sysdb.recordWorkflowOutput(workflowId, null);
+    sysdb.recordWorkflowOutput(workflowId, null, DBTestAccess.takeOwnership(sysdb, workflowId));
 
     assertEquals(SystemDatabase.END_OF_STREAM, sysdb.readStream(workflowId, "key1", 0));
   }
@@ -1240,10 +1271,29 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(status, 5);
     int functionId = 1;
 
-    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
-    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
-    sysdb.writeStreamFromStep(workflowId, functionId, "key2", "value3", "portable_json");
-    sysdb.closeStream(workflowId, functionId, "key2");
+    sysdb.writeStreamFromStep(
+        workflowId,
+        functionId,
+        "key1",
+        "value1",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
+    sysdb.writeStreamFromStep(
+        workflowId,
+        functionId,
+        "key1",
+        "value2",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
+    sysdb.writeStreamFromStep(
+        workflowId,
+        functionId,
+        "key2",
+        "value3",
+        "portable_json",
+        DBTestAccess.takeOwnership(sysdb, workflowId));
+    sysdb.closeStream(
+        workflowId, functionId, "key2", DBTestAccess.takeOwnership(sysdb, workflowId));
 
     Map<String, List<Object>> entries = sysdb.getAllStreamEntries(workflowId);
 
@@ -2540,8 +2590,8 @@ public class SystemDatabaseTest {
     var wfId = "get-all-events-wf-1";
     sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
 
-    sysdb.setEvent(wfId, 0, "key1", "value1", false, null);
-    sysdb.setEvent(wfId, 1, "key2", 42, false, null);
+    sysdb.setEvent(wfId, 0, "key1", "value1", false, null, DBTestAccess.takeOwnership(sysdb, wfId));
+    sysdb.setEvent(wfId, 1, "key2", 42, false, null, DBTestAccess.takeOwnership(sysdb, wfId));
 
     var events = sysdb.getAllEvents(wfId);
 
@@ -2567,14 +2617,12 @@ public class SystemDatabaseTest {
     sysdb.sendBulk(
         List.of(new SendMessage(wfId, "message1", "topic1", "notif-uuid-1")),
         null,
-        -1,
         "DBOS.send",
         false,
         null);
     sysdb.sendBulk(
         List.of(new SendMessage(wfId, "message2", "topic2", "notif-uuid-2")),
         null,
-        -1,
         "DBOS.send",
         false,
         null);
@@ -2915,7 +2963,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-wc").withWorkerConcurrency(2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_READ_COMMITTED,
@@ -2929,7 +2977,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-gc").withConcurrency(3);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,
@@ -2962,7 +3010,8 @@ public class SystemDatabaseTest {
     var ds = new IsolationRecordingDataSource(dataSource);
     ds.lastIsolationLevel = Connection.TRANSACTION_NONE;
 
-    QueuesDAO.startQueuedPartitionedWorkflows(recordingCtx(ds), queue, "exec", "v1", 1, 1);
+    QueuesDAO.startQueuedPartitionedWorkflows(
+        recordingCtx(ds), queue, "exec", "v1", 1, 1, "test-claim");
 
     assertEquals(Connection.TRANSACTION_READ_COMMITTED, ds.lastIsolationLevel);
   }
@@ -2976,7 +3025,8 @@ public class SystemDatabaseTest {
     Queue queue = partitionedQueue("iso-partition-gc", 3, 1);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+    QueuesDAO.startQueuedWorkflows(
+        recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_SERIALIZABLE,
@@ -2992,7 +3042,8 @@ public class SystemDatabaseTest {
     Queue queue = partitionedQueue("iso-partition-only", null, 2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0);
+    QueuesDAO.startQueuedWorkflows(
+        recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,
@@ -3009,7 +3060,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("rl-batch").withRateLimit(limit, Duration.ofSeconds(60));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     var candidateSelect =
         ds.preparedSql.stream()
@@ -3069,7 +3120,7 @@ public class SystemDatabaseTest {
 
       assertThrows(
           Exception.class,
-          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0, 0),
+          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0, 0, "test-claim"),
           "a rate-limited dequeue must not skip past a peer's open claim");
       peer.rollback();
     }
@@ -3135,7 +3186,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-rl").withRateLimit(5, Duration.ofSeconds(1));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0);
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,

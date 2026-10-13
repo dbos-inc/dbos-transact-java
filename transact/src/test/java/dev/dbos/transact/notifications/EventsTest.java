@@ -11,6 +11,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.StepInfo;
@@ -367,7 +368,9 @@ public class EventsTest {
     impl.advanceGetLatch1.countDown();
     impl.advanceGetLatch2.countDown();
     DBUtils.setWorkflowState(dataSource, getwfh.workflowId(), WorkflowState.PENDING.name());
-    getwfh = DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(getwfh.workflowId());
+    getwfh =
+        DBOSExecutorTestAccess.executeWorkflowById(
+            DBOSTestAccess.getDbosExecutor(dbos), getwfh.workflowId());
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
 
@@ -451,7 +454,8 @@ public class EventsTest {
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
     // Recover — workflow body re-executes, getEvent step replays via toResult()
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(wfid);
+    var handle =
+        DBOSExecutorTestAccess.executeWorkflowById(DBOSTestAccess.getDbosExecutor(dbos), wfid);
     assertNull(handle.getResult());
   }
 
@@ -468,7 +472,8 @@ public class EventsTest {
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
     // Recover — workflow body re-executes, recv step replays via toResult()
-    var handle = DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(wfid);
+    var handle =
+        DBOSExecutorTestAccess.executeWorkflowById(DBOSTestAccess.getDbosExecutor(dbos), wfid);
     assertNull(handle.getResult());
   }
 

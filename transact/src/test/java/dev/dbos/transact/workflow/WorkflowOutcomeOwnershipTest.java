@@ -11,6 +11,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -281,7 +282,8 @@ public class WorkflowOutcomeOwnershipTest {
     // time the outcome is read was deleted — fail fast instead of polling for a row that will
     // never reappear.
     var redispatched =
-        DBOSTestAccess.getDbosExecutor(dbos).<String, Exception>executeWorkflowById(workflowId);
+        DBOSExecutorTestAccess.<String, Exception>executeWorkflowById(
+            DBOSTestAccess.getDbosExecutor(dbos), workflowId);
     deleteRow(workflowId);
 
     assertThrows(
@@ -373,7 +375,8 @@ public class WorkflowOutcomeOwnershipTest {
     var handle = startBlockedRun(workflowId);
 
     var duplicate =
-        DBOSTestAccess.getDbosExecutor(dbos).<String, Exception>executeWorkflowById(workflowId);
+        DBOSExecutorTestAccess.<String, Exception>executeWorkflowById(
+            DBOSTestAccess.getDbosExecutor(dbos), workflowId);
 
     var done =
         CompletableFuture.supplyAsync(

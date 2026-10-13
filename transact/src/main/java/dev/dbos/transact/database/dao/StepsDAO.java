@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
@@ -27,35 +28,42 @@ public class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
-  static void recordStepResult(DbContext ctx, StepResult result, long startTimeEpochMs)
-      throws SQLException {
-    recordStepResult(ctx, result, startTimeEpochMs, System.currentTimeMillis());
-  }
-
+  /** Records a step in a transaction of its own. */
   public static void recordStepResult(
-      DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs)
+      DbContext ctx, StepResult result, long startTimeEpochMs, long endTimeEpochMs, String ownerXid)
       throws SQLException {
     try (var conn = ctx.getConnection()) {
-      recordStepResult(ctx, conn, result, startTimeEpochMs, endTimeEpochMs);
+      SqlTransaction.run(
+          conn, c -> recordStepResult(ctx, c, result, startTimeEpochMs, endTimeEpochMs, ownerXid));
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
-  static void recordStepResult(
-      DbContext ctx, Connection conn, StepResult result, long startTimeEpochMs)
-      throws SQLException {
-    recordStepResult(ctx, conn, result, startTimeEpochMs, System.currentTimeMillis());
-  }
-
+  /**
+   * Records a step in the caller's transaction, after the writes the step made in it.
+   *
+   * <p>The step is recorded only while the execution holding {@code ownerXid} still owns the
+   * workflow: the owner check comes first, and a failed one throws {@link
+   * DBOSWorkflowExecutionConflictException}, rolling back the caller's whole transaction. Once the
+   * check passes, no other execution can be writing this workflow's steps, so a different row
+   * already at this step was written by this execution itself, and is a {@link
+   * DBOSStepNondeterminismException}.
+   */
   public static void recordStepResult(
-      DbContext ctx, Connection conn, StepResult result, Long startTimeEpochMs, Long endTimeEpochMs)
+      DbContext ctx,
+      Connection conn,
+      StepResult result,
+      Long startTimeEpochMs,
+      Long endTimeEpochMs,
+      String ownerXid)
       throws SQLException {
 
     String schema = Objects.requireNonNull(ctx.schema());
+    WorkflowDAO.checkOwner(conn, schema, result.workflowId(), ownerXid);
     // On a conflict, the update applies only when the row already there is the one this call is
     // writing: then it is this call's own, committed by an attempt whose acknowledgement was lost,
-    // and RETURNING hands it back. A row that differs was written by another execution of the
-    // workflow; the update leaves it untouched and RETURNING comes back empty.
+    // and RETURNING hands it back. A row that differs leaves the update untouched and RETURNING
+    // comes back empty.
     String sql =
         """
           INSERT INTO "%s".operation_outputs AS oo
@@ -104,17 +112,10 @@ public class StepsDAO {
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (!rs.next()) {
-          logger.warn(
-              "Step output for {}:{}-{} was already recorded by another execution",
-              result.workflowId(),
-              result.stepId(),
-              result.stepName());
-          throw new DBOSWorkflowExecutionConflictException(result.workflowId());
+          throw new DBOSStepNondeterminismException(result.workflowId(), result.stepId());
         }
       }
     }
-
-    WorkflowDAO.restampExecutorId(conn, schema, result.workflowId(), ctx.executorId());
   }
 
   static StepResult checkStepResult(
@@ -299,9 +300,10 @@ public class StepsDAO {
     return new ExportedSteps(steps, stored);
   }
 
-  public static void sleep(DbContext ctx, String workflowUuid, int functionId, Duration duration)
+  public static void sleep(
+      DbContext ctx, String workflowUuid, int functionId, Duration duration, String ownerXid)
       throws SQLException {
-    var endTime = durableSleepEndTime(ctx, workflowUuid, functionId, duration);
+    var endTime = durableSleepEndTime(ctx, workflowUuid, functionId, duration, ownerXid);
     var sleepDuration = Duration.between(Instant.now(), endTime);
     logger.debug("Sleeping until {} (duration {})", endTime, sleepDuration);
     if (sleepDuration.isNegative() || sleepDuration.isZero()) {
@@ -338,18 +340,24 @@ public class StepsDAO {
     }
   }
 
-  public static boolean patch(DbContext ctx, String workflowId, int functionId, String patchName)
+  public static boolean patch(
+      DbContext ctx, String workflowId, int functionId, String patchName, String ownerXid)
       throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
-    try (var conn = ctx.getConnection()) {
-      var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
-      if (checkpointName == null) {
-        var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
-        recordStepResult(ctx, conn, output, System.currentTimeMillis(), null);
-        return true;
-      } else {
-        return patchName.equals(checkpointName);
-      }
+    try (var txConn = ctx.getConnection()) {
+      // Reading an existing marker writes nothing, so only a new marker is checked against the
+      // owner, in the transaction that records it.
+      return SqlTransaction.call(
+          txConn,
+          conn -> {
+            var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
+            if (checkpointName != null) {
+              return patchName.equals(checkpointName);
+            }
+            var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
+            recordStepResult(ctx, conn, output, System.currentTimeMillis(), null, ownerXid);
+            return true;
+          });
     }
   }
 
@@ -363,7 +371,8 @@ public class StepsDAO {
   }
 
   static Instant durableSleepEndTime(
-      DbContext ctx, String workflowUuid, int functionId, Duration duration) throws SQLException {
+      DbContext ctx, String workflowUuid, int functionId, Duration duration, String ownerXid)
+      throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
     Objects.requireNonNull(ctx.schema());
@@ -407,10 +416,10 @@ public class StepsDAO {
               null,
               null,
               serializedValue.serialization());
-      // A conflict means another execution recorded this sleep first. It propagates, so this
-      // run stops and adopts the workflow's recorded outcome rather than sleeping to a wake
-      // time the workflow never recorded.
-      recordStepResult(ctx, output, startTime, (long) endTime);
+      // A conflict means this execution no longer owns the workflow. It propagates, so this run
+      // stops and adopts the workflow's recorded outcome rather than sleeping to a wake time the
+      // workflow never recorded.
+      recordStepResult(ctx, output, startTime, (long) endTime, ownerXid);
       return Instant.ofEpochMilli(endTime);
     }
   }

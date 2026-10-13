@@ -142,6 +142,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
                 c -> {
                   var result = callback.execute(c);
                   recordOutput(c, wfId, stepId, result);
+                  checkStillOwned(wfId);
                   return result;
                 });
           } catch (StepConflictException e) {

@@ -169,7 +169,7 @@ public class JdbcStepFactoryInitTest {
     try (var dbos = new DBOS(config);
         var dataSource =
             SystemDatabase.createDataSource(
-                appDbJdbcUrl, pgContainer.username(), pgContainer.password())) {
+                appDbJdbcUrl, pgContainer.username(), pgContainer.password(), null)) {
       new JdbcStepFactory(dbos, dataSource);
       dbos.launch();
 

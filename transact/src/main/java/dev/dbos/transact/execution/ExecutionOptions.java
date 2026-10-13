@@ -38,6 +38,8 @@ public record ExecutionOptions(
     WorkflowStatus claimedStatus,
     // The database's clock as the claimed row was read, which its deadline is measured against.
     DatabaseTime claimedAt,
+    // The token the claim installed, which the run owns the workflow with.
+    String claimedOwnerXid,
     // Name of the schedule that triggered this workflow, if any. Set only by the scheduler.
     String scheduleName,
     // Set only by the debouncers, which enqueue their workflow flagged as debounced, its delay
@@ -114,6 +116,7 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         null);
   }
@@ -121,6 +124,7 @@ public record ExecutionOptions(
   public ExecutionOptions(String workflowId) {
     this(
         workflowId,
+        null,
         null,
         null,
         null,
@@ -160,15 +164,16 @@ public record ExecutionOptions(
         null,
         null,
         null,
+        null,
         false,
         null);
   }
 
   /**
-   * The options for running a workflow from a row the queue has already claimed, read when the
-   * database's clock read {@code readAt}.
+   * The options for running a workflow from a row the queue has already claimed with {@code
+   * ownerXid}, read when the database's clock read {@code readAt}.
    */
-  public ExecutionOptions asClaimed(WorkflowStatus claimed, DatabaseTime readAt) {
+  public ExecutionOptions asClaimed(WorkflowStatus claimed, DatabaseTime readAt, String ownerXid) {
     return new ExecutionOptions(
         this.workflowId,
         this.timeout,
@@ -186,6 +191,7 @@ public record ExecutionOptions(
         this.attributes,
         claimed,
         readAt,
+        ownerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -210,6 +216,7 @@ public record ExecutionOptions(
         options.attributes(),
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -237,6 +244,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -260,6 +268,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -283,6 +292,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -306,6 +316,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -329,6 +340,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -352,6 +364,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -375,6 +388,7 @@ public record ExecutionOptions(
         attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -398,6 +412,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -421,6 +436,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -444,6 +460,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -467,6 +484,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         scheduleName,
         this.isDebounced,
         this.debounceDeadline);
@@ -491,6 +509,7 @@ public record ExecutionOptions(
         this.attributes,
         this.claimedStatus,
         this.claimedAt,
+        this.claimedOwnerXid,
         this.scheduleName,
         true,
         debounceDeadline);

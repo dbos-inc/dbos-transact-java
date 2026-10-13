@@ -118,6 +118,7 @@ public class JooqStepFactory extends PostgresStepFactory {
                   applyIsolationLevel(trx, options.isolationLevel());
                   var result = callback.run(trx);
                   recordOutput(trx, wfId, stepId, result);
+                  checkStillOwned(wfId);
                   return result;
                 });
           } catch (StepConflictException e) {
