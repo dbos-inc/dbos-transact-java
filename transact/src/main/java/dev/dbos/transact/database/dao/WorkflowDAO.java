@@ -472,8 +472,8 @@ public class WorkflowDAO {
    *
    * <p>Returning false means the row was CANCELLED, dead-lettered, already terminal, handed to
    * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume), or gone entirely. Callers
-   * that need to distinguish a deleted row do so when they park on the recorded outcome (see {@link
-   * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
+   * that need to distinguish a deleted row do so when they wait for the recorded outcome (see
+   * {@link #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
    */
   private static boolean updateWorkflowOutcome(
       Connection conn,
@@ -1892,7 +1892,7 @@ public class WorkflowDAO {
    *
    * <p>A missing row normally means the workflow just hasn't been inserted yet (an unchecked
    * retrieve, or a debounced workflow whose row appears only after the debounce period), so polling
-   * is correct. Callers that know the row must already exist (a run parking on an outcome it just
+   * is correct. Callers that know the row must already exist (a run waiting for an outcome it just
    * failed to write) pass {@code failIfMissing} to fail fast with {@link
    * DBOSNonExistentWorkflowException} instead of polling forever.
    */

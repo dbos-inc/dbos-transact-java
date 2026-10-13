@@ -71,6 +71,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -1522,7 +1524,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   // A missing row normally means the workflow just hasn't been inserted yet (an unchecked
   // retrieve, or a debounced workflow whose row appears only after the debounce period), so
-  // polling is correct. Callers that know the row must already exist (a run parking on an
+  // polling is correct. Callers that know the row must already exist (a run waiting for an
   // outcome it just failed to write) pass failIfMissing to fail fast instead of polling
   // forever.
   private <T, E extends Exception> T awaitWorkflowResult(String workflowId, boolean failIfMissing)
@@ -1771,6 +1773,19 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.recordStepResult(stepResult, startTime);
       return output;
     }
+  }
+
+  // Whether a conflict on this workflow is anywhere in the cause chain: workflow code may have
+  // caught it and rethrown it wrapped, in a checked exception as well as an unchecked one.
+  private static boolean isConflictFor(Throwable e, String workflowId) {
+    var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+    for (Throwable t = e; t != null && seen.add(t); t = t.getCause()) {
+      if (t instanceof DBOSWorkflowExecutionConflictException conflict
+          && workflowId.equals(conflict.workflowId())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Workflow Execution Methods
@@ -2346,8 +2361,8 @@ public class DBOSExecutor implements AutoCloseable {
               finalOptions.claimedStatus() != null
                   ? new QueueBucket(finalOptions.queueName(), finalOptions.queuePartitionKey())
                   : NO_QUEUE;
-          // The warning to park under, set by whichever site found that this run does not
-          // own the workflow's outcome.
+          // The warning logged when this run stops to adopt the recorded outcome, set by
+          // whichever site found that this run does not own the workflow's outcome.
           String pendingAdopt;
           try (var active = new ActiveWorkflowGuard(workflowId, bucket)) {
             logger.debug(
@@ -2396,12 +2411,6 @@ public class DBOSExecutor implements AutoCloseable {
             // may have been cancelled, dead-lettered, completed by a concurrent execution,
             // or handed back to the queue by a resume.
             pendingAdopt = notRecordedWarning;
-          } catch (DBOSWorkflowExecutionConflictException e) {
-            // Another execution owns this workflow (a concurrent run recorded a step
-            // checkpoint, or the workflow is already active on this executor). Never
-            // persist the conflict: park the execution instead.
-            pendingAdopt =
-                "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
           } catch (Exception e) {
             Throwable actual = e;
 
@@ -2415,12 +2424,19 @@ public class DBOSExecutor implements AutoCloseable {
               }
             }
 
-            if (actual instanceof DBOSWorkflowCancelledException cancelled
+            if (isConflictFor(e, workflowId)) {
+              // Another execution owns this workflow (a concurrent run recorded a step
+              // checkpoint, or the workflow is already active on this executor). Never persist
+              // the conflict, even when workflow code caught it and rethrew it wrapped: stop
+              // this run and adopt the outcome the workflow records instead.
+              pendingAdopt =
+                  "Aborting duplicate execution of workflow. Waiting for the recorded outcome.";
+            } else if (actual instanceof DBOSWorkflowCancelledException cancelled
                 && cancelled.workflowId().equals(workflowId)) {
               // The run observed its own cancellation (checkWorkflow only throws this after
               // reading CANCELLED from the DB). Skip the outcome write so it can never clobber
               // the row, and adopt the recorded outcome: normally the row is still CANCELLED
-              // and the park throws DBOSAwaitedWorkflowCancelledException, but a concurrent
+              // and the wait throws DBOSAwaitedWorkflowCancelledException, but a concurrent
               // resume may have taken the workflow back, in which case the recorded outcome
               // is the truth.
               pendingAdopt =
@@ -2441,10 +2457,10 @@ public class DBOSExecutor implements AutoCloseable {
           }
 
           // Reached only when a refusal above set pendingAdopt: this run does not own the
-          // workflow's outcome. Park the execution and deliver the recorded outcome through
-          // this run's own future. The row is known to have existed (this run inserted or
-          // read it), so failIfMissing: a missing row means it was deleted, and the park
-          // surfaces DBOSNonExistentWorkflowException instead of polling forever.
+          // workflow's outcome. Stop executing it, wait for the recorded outcome, and deliver
+          // that through this run's own future. The row is known to have existed (this run
+          // inserted or read it), so failIfMissing: a missing row means it was deleted, and the
+          // wait surfaces DBOSNonExistentWorkflowException instead of polling forever.
           logger.warn("{} workflowId {}", pendingAdopt, workflowId);
           return awaitWorkflowResult(workflowId, true);
         };

@@ -202,10 +202,10 @@ public class WorkflowOutcomeOwnershipTest {
   }
 
   @Test
-  public void nonTerminalRowParksTheRunUntilAnOutcomeIsRecorded() throws Exception {
-    var workflowId = "outcome-ownership-parked-%d".formatted(System.currentTimeMillis());
+  public void nonTerminalRowMakesTheRunWaitUntilAnOutcomeIsRecorded() throws Exception {
+    var workflowId = "outcome-ownership-waiting-%d".formatted(System.currentTimeMillis());
     var handle = startBlockedRun(workflowId);
-    // ENQUEUED with no queue name: nothing dequeues it, so the run stays parked until this test
+    // ENQUEUED with no queue name: nothing dequeues it, so the run keeps waiting until this test
     // records the outcome itself.
     rewriteRow(workflowId, WorkflowState.ENQUEUED, null, null);
     releaseRun(workflowId);
@@ -230,7 +230,7 @@ public class WorkflowOutcomeOwnershipTest {
     assertEquals(
         "recorded-by-owner",
         done.get(30, TimeUnit.SECONDS),
-        "the parked run must adopt the recorded outcome");
+        "the waiting run must adopt the recorded outcome");
   }
 
   @Test
@@ -337,7 +337,7 @@ public class WorkflowOutcomeOwnershipTest {
   @Test
   public void failedRunFailsFastWhenItsRowIsDeleted() throws Exception {
     // Same fail-fast as the success path, reached through the error path: the refused error
-    // write leaves the run parking on a row it knows existed, so a missing row must not be
+    // write leaves the run waiting on a row it knows existed, so a missing row must not be
     // read as "not inserted yet" and polled forever.
     var workflowId = "outcome-ownership-failed-deleted-%d".formatted(System.currentTimeMillis());
     var handle = startThrowingRun(workflowId);
@@ -365,9 +365,9 @@ public class WorkflowOutcomeOwnershipTest {
   }
 
   @Test
-  public void conflictingExecutionParksAndAdoptsTheRecordedOutcome() throws Exception {
+  public void conflictingExecutionStopsAndAdoptsTheRecordedOutcome() throws Exception {
     // A recovery dispatch of a workflow that is already active on this executor loses the
-    // start race: it must park and adopt the outcome recorded by the run that owns the
+    // start race: it must stop and adopt the outcome recorded by the run that owns the
     // workflow, not surface the conflict.
     var workflowId = "outcome-ownership-conflict-%d".formatted(System.currentTimeMillis());
     var handle = startBlockedRun(workflowId);
