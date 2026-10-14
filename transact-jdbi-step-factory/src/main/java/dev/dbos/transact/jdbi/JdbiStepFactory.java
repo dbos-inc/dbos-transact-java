@@ -16,6 +16,7 @@ import org.jdbi.v3.core.HandleCallback;
 import org.jdbi.v3.core.HandleConsumer;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
 
 /**
  * Runs idempotent transactional steps inside DBOS workflows using Jdbi3 {@link Handle} objects.
@@ -143,9 +144,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
                 return result;
               };
           try {
-            return jdbiLevel != null
-                ? jdbi.inTransaction(jdbiLevel, wrapped)
-                : jdbi.inTransaction(wrapped);
+            return inOwnTransaction(jdbiLevel, wrapped);
           } catch (StepConflictException e) {
             return checkExecution(wfId, stepId, options.name())
                 .orElseThrow(
@@ -230,10 +229,13 @@ public class JdbiStepFactory extends PostgresStepFactory {
   protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     try {
-      jdbi.useTransaction(
-          h ->
-              recordResult(
-                  h, workflowId, stepId, null, value.serializedValue(), value.serialization()));
+      inOwnTransaction(
+          null,
+          h -> {
+            recordResult(
+                h, workflowId, stepId, null, value.serializedValue(), value.serialization());
+            return null;
+          });
     } catch (StepConflictException ignored) {
     }
   }
@@ -241,6 +243,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
   @Override
   protected void deleteCheckpoints(String workflowId, int fromStepId) {
     inOwnTransaction(
+        null,
         h ->
             h.createUpdate(TxStepSchema.deleteFromStepSql(schema))
                 .bind(0, workflowId)
@@ -251,29 +254,49 @@ public class JdbiStepFactory extends PostgresStepFactory {
   @Override
   protected void deleteCheckpoints(Collection<String> workflowIds) {
     inOwnTransaction(
+        null,
         h ->
             h.createUpdate(TxStepSchema.deleteWorkflowsSql(schema))
                 .bindArray(0, String.class, workflowIds)
                 .execute());
   }
 
-  // Jdbi's useTransaction does not commit a connection that arrives with autocommit off: it takes
-  // that for a transaction already in progress and leaves the commit to someone else. begin() and
-  // commit() on the handle commit either way.
-  private void inOwnTransaction(HandleConsumer<RuntimeException> work) {
+  // Jdbi's inTransaction and useTransaction do not commit a connection that arrives with
+  // autocommit off: they take that for a transaction already in progress and leave the commit to
+  // someone else. begin() and commit() on the handle commit either way.
+  private <R, X extends Exception> R inOwnTransaction(
+      TransactionIsolationLevel level, HandleCallback<R, X> work) throws X {
     try (var handle = jdbi.open()) {
-      handle.begin();
+      var previousLevel = level != null ? handle.getTransactionIsolationLevel() : null;
+      if (level != null) {
+        handle.setTransactionIsolationLevel(level);
+      }
+      R result;
       try {
-        work.useHandle(handle);
+        handle.begin();
+        result = work.withHandle(handle);
         handle.commit();
-      } catch (RuntimeException e) {
+      } catch (Throwable t) {
+        // Rolling back and restoring the isolation level can themselves fail on a broken
+        // connection. Suppress both onto the original throwable rather than replacing it.
         try {
           handle.rollback();
         } catch (RuntimeException rollbackFailure) {
-          e.addSuppressed(rollbackFailure);
+          t.addSuppressed(rollbackFailure);
         }
-        throw e;
+        if (level != null) {
+          try {
+            handle.setTransactionIsolationLevel(previousLevel);
+          } catch (RuntimeException restoreFailure) {
+            t.addSuppressed(restoreFailure);
+          }
+        }
+        throw t;
       }
+      if (level != null) {
+        handle.setTransactionIsolationLevel(previousLevel);
+      }
+      return result;
     }
   }
 
