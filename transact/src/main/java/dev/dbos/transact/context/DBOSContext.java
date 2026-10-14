@@ -1,15 +1,20 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 public class DBOSContext {
 
@@ -37,6 +42,10 @@ public class DBOSContext {
   // The token of the execution running this workflow. Every checkpoint it writes is checked against
   // the workflow's owner_xid, so a run that no longer owns the workflow cannot record anything.
   private final String ownerXid;
+  // The transactional step factories' checkpoint stores this execution has run steps through,
+  // replayed ones included, so it can delete its checkpoints there when it finishes. Kept in the
+  // order first used; empty and never written outside a workflow.
+  private final Set<StepCheckpointStore> usedStepCheckpointStores;
 
   // private StepStatus stepStatus;
 
@@ -50,6 +59,7 @@ public class DBOSContext {
     authenticatedRoles = null;
     serialization = SerializationStrategy.DEFAULT;
     ownerXid = null;
+    usedStepCheckpointStores = Set.of();
   }
 
   public DBOSContext(
@@ -70,6 +80,7 @@ public class DBOSContext {
     this.authenticatedRoles = authenticatedRoles;
     this.serialization = serialization;
     this.ownerXid = ownerXid;
+    this.usedStepCheckpointStores = new CopyOnWriteArraySet<>();
   }
 
   public DBOSContext(
@@ -94,6 +105,8 @@ public class DBOSContext {
     this.authenticatedRoles = other.authenticatedRoles;
     this.serialization = other.serialization;
     this.ownerXid = other.ownerXid;
+    // The same execution, so the same stores.
+    this.usedStepCheckpointStores = other.usedStepCheckpointStores;
   }
 
   public boolean isInWorkflow() {
@@ -122,6 +135,21 @@ public class DBOSContext {
 
   public void resetStepFunctionId() {
     stepFunctionId = null;
+  }
+
+  /** Records that this workflow's execution ran a transactional step through {@code store}. */
+  public void useStepCheckpointStore(StepCheckpointStore store) {
+    if (isInWorkflow()) {
+      usedStepCheckpointStores.add(store);
+    }
+  }
+
+  /**
+   * The checkpoint stores this workflow's execution has run transactional steps through, as a
+   * read-only view.
+   */
+  public Collection<StepCheckpointStore> usedStepCheckpointStores() {
+    return Collections.unmodifiableCollection(usedStepCheckpointStores);
   }
 
   /** The token of the execution running this workflow, or null outside a workflow. */

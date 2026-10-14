@@ -31,4 +31,9 @@ public class DBOSTestAccess {
     var exec = getDbosExecutor(dbos);
     return DBOSExecutorTestAccess.getSchedulerService(exec);
   }
+
+  /** Keeps finished workflows' transactional step checkpoints; call before launch. */
+  public static void keepCompletedStepCheckpoints(DBOS dbos) {
+    dbos.keepCompletedStepCheckpoints();
+  }
 }

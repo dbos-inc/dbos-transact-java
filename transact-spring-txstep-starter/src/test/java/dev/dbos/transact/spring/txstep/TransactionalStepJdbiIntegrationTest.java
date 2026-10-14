@@ -16,6 +16,7 @@ import javax.sql.DataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.spring.JdbiFactoryBean;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -141,6 +142,10 @@ public class TransactionalStepJdbiIntegrationTest {
             "CREATE TABLE IF NOT EXISTS orders"
                 + " (id TEXT PRIMARY KEY, item TEXT NOT NULL, qty INT NOT NULL)");
     return new ApplicationContextRunner()
+        .withBean(
+            "keepCompletedStepCheckpoints",
+            BeanPostProcessor.class,
+            TransactionalStepTest::keepCompletedStepCheckpoints)
         .withConfiguration(
             AutoConfigurations.of(
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))

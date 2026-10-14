@@ -94,6 +94,15 @@ public class TransactionalStepFactory {
         inTransaction(conn -> TxStepSchema.deleteWorkflows(conn, schema, workflowIds));
       }
     }
+
+    @Override
+    public void deleteCompletedCheckpoints(String workflowId) throws SQLException {
+      inTransaction(
+          conn -> {
+            TxStepSchema.deleteFromStep(conn, schema, workflowId, 0);
+            PostgresStepFactory.checkStillOwned(dbos, workflowId, dataSource, conn);
+          });
+    }
   }
 
   @FunctionalInterface
@@ -108,8 +117,12 @@ public class TransactionalStepFactory {
       try {
         work.run(conn);
         conn.commit();
-      } catch (SQLException ex) {
-        conn.rollback();
+      } catch (SQLException | RuntimeException ex) {
+        try {
+          conn.rollback();
+        } catch (SQLException rollbackFailure) {
+          ex.addSuppressed(rollbackFailure);
+        }
         throw ex;
       }
     }
@@ -212,6 +225,9 @@ public class TransactionalStepFactory {
       }
     }
 
+    // Before the step, so a replayed step counts too: this execution then also clears the rows an
+    // earlier one wrote.
+    dbos.integration().useStepCheckpointStore(checkpointStore);
     return dbos.<Object, E>runStep(
         () -> {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());

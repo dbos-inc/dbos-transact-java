@@ -96,6 +96,8 @@ public class JdbiStepFactoryNoAutoCommitTest {
     noAutoCommitDataSource = new HikariDataSource(cfg);
 
     dbos = new DBOS(pgContainer.dbosConfig());
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
     var factory = new JdbiStepFactory(dbos, Jdbi.create(noAutoCommitDataSource), SCHEMA);
     proxy = dbos.registerProxy(NoAutoCommitService.class, new NoAutoCommitServiceImpl(factory));
     dbos.launch();

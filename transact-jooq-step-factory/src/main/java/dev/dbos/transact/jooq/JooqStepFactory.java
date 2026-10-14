@@ -240,6 +240,15 @@ public class JooqStepFactory extends PostgresStepFactory {
             trx.dsl().connection(conn -> TxStepSchema.deleteWorkflows(conn, schema, workflowIds)));
   }
 
+  @Override
+  protected void deleteCompletedCheckpoints(String workflowId) {
+    dsl.transaction(
+        trx -> {
+          trx.dsl().execute(TxStepSchema.deleteFromStepSql(schema), workflowId, 0);
+          trx.dsl().connection(c -> checkStillOwned(workflowId, c));
+        });
+  }
+
   private void recordResult(
       DSLContext ctx,
       String workflowId,

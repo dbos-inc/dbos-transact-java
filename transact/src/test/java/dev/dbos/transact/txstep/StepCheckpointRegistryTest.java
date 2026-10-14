@@ -70,6 +70,8 @@ public class StepCheckpointRegistryTest {
     cfg.setAutoCommit(false);
     noAutoCommitDataSource = new HikariDataSource(cfg);
     dbos = new DBOS(dbosConfig);
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
   }
 
   private List<Integer> checkpoints(String schema, String workflowId) throws SQLException {
@@ -266,6 +268,11 @@ public class StepCheckpointRegistryTest {
 
     @Override
     public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      record();
+    }
+
+    @Override
+    public void deleteCompletedCheckpoints(String workflowId) throws SQLException {
       record();
     }
 

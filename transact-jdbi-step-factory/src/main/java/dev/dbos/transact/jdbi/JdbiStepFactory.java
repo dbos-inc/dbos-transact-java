@@ -261,6 +261,20 @@ public class JdbiStepFactory extends PostgresStepFactory {
                 .execute());
   }
 
+  @Override
+  protected void deleteCompletedCheckpoints(String workflowId) {
+    inOwnTransaction(
+        null,
+        h -> {
+          h.createUpdate(TxStepSchema.deleteFromStepSql(schema))
+              .bind(0, workflowId)
+              .bind(1, 0)
+              .execute();
+          checkStillOwned(workflowId, h.getConnection());
+          return null;
+        });
+  }
+
   // Jdbi's inTransaction and useTransaction do not commit a connection that arrives with
   // autocommit off: they take that for a transaction already in progress and leave the commit to
   // someone else. begin() and commit() on the handle commit either way.
