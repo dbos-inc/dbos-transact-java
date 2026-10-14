@@ -131,7 +131,7 @@ public class WorkflowInsertOwnershipTest {
       var step = new StepResult(workflowId, 0, "step", "out", null, null, null);
       assertDoesNotThrow(() -> sysdb.recordStepResult(step, 100L, token));
     } finally {
-      DebugTriggers.clearDebugTriggers();
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
     }
 
     assertEquals(1, DBUtils.getStepRows(dataSource, workflowId).size());

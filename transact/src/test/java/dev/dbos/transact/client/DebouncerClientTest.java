@@ -358,7 +358,7 @@ public class DebouncerClientTest {
     try {
       handle = debouncer().debounce("slow", Duration.ofMillis(300), "fresh");
     } finally {
-      DebugTriggers.clearDebugTriggers();
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
     }
 
     assertNotEquals("promised-c5", handle.workflowId());

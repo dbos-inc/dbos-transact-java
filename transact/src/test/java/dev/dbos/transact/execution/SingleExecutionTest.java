@@ -22,6 +22,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 interface TryConcExecIfc {
   void testConcStep() throws InterruptedException;
@@ -418,17 +419,24 @@ public class SingleExecutionTest {
   }
 
   @Test
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT)
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT)
   void testCommitHiccups() throws InterruptedException {
     assertEquals("Yay!", execIfc.testWorkflow());
 
-    DebugTriggers.setDebugTrigger(
-        DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT,
-        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
-    assertEquals("Yay!", execIfc.testWorkflow());
+    try {
+      DebugTriggers.setDebugTrigger(
+          DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT,
+          new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
+      assertEquals("Yay!", execIfc.testWorkflow());
 
-    DebugTriggers.setDebugTrigger(
-        DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT,
-        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
-    assertEquals("Yay!", execIfc.testWorkflow());
+      DebugTriggers.setDebugTrigger(
+          DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT,
+          new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
+      assertEquals("Yay!", execIfc.testWorkflow());
+    } finally {
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT);
+    }
   }
 }
