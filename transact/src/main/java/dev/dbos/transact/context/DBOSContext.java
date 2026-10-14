@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DBOSContext {
 
@@ -46,6 +47,10 @@ public class DBOSContext {
   // replayed ones included, so it can delete its checkpoints there when it finishes. Kept in the
   // order first used; empty and never written outside a workflow.
   private final Set<StepCheckpointStore> usedStepCheckpointStores;
+  // Set when a step ran but its result could not be recorded in the system database. A
+  // transactional step's own commit may then be recorded only in its factory's checkpoint, so this
+  // execution keeps those checkpoints when it finishes.
+  private final AtomicBoolean stepResultUnrecorded;
 
   // private StepStatus stepStatus;
 
@@ -60,6 +65,7 @@ public class DBOSContext {
     serialization = SerializationStrategy.DEFAULT;
     ownerXid = null;
     usedStepCheckpointStores = Set.of();
+    stepResultUnrecorded = new AtomicBoolean();
   }
 
   public DBOSContext(
@@ -81,6 +87,7 @@ public class DBOSContext {
     this.serialization = serialization;
     this.ownerXid = ownerXid;
     this.usedStepCheckpointStores = new CopyOnWriteArraySet<>();
+    this.stepResultUnrecorded = new AtomicBoolean();
   }
 
   public DBOSContext(
@@ -107,6 +114,7 @@ public class DBOSContext {
     this.ownerXid = other.ownerXid;
     // The same execution, so the same stores.
     this.usedStepCheckpointStores = other.usedStepCheckpointStores;
+    this.stepResultUnrecorded = other.stepResultUnrecorded;
   }
 
   public boolean isInWorkflow() {
@@ -150,6 +158,16 @@ public class DBOSContext {
    */
   public Collection<StepCheckpointStore> usedStepCheckpointStores() {
     return Collections.unmodifiableCollection(usedStepCheckpointStores);
+  }
+
+  /** Records that a step of this execution ran but its result was not recorded. */
+  public void markStepResultUnrecorded() {
+    stepResultUnrecorded.set(true);
+  }
+
+  /** Whether a step of this execution ran but its result was not recorded. */
+  public boolean hasUnrecordedStepResult() {
+    return stepResultUnrecorded.get();
   }
 
   /** The token of the execution running this workflow, or null outside a workflow. */

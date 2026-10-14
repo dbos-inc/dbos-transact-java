@@ -11,6 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSSystemDatabaseException;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
@@ -44,6 +45,10 @@ interface CompletionService {
   String alsoUsesABrokenStore() throws SQLException;
 
   String cancelledAfterAStep() throws Exception;
+
+  String stepResultNotRecorded() throws SQLException;
+
+  String interruptedThenFails() throws SQLException;
 }
 
 class CompletionServiceImpl implements CompletionService {
@@ -53,6 +58,7 @@ class CompletionServiceImpl implements CompletionService {
   final CountDownLatch gate = new CountDownLatch(1);
   StepCheckpointStore brokenStore;
   StepCheckpointStore recordingStore;
+  final AtomicInteger unrecordedRuns = new AtomicInteger();
 
   CompletionServiceImpl(DBOS dbos, JdbcStepFactory factory) {
     this.dbos = dbos;
@@ -94,6 +100,22 @@ class CompletionServiceImpl implements CompletionService {
     // The step after the cancel observes it.
     factory.txStep((Connection conn) -> {}, "two");
     return "done";
+  }
+
+  @Override
+  @Workflow
+  public String stepResultNotRecorded() throws SQLException {
+    factory.txStep((Connection conn) -> unrecordedRuns.incrementAndGet(), "unrecorded");
+    return "done";
+  }
+
+  @Override
+  @Workflow
+  public String interruptedThenFails() throws SQLException {
+    dbos.integration().useStepCheckpointStore(recordingStore);
+    factory.txStep((Connection conn) -> {}, "one");
+    Thread.currentThread().interrupt();
+    throw new IllegalStateException("interrupted");
   }
 
   @Override
@@ -276,6 +298,65 @@ public class CompletedStepCheckpointsTest {
     impl.gate.countDown();
 
     assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
+    assertEquals(0, cleanups.get());
+    assertEquals(1, checkpoints(workflowId));
+  }
+
+  @Test
+  @Timeout(60)
+  public void aStepWhoseResultWasNotRecordedKeepsTheCheckpoints() throws Exception {
+    launch(false);
+    // The step's transaction commits, and then its result cannot be recorded in the system
+    // database: the factory's checkpoint is the only record that it ran.
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.execute(
+          """
+          CREATE FUNCTION dbos.refuse_unrecorded() RETURNS trigger AS $$
+          BEGIN
+            IF NEW.function_name = 'unrecorded' THEN
+              RAISE EXCEPTION 'step result refused';
+            END IF;
+            RETURN NEW;
+          END $$ LANGUAGE plpgsql""");
+      stmt.execute(
+          "CREATE TRIGGER refuse_unrecorded BEFORE INSERT ON dbos.operation_outputs"
+              + " FOR EACH ROW EXECUTE FUNCTION dbos.refuse_unrecorded()");
+    }
+
+    var workflowId = "wf-unrecorded";
+    try (var _o = new WorkflowOptions(workflowId).setContext()) {
+      var refused = assertThrows(DBOSSystemDatabaseException.class, proxy::stepResultNotRecorded);
+      assertTrue(refused.getMessage().contains("step result refused"), refused.getMessage());
+    }
+    assertEquals(1, impl.unrecordedRuns.get());
+    assertEquals("ERROR", DBUtils.getWorkflowRow(dataSource, workflowId).status());
+    assertEquals(1, checkpoints(workflowId));
+
+    // Had the execution then crashed before recording that error, recovery would find the step in
+    // the factory's checkpoint alone, and must replay it from there instead of running it again.
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.execute("DROP TRIGGER refuse_unrecorded ON dbos.operation_outputs");
+    }
+    dbos.close();
+    DBUtils.setWorkflowState(dataSource, workflowId, "PENDING");
+    launch(false);
+    assertEquals("done", dbos.retrieveWorkflow(workflowId).getResult());
+    assertEquals(0, impl.unrecordedRuns.get());
+    assertEquals(0, checkpoints(workflowId));
+  }
+
+  @Test
+  public void anInterruptedWorkflowThatThrowsSkipsTheCleanup() throws Exception {
+    launch(false);
+    var cleanups = new AtomicInteger();
+    impl.recordingStore = countingStore(cleanups);
+    var workflowId = "wf-interrupted";
+    var handle =
+        dbos.startWorkflow(proxy::interruptedThenFails, new StartWorkflowOptions(workflowId));
+
+    assertThrows(Exception.class, handle::getResult);
     assertEquals(0, cleanups.get());
     assertEquals(1, checkpoints(workflowId));
   }
