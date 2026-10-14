@@ -115,7 +115,8 @@ public abstract class PostgresStepFactory {
   /**
    * The pool this factory's connections come from, when the factory can tell; null otherwise. When
    * it is the pool the system database uses, the ownership check runs on the step's own connection
-   * instead of taking a second one from that pool.
+   * instead of taking a second one from that pool. When it is null, DBOS instead asks whether the
+   * step's connection reaches the system database's own database, once per physical connection.
    */
   protected @Nullable DataSource dataSource() {
     return null;

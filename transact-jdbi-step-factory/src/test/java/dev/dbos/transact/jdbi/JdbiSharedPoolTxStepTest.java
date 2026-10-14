@@ -13,6 +13,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
+
+import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -60,6 +63,20 @@ class JdbiSharedPoolTxStepTest {
 
   @Test
   void stepsHoldingEveryConnectionOfTheSharedPoolStillCommit() throws Exception {
+    runHoldingThePool((dbos, pool) -> new JdbiStepFactory(dbos, Jdbi.create(pool), pool));
+  }
+
+  @Test
+  void aFactoryCreatedWithoutItsPoolStillCommits() throws Exception {
+    // DBOS cannot be told the pool, so it recognizes the step's connection as reaching the system
+    // database and checks ownership on it.
+    runHoldingThePool((dbos, pool) -> new JdbiStepFactory(dbos, Jdbi.create(pool)));
+  }
+
+  // POOL_SIZE workflows whose steps each hold a connection of the pool DBOS shares, until all of
+  // them do.
+  private void runHoldingThePool(BiFunction<DBOS, DataSource, JdbiStepFactory> newFactory)
+      throws Exception {
     var hikari = new HikariConfig();
     hikari.setJdbcUrl(pgContainer.jdbcUrl());
     hikari.setUsername(pgContainer.username());
@@ -71,7 +88,7 @@ class JdbiSharedPoolTxStepTest {
       // LISTEN would hold a pool connection of its own.
       var config = pgContainer.dbosConfig().withDataSource(pool).withUseListenNotify(false);
       try (var dbos = new DBOS(config)) {
-        var factory = new JdbiStepFactory(dbos, Jdbi.create(pool), pool);
+        var factory = newFactory.apply(dbos, pool);
         var impl = new JdbiSharedPoolServiceImpl(factory, new CyclicBarrier(POOL_SIZE));
         var proxy = dbos.registerProxy(JdbiSharedPoolService.class, impl);
         dbos.launch();

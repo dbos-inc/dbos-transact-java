@@ -138,8 +138,8 @@ public class JdbiStepFactory extends PostgresStepFactory {
       DBOS dbos,
       Jdbi jdbi,
       @Nullable DataSource dataSource,
-      String schema,
-      DBOSSerializer serializer) {
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
     super(dbos, schema, serializer, () -> jdbi.open().getConnection());
     this.jdbi = Objects.requireNonNull(jdbi);
     this.dataSource = dataSource;

@@ -12,6 +12,11 @@ import java.util.UUID;
 import com.zaxxer.hikari.HikariConfig;
 
 public class DBTestAccess {
+  /** How many times the same-database probe has checked a connection. */
+  public static int sameDatabaseProbes(SystemDatabase sysdb) {
+    return sysdb.sameDatabaseProbes();
+  }
+
   public static Optional<HikariConfig> findHikariConfig(SystemDatabase sysdb) {
     return sysdb.getConfig();
   }
