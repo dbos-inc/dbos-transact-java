@@ -12,11 +12,14 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.lang.reflect.Method;
+import java.sql.Connection;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+
+import javax.sql.DataSource;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -88,6 +91,23 @@ public class DBOSIntegration {
    */
   public void registerStepCheckpointStore(@NonNull StepCheckpointStore store) {
     checkpointStoreConsumer.accept(Objects.requireNonNull(store));
+  }
+
+  /**
+   * Throws {@link dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException} unless the
+   * workflow execution running on this thread still owns {@code workflowId}; does nothing outside
+   * that workflow's execution. A transactional step factory calls it inside its transaction, after
+   * recording the step's result and before committing, so an execution that has lost its workflow
+   * commits nothing.
+   *
+   * @param workflowId the workflow the step belongs to
+   * @param dataSource the pool the step's connection came from, if known. When it is the system
+   *     database's pool, the check runs on {@code conn} rather than taking a second connection
+   * @param conn the connection the step's transaction runs on, if any
+   */
+  public void checkStillOwned(
+      @NonNull String workflowId, @Nullable DataSource dataSource, @Nullable Connection conn) {
+    executor("checkStillOwned").checkStillOwned(workflowId, dataSource, conn);
   }
 
   /**

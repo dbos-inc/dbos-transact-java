@@ -139,6 +139,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
               h -> {
                 var result = callback.withHandle(h);
                 recordOutput(h, wfId, stepId, result);
+                checkStillOwned(wfId, h.getConnection());
                 return result;
               };
           try {

@@ -8,5 +8,7 @@ package dev.dbos.transact.context;
  *
  * @param workflowId The unique id for the parent workflow.
  * @param functionId The step number within the parent workflow that created the child.
+ * @param ownerXid The token of the parent's execution, which the child's start is checked against:
+ *     a parent that no longer owns its workflow must not start or record a child.
  */
-public record WorkflowInfo(String workflowId, int functionId) {}
+public record WorkflowInfo(String workflowId, int functionId, String ownerXid) {}

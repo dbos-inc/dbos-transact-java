@@ -217,6 +217,8 @@ public class TransactionalStepFactory {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());
           int stepId = Objects.requireNonNull(DBOS.stepId());
 
+          // A replay needs no ownership check of its own: the system database records this step,
+          // and that record is fenced.
           var prev = checkExecution(workflowId, stepId, stepName);
           if (prev.isPresent()) {
             return prev.get().<Object, E>toResult(serializer);
@@ -231,6 +233,8 @@ public class TransactionalStepFactory {
               Object result = supplier.execute();
               Connection conn = DataSourceUtils.getConnection(dataSource);
               recordOutput(conn, workflowId, stepId, result);
+              // Before committing, so an execution that has lost its workflow commits nothing.
+              PostgresStepFactory.checkStillOwned(dbos, workflowId, dataSource, conn);
               txManager.commit(status);
               return result;
             } catch (PostgresStepFactory.StepConflictException conflict) {
@@ -255,7 +259,13 @@ public class TransactionalStepFactory {
                 retryWaitMs = Math.min((long) (retryWaitMs * 1.5), 2000L);
                 continue;
               }
-              recordError(workflowId, stepId, e);
+              var notTheSteps = PostgresStepFactory.notTheStepsFailure(e);
+              if (notTheSteps != null) {
+                throw notTheSteps;
+              }
+              if (PostgresStepFactory.mayRecordFailure(dbos, workflowId)) {
+                recordError(workflowId, stepId, e);
+              }
               throw (E) e;
             }
           }

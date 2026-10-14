@@ -188,6 +188,18 @@ public class ErrorClassificationTest {
   }
 
   @Test
+  @DisplayName("a session ended for idling in a transaction is retried without recycling the pool")
+  public void anIdleTransactionTimeoutIsRetried() {
+    // The server ended one session; its transaction is gone, and a retry runs on another
+    // connection. The rest of the pool is fine.
+    var ended =
+        new SQLException("terminating connection due to idle-in-transaction timeout", "25P03");
+
+    assertEquals(SystemDatabase.Failure.CONNECTION, SystemDatabase.classify(ended));
+    assertFalse(SystemDatabase.evictsPool(ended));
+  }
+
+  @Test
   @DisplayName("a connection or server that went away does recycle the pool")
   public void aDeadConnectionEvicts() {
     assertTrue(SystemDatabase.evictsPool(new SQLException("gone", "08006")));

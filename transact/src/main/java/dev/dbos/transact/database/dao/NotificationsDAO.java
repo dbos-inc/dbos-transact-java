@@ -5,12 +5,14 @@ import static java.util.stream.Collectors.joining;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
+import dev.dbos.transact.database.SendCaller;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.NotificationInfo;
@@ -93,11 +95,11 @@ public class NotificationsDAO {
     return result;
   }
 
+  /** Sends messages from {@code caller}, or from outside any workflow when it is null. */
   public static void sendBulk(
       DbContext ctx,
       List<SendMessage> messages,
-      String workflowId,
-      int stepId,
+      @Nullable SendCaller caller,
       String functionName,
       boolean sendToForks,
       String serialization)
@@ -106,7 +108,6 @@ public class NotificationsDAO {
     if (messages.isEmpty()) {
       return;
     }
-
     // Reject duplicate idempotency keys within the batch
     var keys = messages.stream().map(SendMessage::idempotencyKey).filter(Objects::nonNull).toList();
     if (keys.size() != keys.stream().distinct().count()) {
@@ -129,12 +130,21 @@ public class NotificationsDAO {
       SqlTransaction.run(
           txConn,
           conn -> {
-            // Check for replay if inside a workflow
-            if (workflowId != null) {
+            // A send from the workflow body replays as the step it was recorded as.
+            if (caller instanceof SendCaller.FromWorkflow step) {
               StepResult recorded =
-                  StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, stepId, functionName);
+                  StepsDAO.checkStepResult(
+                      conn,
+                      ctx.schema(),
+                      step.workflowId(),
+                      step.stepId(),
+                      functionName,
+                      step.ownerXid());
               if (recorded != null) {
-                logger.debug("Replaying sendBulk, workflowId: {}, stepId: {}", workflowId, stepId);
+                logger.debug(
+                    "Replaying sendBulk, workflowId: {}, stepId: {}",
+                    step.workflowId(),
+                    step.stepId());
                 return;
               }
             }
@@ -204,9 +214,17 @@ public class NotificationsDAO {
               throw e;
             }
 
-            if (workflowId != null) {
-              var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
-              StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
+            // The owner is checked after the messages, so the status row is locked last, as every
+            // fenced write locks it. Recording the step checks it first; a send from inside a step
+            // has no step to record, so it is checked on its own.
+            if (caller instanceof SendCaller.FromWorkflow step) {
+              var output =
+                  new StepResult(
+                      step.workflowId(), step.stepId(), functionName, null, null, null, null);
+              StepsDAO.recordStepResult(
+                  ctx, conn, output, startTime, System.currentTimeMillis(), step.ownerXid());
+            } else if (caller != null) {
+              WorkflowDAO.checkOwner(conn, ctx.schema(), caller.workflowId(), caller.ownerXid());
             }
           });
     }
@@ -220,7 +238,8 @@ public class NotificationsDAO {
       int timeoutStepId,
       String topic,
       Duration dbPollingInterval,
-      Function<SignalKey, Subscription> createSubscription)
+      Function<SignalKey, Subscription> createSubscription,
+      String ownerXid)
       throws SQLException {
 
     if (Objects.requireNonNull(workflowId).isEmpty()) {
@@ -231,7 +250,7 @@ public class NotificationsDAO {
     var stepName = "DBOS.recv";
     final var recvTopic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
-    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName);
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName, ownerXid);
     if (result != null) {
       logger.debug(
           "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
@@ -253,7 +272,7 @@ public class NotificationsDAO {
         """
             .formatted(ctx.schema());
 
-    var timeoutAt = StepsDAO.durableSleepEndTime(ctx, workflowId, timeoutStepId, timeout);
+    var timeoutAt = StepsDAO.durableSleepEndTime(ctx, workflowId, timeoutStepId, timeout, ownerXid);
     while (true) {
       ctx.checkClosed();
       try (var messageSignal = createSubscription.apply(messageKey)) {
@@ -268,14 +287,15 @@ public class NotificationsDAO {
               break;
             }
           }
-          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId);
+          WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
         }
 
         var duration = Duration.between(Instant.now(), timeoutAt);
         if (duration.isNegative() || duration.isZero()) {
           var output = SerializationUtil.serializeValue(null, null, ctx.serializer());
           var stepResult = StepResult.ofOutput(workflowId, stepId, stepName, output);
-          StepsDAO.recordStepResult(ctx, stepResult, startTime);
+          StepsDAO.recordStepResult(
+              ctx, stepResult, startTime, System.currentTimeMillis(), ownerXid);
           return null;
         }
 
@@ -287,7 +307,7 @@ public class NotificationsDAO {
     }
 
     ctx.checkClosed();
-    WorkflowDAO.checkWorkflow(ctx, workflowId);
+    WorkflowDAO.checkWorkflow(ctx, workflowId, ownerXid);
 
     var updateSql =
         """
@@ -330,10 +350,9 @@ public class NotificationsDAO {
                       stmt.setString(4, workflowId);
                       stmt.setString(5, recvTopic);
 
-                      // Note, if there are two executors running the same workflow waiting on the
-                      // same recv, only the first one will return a row here. The second one gets
-                      // a null message but then throws a WorkflowExecutionConflictException when
-                      // it records the step result.
+                      // Recording the step checks that this execution still owns the workflow, so
+                      // a stale execution's claim rolls back and leaves the message for the
+                      // owner.
                       try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                           serializedMessage = rs.getString("message");
@@ -355,7 +374,8 @@ public class NotificationsDAO {
                             null,
                             null,
                             serialization);
-                    StepsDAO.recordStepResult(ctx, conn, output, startTime);
+                    StepsDAO.recordStepResult(
+                        ctx, conn, output, startTime, System.currentTimeMillis(), ownerXid);
 
                     return deserializedMessage;
                   }));
@@ -414,7 +434,8 @@ public class NotificationsDAO {
       String key,
       Object message,
       boolean asStep,
-      String serialization)
+      String serialization,
+      String ownerXid)
       throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
@@ -432,7 +453,7 @@ public class NotificationsDAO {
               if (asStep) {
                 var recordedOutput =
                     StepsDAO.checkStepResult(
-                        conn, ctx.schema(), workflowId, functionId, functionName);
+                        conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
                 if (recordedOutput != null) {
                   logger.debug(
                       "Replaying setEvent, workflow: {}, step: {}, key: {}",
@@ -458,12 +479,24 @@ public class NotificationsDAO {
                   serializedResult.serializedValue(),
                   serializedResult.serialization());
 
+              // The owner is checked after the event, so the status row is locked last, as every
+              // fenced write locks it. Recording the step checks it first; from inside a step there
+              // is no step of its own to record, so it is checked on its own: an execution that has
+              // lost its workflow sets nothing.
               if (asStep) {
                 StepResult output =
                     new StepResult(workflowId, functionId, functionName, null, null, null, null);
-                StepsDAO.recordStepResult(ctx, conn, output, startTime);
+                StepsDAO.recordStepResult(
+                    ctx, conn, output, startTime, System.currentTimeMillis(), ownerXid);
+              } else {
+                WorkflowDAO.checkOwner(conn, ctx.schema(), workflowId, ownerXid);
               }
             });
+      } catch (DBOSWorkflowExecutionConflictException e) {
+        // Refused because this execution no longer owns the workflow: expected, not an error.
+        logger.debug(
+            "setEvent refused, workflow: {} id: {}, key: {}", workflowId, functionId, key, e);
+        throw e;
       } catch (Exception e) {
         // The helper has already rolled back; this only records which call lost its work.
         logger.error(
@@ -517,7 +550,8 @@ public class NotificationsDAO {
 
     if (caller != null) {
       var prevResult =
-          StepsDAO.checkStepResult(ctx, caller.workflowId(), caller.stepId(), stepName);
+          StepsDAO.checkStepResult(
+              ctx, caller.workflowId(), caller.stepId(), stepName, caller.ownerXid());
       if (prevResult != null) {
         logger.debug(
             "Replaying getEvent, workflowId: {}, stepId: {}, key: {}",
@@ -538,7 +572,7 @@ public class NotificationsDAO {
     var timeoutAt =
         caller != null
             ? StepsDAO.durableSleepEndTime(
-                ctx, caller.workflowId(), caller.timeoutStepId(), timeout)
+                ctx, caller.workflowId(), caller.timeoutStepId(), timeout, caller.ownerXid())
             : Instant.now().plus(timeout);
     GetEventResult result = null;
 
@@ -555,7 +589,7 @@ public class NotificationsDAO {
           }
 
           if (caller != null) {
-            WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId());
+            WorkflowDAO.checkWorkflow(conn, ctx.schema(), caller.workflowId(), caller.ownerXid());
           }
         }
 
@@ -586,7 +620,8 @@ public class NotificationsDAO {
               null,
               null,
               result.serialization());
-      StepsDAO.recordStepResult(ctx, stepResult, startTime);
+      StepsDAO.recordStepResult(
+          ctx, stepResult, startTime, System.currentTimeMillis(), caller.ownerXid());
     }
 
     return SerializationUtil.deserializeValue(

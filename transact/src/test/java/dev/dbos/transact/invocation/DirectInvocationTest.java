@@ -11,6 +11,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Timeout;
@@ -490,7 +491,7 @@ public class DirectInvocationTest {
 
     DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.PENDING.name());
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    executor.executeWorkflowById(workflowId).getResult();
+    DBOSExecutorTestAccess.executeWorkflowById(executor, workflowId).getResult();
 
     var status = dbos.retrieveWorkflow(workflowId).getStatus();
     assertEquals("alice", status.authenticatedUser());

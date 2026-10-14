@@ -9,6 +9,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -316,7 +317,7 @@ public class TimeoutTest {
 
     setWorkflowDeadlinePassed(dataSource, wfid1);
 
-    var handle = dbosExecutor.executeWorkflowById(wfid1);
+    var handle = DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, wfid1);
     assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
   }
 

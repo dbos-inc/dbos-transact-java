@@ -58,19 +58,37 @@ public class ImportExportTest {
             .priority(0)
             .build(),
         null);
-    sysdb.recordWorkflowOutput(wfId, null);
+    sysdb.recordWorkflowOutput(wfId, null, DBTestAccess.takeOwnership(sysdb, wfId));
 
     long now = System.currentTimeMillis();
-    sysdb.recordStepResult(new StepResult(wfId, 0, "step0"), now - 2000);
-    sysdb.recordStepResult(new StepResult(wfId, 1, "step1"), now - 1000);
+    sysdb.recordStepResult(
+        new StepResult(wfId, 0, "step0"), now - 2000, DBTestAccess.takeOwnership(sysdb, wfId));
+    sysdb.recordStepResult(
+        new StepResult(wfId, 1, "step1"), now - 1000, DBTestAccess.takeOwnership(sysdb, wfId));
 
     // asStep=false: writes to workflow_events + workflow_events_history, not operation_outputs
-    sysdb.setEvent(wfId, 0, "event-key-1", "event-val-1", false, null);
-    sysdb.setEvent(wfId, 1, "event-key-2", "event-val-2", false, null);
+    sysdb.setEvent(
+        wfId,
+        0,
+        "event-key-1",
+        "event-val-1",
+        false,
+        null,
+        DBTestAccess.takeOwnership(sysdb, wfId));
+    sysdb.setEvent(
+        wfId,
+        1,
+        "event-key-2",
+        "event-val-2",
+        false,
+        null,
+        DBTestAccess.takeOwnership(sysdb, wfId));
 
-    sysdb.writeStreamFromStep(wfId, 1, "stream-key-1", "stream-val-1", null);
-    sysdb.writeStreamFromStep(wfId, 1, "stream-key-1", "stream-val-2", null);
-    sysdb.closeStream(wfId, 2, "stream-key-1");
+    sysdb.writeStreamFromStep(
+        wfId, 1, "stream-key-1", "stream-val-1", null, DBTestAccess.takeOwnership(sysdb, wfId));
+    sysdb.writeStreamFromStep(
+        wfId, 1, "stream-key-1", "stream-val-2", null, DBTestAccess.takeOwnership(sysdb, wfId));
+    sysdb.closeStream(wfId, 2, "stream-key-1", DBTestAccess.takeOwnership(sysdb, wfId));
   }
 
   /** Creates a workflow with child workflow step references directly in the DB. */
@@ -84,7 +102,7 @@ public class ImportExportTest {
             .priority(0)
             .build(),
         null);
-    sysdb.recordWorkflowOutput(wfId, null);
+    sysdb.recordWorkflowOutput(wfId, null, DBTestAccess.takeOwnership(sysdb, wfId));
   }
 
   /** Creates a child workflow with parentWorkflowId set so getWorkflowChildren can find it. */
@@ -98,7 +116,7 @@ public class ImportExportTest {
             .parentWorkflowId(parentId)
             .build(),
         null);
-    sysdb.recordWorkflowOutput(wfId, null);
+    sysdb.recordWorkflowOutput(wfId, null, DBTestAccess.takeOwnership(sysdb, wfId));
   }
 
   // ── Import tests (importWorkflow is the subject; setup via buildExportedWorkflow) ──────────

@@ -13,11 +13,15 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
+import javax.sql.DataSource;
+
 import org.jooq.Configuration;
 import org.jooq.DSLContext;
 import org.jooq.TransactionalCallable;
 import org.jooq.TransactionalRunnable;
 import org.jooq.exception.DataAccessException;
+import org.jooq.impl.DataSourceConnectionProvider;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Runs idempotent transactional steps inside DBOS workflows using jOOQ {@link DSLContext} objects.
@@ -118,6 +122,7 @@ public class JooqStepFactory extends PostgresStepFactory {
                   applyIsolationLevel(trx, options.isolationLevel());
                   var result = callback.run(trx);
                   recordOutput(trx, wfId, stepId, result);
+                  trx.dsl().connection(c -> checkStillOwned(wfId, c));
                   return result;
                 });
           } catch (StepConflictException e) {
@@ -173,6 +178,13 @@ public class JooqStepFactory extends PostgresStepFactory {
   private static void applyIsolationLevel(Configuration trx, IsolationLevel level) {
     if (level == null || level == IsolationLevel.DEFAULT) return;
     trx.dsl().execute("SET TRANSACTION ISOLATION LEVEL " + level.sqlName());
+  }
+
+  @Override
+  protected @Nullable DataSource dataSource() {
+    return dsl.configuration().connectionProvider() instanceof DataSourceConnectionProvider provider
+        ? provider.dataSource()
+        : null;
   }
 
   @Override

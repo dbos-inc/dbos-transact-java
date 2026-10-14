@@ -67,6 +67,10 @@ import org.jspecify.annotations.Nullable;
  *     result, recv, getEvent, and reading a stream) may run against the system database at once, so
  *     a polling storm cannot crowd the control plane out of the pool. Null uses half the pool (at
  *     least one); non-positive removes the cap
+ * @param systemDatabaseIdleTransactionTimeout how long Postgres lets a session of the system
+ *     database pool DBOS creates stay idle inside a transaction before ending it and releasing its
+ *     locks; null for the default of one minute, zero or negative to leave the server's setting.
+ *     Not applied to a supplied {@link DataSource}, or when the database URL sets it
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -89,13 +93,18 @@ public record DBOSConfig(
     @Nullable Duration schedulerPollingInterval,
     boolean useListenNotify,
     @Nullable Duration notificationCoalesceInterval,
-    @Nullable Integer databasePollingConcurrency) {
+    @Nullable Integer databasePollingConcurrency,
+    @Nullable Duration systemDatabaseIdleTransactionTimeout) {
 
   /** Default flush interval for batched stream and workflow-event notifications. */
   public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
 
   /** Smallest configurable flush interval; below this the batching buys nothing. */
   public static final Duration MIN_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(1);
+
+  /** Default idle-in-transaction timeout for the system database connections DBOS creates. */
+  public static final Duration DEFAULT_SYSTEM_DATABASE_IDLE_TRANSACTION_TIMEOUT =
+      Duration.ofMinutes(1);
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -121,6 +130,16 @@ public record DBOSConfig(
           "DBOSConfig.notificationCoalesceInterval must be at least "
               + MIN_NOTIFICATION_COALESCE_INTERVAL.toMillis()
               + "ms if specified");
+    }
+
+    // Postgres takes the setting in whole milliseconds, as a 32-bit integer.
+    if (systemDatabaseIdleTransactionTimeout != null
+        && systemDatabaseIdleTransactionTimeout.compareTo(Duration.ofMillis(Integer.MAX_VALUE))
+            > 0) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.systemDatabaseIdleTransactionTimeout must not exceed "
+              + Integer.MAX_VALUE
+              + "ms");
     }
 
     listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
@@ -169,7 +188,8 @@ public record DBOSConfig(
         other.schedulerPollingInterval,
         other.useListenNotify,
         other.notificationCoalesceInterval,
-        other.databasePollingConcurrency);
+        other.databasePollingConcurrency,
+        other.systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -189,7 +209,8 @@ public record DBOSConfig(
         true, // migrate
         null, null, null, null, null, null, false, null, null, null, true, // useListenNotify
         null, // notificationCoalesceInterval
-        null); // databasePollingConcurrency
+        null, // databasePollingConcurrency
+        null); // systemDatabaseIdleTransactionTimeout
   }
 
   /**
@@ -240,7 +261,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -266,7 +288,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -292,7 +315,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -318,7 +342,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -349,7 +374,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -380,7 +406,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -411,7 +438,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -437,7 +465,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code conductorKey} set to {@code v}. */
@@ -463,7 +492,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code conductorDomain} set to {@code v}. */
@@ -489,7 +519,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -515,7 +546,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -541,7 +573,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -567,7 +600,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -593,7 +627,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -629,7 +664,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -751,7 +787,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -777,7 +814,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -803,7 +841,8 @@ public record DBOSConfig(
         v,
         useListenNotify,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -829,7 +868,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         v,
         notificationCoalesceInterval,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -867,7 +907,8 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         v,
-        databasePollingConcurrency);
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout);
   }
 
   /**
@@ -904,6 +945,51 @@ public record DBOSConfig(
         schedulerPollingInterval,
         useListenNotify,
         notificationCoalesceInterval,
+        v,
+        systemDatabaseIdleTransactionTimeout);
+  }
+
+  /**
+   * Returns a copy of this config with {@code systemDatabaseIdleTransactionTimeout} set to {@code
+   * v}.
+   *
+   * <p>Every checkpoint a workflow writes holds a lock on its workflow's row until the write
+   * commits. A process that stalls with that transaction open -- a long pause, a frozen container,
+   * a network partition -- would otherwise hold the lock indefinitely, and every cancel, resume or
+   * recovery of the workflow would wait on it. With this set, Postgres ends any system-database
+   * session left idle in a transaction for longer, and releases its locks.
+   *
+   * <p>Applied to every connection of the pool DBOS creates, unless the database URL already sets
+   * {@code idle_in_transaction_session_timeout}. A {@link DataSource} supplied with {@link
+   * #withDataSource} is left as it is.
+   *
+   * @param v the timeout; null for the default of one minute, or zero or negative to leave the
+   *     server's setting in place
+   * @return a copy with the timeout set
+   */
+  public @NonNull DBOSConfig withSystemDatabaseIdleTransactionTimeout(@Nullable Duration v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
         v);
   }
 
@@ -916,7 +1002,8 @@ public record DBOSConfig(
         migrate=%s, conductorKey=%s, conductorDomain=%s, \
         conductorExecutorMetadata=%s, appVersion=%s, executorId=%s, enablePatching=%s, \
         listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
-        notificationCoalesceInterval=%s, databasePollingConcurrency=%s]
+        notificationCoalesceInterval=%s, databasePollingConcurrency=%s, \
+        systemDatabaseIdleTransactionTimeout=%s]
         """
         .formatted(
             appName,
@@ -938,6 +1025,7 @@ public record DBOSConfig(
             schedulerPollingInterval,
             useListenNotify,
             notificationCoalesceInterval,
-            databasePollingConcurrency);
+            databasePollingConcurrency,
+            systemDatabaseIdleTransactionTimeout);
   }
 }

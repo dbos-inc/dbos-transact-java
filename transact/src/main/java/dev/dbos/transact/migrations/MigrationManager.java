@@ -59,9 +59,7 @@ public class MigrationManager {
       runMigrations(config.dataSource(), config.databaseSchema(), config.useListenNotify());
     } else {
       createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
-      try (var ds =
-          SystemDatabase.createDataSource(
-              config.databaseUrl(), config.dbUser(), config.dbPassword())) {
+      try (var ds = SystemDatabase.createDataSource(config)) {
         runMigrations(ds, config.databaseSchema(), config.useListenNotify());
       }
     }
@@ -74,7 +72,7 @@ public class MigrationManager {
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
-    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
+    try (var ds = SystemDatabase.createDataSource(url, user, password, null)) {
       runMigrations(ds, schema, useListenNotify);
     }
   }
@@ -137,7 +135,7 @@ public class MigrationManager {
   public static void validateSysDbVersion(String url, String user, String password, String schema) {
     Objects.requireNonNull(url, "database url must not be null");
 
-    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
+    try (var ds = SystemDatabase.createDataSource(url, user, password, null)) {
       validateSysDbVersion(ds, schema);
     }
   }
@@ -280,7 +278,7 @@ public class MigrationManager {
 
     var pair = extractDbAndPostgresUrl(url);
 
-    try (var adminDS = SystemDatabase.createDataSource(pair.url(), user, password);
+    try (var adminDS = SystemDatabase.createDataSource(pair.url(), user, password, null);
         var conn = adminDS.getConnection()) {
       try (var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
         stmt.setString(1, pair.database());
@@ -579,7 +577,8 @@ public class MigrationManager {
             migration119(isCockroach),
             migration120(isCockroach),
             MIGRATION_121,
-            migration122(isCockroach)));
+            migration122(isCockroach),
+            MIGRATION_123));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1752,4 +1751,13 @@ public class MigrationManager {
         + " WHERE \"status\" IN ('ENQUEUED', 'PENDING', 'DELAYED')"
         + " AND \"workflow_deadline_epoch_ms\" IS NOT NULL";
   }
+
+  // Migration 123: the token of the insert that created a workflow's row. owner_xid held that
+  // until it became the token of the execution that currently owns the workflow, which changes
+  // hands; this keeps the immutable one, so an insert can still tell whether it created the row.
+  static final String MIGRATION_123 =
+      """
+      ALTER TABLE "%1$s"."workflow_status"
+          ADD COLUMN IF NOT EXISTS "creator_xid" TEXT DEFAULT NULL;
+      """;
 }

@@ -104,7 +104,13 @@ class ListenNotifySourceTest {
         sysdb.start();
         sysdb.initWorkflowStatus(
             WorkflowStatusInternalBuilder.create("wf-no-listen-notify").build(), 5);
-        sysdb.writeStreamFromWorkflow("wf-no-listen-notify", 1, "key1", "v", "portable_json");
+        sysdb.writeStreamFromWorkflow(
+            "wf-no-listen-notify",
+            1,
+            "key1",
+            "v",
+            "portable_json",
+            DBTestAccess.takeOwnership(sysdb, "wf-no-listen-notify"));
       }
 
       assertEquals(Set.of(), drain(listener));
@@ -165,7 +171,14 @@ class ListenNotifySourceTest {
       Thread.sleep(300);
 
       var start = System.nanoTime();
-      sysdb.setEvent("wf1", 0, "k", "v", true, SerializationStrategy.DEFAULT.formatName());
+      sysdb.setEvent(
+          "wf1",
+          0,
+          "k",
+          "v",
+          true,
+          SerializationStrategy.DEFAULT.formatName(),
+          DBTestAccess.takeOwnership(sysdb, "wf1"));
       assertEquals("v", result.get(5, TimeUnit.SECONDS));
       var elapsedMs = (System.nanoTime() - start) / 1_000_000;
 

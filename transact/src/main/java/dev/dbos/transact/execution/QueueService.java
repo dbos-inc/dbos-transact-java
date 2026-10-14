@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -281,9 +282,11 @@ public class QueueService implements AutoCloseable {
       if (maxTasks <= 0) return;
       if (!beginPass()) return;
       try {
+        var ownerXid = UUID.randomUUID().toString();
         var workflowIds =
-            systemDatabase.startQueuedPartitionedWorkflows(queue, executorId, appVersion, maxTasks);
-        startClaimedWorkflows(workflowIds, "<batched>");
+            systemDatabase.startQueuedPartitionedWorkflows(
+                queue, executorId, appVersion, maxTasks, ownerXid);
+        startClaimedWorkflows(workflowIds, ownerXid, "<batched>");
       } finally {
         endPass();
       }
@@ -317,18 +320,30 @@ public class QueueService implements AutoCloseable {
         // across every partition, partitionWorkerConcurrency bounds this partition alone.
         long partitionLocalRunningCount =
             partition == null ? running : dbosExecutor.queueActiveCount(queue.name(), partition);
+        var ownerXid = UUID.randomUUID().toString();
         var workflowIds =
             systemDatabase.startQueuedWorkflows(
-                queue, executorId, appVersion, partition, running, partitionLocalRunningCount);
-        startClaimedWorkflows(workflowIds, partitionLog);
+                queue,
+                executorId,
+                appVersion,
+                partition,
+                running,
+                partitionLocalRunningCount,
+                ownerXid);
+        startClaimedWorkflows(workflowIds, ownerXid, partitionLog);
         return workflowIds.size();
       } finally {
         endPass();
       }
     }
 
-    /** Starts workflows this worker has just claimed from the queue. */
-    private void startClaimedWorkflows(List<String> workflowIds, String partitionLog) {
+    /**
+     * Starts workflows this worker has just claimed from the queue. Each runs under the token the
+     * claim installed, never one read back from its row: a token there that differs is a later
+     * claim's, and this dispatch must not run as that one.
+     */
+    private void startClaimedWorkflows(
+        List<String> workflowIds, String ownerXid, String partitionLog) {
       if (!workflowIds.isEmpty()) {
         logger.debug(
             "Retrieved {} workflows from {} partition of queue {}",
@@ -343,7 +358,7 @@ public class QueueService implements AutoCloseable {
             partitionLog,
             queue.name());
         try {
-          dbosExecutor.executeWorkflowById(workflowId);
+          dbosExecutor.executeWorkflowById(workflowId, ownerXid);
         } catch (Exception e) {
           // A failed dispatch must not strand the rest of the batch, and its failure is not
           // the dequeue contention the poll loop would read it as. A workflow out of attempts is

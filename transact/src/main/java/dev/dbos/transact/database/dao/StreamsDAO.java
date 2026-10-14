@@ -29,10 +29,20 @@ public class StreamsDAO {
       int functionId,
       String key,
       Object value,
-      String serializationFormat)
+      String serializationFormat,
+      String ownerXid)
       throws SQLException {
-    try (var conn = ctx.getConnection()) {
-      insertStream(conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
+    // A step records nothing of its own, but its write lands only while its execution still owns
+    // the workflow. The owner is checked after the insert, so the status row is locked last, as
+    // every fenced write locks it.
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            insertStream(
+                conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
+            WorkflowDAO.checkOwner(conn, ctx.schema(), workflowId, ownerXid);
+          });
     }
   }
 
@@ -42,7 +52,8 @@ public class StreamsDAO {
       int functionId,
       String key,
       Object value,
-      String serializationFormat)
+      String serializationFormat,
+      String ownerXid)
       throws SQLException {
     String functionName =
         STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
@@ -53,7 +64,8 @@ public class StreamsDAO {
           txConn,
           conn -> {
             StepResult recordedOutput =
-                StepsDAO.checkStepResult(conn, ctx.schema(), workflowId, functionId, functionName);
+                StepsDAO.checkStepResult(
+                    conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
 
             if (recordedOutput != null) {
               logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
@@ -67,7 +79,8 @@ public class StreamsDAO {
 
             var output =
                 new StepResult(workflowId, functionId, functionName, null, null, null, null);
-            StepsDAO.recordStepResult(ctx, conn, output, startTime, System.currentTimeMillis());
+            StepsDAO.recordStepResult(
+                ctx, conn, output, startTime, System.currentTimeMillis(), ownerXid);
           });
     }
   }
@@ -147,10 +160,11 @@ public class StreamsDAO {
     }
   }
 
-  public static void closeStream(DbContext ctx, String workflowId, int functionId, String key)
+  public static void closeStream(
+      DbContext ctx, String workflowId, int functionId, String key, String ownerXid)
       throws SQLException {
     writeStreamFromWorkflow(
-        ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
+        ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json", ownerXid);
   }
 
   public static Object readStream(

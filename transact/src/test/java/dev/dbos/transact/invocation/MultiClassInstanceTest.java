@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.EnqueueOptions;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -184,7 +185,7 @@ public class MultiClassInstanceTest {
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
+      var eh = DBOSExecutorTestAccess.executeWorkflowById(dbosExecutor, handle.workflowId());
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(

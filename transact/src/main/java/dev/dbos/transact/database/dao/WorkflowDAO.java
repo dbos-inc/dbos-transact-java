@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.DebounceCaller;
@@ -16,6 +17,7 @@ import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
@@ -162,7 +164,8 @@ public class WorkflowDAO {
       WorkflowStatusInternal initStatus,
       @Nullable Long delayUntilEpochMs,
       @Nullable Integer maxRetries,
-      String ownerXid)
+      String creatorXid,
+      @Nullable ChildOf parent)
       throws SQLException {
 
     logger.debug("initWorkflowStatus workflowId {}", initStatus.workflowId());
@@ -181,7 +184,7 @@ public class WorkflowDAO {
                 ctx.schema(),
                 initStatus,
                 delayUntilEpochMs,
-                ownerXid,
+                creatorXid,
                 owner(ctx, initStatus));
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
@@ -207,23 +210,53 @@ public class WorkflowDAO {
         }
 
         var state = resRow.status;
+        boolean created = creatorXid.equals(resRow.creatorXid);
 
-        // Only the first writer of a row owns its execution. A caller that finds someone else's
-        // row polls for the outcome instead, and one that finds a dead-lettered row is told so.
-        if (!ownerXid.equals(resRow.ownerXid)) {
-          if (resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
-            throw new DBOSMaxRecoveryAttemptsExceededException(
-                initStatus.workflowId(),
-                Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS));
-          }
-          return new WorkflowInitResult(
-              state, resRow.deadline(), false, resRow.serialization(), resRow.clock());
+        // A row this call created can't be dead-lettered yet, so only a found row is checked.
+        if (!created && resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {
+          throw new DBOSMaxRecoveryAttemptsExceededException(
+              initStatus.workflowId(),
+              Objects.requireNonNullElse(maxRetries, Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS));
         }
 
+        // The parent records the child whether this call created it or found it, so the parent's
+        // replay attaches to the same child. Recording it checks that the parent's execution still
+        // owns the parent: one that does not rolls the child's row back with its step.
+        if (parent != null) {
+          var childStep =
+              new StepResult(
+                      parent.workflowId(),
+                      parent.functionId(),
+                      parent.functionName(),
+                      null,
+                      null,
+                      null,
+                      null)
+                  .withChildWorkflowId(initStatus.workflowId());
+          StepsDAO.recordStepResult(ctx, conn, childStep, null, null, parent.ownerXid());
+        }
+
+        // The insert's conflict arm changes nothing, so committing a row this call found is
+        // harmless, and commits the parent's step.
         shouldCommit = true;
 
+        // Only the call that created a row owns its execution. A caller that finds someone else's
+        // row polls for the outcome instead. A retry whose first attempt committed but lost its
+        // acknowledgement finds its own token.
+        if (!created) {
+          return new WorkflowInitResult(
+              state, resRow.deadline(), false, resRow.serialization(), resRow.clock(), null);
+        }
+
+        // A row created PENDING is owned by its creator token. One created ENQUEUED or DELAYED is
+        // owned by nobody until the queue claims it.
         return new WorkflowInitResult(
-            state, resRow.deadline(), true, resRow.serialization(), resRow.clock());
+            state,
+            resRow.deadline(),
+            true,
+            resRow.serialization(),
+            resRow.clock(),
+            state == WorkflowState.PENDING ? creatorXid : null);
 
       } finally {
         if (shouldCommit) {
@@ -250,7 +283,7 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
           SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
-              updated_at = %2$s, completed_at = %2$s
+              owner_xid = NULL, updated_at = %2$s, completed_at = %2$s
           WHERE workflow_uuid = ANY(?) AND status = ? AND recovery_attempts >= ?
         """
             .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
@@ -274,7 +307,7 @@ public class WorkflowDAO {
       String queueName,
       Instant deadline,
       String serialization,
-      String ownerXid,
+      String creatorXid,
       DatabaseTime clock) {}
 
   /**
@@ -294,7 +327,7 @@ public class WorkflowDAO {
       String schema,
       WorkflowStatusInternal status,
       @Nullable Long delayUntilEpochMs,
-      String ownerXid,
+      String creatorXid,
       @Nullable String appName)
       throws SQLException {
 
@@ -310,7 +343,7 @@ public class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            parent_workflow_id, owner_xid, serialization, attributes, schedule_name,
+            parent_workflow_id, owner_xid, creator_xid, serialization, attributes, schedule_name,
             application_name, is_debounced, debounce_deadline_epoch_ms
           ) VALUES (
             ?, ?,
@@ -320,20 +353,14 @@ public class WorkflowDAO {
             ?, ?, ?,
             %2$s, %2$s, ?,
             ?, COALESCE(?::bigint, %2$s + ?::bigint),
-            ?, ?, ?, ?::jsonb, ?,
+            ?, ?, ?, ?, ?::jsonb, ?,
             ?, ?, ?
           )
           ON CONFLICT (workflow_uuid)
-            DO UPDATE SET
-              -- recovery_attempts is absent by design: only the queue's claim counts a dispatch.
-              updated_at = EXCLUDED.updated_at,
-              executor_id = CASE
-                  WHEN EXCLUDED.status != 'ENQUEUED' AND EXCLUDED.status != 'DELAYED'
-                  THEN EXCLUDED.executor_id
-                  ELSE workflow_status.executor_id
-              END,
-              application_name = COALESCE(workflow_status.application_name, EXCLUDED.application_name)
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization, %3$s AS db_now
+            -- A no-op, so RETURNING hands back the row already there, unchanged: a duplicate start
+            -- takes nothing from it, not its executor, its owner or its application.
+            DO UPDATE SET creator_xid = workflow_status.creator_xid
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, creator_xid, serialization, %3$s AS db_now
         """
             .formatted(
                 schema, SystemDatabase.NOW_EPOCH_MS, SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS);
@@ -384,13 +411,16 @@ public class WorkflowDAO {
       stmt.setObject(20, deadlineTimeoutMs, Types.BIGINT);
       stmt.setString(21, status.parentWorkflowId());
 
-      stmt.setObject(22, ownerXid);
-      stmt.setString(23, status.serialization());
-      stmt.setString(24, attributesJson);
-      stmt.setString(25, status.scheduleName());
-      stmt.setString(26, appName);
-      stmt.setBoolean(27, status.isDebounced());
-      stmt.setObject(28, status.debounceDeadlineEpochMs(), Types.BIGINT);
+      // A direct start's creator token also owns the execution. A queued workflow is owned by
+      // nobody until a claim installs its own token.
+      stmt.setString(22, state == WorkflowState.PENDING ? creatorXid : null);
+      stmt.setString(23, creatorXid);
+      stmt.setString(24, status.serialization());
+      stmt.setString(25, attributesJson);
+      stmt.setString(26, status.scheduleName());
+      stmt.setString(27, appName);
+      stmt.setBoolean(28, status.isDebounced());
+      stmt.setObject(29, status.debounceDeadlineEpochMs(), Types.BIGINT);
 
       InsertWorkflowResult result;
       try (ResultSet rs = stmt.executeQuery()) {
@@ -405,7 +435,7 @@ public class WorkflowDAO {
                   rs.getString("queue_name"),
                   SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
                   rs.getString("serialization"),
-                  rs.getString("owner_xid"),
+                  rs.getString("creator_xid"),
                   DatabaseTime.read(rs, "db_now"));
         } else {
           throw new RuntimeException(
@@ -428,7 +458,7 @@ public class WorkflowDAO {
       // which a payload row here would override on every read. Checked here rather than left to the
       // callers' rollback: not every caller rolls back (recordErrorForUnstartedWorkflow commits
       // regardless), and a repeat start then skips a statement it would only have discarded.
-      if (!ownerXid.equals(result.ownerXid())) {
+      if (!creatorXid.equals(result.creatorXid())) {
         return result;
       }
 
@@ -465,15 +495,14 @@ public class WorkflowDAO {
 
   /**
    * Record a workflow's terminal outcome, reporting whether the write landed. The write applies
-   * only to a PENDING row: a run owns its workflow's outcome exactly as long as the row says that
-   * run is what the workflow is doing. (Note: this does not prevent a write when another concurrent
-   * execution is already running and the status is PENDING. However, both executions should be
-   * deterministic and idempotent.)
+   * only to a PENDING row still owned by the execution writing it: a run owns its workflow's
+   * outcome exactly as long as the row says that run is what the workflow is doing.
    *
    * <p>Returning false means the row was CANCELLED, dead-lettered, already terminal, handed to
-   * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume), or gone entirely. Callers
-   * that need to distinguish a deleted row do so when they wait for the recorded outcome (see
-   * {@link #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
+   * another execution (ENQUEUED/DELAYED, e.g. by a concurrent resume, or PENDING under another
+   * execution's token, once a claim has taken it), or gone entirely. Callers that need to
+   * distinguish a deleted row do so when they wait for the recorded outcome (see {@link
+   * #awaitWorkflowResult(DbContext, Duration, String, boolean)}).
    */
   private static boolean updateWorkflowOutcome(
       Connection conn,
@@ -481,7 +510,8 @@ public class WorkflowDAO {
       String workflowId,
       WorkflowState status,
       String output,
-      String error)
+      String error,
+      String ownerXid)
       throws SQLException {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
@@ -493,11 +523,14 @@ public class WorkflowDAO {
           "updateWorkflowOutcome records SUCCESS or ERROR, not " + status);
     }
 
+    // The write is itself the fence: it lands only while this execution still owns the workflow,
+    // and it releases the workflow, as every terminal transition does.
     var sql =
         """
           UPDATE "%1$s".workflow_status
-          SET status = ?, updated_at = %2$s, completed_at = %2$s, deduplication_id = NULL
-          WHERE workflow_uuid = ? AND status = ?
+          SET status = ?, updated_at = %2$s, completed_at = %2$s, deduplication_id = NULL,
+              owner_xid = NULL
+          WHERE workflow_uuid = ? AND status = ? AND owner_xid = ?
         """
             .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
 
@@ -505,6 +538,7 @@ public class WorkflowDAO {
       stmt.setString(1, status.name());
       stmt.setString(2, workflowId);
       stmt.setString(3, WorkflowState.PENDING.name());
+      stmt.setString(4, Objects.requireNonNull(ownerXid, "ownerXid"));
 
       if (stmt.executeUpdate() == 0) {
         // The outcome was not ours to write, so leave no orphan payload.
@@ -535,12 +569,18 @@ public class WorkflowDAO {
   }
 
   private static boolean updateWorkflowOutcome(
-      DbContext ctx, String workflowId, WorkflowState state, String output, String error)
+      DbContext ctx,
+      String workflowId,
+      WorkflowState state,
+      String output,
+      String error,
+      String ownerXid)
       throws SQLException {
 
     try (var conn = ctx.getConnection()) {
       return SqlTransaction.call(
-          conn, c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error));
+          conn,
+          c -> updateWorkflowOutcome(c, ctx.schema(), workflowId, state, output, error, ownerXid));
     }
   }
 
@@ -549,12 +589,14 @@ public class WorkflowDAO {
    *
    * @param workflowId id of the workflow
    * @param result output serialized as json
-   * @return true if the outcome was recorded, false if the row is no longer PENDING
+   * @param ownerXid the token of the execution recording it
+   * @return true if the outcome was recorded, false if the row is no longer PENDING or no longer
+   *     owned by the execution
    */
-  public static boolean recordWorkflowOutput(DbContext ctx, String workflowId, String result)
-      throws SQLException {
+  public static boolean recordWorkflowOutput(
+      DbContext ctx, String workflowId, String result, String ownerXid) throws SQLException {
 
-    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.SUCCESS, result, null);
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.SUCCESS, result, null, ownerXid);
   }
 
   /**
@@ -562,12 +604,14 @@ public class WorkflowDAO {
    *
    * @param workflowId id of the workflow
    * @param error output serialized as json
-   * @return true if the outcome was recorded, false if the row is no longer PENDING
+   * @param ownerXid the token of the execution recording it
+   * @return true if the outcome was recorded, false if the row is no longer PENDING or no longer
+   *     owned by the execution
    */
-  public static boolean recordWorkflowError(DbContext ctx, String workflowId, String error)
-      throws SQLException {
+  public static boolean recordWorkflowError(
+      DbContext ctx, String workflowId, String error, String ownerXid) throws SQLException {
 
-    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.ERROR, null, error);
+    return updateWorkflowOutcome(ctx, workflowId, WorkflowState.ERROR, null, error, ownerXid);
   }
 
   /**
@@ -593,15 +637,19 @@ public class WorkflowDAO {
       SqlTransaction.run(
           conn,
           c -> {
+            // The error is recorded only on a row this call creates, which it owns: a workflow
+            // already there, started by someone else, keeps its own outcome.
+            var creatorXid = UUID.randomUUID().toString();
             insertWorkflowStatus(
+                c, ctx.schema(), initStatus, delayUntilEpochMs, creatorXid, owner(ctx, initStatus));
+            updateWorkflowOutcome(
                 c,
                 ctx.schema(),
-                initStatus,
-                delayUntilEpochMs,
-                UUID.randomUUID().toString(),
-                owner(ctx, initStatus));
-            updateWorkflowOutcome(
-                c, ctx.schema(), initStatus.workflowId(), WorkflowState.ERROR, null, error);
+                initStatus.workflowId(),
+                WorkflowState.ERROR,
+                null,
+                error,
+                creatorXid);
           });
     }
   }
@@ -689,23 +737,104 @@ public class WorkflowDAO {
         + " WHERE workflow_status.workflow_uuid = ?";
   }
 
-  public static void checkWorkflow(DbContext ctx, String workflowId) throws SQLException {
+  public static void checkWorkflow(DbContext ctx, String workflowId, @Nullable String ownerXid)
+      throws SQLException {
     try (var conn = ctx.getConnection()) {
-      checkWorkflow(conn, ctx.schema(), workflowId);
+      checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
     }
   }
 
-  public static void checkWorkflow(Connection conn, String schema, String workflowId)
+  /**
+   * Fails if the workflow does not exist or is cancelled and, given an {@code ownerXid}, with
+   * {@link DBOSWorkflowExecutionConflictException} if that execution no longer owns it.
+   *
+   * <p>The read takes no lock, so it does not replace the {@link #checkOwner} a write makes. It
+   * stops an execution that has lost the workflow before it runs a step or keeps waiting, rather
+   * than at the write that follows.
+   */
+  public static void checkWorkflow(
+      Connection conn, String schema, String workflowId, @Nullable String ownerXid)
       throws SQLException {
-    var workflowState =
-        WorkflowDAO.getWorkflowState(
-            conn, Objects.requireNonNull(schema), Objects.requireNonNull(workflowId));
+    var sql =
+        """
+        SELECT status, owner_xid FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(Objects.requireNonNull(schema));
+    WorkflowState workflowState = null;
+    String currentOwner = null;
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          workflowState = WorkflowState.valueOf(rs.getString("status"));
+          currentOwner = rs.getString("owner_xid");
+        }
+      }
+    }
     if (workflowState == null) {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
     if (workflowState == WorkflowState.CANCELLED) {
       throw new DBOSWorkflowCancelledException(workflowId);
+    }
+
+    if (ownerXid != null && !ownerXid.equals(currentOwner)) {
+      throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
+    }
+  }
+
+  /**
+   * Fails with {@link DBOSWorkflowExecutionConflictException} unless the execution holding {@code
+   * ownerXid} still owns the workflow. A NULL owner -- the workflow was cancelled, resumed,
+   * recovered, timed out or finished -- fails, and so does a deleted row.
+   *
+   * <p>Takes the row with {@code FOR NO KEY UPDATE} and keeps it until the caller's transaction
+   * ends, so no hand-off can land between this check and the write it guards: a cancel, resume or
+   * claim waits for that write to commit. The caller must be inside a transaction, or the lock
+   * would end with this statement. A write that changes other rows in the same transaction makes
+   * them first and checks last, so every fenced write takes the status row last and none can
+   * deadlock with another.
+   */
+  public static void checkOwner(Connection conn, String schema, String workflowId, String ownerXid)
+      throws SQLException {
+    Objects.requireNonNull(ownerXid, "ownerXid");
+    if (conn.getAutoCommit()) {
+      throw new IllegalStateException("checkOwner must run inside a transaction");
+    }
+    var sql =
+        """
+        SELECT owner_xid FROM "%s".workflow_status WHERE workflow_uuid = ? FOR NO KEY UPDATE
+        """
+            .formatted(schema);
+    String current = null;
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          current = rs.getString("owner_xid");
+        }
+      }
+    }
+    if (!ownerXid.equals(current)) {
+      throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
+    }
+  }
+
+  /** The token of the execution that owns the workflow, read without a lock; null if none. */
+  public static @Nullable String getWorkflowOwner(DbContext ctx, String workflowId)
+      throws SQLException {
+    var sql =
+        """
+        SELECT owner_xid FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(ctx.schema());
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString("owner_xid") : null;
+      }
     }
   }
 
@@ -812,7 +941,7 @@ public class WorkflowDAO {
       String debouncerWorkflowId,
       @Nullable WorkflowStatusInternal promised,
       @Nullable Long delayUntilEpochMs,
-      String ownerXid,
+      String creatorXid,
       @Nullable DebounceCaller caller)
       throws SQLException {
     long startTime = System.currentTimeMillis();
@@ -823,13 +952,18 @@ public class WorkflowDAO {
             if (caller != null) {
               var prev =
                   StepsDAO.checkStepResult(
-                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+                      c,
+                      ctx.schema(),
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      caller.ownerXid());
               if (prev != null) {
                 return prev.toResult(ctx.serializer());
               }
             }
             String created =
-                takeOver(ctx, c, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid);
+                takeOver(ctx, c, debouncerWorkflowId, promised, delayUntilEpochMs, creatorXid);
             if (caller != null) {
               var serialized = SerializationUtil.serializeValue(created, null, ctx.serializer());
               StepsDAO.recordStepResult(
@@ -844,7 +978,8 @@ public class WorkflowDAO {
                       created,
                       serialized.serialization()),
                   startTime,
-                  System.currentTimeMillis());
+                  System.currentTimeMillis(),
+                  caller.ownerXid());
             }
             return created;
           });
@@ -857,7 +992,7 @@ public class WorkflowDAO {
       String debouncerWorkflowId,
       @Nullable WorkflowStatusInternal promised,
       @Nullable Long delayUntilEpochMs,
-      String ownerXid)
+      String creatorXid)
       throws SQLException {
     var lockSql =
         """
@@ -886,6 +1021,7 @@ public class WorkflowDAO {
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
+              owner_xid = NULL,
               updated_at = %2$s,
               completed_at = %2$s
           WHERE workflow_uuid = ?
@@ -908,8 +1044,8 @@ public class WorkflowDAO {
     // inputs: the insert writes them only for a row it creates.
     var inserted =
         insertWorkflowStatus(
-            conn, ctx.schema(), promised, delayUntilEpochMs, ownerXid, owner(ctx, promised));
-    if (!ownerXid.equals(inserted.ownerXid())) {
+            conn, ctx.schema(), promised, delayUntilEpochMs, creatorXid, owner(ctx, promised));
+    if (!creatorXid.equals(inserted.creatorXid())) {
       logger.warn(
           "Cancelled debouncer workflow {}, which stopped acknowledging calls after starting its"
               + " user workflow {}",
@@ -977,7 +1113,12 @@ public class WorkflowDAO {
             if (caller != null) {
               var prev =
                   StepsDAO.checkStepResult(
-                      c, ctx.schema(), caller.workflowId(), caller.stepId(), caller.stepName());
+                      c,
+                      ctx.schema(),
+                      caller.workflowId(),
+                      caller.stepId(),
+                      caller.stepName(),
+                      caller.ownerXid());
               if (prev != null) {
                 return prev.toResult(ctx.serializer());
               }
@@ -1019,7 +1160,8 @@ public class WorkflowDAO {
                     null,
                     serialized.serialization()),
                 startTime,
-                System.currentTimeMillis());
+                System.currentTimeMillis(),
+                caller.ownerXid());
             return recorded;
           });
     }
@@ -1240,6 +1382,7 @@ public class WorkflowDAO {
                  queue_name = NULL,
                  deduplication_id = NULL,
                  started_at_epoch_ms = NULL,
+                 owner_xid = NULL,
                  updated_at = %2$s,
                  completed_at = %2$s
            WHERE workflow_uuid IN (
@@ -1967,23 +2110,6 @@ public class WorkflowDAO {
     }
   }
 
-  public static void recordChildWorkflow(
-      DbContext ctx,
-      String parentId,
-      String childId, // workflowId of the child
-      int functionId, // func id in the parent
-      String functionName,
-      long startTime)
-      throws SQLException {
-
-    var result =
-        new StepResult(parentId, functionId, functionName, null, null, null, null)
-            .withChildWorkflowId(childId);
-    try (var conn = ctx.getConnection()) {
-      StepsDAO.recordStepResult(ctx, conn, result, null, null);
-    }
-  }
-
   public static Optional<String> checkChildWorkflow(
       DbContext ctx, String workflowUuid, int functionId) throws SQLException {
 
@@ -2039,6 +2165,39 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Cancels {@code workflowId} only while the execution holding {@code ownerXid} still owns it. The
+   * condition is the fence, so no lock is taken first. Returns whether it cancelled the workflow.
+   */
+  public static boolean cancelOwnedWorkflow(DbContext ctx, String workflowId, String ownerXid)
+      throws SQLException {
+    String sql =
+        """
+          UPDATE "%1$s".workflow_status
+          SET status = ?,
+              queue_name = NULL,
+              deduplication_id = NULL,
+              started_at_epoch_ms = NULL,
+              owner_xid = NULL,
+              updated_at = %2$s,
+              completed_at = %2$s
+          WHERE workflow_uuid = ?
+            AND status NOT IN (?, ?)
+            AND owner_xid = ?
+        """
+            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
+
+    try (Connection conn = ctx.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, WorkflowState.CANCELLED.name());
+      stmt.setString(2, workflowId);
+      stmt.setString(3, WorkflowState.SUCCESS.name());
+      stmt.setString(4, WorkflowState.ERROR.name());
+      stmt.setString(5, ownerXid);
+      return stmt.executeUpdate() > 0;
+    }
+  }
+
   private static void cancelBatch(DbContext ctx, Collection<String> workflowIds)
       throws SQLException {
     String sql =
@@ -2048,6 +2207,7 @@ public class WorkflowDAO {
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
+              owner_xid = NULL,
               updated_at = %2$s,
               completed_at = %2$s
           WHERE workflow_uuid = ANY(?)
@@ -2086,6 +2246,7 @@ public class WorkflowDAO {
               workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
+              owner_xid = NULL,
               completed_at = NULL,
               updated_at = %2$s
           WHERE workflow_uuid = ANY(?)
@@ -2742,32 +2903,6 @@ public class WorkflowDAO {
       stmt.executeUpdate();
     } finally {
       arr.free();
-    }
-  }
-
-  /**
-   * Claims {@code workflowId} for {@code executorId}, skipping the write when the workflow is
-   * already stamped with it. No-ops when {@code executorId} is null, as it is for contexts that
-   * have no executor identity of their own (such as {@link dev.dbos.transact.DBOSClient}).
-   *
-   * <p>Runs on the caller's connection so it joins the caller's transaction.
-   */
-  static void restampExecutorId(
-      Connection conn, String schema, String workflowId, @Nullable String executorId)
-      throws SQLException {
-    if (executorId == null) {
-      return;
-    }
-    String sql =
-        """
-            UPDATE "%s".workflow_status SET executor_id = ? WHERE workflow_uuid = ? AND executor_id IS DISTINCT FROM ?
-          """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, executorId);
-      stmt.setString(2, workflowId);
-      stmt.setString(3, executorId);
-      stmt.executeUpdate();
     }
   }
 

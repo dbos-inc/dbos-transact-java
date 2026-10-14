@@ -33,7 +33,8 @@ class CockroachMigrationTest {
     try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
-          SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
+          SystemDatabase.createDataSource(
+              pg.getJdbcUrl(), pg.getUsername(), pg.getPassword(), null)) {
         assertFalse(SystemDatabase.isCockroach(ds));
         try (Connection conn = ds.getConnection()) {
           assertFalse(SystemDatabase.isCockroach(conn));
@@ -48,7 +49,7 @@ class CockroachMigrationTest {
       crdb.start();
       try (var ds =
           SystemDatabase.createDataSource(
-              crdb.getJdbcUrl(), crdb.getUsername(), crdb.getPassword())) {
+              crdb.getJdbcUrl(), crdb.getUsername(), crdb.getPassword(), null)) {
         assertTrue(SystemDatabase.isCockroach(ds));
         try (Connection conn = ds.getConnection()) {
           assertTrue(SystemDatabase.isCockroach(conn));
@@ -62,7 +63,8 @@ class CockroachMigrationTest {
     try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
-          SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
+          SystemDatabase.createDataSource(
+              pg.getJdbcUrl(), pg.getUsername(), pg.getPassword(), null)) {
         var config = DBOSConfig.defaults("migration-notify-test").withDataSource(ds);
         MigrationManager.runMigrations(config);
 
@@ -85,7 +87,8 @@ class CockroachMigrationTest {
     try (var pg = PgContainer.getPG()) {
       pg.start();
       try (var ds =
-          SystemDatabase.createDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
+          SystemDatabase.createDataSource(
+              pg.getJdbcUrl(), pg.getUsername(), pg.getPassword(), null)) {
         var config =
             DBOSConfig.defaults("migration-notify-test")
                 .withDataSource(ds)
@@ -111,7 +114,7 @@ class CockroachMigrationTest {
       crdb.start();
       try (var ds =
           SystemDatabase.createDataSource(
-              crdb.getJdbcUrl(), crdb.getUsername(), crdb.getPassword())) {
+              crdb.getJdbcUrl(), crdb.getUsername(), crdb.getPassword(), null)) {
         // useListenNotify=true intentionally — MigrationManager must override it to false for CRDB
         var config = DBOSConfig.defaults("migration-notify-test").withDataSource(ds);
         MigrationManager.runMigrations(config);

@@ -3,6 +3,7 @@ package dev.dbos.transact.txstep;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -12,6 +13,10 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
+
+import javax.sql.DataSource;
+
+import org.jspecify.annotations.Nullable;
 
 /**
  * Abstract base for transactional step factories backed by a PostgreSQL database.
@@ -106,6 +111,93 @@ public abstract class PostgresStepFactory {
   protected abstract Optional<StepResult> checkExecution(
       String workflowId, int stepId, String stepName);
 
+  /**
+   * The pool this factory's connections come from, when the factory can tell; null otherwise. When
+   * it is the pool the system database uses, the ownership check runs on the step's own connection
+   * instead of taking a second one from that pool.
+   */
+  protected @Nullable DataSource dataSource() {
+    return null;
+  }
+
+  /**
+   * Throws {@link DBOSWorkflowExecutionConflictException} unless this step's workflow execution
+   * still owns the workflow. Subclasses call it inside the step's transaction, on its connection,
+   * after recording the result and before committing, so an execution that has lost its workflow
+   * commits nothing.
+   *
+   * @throws OwnershipUnknownException if ownership could not be checked at all
+   */
+  protected void checkStillOwned(String workflowId, Connection conn) {
+    checkStillOwned(dbos, workflowId, dataSource(), conn);
+  }
+
+  /**
+   * Thrown in place of a failure to check ownership -- the system database unreachable, or DBOS
+   * shutting down -- so a step's failure handling can tell it from the step's own failure. It says
+   * nothing about the step, so it is never recorded as the step's result.
+   */
+  public static final class OwnershipUnknownException extends RuntimeException {
+    OwnershipUnknownException(RuntimeException cause) {
+      super(cause);
+    }
+  }
+
+  /**
+   * As {@link #checkStillOwned(String, Connection)}, for a factory that does not extend this class.
+   *
+   * @param dataSource the pool {@code conn} came from, if known
+   * @param conn the step's connection, or null outside its transaction
+   * @throws DBOSWorkflowExecutionConflictException if the execution no longer owns the workflow
+   * @throws OwnershipUnknownException if ownership could not be checked at all
+   */
+  public static void checkStillOwned(
+      DBOS dbos, String workflowId, @Nullable DataSource dataSource, @Nullable Connection conn) {
+    try {
+      dbos.integration().checkStillOwned(workflowId, dataSource, conn);
+    } catch (DBOSWorkflowExecutionConflictException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      throw new OwnershipUnknownException(e);
+    }
+  }
+
+  /**
+   * What a step's failure handling throws in place of {@code failure} without recording it: the
+   * cause of an {@link OwnershipUnknownException} anywhere in its chain, which is the real failure
+   * and not the step's, or a {@link DBOSWorkflowExecutionConflictException}. Null when {@code
+   * failure} is the step's own.
+   */
+  public static @Nullable RuntimeException notTheStepsFailure(Throwable failure) {
+    for (Throwable t = failure; t != null; t = t.getCause()) {
+      if (t instanceof OwnershipUnknownException unknown) {
+        return (RuntimeException) unknown.getCause();
+      }
+      if (t instanceof DBOSWorkflowExecutionConflictException conflict) {
+        return conflict;
+      }
+      if (t.getCause() == t) {
+        break;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Whether a step's own failure may be recorded as its result: only while its execution still owns
+   * the workflow. A stale execution's failure is not the owner's to replay, and when ownership
+   * cannot be checked, nothing is recorded; the step's outcome is then settled when it is recorded
+   * in the system database, which is fenced.
+   */
+  public static boolean mayRecordFailure(DBOS dbos, String workflowId) {
+    try {
+      checkStillOwned(dbos, workflowId, null, null);
+      return true;
+    } catch (DBOSWorkflowExecutionConflictException | OwnershipUnknownException e) {
+      return false;
+    }
+  }
+
   protected abstract void recordError(String workflowId, int stepId, Exception exception);
 
   @FunctionalInterface
@@ -152,6 +244,8 @@ public abstract class PostgresStepFactory {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());
           int stepId = Objects.requireNonNull(DBOS.stepId());
 
+          // A replay needs no ownership check of its own: the system database records this step,
+          // and that record is fenced.
           var prev = checkExecution(workflowId, stepId, stepName);
           if (prev.isPresent()) {
             return prev.get().<R, X>toResult(serializer);
@@ -173,7 +267,13 @@ public abstract class PostgresStepFactory {
                     Math.min((long) (retryWaitMs * RETRY_BACKOFF_FACTOR), RETRY_WAIT_MAX_MS);
                 continue;
               }
-              recordError(workflowId, stepId, e);
+              var notTheSteps = notTheStepsFailure(e);
+              if (notTheSteps != null) {
+                throw notTheSteps;
+              }
+              if (mayRecordFailure(dbos, workflowId)) {
+                recordError(workflowId, stepId, e);
+              }
               throw (X) e;
             }
           }

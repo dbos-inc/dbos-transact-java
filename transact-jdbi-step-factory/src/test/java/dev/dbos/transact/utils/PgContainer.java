@@ -108,7 +108,7 @@ public class PgContainer implements AutoCloseable {
   }
 
   public HikariDataSource dataSource() {
-    return SystemDatabase.createDataSource(jdbcUrl(), username(), password());
+    return SystemDatabase.createDataSource(jdbcUrl(), username(), password(), null);
   }
 
   public DBOSClient dbosClient() {
