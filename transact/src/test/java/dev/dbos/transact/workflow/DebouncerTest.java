@@ -1229,7 +1229,7 @@ public class DebouncerTest {
           dbos.<String>debouncer()
               .debounce("slow", Duration.ofMillis(300), () -> svc.process("fresh"));
     } finally {
-      DebugTriggers.clearDebugTriggers();
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
     }
 
     // This call's arguments did not go into that workflow, so it starts one of its own rather than
@@ -1291,7 +1291,7 @@ public class DebouncerTest {
           dbos.<String>debouncer()
               .debounce("contested", Duration.ofSeconds(3), () -> svc.process("fresh"));
     } finally {
-      DebugTriggers.clearDebugTriggers();
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER);
     }
 
     assertTrue(fired.get());
