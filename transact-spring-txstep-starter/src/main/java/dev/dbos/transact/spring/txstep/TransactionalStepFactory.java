@@ -224,7 +224,7 @@ public class TransactionalStepFactory {
             return prev.get().<Object, E>toResult(serializer);
           }
 
-          long retryWaitMs = 1L;
+          var backoff = new PostgresStepFactory.RetryBackoff();
           while (true) {
             var txDef = new DefaultTransactionDefinition(PROPAGATION_REQUIRES_NEW);
             txDef.setIsolationLevel(isolation.value());
@@ -250,13 +250,7 @@ public class TransactionalStepFactory {
             } catch (Exception e) {
               if (!status.isCompleted()) txManager.rollback(status);
               if (SystemDatabase.isSerializationError(e)) {
-                try {
-                  Thread.sleep(retryWaitMs);
-                } catch (InterruptedException ie) {
-                  Thread.currentThread().interrupt();
-                  throw new RuntimeException("Interrupted during serialization retry backoff", ie);
-                }
-                retryWaitMs = Math.min((long) (retryWaitMs * 1.5), 2000L);
+                backoff.sleep();
                 continue;
               }
               var notTheSteps = PostgresStepFactory.notTheStepsFailure(e);

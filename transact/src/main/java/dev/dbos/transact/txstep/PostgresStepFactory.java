@@ -10,6 +10,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
@@ -232,9 +233,45 @@ public abstract class PostgresStepFactory {
     return SystemDatabase.isSerializationError(e);
   }
 
-  private static final long RETRY_WAIT_INITIAL_MS = 1L;
-  private static final double RETRY_BACKOFF_FACTOR = 1.5;
-  private static final long RETRY_WAIT_MAX_MS = 2000L;
+  /**
+   * The waits between retries of a step whose transaction failed with a conflict ({@link
+   * #isSerializationFailure}): 1 ms, growing 1.5x per retry up to 2 s. The number of retries is not
+   * bounded. Create one per step.
+   */
+  public static final class RetryBackoff {
+    private static final long INITIAL_WAIT_NANOS = 1_000_000L;
+    private static final double BACKOFF_FACTOR = 1.5;
+    private static final long MAX_WAIT_NANOS = 2_000_000_000L;
+
+    // Kept as a double so the growth is not lost to truncation while the wait is small.
+    private double waitNanos = INITIAL_WAIT_NANOS;
+
+    /**
+     * Returns the wait before the next retry and advances to the one after it.
+     *
+     * @return the wait before the next retry
+     */
+    public Duration nextWait() {
+      var wait = Duration.ofNanos(Math.round(waitNanos));
+      waitNanos = Math.min(waitNanos * BACKOFF_FACTOR, MAX_WAIT_NANOS);
+      return wait;
+    }
+
+    /**
+     * Sleeps for {@link #nextWait()}.
+     *
+     * @throws RuntimeException if the thread is interrupted; the interrupt flag is set again
+     */
+    public void sleep() {
+      var wait = nextWait();
+      try {
+        Thread.sleep(wait.toMillis(), wait.toNanosPart() % 1_000_000);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Interrupted during serialization retry backoff", ie);
+      }
+    }
+  }
 
   @SuppressWarnings("unchecked")
   protected <R, X extends Exception> R runTxStep(TxStepFunction<R, X> execute, String stepName)
@@ -251,20 +288,13 @@ public abstract class PostgresStepFactory {
             return prev.get().<R, X>toResult(serializer);
           }
 
-          long retryWaitMs = RETRY_WAIT_INITIAL_MS;
+          var backoff = new RetryBackoff();
           while (true) {
             try {
               return execute.execute(workflowId, stepId);
             } catch (Exception e) {
               if (SystemDatabase.isSerializationError(e)) {
-                try {
-                  Thread.sleep(retryWaitMs);
-                } catch (InterruptedException ie) {
-                  Thread.currentThread().interrupt();
-                  throw new RuntimeException("Interrupted during serialization retry backoff", ie);
-                }
-                retryWaitMs =
-                    Math.min((long) (retryWaitMs * RETRY_BACKOFF_FACTOR), RETRY_WAIT_MAX_MS);
+                backoff.sleep();
                 continue;
               }
               var notTheSteps = notTheStepsFailure(e);
