@@ -60,8 +60,12 @@ public final class DebugTriggers {
     pointTriggers.put(name, action);
   }
 
-  public static void clearDebugTriggers() {
-    pointTriggers.clear();
+  /**
+   * Removes the trigger set under {@code name}. Tests run concurrently and share these triggers, so
+   * each removes only the one it set.
+   */
+  public static void clearDebugTrigger(String name) {
+    pointTriggers.remove(name);
   }
 
   // ----- Constants (Should use in just one place in the code) -----
