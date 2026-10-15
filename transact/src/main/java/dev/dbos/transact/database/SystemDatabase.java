@@ -49,6 +49,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -57,6 +58,7 @@ import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.Nullable;
+import org.postgresql.PGConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,6 +118,13 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
 
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  // See reachesThisDatabase: this database's identity, read at start and refreshed periodically
+  // (null when it could not be read), and the answer for each physical connection already probed.
+  // Weak, so connections the pool retires can be collected.
+  private volatile @Nullable DatabaseIdentity databaseIdentity;
+  private final Map<Object, SameDatabaseAnswer> reachesThisDatabaseByConnection =
+      Collections.synchronizedMap(new WeakHashMap<>());
+  private final AtomicInteger sameDatabaseProbes = new AtomicInteger();
   private final SignalMap signalMap = new SignalMap();
   private final Function<SignalKey, Subscription> createSubscription =
       key -> signalMap.subscribe(key.toString());
@@ -384,6 +393,9 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void start() {
+    // Read now, while no step holds a connection: reading it from a step would take a second
+    // connection from a pool the step may already hold one of.
+    databaseIdentity = readDatabaseIdentity();
     notificationSource.start();
   }
 
@@ -1041,6 +1053,211 @@ public class SystemDatabase implements AutoCloseable {
     return dataSource;
   }
 
+  // The database a connection reaches: its server's system_identifier and when the server started,
+  // then the database's name and OID. system_identifier is set when the server's data directory
+  // was created, so every copy of it -- a server restored from another's backup, a cloud clone, a
+  // container from a prebuilt image -- has the same one; the start time tells copies running at
+  // the same time apart. Name and OID are unique only within one server. The start time is in
+  // epoch seconds so the session's time zone cannot change the text. A proxy such as PgBouncer
+  // reports the server behind it.
+  static final String DATABASE_IDENTITY_SQL =
+      """
+      SELECT (SELECT system_identifier FROM pg_control_system()) || '/'
+             || extract(epoch FROM pg_postmaster_start_time()) || '/' || current_database()
+             || '/' || d.oid
+      FROM pg_database d WHERE d.datname = current_database()
+      """;
+
+  // Where the user may not call pg_control_system(), the rest of the identity alone. Two servers
+  // agreeing on their start time, to the microsecond, and on the database's name and OID is not a
+  // realistic coincidence.
+  static final String DATABASE_IDENTITY_BY_START_TIME_SQL =
+      """
+      SELECT extract(epoch FROM pg_postmaster_start_time()) || '/' || current_database()
+             || '/' || d.oid
+      FROM pg_database d WHERE d.datname = current_database()
+      """;
+
+  /** The identity of a database, and the query that read it, for reading it again to compare. */
+  record DatabaseIdentity(String sql, String value) {}
+
+  // A probe's answer, and the system database's identity it was compared with: after a restart
+  // of the database server changes that identity, the answer is probed again.
+  private record SameDatabaseAnswer(String identity, boolean reaches) {}
+
+  /**
+   * Whether {@code conn}, a transactional step's connection, reaches the database this system
+   * database lives in, as a database user that may lock its {@code workflow_status} rows. Then a
+   * step can check that its execution owns the workflow on {@code conn} itself ({@link
+   * #checkOwner}) instead of on a second connection.
+   *
+   * <p>It matters when the step's factory cannot say which pool {@code conn} came from. Two
+   * connections from the same pool reach the same database, so a step on this system database's
+   * pool is always recognized, and never asks that pool for a second connection while holding one:
+   * steps doing so can hold every connection between them and each wait forever for one more. A
+   * connection that reaches another database cannot come from this pool, so taking a second
+   * connection is safe for it.
+   *
+   * <p>Each physical connection is probed once, and again after the system database's identity
+   * changes (see {@link #refreshDatabaseIdentity}). The probe runs under a savepoint when {@code
+   * conn} is in a transaction, so a server that cannot answer it leaves that transaction intact;
+   * such a failure answers no and is not remembered. The privilege is checked for the user the
+   * connection had when it was probed: a step that switches to another role ({@code SET ROLE}) that
+   * may not lock the row fails its ownership check.
+   */
+  public boolean reachesThisDatabase(Connection conn) {
+    var identity = databaseIdentity;
+    if (identity == null) {
+      return false;
+    }
+    var key = physicalConnection(conn);
+    var known = reachesThisDatabaseByConnection.get(key);
+    if (known != null && known.identity().equals(identity.value())) {
+      return known.reaches();
+    }
+    var reaches = probeReachesThisDatabase(conn, identity);
+    if (reaches == null) {
+      return false;
+    }
+    reachesThisDatabaseByConnection.put(key, new SameDatabaseAnswer(identity.value(), reaches));
+    return reaches;
+  }
+
+  /** For tests: stands in for the identity changing, as a restart of the database server does. */
+  void replaceDatabaseIdentity(DatabaseIdentity identity) {
+    databaseIdentity = identity;
+  }
+
+  /** For tests: the identity steps' connections are compared with. */
+  @Nullable DatabaseIdentity databaseIdentity() {
+    return databaseIdentity;
+  }
+
+  /** For tests: how many times {@link #reachesThisDatabase} has probed a connection. */
+  int sameDatabaseProbes() {
+    return sameDatabaseProbes.get();
+  }
+
+  // Pools and proxies hand out a fresh wrapper for each borrow; the driver's connection beneath is
+  // what stays the same, and what the probe's answer belongs to. Some wrappers return themselves
+  // when asked for a java.sql.Connection, so ask for the driver's own type.
+  private static Object physicalConnection(Connection conn) {
+    try {
+      if (conn.isWrapperFor(PGConnection.class)) {
+        return conn.unwrap(PGConnection.class);
+      }
+    } catch (SQLException e) {
+      // Not unwrappable: key on the connection itself.
+    }
+    return conn;
+  }
+
+  // The probe's answer, or null when it could not be had.
+  private @Nullable Boolean probeReachesThisDatabase(Connection conn, DatabaseIdentity identity) {
+    sameDatabaseProbes.incrementAndGet();
+    // A user who cannot run the identity query fails here, under the savepoint.
+    var sql =
+        """
+        SELECT (%s) = ?,
+               COALESCE(has_table_privilege(t.c, 'SELECT') AND has_table_privilege(t.c, 'UPDATE'),
+                        false)
+        FROM (SELECT to_regclass(?) AS c) t
+        """
+            .formatted(identity.sql());
+    Savepoint savepoint = null;
+    try {
+      if (!conn.getAutoCommit()) {
+        savepoint = conn.setSavepoint();
+      }
+      boolean reaches;
+      try (var stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, identity.value());
+        stmt.setString(2, "\"%s\".workflow_status".formatted(ctx.schema()));
+        try (var rs = stmt.executeQuery()) {
+          reaches = rs.next() && rs.getBoolean(1) && rs.getBoolean(2);
+        }
+      }
+      if (savepoint != null) {
+        conn.releaseSavepoint(savepoint);
+      }
+      return reaches;
+    } catch (SQLException e) {
+      if (savepoint != null) {
+        try {
+          conn.rollback(savepoint);
+        } catch (SQLException rollbackFailure) {
+          e.addSuppressed(rollbackFailure);
+        }
+      }
+      logger.debug("Could not tell whether a step's connection reaches the system database", e);
+      return null;
+    }
+  }
+
+  // Null when this server cannot say; steps then check ownership as before.
+  private @Nullable DatabaseIdentity readDatabaseIdentity() {
+    try {
+      return dbRetry(
+          () -> {
+            try (var conn = ctx.getConnection()) {
+              return readDatabaseIdentity(conn);
+            }
+          });
+    } catch (DBOSSystemDatabaseException e) {
+      logger.debug("Could not read the system database's identity", e);
+      return null;
+    }
+  }
+
+  /**
+   * Reads the system database's identity again, so a restart of its server, which changes the
+   * identity, stops making steps' connections look like they reach another database. Called
+   * periodically from a background thread, and by a step that could not check its ownership and has
+   * released its connection; never while holding one, as it takes a connection from the pool. One
+   * attempt; a failure keeps the identity it had.
+   */
+  public void refreshDatabaseIdentity() {
+    if (databaseIdentity == null) {
+      return;
+    }
+    try (var conn = ctx.getConnection()) {
+      var identity = readDatabaseIdentity(conn);
+      if (identity != null) {
+        databaseIdentity = identity;
+      }
+    } catch (SQLException | RuntimeException e) {
+      logger.debug("Could not refresh the system database's identity", e);
+    }
+  }
+
+  /**
+   * The identity of the database {@code conn} reaches: with its server's system_identifier, or
+   * without it where the user may not read it; null when neither can be read. A failure that may
+   * pass, such as a lost connection, is thrown, so a caller can retry rather than settle for less.
+   */
+  static @Nullable DatabaseIdentity readDatabaseIdentity(Connection conn) throws SQLException {
+    for (var sql : List.of(DATABASE_IDENTITY_SQL, DATABASE_IDENTITY_BY_START_TIME_SQL)) {
+      try (var stmt = conn.createStatement();
+          var rs = stmt.executeQuery(sql)) {
+        if (rs.next()) {
+          return new DatabaseIdentity(sql, rs.getString(1));
+        }
+      } catch (SQLException e) {
+        // Only a query this server or user will never answer, such as a missing function or a
+        // missing privilege, moves on to the next one.
+        if (classify(e) != Failure.CALLERS) {
+          throw e;
+        }
+        logger.debug("Could not read the database's identity", e);
+        // A failed statement aborts a transaction the pool's connection may have open.
+        if (!conn.getAutoCommit()) {
+          conn.rollback();
+        }
+      }
+    }
+    return null;
+  }
+
   /**
    * {@link WorkflowDAO#checkOwner} on {@code conn}, inside its caller's transaction, for a caller
    * whose connection comes from this system database's pool. Not retried: a failure rolls back the
@@ -1056,6 +1273,37 @@ public class SystemDatabase implements AutoCloseable {
 
   public @Nullable String getWorkflowOwner(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowOwner(ctx, workflowId));
+  }
+
+  /**
+   * Reads the workflow's owner in one attempt, for a caller that holds a connection of this
+   * database's pool and so must not wait on that pool indefinitely: steps that hold every
+   * connection between them, each waiting for one more, would never get one.
+   *
+   * @throws ConnectionUnavailableException when the attempt fails in a way {@link #dbRetry} would
+   *     retry, such as the pool giving no connection within its timeout. The caller releases its
+   *     connection and tries again.
+   */
+  public @Nullable String getWorkflowOwnerOnce(String workflowId) {
+    try {
+      return WorkflowDAO.getWorkflowOwner(ctx, workflowId);
+    } catch (SQLException e) {
+      if (classify(e) == Failure.CALLERS) {
+        throw new DBOSSystemDatabaseException(e);
+      }
+      throw new ConnectionUnavailableException(e);
+    }
+  }
+
+  /**
+   * Thrown by {@link #getWorkflowOwnerOnce} when it got no answer for a reason that may pass, such
+   * as the pool having no connection to give. A transactional step that sees it rolls back,
+   * releasing its connection, and runs again.
+   */
+  public static final class ConnectionUnavailableException extends RuntimeException {
+    ConnectionUnavailableException(SQLException cause) {
+      super(cause);
+    }
   }
 
   public String getWorkflowSerialization(String workflowId) {

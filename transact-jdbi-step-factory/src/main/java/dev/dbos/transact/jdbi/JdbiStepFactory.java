@@ -11,12 +11,15 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
+import javax.sql.DataSource;
+
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.HandleCallback;
 import org.jdbi.v3.core.HandleConsumer;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Runs idempotent transactional steps inside DBOS workflows using Jdbi3 {@link Handle} objects.
@@ -30,8 +33,11 @@ import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
  * every factory when it launches, so the constructor throws {@link IllegalStateException} after
  * launch.
  *
+ * <p>Pass the pool the {@link Jdbi} was created from as well, especially when it may be the pool
+ * the DBOS system database uses; see {@link #JdbiStepFactory(DBOS, Jdbi, DataSource)}.
+ *
  * <pre>{@code
- * JdbiStepFactory factory = new JdbiStepFactory(dbos, Jdbi.create(dataSource));
+ * JdbiStepFactory factory = new JdbiStepFactory(dbos, Jdbi.create(dataSource), dataSource);
  *
  * // inside a @Workflow method:
  * int count = factory.inStep(handle -> {
@@ -42,6 +48,8 @@ import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
 public class JdbiStepFactory extends PostgresStepFactory {
 
   private final Jdbi jdbi;
+  // The pool jdbi was created from, when the caller passed it; Jdbi itself does not expose it.
+  private final @Nullable DataSource dataSource;
 
   /**
    * Creates a factory using the schema and serializer from {@code dbos} configuration.
@@ -92,8 +100,54 @@ public class JdbiStepFactory extends PostgresStepFactory {
    * @throws RuntimeException if the datasource is not PostgreSQL or the schema setup fails
    */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi, String schema, DBOSSerializer serializer) {
+    this(dbos, jdbi, null, schema, serializer);
+  }
+
+  /**
+   * Creates a factory that knows the pool its {@link Jdbi} was created from, using the schema and
+   * serializer from {@code dbos} configuration.
+   *
+   * <p>Pass the pool when it may be the one the DBOS system database uses: DBOS then checks that a
+   * step's workflow execution still owns the workflow on the step's own connection, rather than
+   * taking a second connection from the same pool while the step holds one. Jdbi does not expose
+   * the pool it was created from, so the factory cannot find it otherwise.
+   *
+   * @param dbos the DBOS runtime instance
+   * @param jdbi a Jdbi instance connected to a PostgreSQL database
+   * @param dataSource the pool {@code jdbi} was created from, as in {@code Jdbi.create(dataSource)}
+   */
+  public JdbiStepFactory(DBOS dbos, Jdbi jdbi, DataSource dataSource) {
+    this(dbos, jdbi, dataSource, null, null);
+  }
+
+  /**
+   * Creates a factory that knows the pool its {@link Jdbi} was created from, with explicit schema
+   * and serializer overrides. See {@link #JdbiStepFactory(DBOS, Jdbi, DataSource)} for why the pool
+   * matters.
+   *
+   * @param dbos the DBOS runtime instance
+   * @param jdbi a Jdbi instance connected to a PostgreSQL database
+   * @param dataSource the pool {@code jdbi} was created from; {@code null} when it is not known
+   * @param schema the PostgreSQL schema to use for {@code tx_step_outputs}; {@code null} uses the
+   *     schema from {@code dbos} configuration
+   * @param serializer the serializer to use for step outputs; {@code null} uses the serializer from
+   *     {@code dbos} configuration
+   * @throws RuntimeException if the datasource is not PostgreSQL or the schema setup fails
+   */
+  public JdbiStepFactory(
+      DBOS dbos,
+      Jdbi jdbi,
+      @Nullable DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
     super(dbos, schema, serializer, () -> jdbi.open().getConnection());
     this.jdbi = Objects.requireNonNull(jdbi);
+    this.dataSource = dataSource;
+  }
+
+  @Override
+  protected @Nullable DataSource dataSource() {
+    return dataSource;
   }
 
   /**

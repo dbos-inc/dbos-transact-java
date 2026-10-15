@@ -6,12 +6,35 @@
 package dev.dbos.transact.database;
 
 import java.sql.SQLException;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariConfig;
+import org.jspecify.annotations.Nullable;
 
 public class DBTestAccess {
+  /** How many times the same-database probe has checked a connection. */
+  public static int sameDatabaseProbes(SystemDatabase sysdb) {
+    return sysdb.sameDatabaseProbes();
+  }
+
+  /**
+   * Replaces the system database's identity with one no connection has, as a restart of its server
+   * does until the identity is read again. Returns the identity it had.
+   */
+  public static String staleDatabaseIdentity(SystemDatabase sysdb) {
+    var identity = Objects.requireNonNull(sysdb.databaseIdentity());
+    sysdb.replaceDatabaseIdentity(new SystemDatabase.DatabaseIdentity(identity.sql(), "stale"));
+    return identity.value();
+  }
+
+  /** The identity steps' connections are compared with, or null when it could not be read. */
+  public static @Nullable String databaseIdentity(SystemDatabase sysdb) {
+    var identity = sysdb.databaseIdentity();
+    return identity == null ? null : identity.value();
+  }
+
   public static Optional<HikariConfig> findHikariConfig(SystemDatabase sysdb) {
     return sysdb.getConfig();
   }

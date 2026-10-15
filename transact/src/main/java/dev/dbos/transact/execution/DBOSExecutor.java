@@ -194,6 +194,9 @@ public class DBOSExecutor implements AutoCloseable {
   private AlertHandler alertHandler;
   private Set<StepCheckpointStore> stepCheckpointStores = Set.of();
   private boolean keepCompletedStepCheckpoints = false;
+  // How often the system database's identity is read again; see
+  // SystemDatabase.refreshDatabaseIdentity.
+  private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -314,6 +317,13 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
+      // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
+      // also fires workflow timeouts.
+      timeoutScheduler.scheduleWithFixedDelay(
+          () -> executorService.submit(systemDatabase::refreshDatabaseIdentity),
+          DATABASE_IDENTITY_REFRESH.toSeconds(),
+          DATABASE_IDENTITY_REFRESH.toSeconds(),
+          TimeUnit.SECONDS);
 
       systemDatabase.createApplicationVersion(this.appVersion, null);
       var latest = systemDatabase.getLatestApplicationVersion();
@@ -1836,10 +1846,14 @@ public class DBOSExecutor implements AutoCloseable {
    * thread still owns {@code workflowId}. Does nothing outside that workflow's execution.
    *
    * <p>For a transactional step, called inside its transaction on {@code conn}, drawn from {@code
-   * dataSource}. When that is the system database's own pool, the check runs on {@code conn} and
-   * locks the workflow's row until the step commits: taking a second connection from the pool while
-   * holding one could exhaust it. Otherwise the read takes a system database connection and no
-   * lock, as the step's database cannot hold the system database's lock across its own commit.
+   * dataSource} when the step's factory can say so. The check runs on {@code conn} and locks the
+   * workflow's row until the step commits when {@code dataSource} is the system database's own
+   * pool, or, when the factory cannot name its pool, when {@code conn} reaches the system
+   * database's own database ({@link SystemDatabase#reachesThisDatabase}): taking a second
+   * connection from the pool while holding one could exhaust it. Otherwise the read takes a system
+   * database connection and no lock, as the step's database cannot hold the system database's lock
+   * across its own commit. For a step whose factory cannot name its pool, that read waits for a
+   * connection once, and otherwise throws {@link SystemDatabase.ConnectionUnavailableException}.
    * Ownership can then still move between this read and the commit; the step's result is the
    * owner's to replay, which holds because the step must be deterministic.
    */
@@ -1850,13 +1864,35 @@ public class DBOSExecutor implements AutoCloseable {
     if (ownerXid == null || !workflowId.equals(ctx.getWorkflowId())) {
       return;
     }
-    if (conn != null && dataSource != null && systemDatabase.sharesPool(dataSource)) {
+    // On the step's own connection when it may come from the system database's pool: a step must
+    // not ask that pool for a second connection while holding one. A factory that cannot name its
+    // pool is asked whether its connection reaches the system database at all.
+    if (conn != null
+        && (dataSource != null
+            ? systemDatabase.sharesPool(dataSource)
+            : systemDatabase.reachesThisDatabase(conn))) {
       systemDatabase.checkOwner(conn, workflowId, ownerXid);
       return;
     }
-    if (!ownerXid.equals(systemDatabase.getWorkflowOwner(workflowId))) {
+    // A connection from a pool the factory cannot name may still be the system database's, its
+    // identity not yet refreshed after a restart of the server. Waiting on the pool indefinitely
+    // could then leave steps holding every connection, each waiting for one more, and the refresh
+    // waiting with them: wait once, and on failure let the step release its connection, refresh
+    // the identity, and run again.
+    var owner =
+        conn != null && dataSource == null
+            ? systemDatabase.getWorkflowOwnerOnce(workflowId)
+            : systemDatabase.getWorkflowOwner(workflowId);
+    if (!ownerXid.equals(owner)) {
       throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
     }
+  }
+
+  /**
+   * Reads the system database's identity again; see {@link SystemDatabase#refreshDatabaseIdentity}.
+   */
+  public void refreshDatabaseIdentity() {
+    systemDatabase.refreshDatabaseIdentity();
   }
 
   /**
