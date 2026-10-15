@@ -211,6 +211,20 @@ public abstract class PostgresStepFactory {
     return null;
   }
 
+  // Whether the ownership check failed for want of a connection, anywhere in the chain: it arrives
+  // wrapped in OwnershipUnknownException, and by the database library.
+  private static boolean isConnectionUnavailable(Throwable failure) {
+    for (Throwable t = failure; t != null; t = t.getCause()) {
+      if (t instanceof SystemDatabase.ConnectionUnavailableException) {
+        return true;
+      }
+      if (t.getCause() == t) {
+        break;
+      }
+    }
+    return false;
+  }
+
   /**
    * Whether a step's own failure may be recorded as its result: only while its execution still owns
    * the workflow. A stale execution's failure is not the owner's to replay, and when ownership
@@ -324,6 +338,14 @@ public abstract class PostgresStepFactory {
               return execute.execute(workflowId, stepId);
             } catch (Exception e) {
               if (SystemDatabase.isSerializationError(e)) {
+                backoff.sleep();
+                continue;
+              }
+              if (isConnectionUnavailable(e)) {
+                // The ownership check got no connection, and the rollback has released this
+                // step's. The pool may be the system database's with its identity out of date,
+                // so refresh it before running again.
+                dbos.integration().refreshDatabaseIdentity();
                 backoff.sleep();
                 continue;
               }

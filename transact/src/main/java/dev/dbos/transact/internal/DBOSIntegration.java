@@ -125,6 +125,17 @@ public class DBOSIntegration {
   }
 
   /**
+   * Reads the system database's identity again, so a step's connection to it is recognized after a
+   * restart of its server. A transactional step factory calls it after an ownership check failed
+   * with {@link dev.dbos.transact.database.SystemDatabase.ConnectionUnavailableException}, once its
+   * transaction has rolled back and released its connection: it takes a connection from the system
+   * database's pool.
+   */
+  public void refreshDatabaseIdentity() {
+    executor("refreshDatabaseIdentity").refreshDatabaseIdentity();
+  }
+
+  /**
    * Register a workflow method with DBOS. This method is used internally by the proxy registration
    * process and should not typically be called directly by application code.
    *

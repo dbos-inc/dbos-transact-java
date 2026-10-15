@@ -1212,8 +1212,9 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Reads the system database's identity again, so a restart of its server, which changes the
    * identity, stops making steps' connections look like they reach another database. Called
-   * periodically from a background thread, never from a step: it takes a connection from the pool.
-   * One attempt; a failure keeps the identity it had.
+   * periodically from a background thread, and by a step that could not check its ownership and has
+   * released its connection; never while holding one, as it takes a connection from the pool. One
+   * attempt; a failure keeps the identity it had.
    */
   public void refreshDatabaseIdentity() {
     if (databaseIdentity == null) {
@@ -1272,6 +1273,37 @@ public class SystemDatabase implements AutoCloseable {
 
   public @Nullable String getWorkflowOwner(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowOwner(ctx, workflowId));
+  }
+
+  /**
+   * Reads the workflow's owner in one attempt, for a caller that holds a connection of this
+   * database's pool and so must not wait on that pool indefinitely: steps that hold every
+   * connection between them, each waiting for one more, would never get one.
+   *
+   * @throws ConnectionUnavailableException when the attempt fails in a way {@link #dbRetry} would
+   *     retry, such as the pool giving no connection within its timeout. The caller releases its
+   *     connection and tries again.
+   */
+  public @Nullable String getWorkflowOwnerOnce(String workflowId) {
+    try {
+      return WorkflowDAO.getWorkflowOwner(ctx, workflowId);
+    } catch (SQLException e) {
+      if (classify(e) == Failure.CALLERS) {
+        throw new DBOSSystemDatabaseException(e);
+      }
+      throw new ConnectionUnavailableException(e);
+    }
+  }
+
+  /**
+   * Thrown by {@link #getWorkflowOwnerOnce} when it got no answer for a reason that may pass, such
+   * as the pool having no connection to give. A transactional step that sees it rolls back,
+   * releasing its connection, and runs again.
+   */
+  public static final class ConnectionUnavailableException extends RuntimeException {
+    ConnectionUnavailableException(SQLException cause) {
+      super(cause);
+    }
   }
 
   public String getWorkflowSerialization(String workflowId) {

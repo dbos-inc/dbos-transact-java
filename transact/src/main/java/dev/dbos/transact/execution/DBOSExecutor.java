@@ -1852,8 +1852,10 @@ public class DBOSExecutor implements AutoCloseable {
    * database's own database ({@link SystemDatabase#reachesThisDatabase}): taking a second
    * connection from the pool while holding one could exhaust it. Otherwise the read takes a system
    * database connection and no lock, as the step's database cannot hold the system database's lock
-   * across its own commit. Ownership can then still move between this read and the commit; the
-   * step's result is the owner's to replay, which holds because the step must be deterministic.
+   * across its own commit. For a step whose factory cannot name its pool, that read waits for a
+   * connection once, and otherwise throws {@link SystemDatabase.ConnectionUnavailableException}.
+   * Ownership can then still move between this read and the commit; the step's result is the
+   * owner's to replay, which holds because the step must be deterministic.
    */
   public void checkStillOwned(
       String workflowId, @Nullable DataSource dataSource, @Nullable Connection conn) {
@@ -1872,9 +1874,25 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.checkOwner(conn, workflowId, ownerXid);
       return;
     }
-    if (!ownerXid.equals(systemDatabase.getWorkflowOwner(workflowId))) {
+    // A connection from a pool the factory cannot name may still be the system database's, its
+    // identity not yet refreshed after a restart of the server. Waiting on the pool indefinitely
+    // could then leave steps holding every connection, each waiting for one more, and the refresh
+    // waiting with them: wait once, and on failure let the step release its connection, refresh
+    // the identity, and run again.
+    var owner =
+        conn != null && dataSource == null
+            ? systemDatabase.getWorkflowOwnerOnce(workflowId)
+            : systemDatabase.getWorkflowOwner(workflowId);
+    if (!ownerXid.equals(owner)) {
       throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
     }
+  }
+
+  /**
+   * Reads the system database's identity again; see {@link SystemDatabase#refreshDatabaseIdentity}.
+   */
+  public void refreshDatabaseIdentity() {
+    systemDatabase.refreshDatabaseIdentity();
   }
 
   /**
