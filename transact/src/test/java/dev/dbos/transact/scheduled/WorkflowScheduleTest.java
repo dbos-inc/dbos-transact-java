@@ -803,6 +803,43 @@ class WorkflowScheduleTest {
   }
 
   @Test
+  public void automaticBackfillAndTheLiveLoopLeaveNoGap() throws Exception {
+    registerAndLaunch();
+    // Five minutes of per-second ticks to catch up on: a backfill long enough to outlast the
+    // second it started in, so ticks pass while it runs.
+    var lastFiredAt = Instant.now().truncatedTo(ChronoUnit.SECONDS).minusSeconds(300);
+    dbos.createSchedule(
+        new WorkflowSchedule("no-gap", workflowName(), className(), "* * * * * *")
+            .withAutomaticBackfill(true)
+            .withLastFiredAt(lastFiredAt));
+
+    var prefix = "sched-no-gap-";
+    var liveUntil = Instant.now().plusSeconds(5);
+    var deadline = Instant.now().plusSeconds(60);
+    List<Instant> ticks;
+    while (true) {
+      ticks =
+          dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix)).stream()
+              .map(w -> OffsetDateTime.parse(w.workflowId().substring(prefix.length())).toInstant())
+              .sorted()
+              .toList();
+      if (!ticks.isEmpty() && !ticks.get(ticks.size() - 1).isBefore(liveUntil)) {
+        break;
+      }
+      assertTrue(Instant.now().isBefore(deadline), "the live loop never caught up");
+      Thread.sleep(200);
+    }
+
+    // Every second from the one after lastFiredAt to the latest tick ran exactly once, whether
+    // backfill or the live loop enqueued it.
+    var expected = lastFiredAt.plusSeconds(1);
+    for (var tick : ticks) {
+      assertEquals(expected, tick, "a tick is missing or repeated");
+      expected = expected.plusSeconds(1);
+    }
+  }
+
+  @Test
   public void workflowIdUsesOffsetDateTimeFormat() throws Exception {
     // Scheduler-generated IDs must use OffsetDateTime (e.g. 2026-04-20T10:15:30Z),
     // not ZonedDateTime which appends zone name in brackets (e.g. [UTC]).

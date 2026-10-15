@@ -268,11 +268,15 @@ public class SchedulerService implements AutoCloseable {
       return;
     }
 
+    // Automatic backfill enqueues the ticks up to start, and the live loop fires the ones after it,
+    // so no tick falls between the two however long the backfill takes. Ticks that pass while it
+    // runs are past due when the loop schedules them, and fire at once.
+    var start = Instant.now();
     if (allowBackfill
         && record.automaticBackfill()
         && record.lastFiredAt() != null
-        && record.lastFiredAt().isBefore(Instant.now())) {
-      dbosExecutor.backfillSchedule(record.scheduleName(), record.lastFiredAt(), Instant.now());
+        && record.lastFiredAt().isBefore(start)) {
+      dbosExecutor.backfillSchedule(record.scheduleName(), record.lastFiredAt(), start);
     }
 
     var running = new RunningSchedule(record);
@@ -285,7 +289,7 @@ public class SchedulerService implements AutoCloseable {
           final WorkflowSchedule wfSchedule = schedule;
           final ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
-          ZonedDateTime nextTime = ZonedDateTime.now(timeZone);
+          ZonedDateTime nextTime = start.atZone(timeZone);
 
           // Returns true if a future was scheduled for the next execution, false if the cron
           // expression has no next execution (eg. a day-of-month/month combination that can
