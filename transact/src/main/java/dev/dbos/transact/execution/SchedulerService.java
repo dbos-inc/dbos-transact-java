@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.WorkflowSchedule;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -29,6 +30,7 @@ import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinitionBuilder;
 import com.cronutils.model.time.ExecutionTime;
 import com.cronutils.parser.CronParser;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,6 +78,26 @@ public class SchedulerService implements AutoCloseable {
 
   public static final CronParser CRON_PARSER =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
+
+  /**
+   * The zone a schedule's cron expression is read in: its {@code cronTimezone}, or UTC. Never the
+   * JVM's default zone, so executors on hosts in different zones fire a schedule at the same times.
+   */
+  public static ZoneId cronZone(@Nullable ZoneId cronTimezone) {
+    return Objects.requireNonNullElse(cronTimezone, ZoneOffset.UTC);
+  }
+
+  /**
+   * The ID of the workflow a schedule runs for the tick at {@code scheduledTime}, the same whether
+   * the tick is fired live or by backfill: the tick as an offset date-time, never with the zone's
+   * region, so the ID is the same for every path that enqueues the tick and the tick runs once.
+   * Ticks fall on whole seconds, and the seconds are left out when they are zero ({@code
+   * 2026-10-05T08:00-04:00}).
+   */
+  public static String scheduledWorkflowId(String scheduleName, ZonedDateTime scheduledTime) {
+    return "sched-%s-%s".formatted(scheduleName, scheduledTime.toOffsetDateTime());
+  }
+
   private static final Class<?>[] EXPECTED_PARAMETERS =
       new Class<?>[] {Instant.class, Object.class};
   private static final Duration MAX_JITTER = Duration.ofSeconds(10);
@@ -258,8 +280,7 @@ public class SchedulerService implements AutoCloseable {
     var task =
         new Runnable() {
 
-          final ZoneId timeZone =
-              Objects.requireNonNullElseGet(schedule.cronTimezone(), () -> ZoneId.systemDefault());
+          final ZoneId timeZone = cronZone(schedule.cronTimezone());
           final WorkflowSchedule wfSchedule = schedule;
           final ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
@@ -320,8 +341,7 @@ public class SchedulerService implements AutoCloseable {
                 return;
               }
               var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
-              var workflowId =
-                  "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime.toOffsetDateTime());
+              var workflowId = scheduledWorkflowId(wfSchedule.scheduleName(), nextTime);
               logger.debug(
                   "Queuing scheduled workflow {} schedule {} workflowId {}",
                   regWorkflow.fullyQualifiedName(),
