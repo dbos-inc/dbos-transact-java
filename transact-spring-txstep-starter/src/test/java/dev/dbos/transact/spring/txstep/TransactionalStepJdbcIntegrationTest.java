@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -134,6 +135,10 @@ public class TransactionalStepJdbcIntegrationTest {
             "CREATE TABLE IF NOT EXISTS orders"
                 + " (id TEXT PRIMARY KEY, item TEXT NOT NULL, qty INT NOT NULL)");
     return new ApplicationContextRunner()
+        .withBean(
+            "keepCompletedStepCheckpoints",
+            BeanPostProcessor.class,
+            TransactionalStepTest::keepCompletedStepCheckpoints)
         .withConfiguration(
             AutoConfigurations.of(
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))

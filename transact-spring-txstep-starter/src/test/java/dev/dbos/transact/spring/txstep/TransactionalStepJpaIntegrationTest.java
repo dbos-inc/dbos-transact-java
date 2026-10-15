@@ -21,6 +21,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.jpa.HibernatePersistenceProvider;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -203,6 +204,10 @@ public class TransactionalStepJpaIntegrationTest {
 
   private static ApplicationContextRunner runner(TransactionalStepTest.TestDatabase db) {
     return new ApplicationContextRunner()
+        .withBean(
+            "keepCompletedStepCheckpoints",
+            BeanPostProcessor.class,
+            TransactionalStepTest::keepCompletedStepCheckpoints)
         .withConfiguration(
             AutoConfigurations.of(
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))

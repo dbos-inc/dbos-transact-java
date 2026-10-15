@@ -208,6 +208,8 @@ public class JdbiStepFactoryTest {
     }
 
     dbos = new DBOS(dbosConfig);
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
     Jdbi jdbi = Jdbi.create(dataSource);
     stepFactory = new JdbiStepFactory(dbos, jdbi);
 

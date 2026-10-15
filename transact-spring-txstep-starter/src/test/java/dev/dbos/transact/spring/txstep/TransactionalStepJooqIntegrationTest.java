@@ -19,6 +19,7 @@ import org.jooq.impl.DSL;
 import org.jooq.impl.DataSourceConnectionProvider;
 import org.jooq.impl.DefaultConfiguration;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -140,6 +141,10 @@ public class TransactionalStepJooqIntegrationTest {
             "CREATE TABLE IF NOT EXISTS orders"
                 + " (id TEXT PRIMARY KEY, item TEXT NOT NULL, qty INT NOT NULL)");
     return new ApplicationContextRunner()
+        .withBean(
+            "keepCompletedStepCheckpoints",
+            BeanPostProcessor.class,
+            TransactionalStepTest::keepCompletedStepCheckpoints)
         .withConfiguration(
             AutoConfigurations.of(
                 DBOSAutoConfiguration.class, TransactionalStepAutoConfiguration.class))

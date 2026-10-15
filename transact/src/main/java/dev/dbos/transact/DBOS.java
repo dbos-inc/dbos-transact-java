@@ -67,6 +67,9 @@ public class DBOS implements AutoCloseable {
   private final QueueRegistry queueRegistry = new QueueRegistry();
   private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
   private final Set<StepCheckpointStore> stepCheckpointStores = ConcurrentHashMap.newKeySet();
+  // Tests that inspect a finished workflow's transactional step checkpoints turn the deletion at
+  // completion off. Kept here rather than on the executor so it survives a relaunch.
+  private boolean keepCompletedStepCheckpoints = false;
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
   private final DBOSIntegration integration;
@@ -395,9 +398,22 @@ public class DBOS implements AutoCloseable {
             workflowRegistry.getInternalInstanceSnapshot(),
             queueRegistry.getSnapshot(),
             Set.copyOf(stepCheckpointStores),
+            keepCompletedStepCheckpoints,
             alertHandler);
       }
     }
+  }
+
+  /**
+   * For tests: keep a workflow's transactional step checkpoints when it finishes. The executor
+   * reads this at launch.
+   */
+  void keepCompletedStepCheckpoints() {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException(
+          "Cannot keep completed step checkpoints after DBOS is launched");
+    }
+    keepCompletedStepCheckpoints = true;
   }
 
   /**

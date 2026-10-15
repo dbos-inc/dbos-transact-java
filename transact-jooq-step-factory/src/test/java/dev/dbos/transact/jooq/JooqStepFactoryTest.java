@@ -198,6 +198,8 @@ public class JooqStepFactoryTest {
     }
 
     dbos = new DBOS(dbosConfig);
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
     DSLContext dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
     stepFactory = new JooqStepFactory(dbos, dsl);
 

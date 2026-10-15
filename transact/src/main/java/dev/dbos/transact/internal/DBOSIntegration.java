@@ -2,6 +2,7 @@ package dev.dbos.transact.internal;
 
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
@@ -91,6 +92,19 @@ public class DBOSIntegration {
    */
   public void registerStepCheckpointStore(@NonNull StepCheckpointStore store) {
     checkpointStoreConsumer.accept(Objects.requireNonNull(store));
+  }
+
+  /**
+   * Records that the workflow execution running on this thread is about to run a transactional step
+   * through the factory that registered {@code store}, so the execution deletes its checkpoints
+   * there when it finishes. A factory calls it before every step, a replayed one included, so an
+   * execution that recovers a workflow also clears the rows an earlier execution wrote. Does
+   * nothing outside a workflow.
+   *
+   * @param store the store the factory registered; must not be {@code null}
+   */
+  public void useStepCheckpointStore(@NonNull StepCheckpointStore store) {
+    DBOSContextHolder.get().useStepCheckpointStore(Objects.requireNonNull(store));
   }
 
   /**

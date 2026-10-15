@@ -81,6 +81,11 @@ public abstract class PostgresStepFactory {
         PostgresStepFactory.this.deleteCheckpoints(workflowIds);
       }
     }
+
+    @Override
+    public void deleteCompletedCheckpoints(String workflowId) throws SQLException {
+      PostgresStepFactory.this.deleteCompletedCheckpoints(workflowId);
+    }
   }
 
   /**
@@ -106,6 +111,27 @@ public abstract class PostgresStepFactory {
   protected void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
     try (var conn = opener.open()) {
       SqlTransaction.run(conn, c -> TxStepSchema.deleteWorkflows(c, schema, workflowIds));
+    }
+  }
+
+  /**
+   * Deletes every checkpoint of a workflow whose execution on this thread has just finished, in a
+   * transaction of its own: delete them all, then {@link #checkStillOwned(String, Connection)} on
+   * the same connection, then commit. DBOS calls it when the workflow's execution finishes, before
+   * recording its outcome; when the execution no longer owns the workflow, the check throws and the
+   * delete rolls back.
+   *
+   * <p>This default opens a connection and commits explicitly. Subclasses override it to go through
+   * their database library's own transaction handling.
+   */
+  protected void deleteCompletedCheckpoints(String workflowId) throws SQLException {
+    try (var conn = opener.open()) {
+      SqlTransaction.run(
+          conn,
+          c -> {
+            TxStepSchema.deleteFromStep(c, schema, workflowId, 0);
+            checkStillOwned(workflowId, c);
+          });
     }
   }
 
@@ -277,6 +303,9 @@ public abstract class PostgresStepFactory {
   @SuppressWarnings("unchecked")
   protected <R, X extends Exception> R runTxStep(TxStepFunction<R, X> execute, String stepName)
       throws X {
+    // Before the step, so a replayed step counts too: this execution then also clears the rows an
+    // earlier one wrote.
+    dbos.integration().useStepCheckpointStore(checkpointStore);
     return dbos.<R, X>runStep(
         () -> {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());

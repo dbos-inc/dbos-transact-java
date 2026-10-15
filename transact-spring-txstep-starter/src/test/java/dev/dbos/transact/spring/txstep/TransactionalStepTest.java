@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -459,6 +461,68 @@ public class TransactionalStepTest {
     }
   }
 
+  /**
+   * Keeps finished workflows' transactional step checkpoints in a Spring context's DBOS, for tests
+   * that read them. Runs as the DBOS bean is created, before the context launches it.
+   */
+  static BeanPostProcessor keepCompletedStepCheckpoints() {
+    return new BeanPostProcessor() {
+      @Override
+      public Object postProcessAfterInitialization(Object bean, String beanName) {
+        if (bean instanceof DBOS dbos) {
+          DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
+        }
+        return bean;
+      }
+    };
+  }
+
+  // ---- Deleting checkpoints when the workflow finishes ----
+
+  @Nested
+  class WhenTheWorkflowFinishes {
+
+    @AutoClose TestDatabase db;
+    @AutoClose DBOS dbos;
+    GreetingService proxy;
+
+    @BeforeEach
+    void setup() throws SQLException {
+      db = new TestDatabase();
+      var jdbc = new JdbcTemplate(db.dataSource);
+      try (var conn = db.dataSource.getConnection();
+          var stmt = conn.createStatement()) {
+        stmt.execute(
+            "CREATE TABLE greetings (name TEXT PRIMARY KEY, count INT NOT NULL DEFAULT 0)");
+      }
+
+      dbos = new DBOS(db.dbosConfig());
+      var txManager = new DataSourceTransactionManager(db.dataSource);
+      var factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
+      factory.initialize();
+      var impl = new GreetingServiceImpl(dbos, factory, jdbc, SystemDatabase.sanitizeSchema(null));
+      proxy = dbos.registerProxy(GreetingService.class, impl);
+      dbos.launch();
+    }
+
+    @Test
+    void aWorkflowThatReturnsDeletesItsCheckpoints() throws SQLException {
+      try (var _o = new WorkflowOptions("wf-finished").setContext()) {
+        assertThat(proxy.insert("dana")).isEqualTo("dana");
+      }
+      assertThat(greetCount(db.dataSource, "dana")).isEqualTo(1);
+      assertThat(getTxRows(db.dataSource, "wf-finished")).isEmpty();
+    }
+
+    @Test
+    void aWorkflowThatThrowsDeletesItsCheckpoints() throws SQLException {
+      try (var _o = new WorkflowOptions("wf-finished-error").setContext()) {
+        assertThatThrownBy(() -> proxy.error("erin")).isInstanceOf(RuntimeException.class);
+      }
+      assertThat(getTxRows(db.dataSource, "wf-finished-error")).isEmpty();
+    }
+  }
+
   // ---- DataSourceTransactionManager tests ----
 
   @Nested
@@ -483,6 +547,8 @@ public class TransactionalStepTest {
       }
 
       dbos = new DBOS(db.dbosConfig());
+      // These tests read the checkpoints a finished workflow's steps wrote.
+      DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
       var txManager = new DataSourceTransactionManager(db.dataSource);
       factory = new TransactionalStepFactory(dbos, db.dataSource, txManager, null);
       factory.initialize();
@@ -847,6 +913,8 @@ public class TransactionalStepTest {
       }
 
       dbos = new DBOS(db.dbosConfig());
+      // These tests read the checkpoints a finished workflow's steps wrote.
+      DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
 
       var jpaTxManager = buildJpaTransactionManager(db.dataSource);
       factory = new TransactionalStepFactory(dbos, db.dataSource, jpaTxManager, null);

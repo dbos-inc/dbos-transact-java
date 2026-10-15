@@ -8,4 +8,9 @@ public class DBOSTestAccess {
   public static DBOSExecutor getDbosExecutor(DBOS dbos) {
     return dbos.getDbosExecutor();
   }
+
+  /** Keeps finished workflows' transactional step checkpoints; call before launch. */
+  public static void keepCompletedStepCheckpoints(DBOS dbos) {
+    dbos.keepCompletedStepCheckpoints();
+  }
 }
