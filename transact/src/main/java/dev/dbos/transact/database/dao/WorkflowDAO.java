@@ -2110,12 +2110,17 @@ public class WorkflowDAO {
     }
   }
 
-  public static Optional<String> checkChildWorkflow(
+  /**
+   * What a parent's step recorded for a child it started or enqueued: the child's ID, or the error
+   * the start or enqueue failed with. Empty when nothing is recorded at that step.
+   */
+  public static Optional<StepResult> checkChildWorkflow(
       DbContext ctx, String workflowUuid, int functionId) throws SQLException {
 
     final String sql =
         """
-          SELECT child_workflow_id FROM "%s".operation_outputs WHERE workflow_uuid = ? AND function_id = ?
+          SELECT function_name, child_workflow_id, error, serialization
+          FROM "%s".operation_outputs WHERE workflow_uuid = ? AND function_id = ?
         """
             .formatted(ctx.schema());
 
@@ -2127,8 +2132,15 @@ public class WorkflowDAO {
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
-          String childWorkflowId = rs.getString("child_workflow_id");
-          return childWorkflowId != null ? Optional.of(childWorkflowId) : Optional.empty();
+          return Optional.of(
+              new StepResult(
+                  workflowUuid,
+                  functionId,
+                  rs.getString("function_name"),
+                  null,
+                  rs.getString("error"),
+                  rs.getString("child_workflow_id"),
+                  rs.getString("serialization")));
         }
         return Optional.empty();
       }

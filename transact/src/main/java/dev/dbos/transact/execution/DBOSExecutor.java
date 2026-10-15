@@ -530,10 +530,11 @@ public class DBOSExecutor implements AutoCloseable {
    * that slot recorded -- which, for a debounce recorded before debounced workflows, is the
    * debouncer workflow, not {@code workflowId}.
    *
-   * <p>An enqueue that collided records nothing in its slot, so a replay alone cannot tell it from
-   * one that never ran. A collision is always followed by the {@code DBOS.lookupDebouncer} step in
-   * the next slot, in this release and the ones before it, so when that step is recorded the replay
-   * throws the collision again rather than enqueue for real: the key may be free by now, or held on
+   * <p>An enqueue that collides records the collision in its slot, and a replay throws it again.
+   * Releases before 1.3 recorded nothing there, so a replay alone cannot tell their collision from
+   * an enqueue that never ran. A collision is always followed by the {@code DBOS.lookupDebouncer}
+   * step in the next slot, so when that step is recorded and the slot is empty, the replay throws
+   * the collision again rather than enqueue for real: the key may be free by now, or held on
    * another queue than the one it collided on.
    *
    * <p>The workflow takes {@code timeout}, timed from its dequeue, and no deadline: it may start
@@ -554,9 +555,7 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable Map<String, Object> attributes) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
-    if (parent != null
-        && systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId()).isEmpty()
-        && lookupDebouncerRecordedAfter(parent)) {
+    if (parent != null && recordedChild(parent) == null && lookupDebouncerRecordedAfter(parent)) {
       throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
     }
     var options =
@@ -2166,9 +2165,9 @@ public class DBOSExecutor implements AutoCloseable {
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
 
     if (parent != null) {
-      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
-      if (childId.isPresent()) {
-        return retrieveWorkflow(childId.get());
+      var childId = recordedChild(parent);
+      if (childId != null) {
+        return retrieveWorkflow(childId);
       }
     }
 
@@ -2373,6 +2372,27 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  /**
+   * The child the parent's current step recorded when it first ran, or null when it recorded none.
+   * When the step recorded the error its start or enqueue failed with, throws that error again, so
+   * a replay sees what the original call saw.
+   */
+  private @Nullable String recordedChild(WorkflowInfo parent) {
+    var recorded = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+    if (recorded.isEmpty()) {
+      return null;
+    }
+    var step = recorded.get();
+    if (step.error() != null) {
+      var t = SerializationUtil.deserializeError(step.error(), step.serialization(), serializer);
+      if (t instanceof RuntimeException re) {
+        throw re;
+      }
+      throw new RuntimeException(t.getMessage(), t);
+    }
+    return step.childWorkflowId();
+  }
+
   // execute or enqueue a worklow
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
@@ -2384,9 +2404,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     if (parent != null) {
-      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
-      if (childId.isPresent()) {
-        return retrieveWorkflow(childId.get());
+      var childId = recordedChild(parent);
+      if (childId != null) {
+        return retrieveWorkflow(childId);
       }
     }
 
@@ -2702,6 +2722,7 @@ public class DBOSExecutor implements AutoCloseable {
         RegisteredWorkflow.fullyQualifiedName(
             workflowName, Objects.requireNonNullElse(className, ""), instanceName));
 
+    var startTime = System.currentTimeMillis();
     try {
       persistWorkflow(
           systemDatabase,
@@ -2719,6 +2740,23 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
+      // A parent records the collision as its step, so a replay throws it again even after the
+      // holder has finished and the enqueue would succeed. Only while the parent's execution still
+      // owns the parent: one that does not is refused here, and stops.
+      if (parent != null) {
+        var error = SerializationUtil.serializeError(e, null, systemDatabase.serializer());
+        systemDatabase.recordStepResult(
+            new StepResult(
+                parent.workflowId(),
+                parent.functionId(),
+                workflowName,
+                null,
+                error.serializedValue(),
+                null,
+                error.serialization()),
+            startTime,
+            parent.ownerXid());
+      }
       throw e;
     } catch (DBOSWorkflowExecutionConflictException e) {
       // A parent that no longer owns its workflow was refused: the fence working, not a failure.
