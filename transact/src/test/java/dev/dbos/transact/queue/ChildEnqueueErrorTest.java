@@ -109,6 +109,19 @@ class ChildEnqueueErrorTest {
     launch();
   }
 
+  // Records the parent's first step under another name, as if the workflow's code had changed so
+  // that a different step ran there first.
+  private void renameStep(String parentId) throws Exception {
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.operation_outputs SET function_name = 'someOtherStep'"
+                    + " WHERE workflow_uuid = ? AND function_id = 0")) {
+      stmt.setString(1, parentId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+  }
+
   @Test
   void aReplayAfterTheHolderFinishesStillSeesTheCollision() throws Exception {
     launch();
@@ -129,21 +142,28 @@ class ChildEnqueueErrorTest {
   }
 
   @Test
+  void aChildRecordedByAnotherStepIsNotReturnedAsThisOnes() throws Exception {
+    launch();
+    var parentId = "renamed-child";
+    // Nothing holds the ID, so the parent enqueues its child and records it.
+    try (var _o = new WorkflowOptions(parentId).setContext()) {
+      assertEquals("enqueued", proxy.enqueueChildOrFallBack());
+    }
+    renameStep(parentId);
+
+    recover(parentId);
+    assertThrows(
+        DBOSUnexpectedStepException.class,
+        () -> dbos.<String, RuntimeException>retrieveWorkflow(parentId).getResult());
+  }
+
+  @Test
   void aCollisionRecordedByAnotherStepIsNotThrownAsThisOnes() throws Exception {
     launch();
     var parentId = "renamed";
     collideThenFreeTheId(parentId);
 
-    // The slot now holds an error recorded under another name, as if the workflow's code had
-    // changed so that a different step ran there first.
-    try (var conn = dataSource.getConnection();
-        var stmt =
-            conn.prepareStatement(
-                "UPDATE dbos.operation_outputs SET function_name = 'someOtherStep'"
-                    + " WHERE workflow_uuid = ? AND function_id = 0")) {
-      stmt.setString(1, parentId);
-      assertEquals(1, stmt.executeUpdate());
-    }
+    renameStep(parentId);
 
     recover(parentId);
     assertThrows(

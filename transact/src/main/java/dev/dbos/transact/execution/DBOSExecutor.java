@@ -555,10 +555,16 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable Map<String, Object> attributes) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
-    if (parent != null
-        && recordedChild(parent, workflow.workflowName()) == null
-        && lookupDebouncerRecordedAfter(parent)) {
-      throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
+    if (parent != null) {
+      // Returned here rather than left to executeWorkflow, which would not accept the debouncer
+      // workflow a release before 1.2 recorded in this slot.
+      var childId = recordedChild(parent, workflow.workflowName(), true);
+      if (childId != null) {
+        return retrieveWorkflow(childId);
+      }
+      if (lookupDebouncerRecordedAfter(parent)) {
+        throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
+      }
     }
     var options =
         debouncedOptions(
@@ -2167,7 +2173,7 @@ public class DBOSExecutor implements AutoCloseable {
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
 
     if (parent != null) {
-      var childId = recordedChild(parent, options.workflowName());
+      var childId = recordedChild(parent, options.workflowName(), false);
       if (childId != null) {
         return retrieveWorkflow(childId);
       }
@@ -2379,22 +2385,28 @@ public class DBOSExecutor implements AutoCloseable {
    * When the step recorded a deduplication collision for this start or enqueue, throws it again, so
    * a replay sees what the original call saw.
    *
-   * <p>A recorded error is this call's only if the step was recorded under the same workflow name;
-   * otherwise the step is another one, and the replay is not deterministic. A recorded child is not
-   * checked by name: release 1.1 recorded a debounced enqueue's debouncer workflow in its slot,
-   * under that workflow's name.
+   * <p>The step is this call's only if it was recorded under the same workflow name; otherwise it
+   * is another one, and the replay is not deterministic. One exception, for a debounced enqueue
+   * ({@code debounced}): releases before 1.2 recorded the debouncer workflow they started in its
+   * slot, under that workflow's name.
    */
-  private @Nullable String recordedChild(WorkflowInfo parent, String workflowName) {
+  private @Nullable String recordedChild(
+      WorkflowInfo parent, String workflowName, boolean debounced) {
     var recorded = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
     if (recorded.isEmpty()) {
       return null;
     }
     var step = recorded.get();
+    var debouncerWorkflow =
+        debounced
+            && step.error() == null
+            && step.childWorkflowId() != null
+            && Constants.DEBOUNCER_WORKFLOW_NAME.equals(step.stepName());
+    if (!debouncerWorkflow && !workflowName.equals(step.stepName())) {
+      throw new DBOSUnexpectedStepException(
+          parent.workflowId(), parent.functionId(), workflowName, step.stepName());
+    }
     if (step.error() != null) {
-      if (!workflowName.equals(step.stepName())) {
-        throw new DBOSUnexpectedStepException(
-            parent.workflowId(), parent.functionId(), workflowName, step.stepName());
-      }
       var t = SerializationUtil.deserializeError(step.error(), step.serialization(), serializer);
       if (t instanceof RuntimeException re) {
         throw re;
@@ -2415,7 +2427,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     if (parent != null) {
-      var childId = recordedChild(parent, workflow.workflowName());
+      var childId = recordedChild(parent, workflow.workflowName(), false);
       if (childId != null) {
         return retrieveWorkflow(childId);
       }
