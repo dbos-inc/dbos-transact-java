@@ -2769,7 +2769,9 @@ public class DBOSExecutor implements AutoCloseable {
       // A failure to record it is thrown instead, with the collision attached: thrown unrecorded,
       // the collision would let the parent take a path its replay cannot repeat.
       if (parent != null) {
-        var error = SerializationUtil.serializeError(e, null, systemDatabase.serializer());
+        // In the native format whatever serializer is configured: a replay must rebuild the exact
+        // type the parent and Debouncer catch, which a custom serializer need not preserve.
+        var error = SerializationUtil.serializeError(e, SerializationUtil.NATIVE, null);
         try {
           systemDatabase.recordStepResult(
               new StepResult(

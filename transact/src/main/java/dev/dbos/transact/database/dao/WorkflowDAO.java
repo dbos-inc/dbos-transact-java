@@ -2138,7 +2138,7 @@ public class WorkflowDAO {
                   functionId,
                   rs.getString("function_name"),
                   null,
-                  rs.getString("error"),
+                  SystemDatabase.errorOrNull(rs.getString("error")),
                   rs.getString("child_workflow_id"),
                   rs.getString("serialization")));
         }

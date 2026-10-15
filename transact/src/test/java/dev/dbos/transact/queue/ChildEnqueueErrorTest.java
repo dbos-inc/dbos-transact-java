@@ -8,9 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
+import dev.dbos.transact.json.DBOSJavaSerializer;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.QueueOptions;
@@ -73,7 +76,11 @@ class ChildEnqueueErrorTest {
   }
 
   private void launch() {
-    dbos = new DBOS(pgContainer.dbosConfig());
+    launch(pgContainer.dbosConfig());
+  }
+
+  private void launch(DBOSConfig config) {
+    dbos = new DBOS(config);
     var impl = new ChildEnqueueServiceImpl(dbos);
     proxy = dbos.registerProxy(ChildEnqueueService.class, impl);
     impl.self = proxy;
@@ -104,9 +111,44 @@ class ChildEnqueueErrorTest {
 
   // Stands in for a crash: the parent is PENDING again, and a relaunch recovers it.
   private void recover(String parentId) throws Exception {
+    recover(parentId, pgContainer.dbosConfig());
+  }
+
+  private void recover(String parentId, DBOSConfig config) throws Exception {
     dbos.close();
     DBUtils.setWorkflowState(dataSource, parentId, "PENDING");
-    launch();
+    launch(config);
+  }
+
+  /**
+   * A serializer that keeps values as the native one does but loses an error's type, as a custom
+   * serializer may: every error reads back as a RuntimeException.
+   */
+  private static final class TypeLosingSerializer implements DBOSSerializer {
+    @Override
+    public String name() {
+      return "type-losing";
+    }
+
+    @Override
+    public String serialize(Object value) {
+      return DBOSJavaSerializer.INSTANCE.serialize(value);
+    }
+
+    @Override
+    public Object deserialize(String text) {
+      return DBOSJavaSerializer.INSTANCE.deserialize(text);
+    }
+
+    @Override
+    public String serializeThrowable(Throwable throwable) {
+      return throwable.getMessage();
+    }
+
+    @Override
+    public Throwable deserializeThrowable(String text) {
+      return new RuntimeException(text);
+    }
   }
 
   // Records the parent's first step under another name, as if the workflow's code had changed so
@@ -139,6 +181,41 @@ class ChildEnqueueErrorTest {
         "fell back", dbos.<String, RuntimeException>retrieveWorkflow(parentId).getResult());
     // Only the holder and the parent exist: the replay enqueued no child.
     assertEquals(2, DBUtils.getWorkflowRows(dataSource).size());
+  }
+
+  @Test
+  void aCollisionReplaysAsItsOwnTypeUnderACustomSerializer() throws Exception {
+    var config = pgContainer.dbosConfig().withSerializer(new TypeLosingSerializer());
+    launch(config);
+    var parentId = "custom-serializer";
+    collideThenFreeTheId(parentId);
+
+    // The replay must rebuild the collision the parent catches, not the serializer's stand-in.
+    recover(parentId, config);
+    assertEquals(
+        "fell back", dbos.<String, RuntimeException>retrieveWorkflow(parentId).getResult());
+    assertEquals(2, DBUtils.getWorkflowRows(dataSource).size());
+  }
+
+  @Test
+  void aChildRecordedWithAnEmptyErrorIsReturned() throws Exception {
+    launch();
+    var parentId = "empty-error";
+    try (var _o = new WorkflowOptions(parentId).setContext()) {
+      assertEquals("enqueued", proxy.enqueueChildOrFallBack());
+    }
+    // An empty error, which some writers record for none.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.operation_outputs SET error = ''"
+                    + " WHERE workflow_uuid = ? AND function_id = 0")) {
+      stmt.setString(1, parentId);
+      assertEquals(1, stmt.executeUpdate());
+    }
+
+    recover(parentId);
+    assertEquals("enqueued", dbos.<String, RuntimeException>retrieveWorkflow(parentId).getResult());
   }
 
   @Test
