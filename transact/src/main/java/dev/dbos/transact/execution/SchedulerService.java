@@ -294,7 +294,12 @@ public class SchedulerService implements AutoCloseable {
           // Returns true if a future was scheduled for the next execution, false if the cron
           // expression has no next execution (eg. a day-of-month/month combination that can
           // never occur, like April 31st) or if the schedule was already canceled.
-          public boolean schedule() {
+          //
+          // Synchronized so futures are recorded in the order they were scheduled: a tick that is
+          // already due runs at once on another thread, and its own call here for the next tick
+          // must not record that tick's future before this call records the one it replaces, or
+          // this call would cancel it and leave the schedule with nothing pending.
+          public synchronized boolean schedule() {
             if (running.canceled().get()) {
               return false;
             }
