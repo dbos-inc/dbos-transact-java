@@ -63,6 +63,8 @@ public class RewindTest {
     dbosConfig = pgContainer.dbosConfig();
     dataSource = pgContainer.dataSource();
     dbos = new DBOS(dbosConfig);
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
@@ -91,6 +93,9 @@ public class RewindTest {
 
               @Override
               public void deleteCheckpoints(Collection<String> workflowIds) {}
+
+              @Override
+              public void deleteCompletedCheckpoints(String workflowId) {}
             });
 
     impl = new RewindTestServiceImpl(dbos);

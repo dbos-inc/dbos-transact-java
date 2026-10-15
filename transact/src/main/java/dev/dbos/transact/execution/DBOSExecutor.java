@@ -193,6 +193,7 @@ public class DBOSExecutor implements AutoCloseable {
   private ScheduledExecutorService timeoutScheduler;
   private AlertHandler alertHandler;
   private Set<StepCheckpointStore> stepCheckpointStores = Set.of();
+  private boolean keepCompletedStepCheckpoints = false;
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -261,6 +262,7 @@ public class DBOSExecutor implements AutoCloseable {
       Map<String, RegisteredWorkflowInstance> internalInstanceMap,
       List<Queue> queues,
       Set<StepCheckpointStore> stepCheckpointStores,
+      boolean keepCompletedStepCheckpoints,
       AlertHandler alertHandler) {
 
     if (isRunning.compareAndSet(false, true)) {
@@ -273,6 +275,7 @@ public class DBOSExecutor implements AutoCloseable {
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
       this.stepCheckpointStores = stepCheckpointStores;
+      this.keepCompletedStepCheckpoints = keepCompletedStepCheckpoints;
       this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
@@ -1784,36 +1787,47 @@ public class DBOSExecutor implements AutoCloseable {
       curAttempts++;
     }
 
-    if (exception != null) {
-      logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
+    // The step has run: a transactional step's own transaction has committed, and until its result
+    // is recorded here its factory's checkpoint is the only record of it.
+    boolean recorded = false;
+    try {
+      if (exception != null) {
+        logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
 
-      var serializedException = SerializationUtil.serializeError(exception, null, serializer);
-      var stepResult =
-          new StepResult(
-              workflowId,
-              stepId,
-              options.name(),
-              null,
-              serializedException.serializedValue(),
-              childWorkflowId,
-              serializedException.serialization());
-      systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
-      throw (E) exception;
-    } else {
-      logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
+        var serializedException = SerializationUtil.serializeError(exception, null, serializer);
+        var stepResult =
+            new StepResult(
+                workflowId,
+                stepId,
+                options.name(),
+                null,
+                serializedException.serializedValue(),
+                childWorkflowId,
+                serializedException.serialization());
+        systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
+        recorded = true;
+        throw (E) exception;
+      } else {
+        logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
 
-      var serializedOutput = SerializationUtil.serializeValue(output, null, serializer);
-      var stepResult =
-          new StepResult(
-              workflowId,
-              stepId,
-              options.name(),
-              serializedOutput.serializedValue(),
-              null,
-              childWorkflowId,
-              serializedOutput.serialization());
-      systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
-      return output;
+        var serializedOutput = SerializationUtil.serializeValue(output, null, serializer);
+        var stepResult =
+            new StepResult(
+                workflowId,
+                stepId,
+                options.name(),
+                serializedOutput.serializedValue(),
+                null,
+                childWorkflowId,
+                serializedOutput.serialization());
+        systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
+        recorded = true;
+        return output;
+      }
+    } finally {
+      if (!recorded) {
+        ctx.markStepResultUnrecorded();
+      }
     }
   }
 
@@ -1842,6 +1856,42 @@ public class DBOSExecutor implements AutoCloseable {
     }
     if (!ownerXid.equals(systemDatabase.getWorkflowOwner(workflowId))) {
       throw DBOSWorkflowExecutionConflictException.notOwned(workflowId);
+    }
+  }
+
+  /**
+   * Deletes the transactional step checkpoints of the workflow whose execution on this thread has
+   * just finished, in every step factory it ran steps through, before its outcome is recorded. The
+   * system database records every one of those steps too, and that is what a later execution
+   * replays, so the factories' rows are needed only while the workflow may still run them.
+   *
+   * <p>Each factory deletes and then checks that this execution still owns the workflow, in one
+   * transaction; when it does not, the delete rolls back and the rest are left to the new owner.
+   * Best effort: any other exception is logged and the next factory is still tried, and nothing
+   * here changes the workflow's outcome. A row left behind is only replayed if the workflow runs
+   * again. An {@link Error} is not caught; it propagates as it would from anywhere else in the run.
+   */
+  private void deleteCompletedStepCheckpoints(String workflowId) {
+    if (keepCompletedStepCheckpoints) {
+      return;
+    }
+    var ctx = DBOSContextHolder.get();
+    if (ctx.hasUnrecordedStepResult()) {
+      logger.warn(
+          "Keeping the transactional step checkpoints of workflow {}: a step result was not recorded",
+          workflowId);
+      return;
+    }
+    for (var store : ctx.usedStepCheckpointStores()) {
+      try {
+        store.deleteCompletedCheckpoints(workflowId);
+      } catch (Exception e) {
+        if (isConflictFor(e, workflowId)) {
+          return;
+        }
+        logger.warn(
+            "Failed to delete the transactional step checkpoints of workflow {}", workflowId, e);
+      }
     }
   }
 
@@ -2482,6 +2532,8 @@ public class DBOSExecutor implements AutoCloseable {
               return null;
             }
 
+            deleteCompletedStepCheckpoints(workflowId);
+
             active.release();
             if (persistWorkflowOutput(workflowId, output, initResult.serialization(), ownerXid)) {
               return output;
@@ -2520,13 +2572,19 @@ public class DBOSExecutor implements AutoCloseable {
               // is the truth.
               pendingAdopt =
                   "Workflow was cancelled during execution. Waiting for the recorded outcome.";
-            } else if (persistWorkflowError(
-                workflowId, actual, initResult.serialization(), ownerXid)) {
-              // active is already closed here: try-with-resources closes before catch runs,
-              // so the entry is released before this terminal write becomes durable.
-              logger.error("executeWorkflow {}", workflowId, actual);
-              throw e;
             } else {
+              // The workflow's own error. The context is still this run's here: the finally
+              // below clears it. An interrupted run keeps its checkpoints, as on return: the
+              // error may be the interrupt's, cutting short a step result's write.
+              if (!Thread.currentThread().isInterrupted()) {
+                deleteCompletedStepCheckpoints(workflowId);
+              }
+              if (persistWorkflowError(workflowId, actual, initResult.serialization(), ownerXid)) {
+                // active is already closed here: try-with-resources closes before catch runs,
+                // so the entry is released before this terminal write becomes durable.
+                logger.error("executeWorkflow {}", workflowId, actual);
+                throw e;
+              }
               // The row was not PENDING: this run no longer owns the workflow's outcome, and
               // the error it computed is not the workflow's error.
               logger.debug("executeWorkflow {}", workflowId, actual);

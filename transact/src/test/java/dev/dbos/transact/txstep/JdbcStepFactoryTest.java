@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.json.SerializationUtil;
@@ -209,6 +210,8 @@ public class JdbcStepFactoryTest {
     }
 
     dbos = new DBOS(dbosConfig);
+    // These tests read the checkpoints a finished workflow's steps wrote.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
     stepFactory = new JdbcStepFactory(dbos, dataSource);
 
     impl = new FactoryTestServiceImpl(stepFactory, dataSource);
