@@ -17,6 +17,11 @@ public record WorkflowSchedule(
     @Nullable Object context,
     @Nullable Instant lastFiredAt,
     boolean automaticBackfill,
+    /**
+     * The time zone the cron expression is read in, or null for UTC. Never the JVM's default zone,
+     * so executors on hosts in different zones fire the schedule at the same times. To fire in the
+     * host's zone, pass {@code ZoneId.systemDefault()}.
+     */
     @Nullable ZoneId cronTimezone,
     @Nullable String queueName,
     /**

@@ -71,7 +71,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1418,7 +1417,7 @@ public class DBOSExecutor implements AutoCloseable {
                     new IllegalStateException(
                         "Schedule %s does not exist".formatted(scheduleName)));
 
-    var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
+    var timeZone = SchedulerService.cronZone(schedule.cronTimezone());
     var cron = SchedulerService.CRON_PARSER.parse(schedule.cron());
     var executionTime = ExecutionTime.forCron(cron);
 
@@ -1432,7 +1431,7 @@ public class DBOSExecutor implements AutoCloseable {
         break;
       }
 
-      var workflowId = "sched-%s-%s".formatted(schedule.scheduleName(), next);
+      var workflowId = SchedulerService.scheduledWorkflowId(schedule.scheduleName(), next);
       enqueueScheduledWorkflow(
           schedule.workflowName(),
           schedule.className(),
