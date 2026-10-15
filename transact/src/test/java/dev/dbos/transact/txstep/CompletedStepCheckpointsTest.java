@@ -311,23 +311,14 @@ public class CompletedStepCheckpointsTest {
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.execute(
-          """
-          CREATE FUNCTION dbos.refuse_unrecorded() RETURNS trigger AS $$
-          BEGIN
-            IF NEW.function_name = 'unrecorded' THEN
-              RAISE EXCEPTION 'step result refused';
-            END IF;
-            RETURN NEW;
-          END $$ LANGUAGE plpgsql""");
-      stmt.execute(
-          "CREATE TRIGGER refuse_unrecorded BEFORE INSERT ON dbos.operation_outputs"
-              + " FOR EACH ROW EXECUTE FUNCTION dbos.refuse_unrecorded()");
+          "ALTER TABLE dbos.operation_outputs ADD CONSTRAINT refuse_unrecorded"
+              + " CHECK (function_name <> 'unrecorded')");
     }
 
     var workflowId = "wf-unrecorded";
     try (var _o = new WorkflowOptions(workflowId).setContext()) {
       var refused = assertThrows(DBOSSystemDatabaseException.class, proxy::stepResultNotRecorded);
-      assertTrue(refused.getMessage().contains("step result refused"), refused.getMessage());
+      assertTrue(refused.getMessage().contains("unrecorded"), refused.getMessage());
     }
     assertEquals(1, impl.unrecordedRuns.get());
     assertEquals("ERROR", DBUtils.getWorkflowRow(dataSource, workflowId).status());
@@ -337,7 +328,7 @@ public class CompletedStepCheckpointsTest {
     // the factory's checkpoint alone, and must replay it from there instead of running it again.
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
-      stmt.execute("DROP TRIGGER refuse_unrecorded ON dbos.operation_outputs");
+      stmt.execute("ALTER TABLE dbos.operation_outputs DROP CONSTRAINT refuse_unrecorded");
     }
     dbos.close();
     DBUtils.setWorkflowState(dataSource, workflowId, "PENDING");
