@@ -1,8 +1,6 @@
-package dev.dbos.transact.scheduled;
+package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-
-import dev.dbos.transact.execution.SchedulerService;
 
 import java.time.Instant;
 import java.time.ZoneId;

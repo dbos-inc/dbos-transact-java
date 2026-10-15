@@ -804,7 +804,7 @@ class WorkflowScheduleTest {
 
   @Test
   public void workflowIdUsesOffsetDateTimeFormat() throws Exception {
-    // Scheduler-generated IDs must use OffsetDateTime (e.g. 2026-04-20T10:15:30+00:00),
+    // Scheduler-generated IDs must use OffsetDateTime (e.g. 2026-04-20T10:15:30Z),
     // not ZonedDateTime which appends zone name in brackets (e.g. [UTC]).
     var impl = registerAndLaunch();
     dbos.createSchedule(
