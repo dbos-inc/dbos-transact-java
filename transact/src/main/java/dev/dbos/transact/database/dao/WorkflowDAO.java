@@ -2111,8 +2111,8 @@ public class WorkflowDAO {
   }
 
   /**
-   * What a parent's step recorded for a child it started or enqueued: the child's ID, or the error
-   * the start or enqueue failed with. Empty when nothing is recorded at that step.
+   * What a parent's step recorded for a child it started or enqueued: the child's ID, or the
+   * deduplication collision its enqueue failed with. Empty when nothing is recorded at that step.
    */
   public static Optional<StepResult> checkChildWorkflow(
       DbContext ctx, String workflowUuid, int functionId) throws SQLException {

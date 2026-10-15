@@ -555,7 +555,9 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable Map<String, Object> attributes) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
-    if (parent != null && recordedChild(parent) == null && lookupDebouncerRecordedAfter(parent)) {
+    if (parent != null
+        && recordedChild(parent, workflow.workflowName()) == null
+        && lookupDebouncerRecordedAfter(parent)) {
       throw new DBOSQueueDuplicatedException(workflowId, queueName, deduplicationId);
     }
     var options =
@@ -2165,7 +2167,7 @@ public class DBOSExecutor implements AutoCloseable {
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
 
     if (parent != null) {
-      var childId = recordedChild(parent);
+      var childId = recordedChild(parent, options.workflowName());
       if (childId != null) {
         return retrieveWorkflow(childId);
       }
@@ -2374,16 +2376,25 @@ public class DBOSExecutor implements AutoCloseable {
 
   /**
    * The child the parent's current step recorded when it first ran, or null when it recorded none.
-   * When the step recorded the error its start or enqueue failed with, throws that error again, so
+   * When the step recorded a deduplication collision for this start or enqueue, throws it again, so
    * a replay sees what the original call saw.
+   *
+   * <p>A recorded error is this call's only if the step was recorded under the same workflow name;
+   * otherwise the step is another one, and the replay is not deterministic. A recorded child is not
+   * checked by name: release 1.1 recorded a debounced enqueue's debouncer workflow in its slot,
+   * under that workflow's name.
    */
-  private @Nullable String recordedChild(WorkflowInfo parent) {
+  private @Nullable String recordedChild(WorkflowInfo parent, String workflowName) {
     var recorded = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
     if (recorded.isEmpty()) {
       return null;
     }
     var step = recorded.get();
     if (step.error() != null) {
+      if (!workflowName.equals(step.stepName())) {
+        throw new DBOSUnexpectedStepException(
+            parent.workflowId(), parent.functionId(), workflowName, step.stepName());
+      }
       var t = SerializationUtil.deserializeError(step.error(), step.serialization(), serializer);
       if (t instanceof RuntimeException re) {
         throw re;
@@ -2404,7 +2415,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     if (parent != null) {
-      var childId = recordedChild(parent);
+      var childId = recordedChild(parent, workflow.workflowName());
       if (childId != null) {
         return retrieveWorkflow(childId);
       }
@@ -2743,19 +2754,26 @@ public class DBOSExecutor implements AutoCloseable {
       // A parent records the collision as its step, so a replay throws it again even after the
       // holder has finished and the enqueue would succeed. Only while the parent's execution still
       // owns the parent: one that does not is refused here, and stops.
+      // A failure to record it is thrown instead, with the collision attached: thrown unrecorded,
+      // the collision would let the parent take a path its replay cannot repeat.
       if (parent != null) {
         var error = SerializationUtil.serializeError(e, null, systemDatabase.serializer());
-        systemDatabase.recordStepResult(
-            new StepResult(
-                parent.workflowId(),
-                parent.functionId(),
-                workflowName,
-                null,
-                error.serializedValue(),
-                null,
-                error.serialization()),
-            startTime,
-            parent.ownerXid());
+        try {
+          systemDatabase.recordStepResult(
+              new StepResult(
+                  parent.workflowId(),
+                  parent.functionId(),
+                  workflowName,
+                  null,
+                  error.serializedValue(),
+                  null,
+                  error.serialization()),
+              startTime,
+              parent.ownerXid());
+        } catch (RuntimeException recordFailure) {
+          recordFailure.addSuppressed(e);
+          throw recordFailure;
+        }
       }
       throw e;
     } catch (DBOSWorkflowExecutionConflictException e) {
