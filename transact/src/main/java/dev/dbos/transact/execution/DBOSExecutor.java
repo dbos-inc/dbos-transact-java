@@ -6,7 +6,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
-import dev.dbos.transact.conductor.Conductor;
+import dev.dbos.transact.conductor.ConductorConnection;
+import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.conductor.ConductorProvider;
+import dev.dbos.transact.conductor.ConductorProviders;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -187,7 +190,8 @@ public class DBOSExecutor implements AutoCloseable {
   private QueueService queueService;
   private SchedulerService schedulerService;
   private AdminServer adminServer;
-  private Conductor conductor;
+  private @Nullable ConductorProvider conductorProvider;
+  private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
   private AlertHandler alertHandler;
@@ -236,6 +240,11 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException(msg);
       }
       logger.warn(msg);
+    }
+
+    // Found before anything is started, so a missing provider fails launch cleanly.
+    if (dbosCloud || config.conductorKey() != null) {
+      conductorProvider = ConductorProviders.load();
     }
 
     if (!dbosCloud) {
@@ -316,6 +325,9 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
+      // The provider is another artifact's code, so build its client before anything else starts:
+      // if it throws, launch fails with no queue, scheduler or listener running.
+      conductor = createConductor();
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
       timeoutScheduler.scheduleWithFixedDelay(
@@ -359,35 +371,9 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched(dbos);
       }
 
-      if (dbosCloud) {
-        String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
-        String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
-        String cloudUrl = System.getenv("DBOS__CONDUCTOR_URL");
-        if (cloudAppName != null
-            && !cloudAppName.isBlank()
-            && cloudKey != null
-            && !cloudKey.isBlank()
-            && cloudUrl != null
-            && !cloudUrl.isBlank()) {
-          logger.debug("Starting Conductor connection (DBOS Cloud)");
-          conductor =
-              new Conductor.Builder(this, systemDatabase, cloudKey)
-                  .appName(cloudAppName)
-                  .domain(cloudUrl)
-                  .build();
-          conductor.start();
-        }
-      } else {
-        String conductorKey = config.conductorKey();
-        if (conductorKey != null) {
-          Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
-          String domain = config.conductorDomain();
-          if (domain != null && !domain.trim().isEmpty()) {
-            builder.domain(domain);
-          }
-          conductor = builder.build();
-          conductor.start();
-        }
+      if (conductor != null) {
+        logger.debug("Starting Conductor connection");
+        conductor.start();
       }
 
       if (dbosCloud || config.adminServer()) {
@@ -405,6 +391,37 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       logger.warn("DBOS Executor already started");
     }
+  }
+
+  private @Nullable ConductorConnection createConductor() {
+    if (conductorProvider == null) {
+      return null;
+    }
+    if (dbosCloud) {
+      String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
+      String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
+      String cloudUrl = System.getenv("DBOS__CONDUCTOR_URL");
+      if (cloudAppName == null
+          || cloudAppName.isBlank()
+          || cloudKey == null
+          || cloudKey.isBlank()
+          || cloudUrl == null
+          || cloudUrl.isBlank()) {
+        return null;
+      }
+      return conductorProvider.create(
+          this, systemDatabase, new ConductorOptions(cloudKey, cloudAppName, cloudUrl));
+    }
+    String conductorKey = config.conductorKey();
+    if (conductorKey == null) {
+      return null;
+    }
+    String domain = config.conductorDomain();
+    if (domain != null && domain.trim().isEmpty()) {
+      domain = null;
+    }
+    return conductorProvider.create(
+        this, systemDatabase, new ConductorOptions(conductorKey, null, domain));
   }
 
   @Override
