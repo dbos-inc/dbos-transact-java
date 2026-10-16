@@ -5,6 +5,9 @@ public interface ConductorConnection {
   /** Starts connecting to Conductor. Called once, at the end of launch. */
   void start();
 
-  /** Disconnects from Conductor. Called once, at the start of shutdown. */
+  /**
+   * Disconnects from Conductor. Called once, at the start of shutdown, including when launch failed
+   * before {@link #start} was called.
+   */
   void stop();
 }

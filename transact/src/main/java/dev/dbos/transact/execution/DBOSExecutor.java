@@ -325,6 +325,9 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
+      // The provider is another artifact's code, so build its client before anything else starts:
+      // if it throws, launch fails with no queue, scheduler or listener running.
+      conductor = createConductor();
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
       timeoutScheduler.scheduleWithFixedDelay(
@@ -368,34 +371,9 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched(dbos);
       }
 
-      if (dbosCloud) {
-        String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
-        String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
-        String cloudUrl = System.getenv("DBOS__CONDUCTOR_URL");
-        if (cloudAppName != null
-            && !cloudAppName.isBlank()
-            && cloudKey != null
-            && !cloudKey.isBlank()
-            && cloudUrl != null
-            && !cloudUrl.isBlank()) {
-          logger.debug("Starting Conductor connection (DBOS Cloud)");
-          conductor =
-              conductorProvider.create(
-                  this, systemDatabase, new ConductorOptions(cloudKey, cloudAppName, cloudUrl));
-          conductor.start();
-        }
-      } else {
-        String conductorKey = config.conductorKey();
-        if (conductorKey != null) {
-          String domain = config.conductorDomain();
-          if (domain != null && domain.trim().isEmpty()) {
-            domain = null;
-          }
-          conductor =
-              conductorProvider.create(
-                  this, systemDatabase, new ConductorOptions(conductorKey, null, domain));
-          conductor.start();
-        }
+      if (conductor != null) {
+        logger.debug("Starting Conductor connection");
+        conductor.start();
       }
 
       if (dbosCloud || config.adminServer()) {
@@ -413,6 +391,37 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       logger.warn("DBOS Executor already started");
     }
+  }
+
+  private @Nullable ConductorConnection createConductor() {
+    if (conductorProvider == null) {
+      return null;
+    }
+    if (dbosCloud) {
+      String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
+      String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
+      String cloudUrl = System.getenv("DBOS__CONDUCTOR_URL");
+      if (cloudAppName == null
+          || cloudAppName.isBlank()
+          || cloudKey == null
+          || cloudKey.isBlank()
+          || cloudUrl == null
+          || cloudUrl.isBlank()) {
+        return null;
+      }
+      return conductorProvider.create(
+          this, systemDatabase, new ConductorOptions(cloudKey, cloudAppName, cloudUrl));
+    }
+    String conductorKey = config.conductorKey();
+    if (conductorKey == null) {
+      return null;
+    }
+    String domain = config.conductorDomain();
+    if (domain != null && domain.trim().isEmpty()) {
+      domain = null;
+    }
+    return conductorProvider.create(
+        this, systemDatabase, new ConductorOptions(conductorKey, null, domain));
   }
 
   @Override

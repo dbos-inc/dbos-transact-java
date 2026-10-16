@@ -13,8 +13,9 @@ import dev.dbos.transact.execution.DBOSExecutor;
  */
 public interface ConductorProvider {
   /**
-   * Builds a Conductor client. DBOS calls this during launch, once the system database is open, and
-   * then starts the returned connection.
+   * Builds a Conductor client, without connecting. DBOS calls this during launch, once the system
+   * database is open and before queues, the scheduler or lifecycle listeners start, and starts the
+   * returned connection at the end of launch.
    */
   ConductorConnection create(
       DBOSExecutor executor, SystemDatabase systemDatabase, ConductorOptions options);
