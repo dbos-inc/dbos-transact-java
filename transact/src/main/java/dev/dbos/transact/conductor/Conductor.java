@@ -63,7 +63,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.cfg.DateTimeFeature;
 import tools.jackson.databind.json.JsonMapper;
 
-public class Conductor implements AutoCloseable {
+public class Conductor implements ConductorConnection, AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
 
@@ -588,11 +588,13 @@ public class Conductor implements AutoCloseable {
     this.stop();
   }
 
+  @Override
   public void start() {
     logger.debug("start");
     connectWebSocket();
   }
 
+  @Override
   public void stop() {
     logger.debug("stop");
     if (isShutdown.compareAndSet(false, true)) {

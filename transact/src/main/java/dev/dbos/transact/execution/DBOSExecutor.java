@@ -6,7 +6,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
-import dev.dbos.transact.conductor.Conductor;
+import dev.dbos.transact.conductor.ConductorConnection;
+import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.conductor.ConductorProvider;
+import dev.dbos.transact.conductor.ConductorProviders;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -187,7 +190,8 @@ public class DBOSExecutor implements AutoCloseable {
   private QueueService queueService;
   private SchedulerService schedulerService;
   private AdminServer adminServer;
-  private Conductor conductor;
+  private @Nullable ConductorProvider conductorProvider;
+  private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
   private AlertHandler alertHandler;
@@ -236,6 +240,11 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException(msg);
       }
       logger.warn(msg);
+    }
+
+    // Found before anything is started, so a missing provider fails launch cleanly.
+    if (dbosCloud || config.conductorKey() != null) {
+      conductorProvider = ConductorProviders.load();
     }
 
     if (!dbosCloud) {
@@ -371,21 +380,20 @@ public class DBOSExecutor implements AutoCloseable {
             && !cloudUrl.isBlank()) {
           logger.debug("Starting Conductor connection (DBOS Cloud)");
           conductor =
-              new Conductor.Builder(this, systemDatabase, cloudKey)
-                  .appName(cloudAppName)
-                  .domain(cloudUrl)
-                  .build();
+              conductorProvider.create(
+                  this, systemDatabase, new ConductorOptions(cloudKey, cloudAppName, cloudUrl));
           conductor.start();
         }
       } else {
         String conductorKey = config.conductorKey();
         if (conductorKey != null) {
-          Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
           String domain = config.conductorDomain();
-          if (domain != null && !domain.trim().isEmpty()) {
-            builder.domain(domain);
+          if (domain != null && domain.trim().isEmpty()) {
+            domain = null;
           }
-          conductor = builder.build();
+          conductor =
+              conductorProvider.create(
+                  this, systemDatabase, new ConductorOptions(conductorKey, null, domain));
           conductor.start();
         }
       }
