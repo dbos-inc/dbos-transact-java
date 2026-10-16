@@ -1530,7 +1530,8 @@ public class SystemDatabase implements AutoCloseable {
                 ownerXid));
   }
 
-  public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
+  /** See {@link WorkflowDAO#checkChildWorkflow}. */
+  public Optional<StepResult> checkChildWorkflow(String workflowUuid, int functionId) {
     return dbRetry(() -> WorkflowDAO.checkChildWorkflow(ctx, workflowUuid, functionId));
   }
 
