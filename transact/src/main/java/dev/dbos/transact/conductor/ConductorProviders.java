@@ -37,14 +37,14 @@ public final class ConductorProviders {
       loaders.add(own);
     }
 
-    // One instance per provider class: a loader that delegates to its parent sees the parent's
-    // registrations too.
+    // One instance per provider class, constructed once: a loader that delegates to its parent sees
+    // the parent's registrations too, so duplicates are dropped before they are instantiated.
     var providers = new LinkedHashMap<Class<?>, ConductorProvider>();
     try {
       for (var loader : loaders) {
-        for (var provider : ServiceLoader.load(ConductorProvider.class, loader)) {
-          providers.putIfAbsent(provider.getClass(), provider);
-        }
+        ServiceLoader.load(ConductorProvider.class, loader).stream()
+            .filter(provider -> !providers.containsKey(provider.type()))
+            .forEach(provider -> providers.put(provider.type(), provider.get()));
       }
     } catch (ServiceConfigurationError e) {
       // A provider's constructor rejected this DBOS, e.g. for a version mismatch. Its own message
