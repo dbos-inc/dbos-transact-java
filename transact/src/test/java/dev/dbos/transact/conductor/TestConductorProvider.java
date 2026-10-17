@@ -19,10 +19,6 @@ public final class TestConductorProvider implements ConductorProvider {
     return List.copyOf(created);
   }
 
-  public static void reset() {
-    created.clear();
-  }
-
   @Override
   public ConductorConnection create(
       DBOSExecutor executor, SystemDatabase systemDatabase, ConductorOptions options) {
