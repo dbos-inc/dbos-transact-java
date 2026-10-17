@@ -25,7 +25,6 @@ dependencies {
   testImplementation(libs.system.stubs.jupiter)
   testRuntimeOnly(libs.junit.platform.launcher)
 
-  testImplementation(libs.java.websocket)
   testImplementation(libs.kryo)
   testImplementation(libs.logback.classic)
   testImplementation(libs.maven.artifact)
