@@ -26,7 +26,7 @@ public class MigrationManager {
   private static final Set<Integer> ONLINE_MIGRATIONS =
       Set.of(
           22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114, 115, 116,
-          117, 118, 119, 120, 122);
+          117, 118, 119, 120, 122, 124, 125);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -578,7 +578,9 @@ public class MigrationManager {
             migration120(isCockroach),
             MIGRATION_121,
             migration122(isCockroach),
-            MIGRATION_123));
+            MIGRATION_123,
+            migration124(isCockroach),
+            migration125(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1760,4 +1762,18 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."workflow_status"
           ADD COLUMN IF NOT EXISTS "creator_xid" TEXT DEFAULT NULL;
       """;
+
+  static String migration124(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_application_versions_timestamp\""
+        + " ON \"%1$s\".\"application_versions\" (\"version_timestamp\" DESC)";
+  }
+
+  static String migration125(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_application_versions_owner_timestamp\""
+        + " ON \"%1$s\".\"application_versions\" (\"application_name\", \"version_timestamp\" DESC)";
+  }
 }
