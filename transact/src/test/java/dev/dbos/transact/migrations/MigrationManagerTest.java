@@ -727,7 +727,8 @@ class MigrationManagerTest {
     var schema = Constants.DB_SCHEMA;
     var config = pgContainer.dbosConfig();
     var migrations =
-        MigrationManager.getMigrations(schema, !PgContainer.USE_COCKROACH_DB, PgContainer.USE_COCKROACH_DB);
+        MigrationManager.getMigrations(
+            schema, !PgContainer.USE_COCKROACH_DB, PgContainer.USE_COCKROACH_DB);
     MigrationManager.createDatabaseIfNotExists(
         pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
     try (var conn = dataSource.getConnection()) {
@@ -742,10 +743,14 @@ class MigrationManagerTest {
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       assertEquals(migrations.size(), getVersion(conn));
-      for (var name : List.of("idx_application_versions_timestamp", "idx_application_versions_owner_timestamp")) {
+      for (var name :
+          List.of(
+              "idx_application_versions_timestamp", "idx_application_versions_owner_timestamp")) {
         assertIndexExists(conn, name);
-        try (var result = stmt.executeQuery(
-            "SELECT indexdef FROM pg_indexes WHERE schemaname = '%s' AND indexname = '%s'".formatted(schema, name))) {
+        try (var result =
+            stmt.executeQuery(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname = '%s' AND indexname = '%s'"
+                    .formatted(schema, name))) {
           assertTrue(result.next());
           var definition = result.getString(1);
           assertTrue(definition.contains("version_timestamp DESC"));
