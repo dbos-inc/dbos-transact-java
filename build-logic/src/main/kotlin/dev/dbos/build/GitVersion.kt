@@ -13,8 +13,14 @@ object GitVersion {
   fun gitHash(root: File): String =
     cachedHash ?: run(root, "git", "rev-parse", "--short", "HEAD").also { cachedHash = it }
 
+  /**
+   * The version from DBOS_VERSION_OVERRIDE when set, else derived from git. CI sets the override so
+   * every publish job uses the version the build job computed, even if a tag was added since.
+   */
   fun version(root: File): String =
-    cachedVersion ?: calcVersion(root).also { cachedVersion = it }
+    cachedVersion
+      ?: (System.getenv("DBOS_VERSION_OVERRIDE")?.takeIf { it.isNotBlank() } ?: calcVersion(root))
+        .also { cachedVersion = it }
 
   private fun gitTag(root: File): String? =
     runCatching { run(root, "git", "describe", "--abbrev=0", "--tags") }.getOrNull()
