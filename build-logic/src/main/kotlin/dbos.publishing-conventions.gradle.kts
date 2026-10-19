@@ -14,6 +14,18 @@ tasks.withType<Javadoc> {
 
 tasks.named("build") { dependsOn("javadoc") }
 
+// Every main and release/* build goes to GitHub Packages; only full releases also go to Maven
+// Central. Credentials come from the GitHubPackagesUsername and GitHubPackagesPassword properties.
+extensions.configure<PublishingExtension> {
+  repositories {
+    maven {
+      name = "GitHubPackages"
+      url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java")
+      credentials(PasswordCredentials::class)
+    }
+  }
+}
+
 extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
   publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)
   if (publishingToMavenCentral) signAllPublications()
