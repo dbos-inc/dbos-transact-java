@@ -1721,7 +1721,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */
-  public List<String> cancelTimedOutWorkflows(int limit) {
+  public List<CancelledWorkflow> cancelTimedOutWorkflows(int limit) {
     return dbRetry(() -> WorkflowDAO.cancelTimedOutWorkflows(ctx, limit));
   }
 

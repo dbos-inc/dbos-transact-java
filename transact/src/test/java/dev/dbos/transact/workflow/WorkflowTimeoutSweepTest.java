@@ -3,12 +3,17 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.CancelledWorkflow;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -26,6 +31,25 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+interface SweepSleeper {
+  String sleep(long sleepMs);
+}
+
+class SweepSleeperImpl implements SweepSleeper {
+  private final DBOS dbos;
+
+  SweepSleeperImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String sleep(long sleepMs) {
+    dbos.sleep(Duration.ofMillis(sleepMs));
+    return "woke";
+  }
+}
 
 /**
  * The workflow-timeout sweep cancels an application's workflows past their deadline, whatever state
@@ -108,7 +132,7 @@ public class WorkflowTimeoutSweepTest {
     long giveUp = System.nanoTime() + Duration.ofSeconds(10).toNanos();
     while (!cancelled.containsAll(expected)) {
       assertTrue(System.nanoTime() < giveUp, "the sweep did not cancel the expired rows");
-      var pass = sysdb.cancelTimedOutWorkflows(limit);
+      var pass = sweep(limit);
       if (pass.isEmpty()) {
         Thread.sleep(100);
       } else {
@@ -117,6 +141,13 @@ public class WorkflowTimeoutSweepTest {
       }
     }
     return passes;
+  }
+
+  /** One sweep pass, as the IDs it cancelled. */
+  private List<String> sweep(int limit) {
+    return sysdb.cancelTimedOutWorkflows(limit).stream()
+        .map(CancelledWorkflow::workflowId)
+        .toList();
   }
 
   private static Set<String> union(List<List<String>> passes) {
@@ -152,7 +183,7 @@ public class WorkflowTimeoutSweepTest {
     var expired = plant(WorkflowState.ENQUEUED, -1_000, APP);
 
     assertEquals(Set.of(expired), union(sweepUntilCancelled(Set.of(expired), 1_000)));
-    assertEquals(List.of(), sysdb.cancelTimedOutWorkflows(1_000));
+    assertEquals(List.of(), sweep(1_000));
 
     assertEquals(WorkflowState.ENQUEUED, status(notYet));
     assertEquals(WorkflowState.SUCCESS, status(finished));
@@ -171,7 +202,7 @@ public class WorkflowTimeoutSweepTest {
     for (var pass : passes) {
       assertTrue(pass.size() <= 3, "a pass cancelled more than its limit: " + pass);
     }
-    assertEquals(List.of(), sysdb.cancelTimedOutWorkflows(3));
+    assertEquals(List.of(), sweep(3));
   }
 
   @Test
@@ -189,11 +220,45 @@ public class WorkflowTimeoutSweepTest {
         stmt.executeQuery().close();
       }
 
-      assertEquals(List.of(), sysdb.cancelTimedOutWorkflows(1_000));
+      assertEquals(List.of(), sweep(1_000));
       conn.rollback();
     }
 
     assertEquals(Set.of(held), union(sweepUntilCancelled(Set.of(held), 1_000)));
+  }
+
+  /**
+   * The sweep can cancel a running workflow's row before the workflow's own timer fires, which then
+   * finds the row no longer its run's and cancels nothing. The sweep completes the run's handle
+   * itself, so getResult doesn't wait out the run.
+   */
+  @Test
+  void theSweepCancelsTheHandleOfARunItCancels() throws Exception {
+    try (DBOS dbos = new DBOS(pgContainer.dbosConfig(APP))) {
+      var proxy = dbos.registerProxy(SweepSleeper.class, new SweepSleeperImpl(dbos));
+      dbos.launch();
+      var id = UUID.randomUUID().toString();
+      // The run's own timer is ten minutes away, so only the sweep can cancel it here.
+      var handle =
+          dbos.startWorkflow(
+              () -> proxy.sleep(600_000),
+              new StartWorkflowOptions(id).withTimeout(Duration.ofMinutes(10)));
+
+      // Expire the row on the database only, so the sweep's next pass cancels it.
+      try (var conn = dataSource.getConnection();
+          var stmt =
+              conn.prepareStatement(
+                  "UPDATE \"dbos\".workflow_status SET workflow_deadline_epoch_ms = %s - 1000 WHERE workflow_uuid = ?"
+                      .formatted(SystemDatabase.NOW_EPOCH_MS))) {
+        stmt.setString(1, id);
+        assertEquals(1, stmt.executeUpdate());
+      }
+
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> assertTimeoutPreemptively(Duration.ofSeconds(15), () -> handle.getResult()));
+      assertEquals(WorkflowState.CANCELLED, status(id));
+    }
   }
 
   @Test

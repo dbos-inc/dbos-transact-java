@@ -173,6 +173,10 @@ public class DBOSExecutor implements AutoCloseable {
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
   private final ConcurrentHashMap<ActiveExecution, QueueBucket> activeWorkflows =
       new ConcurrentHashMap<>();
+  // The future of each execution started in this process, until it completes, so a cancellation
+  // that takes the row from its execution can complete the execution's handle too.
+  private final ConcurrentHashMap<ActiveExecution, CompletableFuture<?>> localRuns =
+      new ConcurrentHashMap<>();
 
   private final boolean dbosCloud;
   private final String appId;
@@ -2729,7 +2733,25 @@ public class DBOSExecutor implements AutoCloseable {
       return retrieveWorkflow(workflowId);
     }
 
-    var future = CompletableFuture.supplyAsync(task, executorService);
+    // Registered before the task starts, so a cancellation can't land between the start and the
+    // registration and miss the run.
+    var execution = new ActiveExecution(workflowId, ownerXid);
+    var future = new CompletableFuture<T>();
+    localRuns.put(execution, future);
+    future.whenComplete((result, error) -> localRuns.remove(execution, future));
+    try {
+      executorService.execute(
+          () -> {
+            try {
+              future.complete(task.get());
+            } catch (Throwable e) {
+              future.completeExceptionally(e);
+            }
+          });
+    } catch (RuntimeException e) {
+      localRuns.remove(execution, future);
+      throw e;
+    }
     if (timeLeft != null) {
       timeoutScheduler.schedule(
           () -> {
@@ -2744,6 +2766,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return new WorkflowHandleFuture<>(this, workflowId, future);
+  }
+
+  /**
+   * Completes the handle of this process's execution of a workflow as cancelled, once something
+   * else has cancelled the row out from under it. Only the execution that owned the row is
+   * affected: one that took the workflow over since has a different token.
+   */
+  void cancelLocalRun(String workflowId, String ownerXid) {
+    var future = localRuns.get(new ActiveExecution(workflowId, ownerXid));
+    if (future != null) {
+      future.cancel(true);
+    }
   }
 
   // Persist an queued workflow to the database without execution

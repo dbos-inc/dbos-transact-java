@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.CancelledWorkflow;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
@@ -501,17 +502,23 @@ public class QueueService implements AutoCloseable {
    * <p>Every executor runs the sweep, and the database decides which rows have expired, on its own
    * clock. A workflow running in this process is also cancelled by its own timer in {@link
    * DBOSExecutor}, which measures from a reading of the same clock, so the two agree; the timer
-   * only makes the cancellation prompt between sweeps.
+   * only makes the cancellation prompt between sweeps. Whichever cancels the row first also
+   * completes the run's handle as cancelled.
    */
   void cancelTimedOutWorkflows() {
     if (!beginPass()) return;
     try {
       // A full batch may have left more behind, so sweep again at once rather than a second later.
-      List<String> cancelled;
+      List<CancelledWorkflow> cancelled;
       do {
         cancelled = systemDatabase.cancelTimedOutWorkflows(TIMEOUT_SWEEP_BATCH_SIZE);
-        for (var workflowId : cancelled) {
-          logger.info("Workflow {} timed out", workflowId);
+        for (var workflow : cancelled) {
+          logger.info("Workflow {} timed out", workflow.workflowId());
+          // The workflow's own timer cancels the run only while the run still owns the row; the
+          // sweep has just taken that away, so if the run is in this process, stop it here.
+          if (workflow.ownerXid() != null) {
+            dbosExecutor.cancelLocalRun(workflow.workflowId(), workflow.ownerXid());
+          }
         }
       } while (cancelled.size() == TIMEOUT_SWEEP_BATCH_SIZE && !paused.get() && !isStopped());
     } catch (Throwable e) {
