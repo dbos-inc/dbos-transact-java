@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -24,6 +25,10 @@ public class DBOSExecutorTestAccess {
 
   public static ConductorOptions getConductorOptions(DBOSExecutor exec) {
     return exec.conductorOptions();
+  }
+
+  public static ConductorProvider getConductorProvider(DBOSExecutor exec) {
+    return exec.conductorProvider();
   }
 
   /**

@@ -440,6 +440,10 @@ public class DBOSExecutor implements AutoCloseable {
     return conductorOptions;
   }
 
+  @Nullable ConductorProvider conductorProvider() {
+    return conductorProvider;
+  }
+
   @Override
   public void close() {
     if (isRunning.compareAndSet(true, false)) {

@@ -423,8 +423,11 @@ public class ConfigEnvTest {
         () -> {
           try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
             dbos.launch();
-            assertNull(
-                DBOSExecutorTestAccess.getConductorOptions(DBOSTestAccess.getDbosExecutor(dbos)));
+            var executor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertNull(DBOSExecutorTestAccess.getConductorOptions(executor));
+            // This module's test provider is always on the class path, so loading one would
+            // succeed: check that launch didn't look for one.
+            assertNull(DBOSExecutorTestAccess.getConductorProvider(executor));
           }
         });
   }
