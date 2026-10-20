@@ -187,6 +187,8 @@ class NotificationServiceTest {
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
+    // The receiver can finish as soon as the send step commits, before the sender records SUCCESS.
+    handle2.getResult();
 
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
@@ -271,6 +273,8 @@ class NotificationServiceTest {
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
+    // The receiver can finish as soon as the send step commits, before the sender records SUCCESS.
+    handle2.getResult();
 
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
@@ -333,6 +337,8 @@ class NotificationServiceTest {
 
     String result = (String) handle1.getResult();
     assertNull(result);
+    // The receiver can finish as soon as the send step commits, before the sender records SUCCESS.
+    handle2.getResult();
 
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
@@ -422,6 +428,8 @@ class NotificationServiceTest {
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
+    // The receiver can finish as soon as the send step commits, before the sender records SUCCESS.
+    handle2.getResult();
 
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
