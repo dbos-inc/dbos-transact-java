@@ -93,6 +93,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -325,7 +326,11 @@ public class DBOSExecutor implements AutoCloseable {
           };
 
       executorService = executorServiceSupplier.get();
-      timeoutScheduler = Executors.newScheduledThreadPool(2);
+      var scheduler = new ScheduledThreadPoolExecutor(2);
+      // A workflow's timeout timer is cancelled when the workflow finishes; without this, the
+      // cancelled timer, and the result it references, stays queued until the deadline.
+      scheduler.setRemoveOnCancelPolicy(true);
+      timeoutScheduler = scheduler;
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
@@ -2733,22 +2738,29 @@ public class DBOSExecutor implements AutoCloseable {
 
     var future = CompletableFuture.supplyAsync(task, executorService);
     if (timeLeft != null) {
-      timeoutScheduler.schedule(
-          () -> {
-            // The deadline has passed, so the handle stops waiting on the run either way. The run
-            // cancels the row only while it still owns it; if it doesn't, something else settled
-            // or took over the row (the timeout sweep on any executor, an explicit cancel, a
-            // resume), and getResult reports what the row records.
-            if (!future.isDone()) {
-              systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
-              future.cancel(true);
-            }
-          },
-          timeLeft.toMillis(),
-          TimeUnit.MILLISECONDS);
+      var timer =
+          timeoutScheduler.schedule(
+              () -> {
+                // The deadline has passed, so the handle stops waiting on the run either way. The
+                // run cancels the row only while it still owns it; if it doesn't, something else
+                // settled or took over the row (the timeout sweep on any executor, an explicit
+                // cancel, a resume), and getResult reports what the row records.
+                if (!future.isDone()) {
+                  systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
+                  future.cancel(true);
+                }
+              },
+              timeLeft.toMillis(),
+              TimeUnit.MILLISECONDS);
+      // A run that ends before its deadline needs no timer.
+      future.whenComplete((result, error) -> timer.cancel(false));
     }
 
     return new WorkflowHandleFuture<>(this, workflowId, future);
+  }
+
+  ScheduledExecutorService timeoutScheduler() {
+    return timeoutScheduler;
   }
 
   // Persist an queued workflow to the database without execution

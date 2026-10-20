@@ -237,6 +237,31 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED, s.status());
   }
 
+  /** A run that finishes well before its deadline doesn't leave its timer queued until then. */
+  @Test
+  public void aFinishedRunLeavesNoTimerQueued() throws Exception {
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
+    impl.setSelf(simpleService);
+    dbos.launch();
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    int before = DBOSExecutorTestAccess.queuedTimeoutTasks(executor);
+
+    for (int i = 0; i < 5; i++) {
+      try (var id = new WorkflowOptions("timer-" + i).withTimeout(1, TimeUnit.HOURS).setContext()) {
+        assertEquals("Processed: ab", simpleService.workWithString("ab"));
+      }
+    }
+
+    // The timer is cancelled as the run's future completes, which may be just after getResult
+    // returns.
+    long giveUp = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+    while (DBOSExecutorTestAccess.queuedTimeoutTasks(executor) != before) {
+      assertTrue(System.nanoTime() < giveUp, "the finished runs' timers are still queued");
+      Thread.sleep(20);
+    }
+  }
+
   @Test
   public void sync() throws Exception {
 
