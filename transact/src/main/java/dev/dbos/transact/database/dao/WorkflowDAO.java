@@ -1,7 +1,6 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.database.CancelledWorkflow;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
@@ -1373,11 +1372,9 @@ public class WorkflowDAO {
    * are cleaned up a moment later. The status values are literals rather than parameters, so the
    * planner can match idx_workflow_status_deadline's predicate under a generic plan.
    *
-   * @return the workflows cancelled, each with the execution that owned it until then
+   * @return the IDs of the workflows cancelled
    */
-  public static List<CancelledWorkflow> cancelTimedOutWorkflows(DbContext ctx, int limit)
-      throws SQLException {
-    // The update clears owner_xid, so the owner each row had is read from the locked subquery.
+  public static List<String> cancelTimedOutWorkflows(DbContext ctx, int limit) throws SQLException {
     var sql =
         """
           UPDATE "%1$s".workflow_status
@@ -1388,16 +1385,15 @@ public class WorkflowDAO {
                  owner_xid = NULL,
                  updated_at = %2$s,
                  completed_at = %2$s
-            FROM (
-               SELECT workflow_uuid, owner_xid FROM "%1$s".workflow_status
+           WHERE workflow_uuid IN (
+               SELECT workflow_uuid FROM "%1$s".workflow_status
                 WHERE status IN ('%3$s', '%4$s', '%5$s')
                   AND workflow_deadline_epoch_ms IS NOT NULL
                   AND workflow_deadline_epoch_ms <= %2$s%6$s
                 ORDER BY workflow_deadline_epoch_ms
                 LIMIT ?
-                FOR UPDATE SKIP LOCKED) expired
-           WHERE "%1$s".workflow_status.workflow_uuid = expired.workflow_uuid
-           RETURNING expired.workflow_uuid, expired.owner_xid
+                FOR UPDATE SKIP LOCKED)
+           RETURNING workflow_uuid
         """
             .formatted(
                 ctx.schema(),
@@ -1407,7 +1403,7 @@ public class WorkflowDAO {
                 WorkflowState.DELAYED.name(),
                 ctx.andAppScope());
 
-    var cancelled = new ArrayList<CancelledWorkflow>();
+    var cancelled = new ArrayList<String>();
     try (var conn = ctx.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       int i = 1;
@@ -1416,7 +1412,7 @@ public class WorkflowDAO {
       stmt.setInt(i, limit);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
-          cancelled.add(new CancelledWorkflow(rs.getString(1), rs.getString(2)));
+          cancelled.add(rs.getString(1));
         }
       }
     }

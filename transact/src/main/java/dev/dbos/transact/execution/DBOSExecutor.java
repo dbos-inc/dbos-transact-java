@@ -173,10 +173,6 @@ public class DBOSExecutor implements AutoCloseable {
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
   private final ConcurrentHashMap<ActiveExecution, QueueBucket> activeWorkflows =
       new ConcurrentHashMap<>();
-  // The future of each execution started in this process, until it completes, so a cancellation
-  // that takes the row from its execution can complete the execution's handle too.
-  private final ConcurrentHashMap<ActiveExecution, CompletableFuture<?>> localRuns =
-      new ConcurrentHashMap<>();
 
   private final boolean dbosCloud;
   private final String appId;
@@ -1603,7 +1599,9 @@ public class DBOSExecutor implements AutoCloseable {
           } catch (DBOSWorkflowExecutionConflictException e) {
             return awaitWorkflowResult(workflowId, false);
           } catch (CancellationException e) {
-            throw new DBOSAwaitedWorkflowCancelledException(workflowId);
+            // The run's deadline passed. The row has the outcome: cancelled by this run, by the
+            // timeout sweep or explicitly, or, if the workflow was resumed, the new run's.
+            return awaitWorkflowResult(workflowId, true);
           } catch (ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
               if (cause instanceof DBOSWorkflowExecutionConflictException) {
@@ -2733,31 +2731,16 @@ public class DBOSExecutor implements AutoCloseable {
       return retrieveWorkflow(workflowId);
     }
 
-    // Registered before the task starts, so a cancellation can't land between the start and the
-    // registration and miss the run.
-    var execution = new ActiveExecution(workflowId, ownerXid);
-    var future = new CompletableFuture<T>();
-    localRuns.put(execution, future);
-    future.whenComplete((result, error) -> localRuns.remove(execution, future));
-    try {
-      executorService.execute(
-          () -> {
-            try {
-              future.complete(task.get());
-            } catch (Throwable e) {
-              future.completeExceptionally(e);
-            }
-          });
-    } catch (RuntimeException e) {
-      localRuns.remove(execution, future);
-      throw e;
-    }
+    var future = CompletableFuture.supplyAsync(task, executorService);
     if (timeLeft != null) {
       timeoutScheduler.schedule(
           () -> {
-            // A run that lost the workflow is left to reach the fence and report the owner's
-            // outcome; cancelling its future would report a cancellation that never happened.
-            if (!future.isDone() && systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid)) {
+            // The deadline has passed, so the handle stops waiting on the run either way. The run
+            // cancels the row only while it still owns it; if it doesn't, something else settled
+            // or took over the row (the timeout sweep on any executor, an explicit cancel, a
+            // resume), and getResult reports what the row records.
+            if (!future.isDone()) {
+              systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
               future.cancel(true);
             }
           },
@@ -2766,18 +2749,6 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return new WorkflowHandleFuture<>(this, workflowId, future);
-  }
-
-  /**
-   * Completes the handle of this process's execution of a workflow as cancelled, once something
-   * else has cancelled the row out from under it. Only the execution that owned the row is
-   * affected: one that took the workflow over since has a different token.
-   */
-  void cancelLocalRun(String workflowId, String ownerXid) {
-    var future = localRuns.get(new ActiveExecution(workflowId, ownerXid));
-    if (future != null) {
-      future.cancel(true);
-    }
   }
 
   // Persist an queued workflow to the database without execution
