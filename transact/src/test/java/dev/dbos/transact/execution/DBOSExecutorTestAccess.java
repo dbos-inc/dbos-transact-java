@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -19,6 +20,10 @@ public class DBOSExecutorTestAccess {
 
   public static SchedulerService getSchedulerService(DBOSExecutor exec) {
     return exec.getSchedulerService();
+  }
+
+  public static ConductorOptions getConductorOptions(DBOSExecutor exec) {
+    return exec.conductorOptions();
   }
 
   /**

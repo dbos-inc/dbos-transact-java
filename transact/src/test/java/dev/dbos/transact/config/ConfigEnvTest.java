@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.conductor.TestConductorProvider;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -404,6 +406,25 @@ public class ConfigEnvTest {
                         new ConductorOptions(
                             "cloud-conductor-key", "cloud-conductor-app", "ws://localhost:1234")),
                 () -> "created: " + TestConductorProvider.created());
+          }
+        });
+  }
+
+  @Test
+  public void cloudWithoutConductorSettingsDoesNotConnect() throws Exception {
+    // Without all three Conductor variables, a DBOS Cloud application does not connect, so it
+    // needs no dev.dbos:transact-enterprise on the class path.
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true")
+            .and("DBOS_APP_NAME", "env-app-name")
+            .and("DBOS__CONDUCTOR_KEY", "cloud-conductor-key");
+
+    envVars.execute(
+        () -> {
+          try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
+            dbos.launch();
+            assertNull(
+                DBOSExecutorTestAccess.getConductorOptions(DBOSTestAccess.getDbosExecutor(dbos)));
           }
         });
   }
