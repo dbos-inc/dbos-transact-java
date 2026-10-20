@@ -1,11 +1,11 @@
-package dev.dbos.transact.conductor.protocol;
+package dev.dbos.transact.admin;
 
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.util.Objects;
 
-public class WorkflowsOutput {
+class WorkflowsOutput {
   public String WorkflowUUID;
 
   // Note, remaining fields are optional

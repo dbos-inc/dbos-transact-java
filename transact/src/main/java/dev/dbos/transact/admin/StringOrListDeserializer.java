@@ -1,4 +1,4 @@
-package dev.dbos.transact.conductor.protocol;
+package dev.dbos.transact.admin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +8,7 @@ import tools.jackson.core.JsonToken;
 import tools.jackson.databind.DeserializationContext;
 import tools.jackson.databind.ValueDeserializer;
 
-public class StringOrListDeserializer extends ValueDeserializer<List<String>> {
+class StringOrListDeserializer extends ValueDeserializer<List<String>> {
   @Override
   public List<String> deserialize(JsonParser p, DeserializationContext ctxt) {
     if (p.currentToken() == JsonToken.START_ARRAY) {

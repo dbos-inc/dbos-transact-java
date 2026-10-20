@@ -92,7 +92,10 @@ public class DBOSProperties {
   /** DBOS Cloud conductor connection properties. */
   public static class Conductor {
 
-    /** Conductor API key. */
+    /**
+     * Conductor API key. Connecting to Conductor requires {@code dev.dbos:transact-enterprise} on
+     * the class path.
+     */
     private String key;
 
     /** Conductor domain. */

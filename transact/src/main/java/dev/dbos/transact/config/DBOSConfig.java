@@ -42,7 +42,8 @@ import org.jspecify.annotations.Nullable;
  * @param adminServerPort port for the built-in admin HTTP server; deprecated and will be removed
  *     before 1.0 — use DBOS Conductor instead
  * @param migrate whether to run database migrations on startup
- * @param conductorKey API key for DBOS Conductor; must not be empty if non-null
+ * @param conductorKey API key for DBOS Conductor; must not be empty if non-null. Connecting to
+ *     Conductor requires {@code dev.dbos:transact-enterprise} on the class path
  * @param conductorDomain custom hostname for DBOS Conductor; must not be empty if non-null
  * @param conductorExecutorMetadata arbitrary key-value metadata attached to this executor's
  *     registration in Conductor
@@ -469,7 +470,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout);
   }
 
-  /** Returns a copy of this config with {@code conductorKey} set to {@code v}. */
+  /**
+   * Returns a copy of this config with {@code conductorKey} set to {@code v}. Connecting to
+   * Conductor requires {@code dev.dbos:transact-enterprise} on the class path.
+   */
   public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
     return new DBOSConfig(
         appName,

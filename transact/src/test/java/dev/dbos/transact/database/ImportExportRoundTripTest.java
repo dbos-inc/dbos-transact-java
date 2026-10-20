@@ -1,4 +1,4 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -29,11 +28,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * A workflow exported through Conductor and imported again must come back with the same Java types.
- * Export and import travel as JSON written and read by Conductor's own mapper, so these tests take
- * that path rather than handing the in-memory records straight from export to import.
+ * A workflow exported and imported again must come back as it was: with the same Java types, still
+ * debounced if it was, and with its payloads where this release writes them.
  */
-public class ImportExportTypeRoundTripTest {
+public class ImportExportRoundTripTest {
 
   /** A user type the way most are written: a plain, non-final class. */
   public static class Order {
@@ -107,14 +105,11 @@ public class ImportExportTypeRoundTripTest {
     dataSource = pgContainer.dataSource();
   }
 
-  /** Export through Conductor's JSON, delete the original, and import what came back. */
-  private void roundTripThroughConductorJson(String workflowId) throws Exception {
-    var mapper = Conductor.buildObjectMapper();
-    var json =
-        Conductor.serializeExportedWorkflows(sysdb.exportWorkflow(workflowId, false), mapper);
-    List<ExportedWorkflow> imported = Conductor.deserializeExportedWorkflows(json, mapper);
+  /** Export the workflow, delete the original, and import the export. */
+  private void roundTrip(String workflowId) throws Exception {
+    List<ExportedWorkflow> exported = sysdb.exportWorkflow(workflowId, false);
     sysdb.deleteWorkflows(List.of(workflowId), false);
-    sysdb.importWorkflow(imported);
+    sysdb.importWorkflow(exported);
   }
 
   /**
@@ -130,7 +125,7 @@ public class ImportExportTypeRoundTripTest {
     assertTrue(before.isDebounced());
     assertNotNull(before.debounceDeadlineEpochMs());
 
-    roundTripThroughConductorJson(handle.workflowId());
+    roundTrip(handle.workflowId());
 
     var after = DebouncedRows.read(dataSource, handle.workflowId());
     assertEquals(WorkflowState.DELAYED.name(), after.status());
@@ -157,7 +152,7 @@ public class ImportExportTypeRoundTripTest {
     assertInstanceOf(Order.class, before.input()[0]);
     assertInstanceOf(Order.class, dbos.listWorkflowSteps(workflowId).get(0).output());
 
-    roundTripThroughConductorJson(workflowId);
+    roundTrip(workflowId);
 
     var after = sysdb.getWorkflowStatus(workflowId);
     var stepOutput = dbos.listWorkflowSteps(workflowId).get(0).output();
@@ -184,7 +179,7 @@ public class ImportExportTypeRoundTripTest {
         OrderRejected.class,
         () -> dbos.<Order, RuntimeException>retrieveWorkflow(workflowId).getResult());
 
-    roundTripThroughConductorJson(workflowId);
+    roundTrip(workflowId);
 
     var thrown =
         assertThrows(
@@ -226,7 +221,7 @@ public class ImportExportTypeRoundTripTest {
     execute("DELETE FROM dbos.workflow_output WHERE workflow_uuid = ?", workflowId);
     assertInstanceOf(Order.class, sysdb.getWorkflowStatus(workflowId).output());
 
-    roundTripThroughConductorJson(workflowId);
+    roundTrip(workflowId);
 
     var after = sysdb.getWorkflowStatus(workflowId);
     assertAll(

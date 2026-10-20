@@ -4,13 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.conductor.TestWebSocketServer;
-import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
+import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.conductor.TestConductorProvider;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -19,12 +21,8 @@ import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import org.java_websocket.WebSocket;
-import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
@@ -388,26 +386,6 @@ public class ConfigEnvTest {
 
   @Test
   public void cloudAutoStartsConductor() throws Exception {
-    var testServer = new TestWebSocketServer(0);
-    testServer.start();
-    assertTrue(testServer.waitStart(5000), "web socket server did not start");
-    int port = testServer.getPort();
-    assertTrue(port != 0, "Invalid Web Socket Server port");
-
-    class Listener implements WebSocketTestListener {
-      volatile String resourceDescriptor;
-      final CountDownLatch latch = new CountDownLatch(1);
-
-      @Override
-      public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        resourceDescriptor = handshake.getResourceDescriptor();
-        latch.countDown();
-      }
-    }
-
-    var listener = new Listener();
-    testServer.setListener(listener);
-
     // In DBOS Cloud, Conductor connection details come from env vars injected by the platform.
     // The conductor app name (DBOS__CONDUCTOR_APP_NAME) is distinct from the executor app name.
     var envVars =
@@ -415,22 +393,43 @@ public class ConfigEnvTest {
             .and("DBOS_APP_NAME", "env-app-name")
             .and("DBOS__CONDUCTOR_APP_NAME", "cloud-conductor-app")
             .and("DBOS__CONDUCTOR_KEY", "cloud-conductor-key")
-            .and("DBOS__CONDUCTOR_URL", "ws://localhost:" + port);
+            .and("DBOS__CONDUCTOR_URL", "ws://localhost:1234");
 
-    try {
-      envVars.execute(
-          () -> {
-            try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
-              dbos.launch();
-              assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "conductor did not connect");
-              assertEquals(
-                  "/websocket/cloud-conductor-app/cloud-conductor-key",
-                  listener.resourceDescriptor);
-            }
-          });
-    } finally {
-      testServer.stop();
-    }
+    envVars.execute(
+        () -> {
+          try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
+            dbos.launch();
+            // Other tests launch with Conductor concurrently, so look for this launch's options.
+            assertTrue(
+                TestConductorProvider.created()
+                    .contains(
+                        new ConductorOptions(
+                            "cloud-conductor-key", "cloud-conductor-app", "ws://localhost:1234")),
+                () -> "created: " + TestConductorProvider.created());
+          }
+        });
+  }
+
+  @Test
+  public void cloudWithoutConductorSettingsDoesNotConnect() throws Exception {
+    // Without all three Conductor variables, a DBOS Cloud application does not connect, so it
+    // needs no dev.dbos:transact-enterprise on the class path.
+    var envVars =
+        new EnvironmentVariables("DBOS__CLOUD", "true")
+            .and("DBOS_APP_NAME", "env-app-name")
+            .and("DBOS__CONDUCTOR_KEY", "cloud-conductor-key");
+
+    envVars.execute(
+        () -> {
+          try (var dbos = new DBOS(pgContainer.dbosConfig("local-app-name"))) {
+            dbos.launch();
+            var executor = DBOSTestAccess.getDbosExecutor(dbos);
+            assertNull(DBOSExecutorTestAccess.getConductorOptions(executor));
+            // This module's test provider is always on the class path, so loading one would
+            // succeed: check that launch didn't look for one.
+            assertNull(DBOSExecutorTestAccess.getConductorProvider(executor));
+          }
+        });
   }
 
   @Test

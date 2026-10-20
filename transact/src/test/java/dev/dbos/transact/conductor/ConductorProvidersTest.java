@@ -14,19 +14,19 @@ import org.junit.jupiter.api.Test;
 public class ConductorProvidersTest {
 
   @Test
-  public void loadsTheBundledProvider() {
-    assertInstanceOf(BundledConductorProvider.class, ConductorProviders.load());
+  public void loadsTheRegisteredProvider() {
+    assertInstanceOf(TestConductorProvider.class, ConductorProviders.load());
   }
 
   @Test
   public void aContextLoaderThatDelegatesToDbosFindsItOnce() throws Exception {
-    // The child sees the bundled registration through its parent; finding it twice would read as
+    // The child sees the test registration through its parent; finding it twice would read as
     // two providers.
     var thread = Thread.currentThread();
     var previous = thread.getContextClassLoader();
     try (var child = new URLClassLoader(new URL[0], ConductorProvider.class.getClassLoader())) {
       thread.setContextClassLoader(child);
-      assertInstanceOf(BundledConductorProvider.class, ConductorProviders.load());
+      assertInstanceOf(TestConductorProvider.class, ConductorProviders.load());
     } finally {
       thread.setContextClassLoader(previous);
     }
@@ -34,7 +34,7 @@ public class ConductorProvidersTest {
 
   @Test
   public void selectsTheOnlyProvider() {
-    var provider = new BundledConductorProvider();
+    var provider = new TestConductorProvider();
     assertSame(provider, ConductorProviders.select(List.of(provider), "1.3.0"));
   }
 
@@ -63,7 +63,7 @@ public class ConductorProvidersTest {
   @Test
   public void moreThanOneProviderIsRejected() {
     var providers =
-        List.<ConductorProvider>of(new BundledConductorProvider(), new BundledConductorProvider());
+        List.<ConductorProvider>of(new TestConductorProvider(), new TestConductorProvider());
     assertThrows(IllegalStateException.class, () -> ConductorProviders.select(providers, "1.3.0"));
   }
 }

@@ -190,6 +190,7 @@ public class DBOSExecutor implements AutoCloseable {
   private QueueService queueService;
   private SchedulerService schedulerService;
   private AdminServer adminServer;
+  private final @Nullable ConductorOptions conductorOptions;
   private @Nullable ConductorProvider conductorProvider;
   private ConductorConnection conductor;
   private ExecutorService executorService;
@@ -242,8 +243,11 @@ public class DBOSExecutor implements AutoCloseable {
       logger.warn(msg);
     }
 
-    // Found before anything is started, so a missing provider fails launch cleanly.
-    if (dbosCloud || config.conductorKey() != null) {
+    // Found before anything is started, so a missing provider fails launch cleanly. An
+    // application that will not connect, including one on DBOS Cloud without Conductor settings,
+    // needs no provider.
+    conductorOptions = conductorOptions(config, dbosCloud);
+    if (conductorOptions != null) {
       conductorProvider = ConductorProviders.load();
     }
 
@@ -394,9 +398,19 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   private @Nullable ConductorConnection createConductor() {
-    if (conductorProvider == null) {
+    if (conductorProvider == null || conductorOptions == null) {
       return null;
     }
+    return conductorProvider.create(this, systemDatabase, conductorOptions);
+  }
+
+  /**
+   * The options to connect to Conductor with, or null to not connect. On DBOS Cloud they come from
+   * the environment, and the application connects only when the platform sets all three of
+   * DBOS__CONDUCTOR_APP_NAME, DBOS__CONDUCTOR_KEY and DBOS__CONDUCTOR_URL. Elsewhere it connects
+   * when a Conductor key is configured.
+   */
+  private static @Nullable ConductorOptions conductorOptions(DBOSConfig config, boolean dbosCloud) {
     if (dbosCloud) {
       String cloudAppName = System.getenv("DBOS__CONDUCTOR_APP_NAME");
       String cloudKey = System.getenv("DBOS__CONDUCTOR_KEY");
@@ -409,8 +423,7 @@ public class DBOSExecutor implements AutoCloseable {
           || cloudUrl.isBlank()) {
         return null;
       }
-      return conductorProvider.create(
-          this, systemDatabase, new ConductorOptions(cloudKey, cloudAppName, cloudUrl));
+      return new ConductorOptions(cloudKey, cloudAppName, cloudUrl);
     }
     String conductorKey = config.conductorKey();
     if (conductorKey == null) {
@@ -420,8 +433,15 @@ public class DBOSExecutor implements AutoCloseable {
     if (domain != null && domain.trim().isEmpty()) {
       domain = null;
     }
-    return conductorProvider.create(
-        this, systemDatabase, new ConductorOptions(conductorKey, null, domain));
+    return new ConductorOptions(conductorKey, null, domain);
+  }
+
+  @Nullable ConductorOptions conductorOptions() {
+    return conductorOptions;
+  }
+
+  @Nullable ConductorProvider conductorProvider() {
+    return conductorProvider;
   }
 
   @Override

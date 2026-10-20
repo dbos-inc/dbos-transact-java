@@ -5,7 +5,6 @@ cron-utils = "9.2.1"
 hibernate = "7.4.10.Final"
 hikaricp = "7.1.0"
 jackson = "3.2.3"
-java-websocket = "1.6.0"
 jaxb-api = "4.0.5"
 jdbi = "3.54.0"
 # jOOQ pinned to 3.19.x for JDK 17 compat https://www.jooq.org/download/support-matrix-jdk
@@ -42,7 +41,6 @@ assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
-java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
 jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
 jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
 jdbi-spring = { module = "org.jdbi:jdbi3-spring", version.ref = "jdbi" }
