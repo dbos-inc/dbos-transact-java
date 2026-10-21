@@ -3,12 +3,16 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -21,11 +25,54 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+interface SweepSleeper {
+  String sleep(long sleepMs);
+
+  String slowFirstRun();
+}
+
+class SweepSleeperImpl implements SweepSleeper {
+  private final DBOS dbos;
+
+  SweepSleeperImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String sleep(long sleepMs) {
+    dbos.sleep(Duration.ofMillis(sleepMs));
+    return "woke";
+  }
+
+  private final AtomicInteger runs = new AtomicInteger();
+
+  /** Its first run blocks in a step; a later run, such as a resumed one, finishes at once. */
+  @Override
+  @Workflow
+  public String slowFirstRun() {
+    return dbos.runStep(
+        () -> {
+          if (runs.incrementAndGet() == 1) {
+            try {
+              Thread.sleep(600_000);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              throw new IllegalStateException(e);
+            }
+          }
+          return "finished";
+        },
+        "work");
+  }
+}
 
 /**
  * The workflow-timeout sweep cancels an application's workflows past their deadline, whatever state
@@ -194,6 +241,108 @@ public class WorkflowTimeoutSweepTest {
     }
 
     assertEquals(Set.of(held), union(sweepUntilCancelled(Set.of(held), 1_000)));
+  }
+
+  /**
+   * The sweep can cancel a running workflow's row before the workflow's own timer fires, which then
+   * finds the row no longer its run's to cancel. The timer still ends the wait, so getResult
+   * doesn't wait out the run.
+   */
+  @Test
+  void aRunTheSweepCancelsFirstStillEndsAtItsDeadline() throws Exception {
+    try (DBOS dbos = new DBOS(pgContainer.dbosConfig(APP))) {
+      var proxy = dbos.registerProxy(SweepSleeper.class, new SweepSleeperImpl(dbos));
+      dbos.launch();
+      var id = UUID.randomUUID().toString();
+      var handle =
+          dbos.startWorkflow(
+              () -> proxy.sleep(600_000),
+              new StartWorkflowOptions(id).withTimeout(Duration.ofSeconds(2)));
+
+      // Once the run is inside its sleep, which makes no further writes for it to be refused at.
+      long giveUp = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+      while (dbos.listWorkflowSteps(id).isEmpty()) {
+        assertTrue(System.nanoTime() < giveUp, "the run did not start its sleep");
+        Thread.sleep(20);
+      }
+      // Expire the row on the database only, so the sweep cancels it before the run's timer fires.
+      try (var conn = dataSource.getConnection();
+          var stmt =
+              conn.prepareStatement(
+                  "UPDATE \"dbos\".workflow_status SET workflow_deadline_epoch_ms = %s - 1000 WHERE workflow_uuid = ?"
+                      .formatted(SystemDatabase.NOW_EPOCH_MS))) {
+        stmt.setString(1, id);
+        assertEquals(1, stmt.executeUpdate());
+      }
+
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> assertTimeoutPreemptively(Duration.ofSeconds(15), () -> handle.getResult()));
+      assertEquals(WorkflowState.CANCELLED, status(id));
+    }
+  }
+
+  /**
+   * Another executor's sweep cancelled the row, so this run's timer can't cancel it and nothing in
+   * this process was told. The timer still ends the wait at the deadline.
+   */
+  @Test
+  void aRowAnotherExecutorCancelledEndsTheWaitAtTheDeadline() throws Exception {
+    try (DBOS dbos = new DBOS(pgContainer.dbosConfig(APP))) {
+      var proxy = dbos.registerProxy(SweepSleeper.class, new SweepSleeperImpl(dbos));
+      dbos.launch();
+      var id = UUID.randomUUID().toString();
+      var handle =
+          dbos.startWorkflow(
+              () -> proxy.sleep(600_000),
+              new StartWorkflowOptions(id).withTimeout(Duration.ofSeconds(2)));
+
+      // Once the run is inside its sleep, which makes no further writes for it to be refused at.
+      long giveUp = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+      while (dbos.listWorkflowSteps(id).isEmpty()) {
+        assertTrue(System.nanoTime() < giveUp, "the run did not start its sleep");
+        Thread.sleep(20);
+      }
+      // What another executor's sweep writes.
+      try (var conn = dataSource.getConnection();
+          var stmt =
+              conn.prepareStatement(
+                  "UPDATE \"dbos\".workflow_status SET status = 'CANCELLED', owner_xid = NULL WHERE workflow_uuid = ?")) {
+        stmt.setString(1, id);
+        assertEquals(1, stmt.executeUpdate());
+      }
+
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> assertTimeoutPreemptively(Duration.ofSeconds(15), () -> handle.getResult()));
+    }
+  }
+
+  /**
+   * A workflow resumed after its timeout cancelled it settles with the resumed run's outcome, and
+   * the first run's handle reports that rather than the cancellation.
+   */
+  @Test
+  void aHandleReportsTheOutcomeOfARunResumedAfterTheTimeout() throws Exception {
+    try (DBOS dbos = new DBOS(pgContainer.dbosConfig(APP))) {
+      var proxy = dbos.registerProxy(SweepSleeper.class, new SweepSleeperImpl(dbos));
+      dbos.launch();
+      var id = UUID.randomUUID().toString();
+      var handle =
+          dbos.startWorkflow(
+              () -> proxy.slowFirstRun(),
+              new StartWorkflowOptions(id).withTimeout(Duration.ofSeconds(2)));
+
+      long giveUp = System.nanoTime() + Duration.ofSeconds(15).toNanos();
+      while (status(id) != WorkflowState.CANCELLED) {
+        assertTrue(System.nanoTime() < giveUp, "the timeout did not cancel the workflow");
+        Thread.sleep(100);
+      }
+      dbos.resumeWorkflow(id);
+
+      assertEquals(
+          "finished", assertTimeoutPreemptively(Duration.ofSeconds(15), () -> handle.getResult()));
+    }
   }
 
   @Test
