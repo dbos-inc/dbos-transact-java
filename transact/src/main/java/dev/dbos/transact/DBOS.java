@@ -1246,15 +1246,15 @@ public class DBOS implements AutoCloseable {
 
   /**
    * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
-   * {@code end} (exclusive).
+   * {@code end} (inclusive).
    *
    * <p>Uses the same deterministic workflow IDs as the live scheduler, so already-executed times
-   * are skipped.
+   * are not run again.
    *
    * @param scheduleName name of an existing schedule
    * @param start start of the backfill window (exclusive)
-   * @param end end of the backfill window (exclusive)
-   * @return handles to the enqueued executions
+   * @param end end of the backfill window (inclusive)
+   * @return handles to the executions for every time in the window, including any already run
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
       @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {

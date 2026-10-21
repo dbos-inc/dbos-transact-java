@@ -406,7 +406,8 @@ public class DBOSExecutor implements AutoCloseable {
     if (conductorProvider == null || conductorOptions == null) {
       return null;
     }
-    return conductorProvider.create(this, systemDatabase, conductorOptions);
+    return conductorProvider.create(
+        new DBOSConductorEngine(this, systemDatabase), conductorOptions);
   }
 
   /**

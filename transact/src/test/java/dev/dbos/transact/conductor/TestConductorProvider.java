@@ -1,8 +1,5 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
-
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -20,8 +17,7 @@ public final class TestConductorProvider implements ConductorProvider {
   }
 
   @Override
-  public ConductorConnection create(
-      DBOSExecutor executor, SystemDatabase systemDatabase, ConductorOptions options) {
+  public ConductorConnection create(ConductorEngine engine, ConductorOptions options) {
     created.add(options);
     return new ConductorConnection() {
       @Override

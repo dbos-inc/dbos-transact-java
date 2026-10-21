@@ -1,8 +1,5 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
-
 /**
  * Builds the Conductor client for a DBOS instance. DBOS Transact finds the implementation with
  * {@link java.util.ServiceLoader}; the {@code dev.dbos:transact-enterprise} artifact registers it
@@ -16,7 +13,10 @@ public interface ConductorProvider {
    * Builds a Conductor client, without connecting. DBOS calls this during launch, once the system
    * database is open and before queues, the scheduler or lifecycle listeners start, and starts the
    * returned connection at the end of launch.
+   *
+   * @param engine the DBOS instance, as the Conductor client may use it
+   * @param options how to connect
+   * @return the connection, not yet started
    */
-  ConductorConnection create(
-      DBOSExecutor executor, SystemDatabase systemDatabase, ConductorOptions options);
+  ConductorConnection create(ConductorEngine engine, ConductorOptions options);
 }
