@@ -59,7 +59,7 @@ final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
-  public Map<String, Object> executorMetadata() {
+  public @Nullable Map<String, Object> executorMetadata() {
     return executor.executorMetadata();
   }
 

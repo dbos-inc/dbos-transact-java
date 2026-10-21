@@ -39,7 +39,7 @@ class EngineTestWorkflowsImpl implements EngineTestWorkflows {
 }
 
 /** The engine DBOS hands the Conductor client serves its calls from the running instance. */
-public class DBOSConductorEngineTest {
+class DBOSConductorEngineTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
   EngineTestWorkflows proxy;
@@ -52,7 +52,7 @@ public class DBOSConductorEngineTest {
     proxy = dbos.registerProxy(EngineTestWorkflows.class, new EngineTestWorkflowsImpl(dbos));
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
-    engine = new DBOSConductorEngine(executor, DBOSExecutorTestAccess.getSystemDatabase(executor));
+    engine = new DBOSConductorEngine(executor, executor.getSystemDatabase());
   }
 
   @Test

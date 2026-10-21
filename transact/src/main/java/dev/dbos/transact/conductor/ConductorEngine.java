@@ -30,8 +30,15 @@ import org.jspecify.annotations.Nullable;
  * DBOS instance. It is not application API.
  *
  * <p>An enterprise build runs against any later DBOS Transact build of the same minor version, so
- * within a minor this interface only gains methods: none is changed or removed. DBOS Transact
- * implements it over its internal classes, which absorb their own changes behind it.
+ * within a minor this interface only gains methods: none is changed or removed, and neither are the
+ * types its methods take and return. DBOS Transact implements it over its internal classes, which
+ * absorb their own changes behind it.
+ *
+ * <p>The methods grouped at the end are the exception. They are Conductor-only operations moving
+ * into {@code dev.dbos:transact-enterprise}, and each leaves this interface during the 1.3 previews
+ * as it moves, before the 1.3.0 release. An enterprise preview that still calls one fails against a
+ * core preview without it, so the enterprise build that stops calling it also raises its minimum
+ * DBOS Transact version past the build that removed it.
  */
 public interface ConductorEngine {
   /** The application name. */
@@ -43,8 +50,8 @@ public interface ConductorEngine {
   /** This executor's ID. */
   String executorId();
 
-  /** The metadata this executor reports to Conductor. */
-  Map<String, Object> executorMetadata();
+  /** The metadata this executor reports to Conductor, or {@code null} if none is configured. */
+  @Nullable Map<String, Object> executorMetadata();
 
   /**
    * Recovers the pending workflows of the given executors.
@@ -109,7 +116,7 @@ public interface ConductorEngine {
    * Lists a workflow's steps.
    *
    * @param workflowId the workflow
-   * @param loadOutput whether to load each step's output; {@code null} means the default
+   * @param loadOutput whether to load each step's output; {@code null} means {@code true}
    * @param limit the most steps to return; {@code null} means all
    * @param offset the steps to skip; {@code null} means none
    * @return the steps
@@ -182,14 +189,14 @@ public interface ConductorEngine {
   void resumeSchedule(String name);
 
   /**
-   * Enqueues a schedule's workflow for every time it would have fired between {@code start} and
-   * {@code end}, both exclusive. Times already run are skipped, as the IDs match the live
+   * Enqueues a schedule's workflow for every time it would have fired after {@code start} and up to
+   * and including {@code end}. Times already run are not run again, as the IDs match the live
    * scheduler's.
    *
    * @param scheduleName the schedule's name
    * @param start the start of the window, exclusive
-   * @param end the end of the window, exclusive
-   * @return the IDs of the workflows enqueued
+   * @param end the end of the window, inclusive
+   * @return the workflow IDs of every firing in the window, including any that already ran
    */
   List<String> backfillSchedule(String scheduleName, Instant start, Instant end);
 
@@ -232,8 +239,9 @@ public interface ConductorEngine {
    */
   String toJson(@Nullable Object value);
 
-  // The methods below are Conductor-only operations that move into dev.dbos:transact-enterprise
-  // before the 1.3.0 release, and leave this interface as they do.
+  // Conductor-only operations moving into dev.dbos:transact-enterprise before the 1.3.0 release.
+  // Unlike the methods above, each is removed from this interface as it moves; see the class
+  // documentation.
 
   /**
    * Exports a workflow.
@@ -262,11 +270,13 @@ public interface ConductorEngine {
 
   /**
    * Runs one retention round over the whole system database, deleting finished workflows and then
-   * the payloads they leave behind. Does nothing if both limits are {@code null}.
+   * the payloads they leave behind. Does nothing if both limits are {@code null}, or if another
+   * round holds the retention lock.
    *
    * @param cutoff delete workflows that finished before this time; {@code null} means no age limit
    * @param rowsThreshold the workflow count retention keeps to; {@code null} means no count limit
-   * @param batchSize the most rows to delete in one statement
+   * @param batchSize the most rows to delete in one statement; must be positive
+   * @throws IllegalArgumentException if {@code batchSize} is not positive
    */
   void garbageCollect(@Nullable Instant cutoff, @Nullable Long rowsThreshold, int batchSize);
 
