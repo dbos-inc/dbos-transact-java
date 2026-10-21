@@ -13,8 +13,10 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -54,7 +56,7 @@ class InOrderReceiverImpl implements InOrderReceiver {
  */
 public class RecvAcrossRecoveryTest {
   private static final String TOPIC = "in-order";
-  private static final int MESSAGES = 300;
+  private static final int MESSAGES = 1000;
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOSClient client;
@@ -83,6 +85,28 @@ public class RecvAcrossRecoveryTest {
     dbos.launch();
     executors.add(dbos);
     return new Launched(dbos, proxy, executorId);
+  }
+
+  /**
+   * Waits for a new execution to claim the receiver after a hand-off (its start time changes) and
+   * receive at least one more message, while the sender is still sending. A recovered workflow
+   * waits for a queue poll, about a second, before anything runs it again.
+   */
+  private boolean resumedMidStream(
+      String workflowId, Instant startedBefore, int stepsBefore, CompletableFuture<Void> sender)
+      throws InterruptedException {
+    long giveUp = System.nanoTime() + Duration.ofSeconds(15).toNanos();
+    while (!sender.isDone()) {
+      var status = client.getWorkflowStatus(workflowId).orElseThrow();
+      if (status.status() == WorkflowState.PENDING
+          && !Objects.equals(status.startedAt(), startedBefore)
+          && client.listWorkflowSteps(workflowId).size() > stepsBefore) {
+        return true;
+      }
+      assertTrue(System.nanoTime() < giveUp, "the receiver was not resumed after a hand-off");
+      Thread.sleep(50);
+    }
+    return false;
   }
 
   private WorkflowStatus awaitFinished(String workflowId) throws InterruptedException {
@@ -158,16 +182,18 @@ public class RecvAcrossRecoveryTest {
               }
             });
 
-    int recoveries = 0;
+    int handOffs = 0;
+    int resumptions = 0;
     var previous = current;
     Launched abandoned = null;
     var replaced = new ArrayList<String>();
     while (!sender.isDone()) {
-      Thread.sleep(250);
+      var before = client.getWorkflowStatus(workflowId).orElseThrow();
+      int stepsBefore = client.listWorkflowSteps(workflowId).size();
       if (handOff.equals("close")) {
         close(previous);
       }
-      var next = launch("executor-" + (++recoveries));
+      var next = launch("executor-" + (++handOffs));
       // Every earlier executor counts as dead, as Cloud's sweep of unknown executors treats them:
       // an abandoned one may have claimed the workflow from the queue before it was closed.
       replaced.add(previous.executorId());
@@ -181,9 +207,15 @@ public class RecvAcrossRecoveryTest {
         abandoned = previous;
       }
       previous = next;
+      if (resumedMidStream(workflowId, before.startedAt(), stepsBefore, sender)) {
+        resumptions++;
+      }
     }
     sender.get();
-    assertTrue(recoveries >= 5, "only %d recoveries while sending".formatted(recoveries));
+    assertTrue(
+        resumptions >= 5,
+        "only %d of %d hand-offs resumed the receiver while messages were arriving"
+            .formatted(resumptions, handOffs));
 
     WorkflowStatus status = null;
     long giveUp = System.nanoTime() + Duration.ofSeconds(60).toNanos();
@@ -199,14 +231,14 @@ public class RecvAcrossRecoveryTest {
       Thread.sleep(100);
     }
     var finalStatus = status;
-    var finalRecoveries = recoveries;
+    var finalResumptions = resumptions;
     assertEquals(
         WorkflowState.SUCCESS,
         finalStatus.status(),
         () ->
-            "after %d recoveries: %s"
+            "after %d resumptions: %s"
                 .formatted(
-                    finalRecoveries,
+                    finalResumptions,
                     finalStatus.error() == null ? "no error" : finalStatus.error().message()));
   }
 }
