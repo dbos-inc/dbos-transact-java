@@ -2604,10 +2604,11 @@ public class DBOSExecutor implements AutoCloseable {
     final String notRecordedWarning =
         "Workflow outcome was not recorded: the workflow is no longer owned by this execution."
             + " Waiting for the recorded outcome.";
-    // Set once the body has returned or thrown. From then on the run only records or adopts the
-    // outcome and completes its own future promptly, so the deadline timer leaves it to: cancelling
-    // it would make getResult read back a deserialized copy of a result this run holds itself.
-    var bodyFinished = new AtomicBoolean(false);
+    // Set as the run starts writing its outcome. From then on it completes its own future
+    // promptly, with the result it holds or the outcome it adopts, so the deadline timer leaves it
+    // to: cancelling it could make getResult read back a deserialized copy of that result. Work
+    // before the write, such as deleting step checkpoints, stays under the deadline.
+    var recordingOutcome = new AtomicBoolean(false);
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
@@ -2651,12 +2652,7 @@ public class DBOSExecutor implements AutoCloseable {
               return null;
             }
 
-            T output;
-            try {
-              output = workflow.invoke(args);
-            } finally {
-              bodyFinished.set(true);
-            }
+            T output = workflow.invoke(args);
 
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke completion");
@@ -2666,6 +2662,7 @@ public class DBOSExecutor implements AutoCloseable {
             deleteCompletedStepCheckpoints(workflowId);
 
             active.release();
+            recordingOutcome.set(true);
             if (persistWorkflowOutput(workflowId, output, initResult.serialization(), ownerXid)) {
               return output;
             }
@@ -2710,6 +2707,7 @@ public class DBOSExecutor implements AutoCloseable {
               if (!Thread.currentThread().isInterrupted()) {
                 deleteCompletedStepCheckpoints(workflowId);
               }
+              recordingOutcome.set(true);
               if (persistWorkflowError(workflowId, actual, initResult.serialization(), ownerXid)) {
                 // active is already closed here: try-with-resources closes before catch runs,
                 // so the entry is released before this terminal write becomes durable.
@@ -2750,19 +2748,19 @@ public class DBOSExecutor implements AutoCloseable {
       var timer =
           timeoutScheduler.schedule(
               () -> {
-                // The deadline has passed. Unless the body has already finished, the handle stops
-                // waiting on the run, even if the cancel fails. The run cancels the row only while
-                // it still owns it; if it doesn't, something else settled or took over the row
-                // (the timeout sweep on any executor, an explicit cancel, a resume), and getResult
-                // reports what the row records.
-                if (future.isDone() || bodyFinished.get()) {
+                // The deadline has passed. Unless the run is already writing its outcome, the
+                // handle stops waiting on it, even if the cancel fails. The run cancels the row
+                // only while it still owns it; if it doesn't, something else settled or took over
+                // the row (the timeout sweep on any executor, an explicit cancel, a resume), and
+                // getResult reports what the row records.
+                if (future.isDone() || recordingOutcome.get()) {
                   return;
                 }
                 try {
                   systemDatabase.cancelOwnedWorkflow(workflowId, ownerXid);
                 } finally {
-                  // Checked again: the body may have finished during the cancel.
-                  if (!bodyFinished.get()) {
+                  // Checked again: the run may have started writing during the cancel.
+                  if (!recordingOutcome.get()) {
                     future.cancel(true);
                   }
                 }
