@@ -3,7 +3,6 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -170,11 +169,6 @@ final class DBOSConductorEngine implements ConductorEngine {
   @Override
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
     executor.fireAlertHandler(name, message, metadata);
-  }
-
-  @Override
-  public String toJson(@Nullable Object value) {
-    return JsonUtility.toJson(value);
   }
 
   @Override

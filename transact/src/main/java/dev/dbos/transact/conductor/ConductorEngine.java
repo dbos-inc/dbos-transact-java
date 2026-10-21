@@ -231,14 +231,6 @@ public interface ConductorEngine {
    */
   void fireAlertHandler(String name, String message, Map<String, String> metadata);
 
-  /**
-   * Serializes a value to JSON as DBOS does for display.
-   *
-   * @param value the value
-   * @return its JSON
-   */
-  String toJson(@Nullable Object value);
-
   // Conductor-only operations moving into dev.dbos:transact-enterprise before the 1.3.0 release.
   // Unlike the methods above, each is removed from this interface as it moves; see the class
   // documentation.

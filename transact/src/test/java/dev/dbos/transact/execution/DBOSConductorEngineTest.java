@@ -13,7 +13,6 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AutoClose;
@@ -75,11 +74,5 @@ class DBOSConductorEngineTest {
     var forkedId = engine.forkWorkflow(workflowId, 0, new ForkOptions());
     assertNotEquals(workflowId, forkedId);
     assertEquals("hello", dbos.<String, Exception>retrieveWorkflow(forkedId).getResult());
-  }
-
-  @Test
-  void serializesValuesAsDbosDoes() {
-    assertEquals("{\"a\":1}", engine.toJson(Map.of("a", 1)));
-    assertEquals("null", engine.toJson(null));
   }
 }
