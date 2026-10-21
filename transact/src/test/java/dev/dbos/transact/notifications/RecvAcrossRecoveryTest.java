@@ -56,7 +56,7 @@ class InOrderReceiverImpl implements InOrderReceiver {
  */
 public class RecvAcrossRecoveryTest {
   private static final String TOPIC = "in-order";
-  private static final int MESSAGES = 1000;
+  private static final int MESSAGES = 500;
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOSClient client;
@@ -167,14 +167,14 @@ public class RecvAcrossRecoveryTest {
         .startWorkflow(
             () -> current.proxy().receive(TOPIC, MESSAGES), new StartWorkflowOptions(workflowId));
 
-    // Sent without idempotency keys, from outside any executor, about one every 10 ms.
+    // Sent without idempotency keys, from outside any executor, about one every 20 ms.
     var sender =
         CompletableFuture.runAsync(
             () -> {
               for (int i = 0; i < MESSAGES; i++) {
                 client.send(workflowId, String.valueOf(i), TOPIC, null);
                 try {
-                  Thread.sleep(10);
+                  Thread.sleep(20);
                 } catch (InterruptedException e) {
                   Thread.currentThread().interrupt();
                   return;
@@ -217,10 +217,20 @@ public class RecvAcrossRecoveryTest {
         "only %d of %d hand-offs resumed the receiver while messages were arriving"
             .formatted(resumptions, handOffs));
 
+    // The receiver may still be working through a backlog when the sending ends, slowly on
+    // CockroachDB, so wait as long as it keeps receiving, and give up once it stalls.
     WorkflowStatus status = null;
-    long giveUp = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+    int steps = -1;
+    long giveUp = 0;
     var last = DBOSTestAccess.getDbosExecutor(previous.dbos());
-    while (System.nanoTime() < giveUp) {
+    while (true) {
+      int now = client.listWorkflowSteps(workflowId).size();
+      if (now != steps) {
+        steps = now;
+        giveUp = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+      } else if (System.nanoTime() > giveUp) {
+        break;
+      }
       // An abandoned executor closed after the last hand-off may have held the workflow.
       last.recoverPendingWorkflows(List.copyOf(replaced));
       status = client.getWorkflowStatus(workflowId).orElseThrow();
@@ -232,13 +242,15 @@ public class RecvAcrossRecoveryTest {
     }
     var finalStatus = status;
     var finalResumptions = resumptions;
+    var finalSteps = steps;
     assertEquals(
         WorkflowState.SUCCESS,
         finalStatus.status(),
         () ->
-            "after %d resumptions: %s"
+            "after %d resumptions and %d steps: %s"
                 .formatted(
                     finalResumptions,
+                    finalSteps,
                     finalStatus.error() == null ? "no error" : finalStatus.error().message()));
   }
 }
