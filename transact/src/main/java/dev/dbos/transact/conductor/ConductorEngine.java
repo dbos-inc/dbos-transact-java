@@ -182,6 +182,26 @@ public interface ConductorEngine {
   void resumeSchedule(String name);
 
   /**
+   * Enqueues a schedule's workflow for every time it would have fired between {@code start} and
+   * {@code end}, both exclusive. Times already run are skipped, as the IDs match the live
+   * scheduler's.
+   *
+   * @param scheduleName the schedule's name
+   * @param start the start of the window, exclusive
+   * @param end the end of the window, exclusive
+   * @return the IDs of the workflows enqueued
+   */
+  List<String> backfillSchedule(String scheduleName, Instant start, Instant end);
+
+  /**
+   * Enqueues a schedule's workflow for the current time.
+   *
+   * @param scheduleName the schedule's name
+   * @return the ID of the workflow enqueued
+   */
+  String triggerSchedule(String scheduleName);
+
+  /**
    * Lists the application's versions.
    *
    * @return the versions

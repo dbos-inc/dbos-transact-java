@@ -148,6 +148,16 @@ final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
+  public List<String> backfillSchedule(String scheduleName, Instant start, Instant end) {
+    return DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
+  }
+
+  @Override
+  public String triggerSchedule(String scheduleName) {
+    return DBOSExecutor.triggerSchedule(scheduleName, systemDatabase);
+  }
+
+  @Override
   public List<VersionInfo> listApplicationVersions() {
     return systemDatabase.listApplicationVersions();
   }
