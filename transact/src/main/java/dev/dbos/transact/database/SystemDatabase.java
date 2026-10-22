@@ -1642,6 +1642,29 @@ public class SystemDatabase implements AutoCloseable {
         () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
   }
 
+  public void forkWorkflows(
+      List<String> workflowIds,
+      List<String> forkIds,
+      List<Integer> startSteps,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    dbRetryIncludingSerializationError(
+        "forkWorkflows",
+        () -> {
+          WorkflowDAO.forkWorkflows(
+              ctx,
+              workflowIds,
+              forkIds,
+              startSteps,
+              applicationVersion,
+              queueName,
+              queuePartitionKey,
+              null);
+          return null;
+        });
+  }
+
   public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
     dbRetryIncludingSerializationError(
         "rewindWorkflow", () -> WorkflowDAO.rewindWorkflow(ctx, workflowId, startStep, options));

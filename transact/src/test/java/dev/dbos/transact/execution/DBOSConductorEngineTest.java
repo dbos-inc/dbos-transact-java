@@ -2,10 +2,12 @@ package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -75,6 +77,41 @@ class DBOSConductorEngineTest {
     var forkedId = engine.forkWorkflow(workflowId, 0, new ForkOptions());
     assertNotEquals(workflowId, forkedId);
     assertEquals("hello", dbos.<String, Exception>retrieveWorkflow(forkedId).getResult());
+  }
+
+  @Test
+  void forksWorkflowsInOneBatchEachFromItsOwnStep() throws Exception {
+    var first = UUID.randomUUID().toString();
+    var second = UUID.randomUUID().toString();
+    dbos.startWorkflow(() -> proxy.echo("one"), new StartWorkflowOptions(first)).getResult();
+    dbos.startWorkflow(() -> proxy.echo("two"), new StartWorkflowOptions(second)).getResult();
+
+    var forkedIds = engine.forkWorkflows(List.of(first, second), List.of(0, 1), null, null, null);
+
+    assertEquals(2, forkedIds.size());
+    assertEquals("one", dbos.<String, Exception>retrieveWorkflow(forkedIds.get(0)).getResult());
+    assertEquals("two", dbos.<String, Exception>retrieveWorkflow(forkedIds.get(1)).getResult());
+    assertEquals(first, dbos.retrieveWorkflow(forkedIds.get(0)).getStatus().forkedFrom());
+    assertEquals(second, dbos.retrieveWorkflow(forkedIds.get(1)).getStatus().forkedFrom());
+    // Forked from step 1, the second fork copies its original's step 0 rather than rerunning it.
+    assertEquals(1, engine.listWorkflowSteps(forkedIds.get(1), true, null, null).size());
+  }
+
+  @Test
+  void forksNoneOfTheBatchIfOneIsMissing() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    dbos.startWorkflow(() -> proxy.echo("one"), new StartWorkflowOptions(workflowId)).getResult();
+
+    var thrown =
+        assertThrows(
+            DBOSNonExistentWorkflowException.class,
+            () ->
+                engine.forkWorkflows(
+                    List.of(workflowId, "no-such-workflow"), List.of(0, 0), null, null, null));
+    assertEquals("no-such-workflow", thrown.workflowId());
+    assertEquals(
+        List.of(workflowId),
+        engine.listWorkflows(new ListWorkflowsInput()).stream().map(s -> s.workflowId()).toList());
   }
 
   @Test

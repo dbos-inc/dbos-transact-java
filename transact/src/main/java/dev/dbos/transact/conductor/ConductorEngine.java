@@ -95,6 +95,24 @@ public interface ConductorEngine {
   String forkWorkflow(String workflowId, int startStep, ForkOptions options);
 
   /**
+   * Forks workflows in one transaction, each from its own step: all of them are forked, or, if any
+   * does not exist, none is.
+   *
+   * @param workflowIds the workflows to fork
+   * @param startSteps the step each fork starts from, matching {@code workflowIds}
+   * @param applicationVersion the forks' application version, or {@code null} for the originals'
+   * @param queueName the queue the forks are enqueued on, or {@code null} for DBOS's internal queue
+   * @param queuePartitionKey the forks' partition key on a partitioned queue, or {@code null}
+   * @return the forks' IDs, matching {@code workflowIds}
+   */
+  List<String> forkWorkflows(
+      List<String> workflowIds,
+      List<Integer> startSteps,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey);
+
+  /**
    * Rewinds a workflow.
    *
    * @param workflowId the workflow to rewind

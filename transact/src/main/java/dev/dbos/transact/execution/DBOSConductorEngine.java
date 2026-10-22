@@ -89,6 +89,17 @@ final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
+  public List<String> forkWorkflows(
+      List<String> workflowIds,
+      List<Integer> startSteps,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    return executor.forkWorkflows(
+        workflowIds, startSteps, applicationVersion, queueName, queuePartitionKey);
+  }
+
+  @Override
   public String rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
     return executor.rewindWorkflow(workflowId, startStep, options).workflowId();
   }

@@ -1206,6 +1206,29 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
+  public List<String> forkWorkflows(
+      List<String> workflowIds,
+      List<Integer> startSteps,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    return this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Forking {} workflow(s)", workflowIds.size());
+
+          validateQueue(queueName, queuePartitionKey);
+
+          // Chosen before the retries, so a replay writes the same forks.
+          List<String> forkIds =
+              workflowIds.stream().map(ignored -> UUID.randomUUID().toString()).toList();
+          systemDatabase.forkWorkflows(
+              workflowIds, forkIds, startSteps, applicationVersion, queueName, queuePartitionKey);
+          return forkIds;
+        },
+        "DBOS.forkWorkflows",
+        null);
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> rewindWorkflow(
       String workflowId, int startStep, RewindOptions options) {
     Objects.requireNonNull(workflowId);

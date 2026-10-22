@@ -2679,7 +2679,11 @@ public class WorkflowDAO {
     return startSteps;
   }
 
-  private static void forkWorkflows(
+  /**
+   * Forks workflows in one transaction, each under the matching ID in {@code forkIds} and from the
+   * matching step in {@code startSteps}. Fails, writing nothing, if any of them does not exist.
+   */
+  public static void forkWorkflows(
       DbContext ctx,
       List<String> workflowIds,
       List<String> forkIds,
