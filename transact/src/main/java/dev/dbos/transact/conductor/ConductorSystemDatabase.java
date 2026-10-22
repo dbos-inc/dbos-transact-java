@@ -24,7 +24,10 @@ public interface ConductorSystemDatabase {
   /** The system database's connections. */
   DataSource dataSource();
 
-  /** The schema holding the system database's tables, unquoted. */
+  /**
+   * The schema holding the system database's tables, unquoted. It never contains a double quote, so
+   * it can be quoted as {@code "<schema>"} in SQL.
+   */
   String schema();
 
   /**
@@ -45,7 +48,8 @@ public interface ConductorSystemDatabase {
    * @param work the work, which must be safe to run more than once
    * @return what {@code work} returns
    * @throws dev.dbos.transact.exceptions.DBOSSystemDatabaseException if the failure is not one to
-   *     retry
+   *     retry, or an interrupt stops the retries
+   * @throws IllegalStateException if the system database has been closed
    */
   <T> T retry(SqlWork<T> work);
 
@@ -59,7 +63,8 @@ public interface ConductorSystemDatabase {
    * @param work the work, which must be safe to replay after a peer's commit
    * @return what {@code work} returns
    * @throws dev.dbos.transact.exceptions.DBOSSystemDatabaseException if the failure is not one to
-   *     retry
+   *     retry, or an interrupt stops the retries
+   * @throws IllegalStateException if the system database has been closed
    */
   <T> T retryIncludingSerializationError(String operation, SqlWork<T> work);
 }
