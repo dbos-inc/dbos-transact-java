@@ -2694,13 +2694,13 @@ public class WorkflowDAO {
       @Nullable Duration timeout)
       throws SQLException {
 
-    if (workflowIds.isEmpty()) {
-      return;
-    }
-
     if (workflowIds.size() != forkIds.size() || workflowIds.size() != startSteps.size()) {
       throw new IllegalArgumentException(
           "workflowIds, forkIds and startSteps must have the same length");
+    }
+
+    if (workflowIds.isEmpty()) {
+      return;
     }
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;

@@ -15,8 +15,11 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +31,8 @@ interface EngineTestWorkflows {
 
 class EngineTestWorkflowsImpl implements EngineTestWorkflows {
   private final DBOS dbos;
+  // How many times echoStep ran for each value, so a test can tell a rerun step from a copied one.
+  final Map<String, AtomicInteger> stepRuns = new ConcurrentHashMap<>();
 
   EngineTestWorkflowsImpl(DBOS dbos) {
     this.dbos = dbos;
@@ -36,7 +41,12 @@ class EngineTestWorkflowsImpl implements EngineTestWorkflows {
   @Override
   @Workflow
   public String echo(String value) {
-    return dbos.runStep(() -> value, "echoStep");
+    return dbos.runStep(
+        () -> {
+          stepRuns.computeIfAbsent(value, ignored -> new AtomicInteger()).incrementAndGet();
+          return value;
+        },
+        "echoStep");
   }
 }
 
@@ -44,6 +54,7 @@ class EngineTestWorkflowsImpl implements EngineTestWorkflows {
 class DBOSConductorEngineTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
+  EngineTestWorkflowsImpl impl;
   EngineTestWorkflows proxy;
   DBOSExecutor executor;
   DBOSConductorEngine engine;
@@ -51,7 +62,8 @@ class DBOSConductorEngineTest {
   @BeforeEach
   void beforeEach() {
     dbos = new DBOS(pgContainer.dbosConfig());
-    proxy = dbos.registerProxy(EngineTestWorkflows.class, new EngineTestWorkflowsImpl(dbos));
+    impl = new EngineTestWorkflowsImpl(dbos);
+    proxy = dbos.registerProxy(EngineTestWorkflows.class, impl);
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
     engine = new DBOSConductorEngine(executor, executor.getSystemDatabase());
@@ -93,8 +105,17 @@ class DBOSConductorEngineTest {
     assertEquals("two", dbos.<String, Exception>retrieveWorkflow(forkedIds.get(1)).getResult());
     assertEquals(first, dbos.retrieveWorkflow(forkedIds.get(0)).getStatus().forkedFrom());
     assertEquals(second, dbos.retrieveWorkflow(forkedIds.get(1)).getStatus().forkedFrom());
-    // Forked from step 1, the second fork copies its original's step 0 rather than rerunning it.
-    assertEquals(1, engine.listWorkflowSteps(forkedIds.get(1), true, null, null).size());
+    // Forked from step 0, the first fork reruns echoStep; forked from step 1, the second copies its
+    // original's step 0 instead.
+    assertEquals(2, impl.stepRuns.get("one").get());
+    assertEquals(1, impl.stepRuns.get("two").get());
+  }
+
+  @Test
+  void refusesStartStepsThatDoNotMatchTheWorkflows() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> engine.forkWorkflows(List.of(), List.of(0), null, null, null));
   }
 
   @Test
