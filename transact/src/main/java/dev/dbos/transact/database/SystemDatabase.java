@@ -1,6 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.conductor.ConductorSystemDatabase;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.database.dao.ApplicationVersionDAO;
@@ -1816,6 +1817,39 @@ public class SystemDatabase implements AutoCloseable {
 
   public Set<String> getWorkflowChildren(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getWorkflowChildren(ctx, workflowId));
+  }
+
+  /**
+   * This database as the Conductor client in {@code dev.dbos:transact-enterprise} sees it: its
+   * connections and schema, and the retries this class's own calls use.
+   */
+  public ConductorSystemDatabase forConductor() {
+    return new ConductorSystemDatabase() {
+      @Override
+      public DataSource dataSource() {
+        return ctx.dataSource();
+      }
+
+      @Override
+      public String schema() {
+        return ctx.schema();
+      }
+
+      @Override
+      public Set<String> workflowChildren(String workflowId) throws SQLException {
+        return WorkflowDAO.getWorkflowChildren(ctx, workflowId);
+      }
+
+      @Override
+      public <T> T retry(SqlWork<T> work) {
+        return dbRetry(work::run);
+      }
+
+      @Override
+      public <T> T retryIncludingSerializationError(String operation, SqlWork<T> work) {
+        return dbRetryIncludingSerializationError(operation, work::run);
+      }
+    };
   }
 
   public Map<String, Object> getAllEvents(String workflowId) {

@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AutoClose;
@@ -74,5 +75,30 @@ class DBOSConductorEngineTest {
     var forkedId = engine.forkWorkflow(workflowId, 0, new ForkOptions());
     assertNotEquals(workflowId, forkedId);
     assertEquals("hello", dbos.<String, Exception>retrieveWorkflow(forkedId).getResult());
+  }
+
+  @Test
+  void handsOutTheSystemDatabaseForConductorOnlySql() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    dbos.startWorkflow(() -> proxy.echo("hello"), new StartWorkflowOptions(workflowId)).getResult();
+
+    var database = engine.systemDatabase();
+    var sql =
+        "SELECT status FROM \"%s\".workflow_status WHERE workflow_uuid = ?"
+            .formatted(database.schema());
+    var status =
+        database.retry(
+            () -> {
+              try (var conn = database.dataSource().getConnection();
+                  var stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, workflowId);
+                try (var rs = stmt.executeQuery()) {
+                  rs.next();
+                  return rs.getString("status");
+                }
+              }
+            });
+    assertEquals(WorkflowState.SUCCESS.name(), status);
+    assertEquals(Set.of(), database.workflowChildren(workflowId));
   }
 }
