@@ -231,6 +231,9 @@ public interface ConductorEngine {
    */
   void fireAlertHandler(String name, String message, Map<String, String> metadata);
 
+  /** The system database, for the Conductor-only operations that run their own SQL. */
+  ConductorSystemDatabase systemDatabase();
+
   // Conductor-only operations moving into dev.dbos:transact-enterprise before the 1.3.0 release.
   // Unlike the methods above, each is removed from this interface as it moves; see the class
   // documentation.
