@@ -10,6 +10,7 @@ import dev.dbos.transact.conductor.ConductorConnection;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.conductor.ConductorProviders;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -1206,27 +1207,18 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public List<String> forkWorkflows(
-      List<String> workflowIds,
-      List<Integer> startSteps,
+  public void forkWorkflows(
+      List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey) {
-    Objects.requireNonNull(workflowIds, "workflowIds must not be null");
-    Objects.requireNonNull(startSteps, "startSteps must not be null");
+    Objects.requireNonNull(forks, "forks must not be null");
     // Only Conductor forks a batch, never from inside a workflow, so this is not run as a step.
-    logger.info("Forking {} workflow(s)", workflowIds.size());
+    logger.info("Forking {} workflow(s)", forks.size());
 
     validateQueue(queueName, queuePartitionKey);
 
-    // Chosen before the retries. A replay after a conflict, which rolled the attempt back, writes
-    // the same forks; a replay after an attempt that committed unseen fails on the rows it wrote
-    // rather than forking a second time.
-    List<String> forkIds =
-        workflowIds.stream().map(ignored -> UUID.randomUUID().toString()).toList();
-    systemDatabase.forkWorkflows(
-        workflowIds, forkIds, startSteps, applicationVersion, queueName, queuePartitionKey);
-    return forkIds;
+    systemDatabase.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> rewindWorkflow(

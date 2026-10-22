@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.database.dao.ApplicationVersionDAO;
@@ -1643,9 +1644,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void forkWorkflows(
-      List<String> workflowIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
+      List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey) {
@@ -1653,14 +1652,7 @@ public class SystemDatabase implements AutoCloseable {
         "forkWorkflows",
         () -> {
           WorkflowDAO.forkWorkflows(
-              ctx,
-              workflowIds,
-              forkIds,
-              startSteps,
-              applicationVersion,
-              queueName,
-              queuePartitionKey,
-              null);
+              ctx, forks, applicationVersion, queueName, queuePartitionKey, null);
           return null;
         });
   }

@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
@@ -2379,9 +2380,7 @@ public class WorkflowDAO {
 
     forkWorkflows(
         ctx,
-        List.of(workflowId),
-        List.of(forkedWorkflowId),
-        List.of(startStep),
+        List.of(new WorkflowFork(workflowId, forkedWorkflowId, startStep)),
         options.applicationVersion(),
         options.queueName(),
         options.queuePartitionKey(),
@@ -2600,15 +2599,16 @@ public class WorkflowDAO {
             : resolveStartSteps(ctx, workflowIds, options);
 
     List<String> forkedIds = new ArrayList<>(workflowIds.size());
+    List<WorkflowFork> forks = new ArrayList<>(workflowIds.size());
     for (int i = 0; i < workflowIds.size(); i++) {
-      forkedIds.add(UUID.randomUUID().toString());
+      var forkedId = UUID.randomUUID().toString();
+      forkedIds.add(forkedId);
+      forks.add(new WorkflowFork(workflowIds.get(i), forkedId, startSteps.get(i)));
     }
 
     forkWorkflows(
         ctx,
-        workflowIds,
-        forkedIds,
-        startSteps,
+        forks,
         options.applicationVersion(),
         options.queueName(),
         options.queuePartitionKey(),
@@ -2680,28 +2680,24 @@ public class WorkflowDAO {
   }
 
   /**
-   * Forks workflows in one transaction, each under the matching ID in {@code forkIds} and from the
-   * matching step in {@code startSteps}. Fails, writing nothing, if any of them does not exist.
+   * Forks workflows in one transaction, each under its fork's ID and from its fork's start step.
+   * Fails, writing nothing, if any of them does not exist.
    */
   public static void forkWorkflows(
       DbContext ctx,
-      List<String> workflowIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
+      List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey,
       @Nullable Duration timeout)
       throws SQLException {
 
-    if (workflowIds.size() != forkIds.size() || workflowIds.size() != startSteps.size()) {
-      throw new IllegalArgumentException(
-          "workflowIds, forkIds and startSteps must have the same length");
-    }
-
-    if (workflowIds.isEmpty()) {
+    if (forks.isEmpty()) {
       return;
     }
+    var workflowIds = forks.stream().map(WorkflowFork::workflowId).toList();
+    var forkIds = forks.stream().map(WorkflowFork::forkedWorkflowId).toList();
+    var startSteps = forks.stream().map(WorkflowFork::startStep).toList();
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
     final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);

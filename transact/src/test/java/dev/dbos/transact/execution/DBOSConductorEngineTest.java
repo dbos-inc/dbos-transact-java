@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -98,9 +99,15 @@ class DBOSConductorEngineTest {
     dbos.startWorkflow(() -> proxy.echo("one"), new StartWorkflowOptions(first)).getResult();
     dbos.startWorkflow(() -> proxy.echo("two"), new StartWorkflowOptions(second)).getResult();
 
-    var forkedIds = engine.forkWorkflows(List.of(first, second), List.of(0, 1), null, null, null);
+    var forkedIds = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+    engine.forkWorkflows(
+        List.of(
+            new WorkflowFork(first, forkedIds.get(0), 0),
+            new WorkflowFork(second, forkedIds.get(1), 1)),
+        null,
+        null,
+        null);
 
-    assertEquals(2, forkedIds.size());
     assertEquals("one", dbos.<String, Exception>retrieveWorkflow(forkedIds.get(0)).getResult());
     assertEquals("two", dbos.<String, Exception>retrieveWorkflow(forkedIds.get(1)).getResult());
     assertEquals(first, dbos.retrieveWorkflow(forkedIds.get(0)).getStatus().forkedFrom());
@@ -112,10 +119,16 @@ class DBOSConductorEngineTest {
   }
 
   @Test
-  void refusesStartStepsThatDoNotMatchTheWorkflows() {
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> engine.forkWorkflows(List.of(), List.of(0), null, null, null));
+  void aRetriedBatchForksNothingTwice() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    dbos.startWorkflow(() -> proxy.echo("one"), new StartWorkflowOptions(workflowId)).getResult();
+    var forks = List.of(new WorkflowFork(workflowId, UUID.randomUUID().toString(), 0));
+
+    engine.forkWorkflows(forks, null, null, null);
+    // The same forks again, as after an attempt that committed but whose commit went unseen.
+    assertThrows(Exception.class, () -> engine.forkWorkflows(forks, null, null, null));
+
+    assertEquals(2, engine.listWorkflows(new ListWorkflowsInput()).size());
   }
 
   @Test
@@ -128,7 +141,12 @@ class DBOSConductorEngineTest {
             DBOSNonExistentWorkflowException.class,
             () ->
                 engine.forkWorkflows(
-                    List.of(workflowId, "no-such-workflow"), List.of(0, 0), null, null, null));
+                    List.of(
+                        new WorkflowFork(workflowId, UUID.randomUUID().toString(), 0),
+                        new WorkflowFork("no-such-workflow", UUID.randomUUID().toString(), 0)),
+                    null,
+                    null,
+                    null));
     assertEquals("no-such-workflow", thrown.workflowId());
     assertEquals(
         List.of(workflowId),
