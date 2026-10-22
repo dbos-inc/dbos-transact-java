@@ -104,6 +104,10 @@ public interface ConductorEngine {
    * @param queueName the queue the forks are enqueued on, or {@code null} for DBOS's internal queue
    * @param queuePartitionKey the forks' partition key on a partitioned queue, or {@code null}
    * @return the forks' IDs, matching {@code workflowIds}
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
+   *     exist
+   * @throws IllegalArgumentException if the lists' lengths differ, the queue is not registered, or
+   *     the partition key does not match whether the queue is partitioned
    */
   List<String> forkWorkflows(
       List<String> workflowIds,

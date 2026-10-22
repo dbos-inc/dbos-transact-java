@@ -1212,13 +1212,17 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey) {
+    Objects.requireNonNull(workflowIds, "workflowIds must not be null");
+    Objects.requireNonNull(startSteps, "startSteps must not be null");
     return this.runDbosFunctionAsStep(
         () -> {
           logger.info("Forking {} workflow(s)", workflowIds.size());
 
           validateQueue(queueName, queuePartitionKey);
 
-          // Chosen before the retries, so a replay writes the same forks.
+          // Chosen before the retries. A replay after a conflict, which rolled the attempt back,
+          // writes the same forks; a replay after an attempt that committed unseen fails on the
+          // rows it wrote rather than forking a second time.
           List<String> forkIds =
               workflowIds.stream().map(ignored -> UUID.randomUUID().toString()).toList();
           systemDatabase.forkWorkflows(
