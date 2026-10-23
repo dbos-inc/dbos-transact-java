@@ -1,5 +1,6 @@
 package dev.dbos.transact.conductor;
 
+import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkFromFailureOptions;
@@ -244,14 +245,8 @@ public interface ConductorEngine {
    */
   void setLatestApplicationVersion(String versionName);
 
-  /**
-   * Passes an alert to the application's alert handler, or logs and drops it if there is none.
-   *
-   * @param name the alert's name
-   * @param message the alert's message
-   * @param metadata the alert's metadata
-   */
-  void fireAlertHandler(String name, String message, Map<String, String> metadata);
+  /** The alert handler the application registered, or {@code null} if it registered none. */
+  @Nullable AlertHandler alertHandler();
 
   /** The system database, for the Conductor-only operations that run their own SQL. */
   ConductorSystemDatabase systemDatabase();

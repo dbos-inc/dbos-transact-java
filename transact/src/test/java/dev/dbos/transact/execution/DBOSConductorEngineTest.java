@@ -2,8 +2,11 @@ package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -151,6 +154,21 @@ class DBOSConductorEngineTest {
     assertEquals(
         List.of(workflowId),
         engine.listWorkflows(new ListWorkflowsInput()).stream().map(s -> s.workflowId()).toList());
+  }
+
+  @Test
+  void handsOutTheRegisteredAlertHandler() throws Exception {
+    assertNull(engine.alertHandler());
+
+    dbos.close();
+    AlertHandler handler = (name, message, metadata) -> {};
+    dbos = new DBOS(pgContainer.dbosConfig());
+    dbos.registerAlertHandler(handler);
+    dbos.launch();
+    executor = DBOSTestAccess.getDbosExecutor(dbos);
+    engine = new DBOSConductorEngine(executor, executor.getSystemDatabase());
+
+    assertSame(handler, engine.alertHandler());
   }
 
   @Test
