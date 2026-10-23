@@ -892,16 +892,8 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.listQueues(applicationName);
   }
 
-  public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
-    if (alertHandler != null) {
-      alertHandler.invoke(name, message, metadata);
-    } else {
-      logger.warn(
-          "No AlertHandler configured; dropping alert. name='{}', message='{}', metadata={}",
-          name,
-          message,
-          metadata);
-    }
+  public @Nullable AlertHandler alertHandler() {
+    return alertHandler;
   }
 
   public long queueActiveCount(String queueName, String partitionKey) {

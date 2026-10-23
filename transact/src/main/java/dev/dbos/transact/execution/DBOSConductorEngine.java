@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
 import dev.dbos.transact.conductor.WorkflowFork;
@@ -178,8 +179,8 @@ final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
-  public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
-    executor.fireAlertHandler(name, message, metadata);
+  public @Nullable AlertHandler alertHandler() {
+    return executor.alertHandler();
   }
 
   @Override
