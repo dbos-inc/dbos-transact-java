@@ -23,6 +23,22 @@ tasks.withType<Test>().configureEach {
   javaLauncher.set(null as JavaLauncher?)
 
   useJUnitPlatform { if (System.getenv("CI") != "true") excludeTags("ci-only") }
+
+  // -PtestShard=i/n runs only the test classes whose name hashes to shard i of n, so CI can split
+  // the suite across runners. Nested classes go with their enclosing class.
+  providers.gradleProperty("testShard").orNull?.let { shard ->
+    val (index, count) = shard.split("/").map { it.toInt() }
+    require(count > 0 && index in 1..count) { "testShard must be i/n with 1 <= i <= n: $shard" }
+    // A small module can have no classes in a shard.
+    failOnNoDiscoveredTests = false
+    exclude { element ->
+      !element.isDirectory &&
+        element.name.endsWith(".class") &&
+        Math.floorMod(element.path.removeSuffix(".class").substringBefore('$').hashCode(), count) !=
+          index - 1
+    }
+  }
+
   testLogging {
     events("failed")
     showStandardStreams = true

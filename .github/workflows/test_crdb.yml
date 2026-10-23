@@ -8,6 +8,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Each shard runs a third of the test classes on its own runner and CockroachDB.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -24,7 +30,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Run tests
-        run: ./gradlew clean build
+        run: ./gradlew clean build --parallel -PtestShard=${{ matrix.shard }}/3
         env:
           PGPASSWORD: dbos
           DBOS_TEST_USE_COCKROACH_DB: 'true'
@@ -40,7 +46,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results-crdb-temurin-25
+          name: test-results-crdb-temurin-25-shard-${{ matrix.shard }}
           path: |
             transact*/build/reports/tests/
             transact*/build/test-results/
