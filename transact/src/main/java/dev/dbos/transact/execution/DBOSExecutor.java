@@ -10,6 +10,7 @@ import dev.dbos.transact.conductor.ConductorConnection;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.conductor.ConductorProviders;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -1204,6 +1205,20 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS.forkWorkflow",
             null);
     return retrieveWorkflow(forkedId);
+  }
+
+  public void forkWorkflows(
+      List<WorkflowFork> forks,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    Objects.requireNonNull(forks, "forks must not be null");
+    // Only Conductor forks a batch, never from inside a workflow, so this is not run as a step.
+    logger.info("Forking {} workflow(s)", forks.size());
+
+    validateQueue(queueName, queuePartitionKey);
+
+    systemDatabase.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> rewindWorkflow(

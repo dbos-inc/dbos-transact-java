@@ -2,6 +2,7 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -86,6 +87,15 @@ final class DBOSConductorEngine implements ConductorEngine {
   @Override
   public String forkWorkflow(String workflowId, int startStep, ForkOptions options) {
     return executor.forkWorkflow(workflowId, startStep, options).workflowId();
+  }
+
+  @Override
+  public void forkWorkflows(
+      List<WorkflowFork> forks,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    executor.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
 
   @Override

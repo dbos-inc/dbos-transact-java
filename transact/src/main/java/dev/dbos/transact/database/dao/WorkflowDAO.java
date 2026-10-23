@@ -1,6 +1,7 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
@@ -2379,9 +2380,7 @@ public class WorkflowDAO {
 
     forkWorkflows(
         ctx,
-        List.of(workflowId),
-        List.of(forkedWorkflowId),
-        List.of(startStep),
+        List.of(new WorkflowFork(workflowId, forkedWorkflowId, startStep)),
         options.applicationVersion(),
         options.queueName(),
         options.queuePartitionKey(),
@@ -2600,15 +2599,16 @@ public class WorkflowDAO {
             : resolveStartSteps(ctx, workflowIds, options);
 
     List<String> forkedIds = new ArrayList<>(workflowIds.size());
+    List<WorkflowFork> forks = new ArrayList<>(workflowIds.size());
     for (int i = 0; i < workflowIds.size(); i++) {
-      forkedIds.add(UUID.randomUUID().toString());
+      var forkedId = UUID.randomUUID().toString();
+      forkedIds.add(forkedId);
+      forks.add(new WorkflowFork(workflowIds.get(i), forkedId, startSteps.get(i)));
     }
 
     forkWorkflows(
         ctx,
-        workflowIds,
-        forkedIds,
-        startSteps,
+        forks,
         options.applicationVersion(),
         options.queueName(),
         options.queuePartitionKey(),
@@ -2679,25 +2679,23 @@ public class WorkflowDAO {
     return startSteps;
   }
 
-  private static void forkWorkflows(
+  /**
+   * Forks workflows in one transaction, each under its fork's ID and from its fork's start step.
+   * Fails, writing nothing, if any of them does not exist.
+   */
+  public static void forkWorkflows(
       DbContext ctx,
-      List<String> workflowIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
+      List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey,
       @Nullable Duration timeout)
       throws SQLException {
 
-    if (workflowIds.isEmpty()) {
+    if (forks.isEmpty()) {
       return;
     }
-
-    if (workflowIds.size() != forkIds.size() || workflowIds.size() != startSteps.size()) {
-      throw new IllegalArgumentException(
-          "workflowIds, forkIds and startSteps must have the same length");
-    }
+    var workflowIds = forks.stream().map(WorkflowFork::workflowId).toList();
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
     final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
@@ -2712,44 +2710,36 @@ public class WorkflowDAO {
                 throw new DBOSNonExistentWorkflowException(id);
               }
             }
-            var dataList = workflowIds.stream().map(wfDataMap::get).toList();
-
-            // One app name per fork, shared by its status row and its copied steps: the source's,
-            // or this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
-            List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
-            for (var rd : dataList) {
-              forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
-            }
+            var rows =
+                forks.stream()
+                    .map(
+                        fork -> {
+                          var original = wfDataMap.get(fork.workflowId());
+                          // One app name per fork, shared by its status row and its copied steps:
+                          // the source's, or this application claiming an unclaimed one.
+                          var appName =
+                              original.applicationName() != null
+                                  ? original.applicationName()
+                                  : ctx.appName();
+                          return new ForkRow(fork, original, appName);
+                        })
+                    .toList();
 
             batchInsertForkedStatuses(
                 conn,
                 ctx.schema(),
-                workflowIds,
-                forkIds,
-                dataList,
+                rows,
                 applicationVersion,
                 forkQueueName,
                 queuePartitionKey,
-                timeoutMs,
-                forkAppNames);
+                timeoutMs);
 
             markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
-            List<String> copyOrigIds = new ArrayList<>();
-            List<String> copyForkIds = new ArrayList<>();
-            List<Integer> copyStartSteps = new ArrayList<>();
-            List<@Nullable String> copyAppNames = new ArrayList<>();
-            for (int i = 0; i < workflowIds.size(); i++) {
-              if (startSteps.get(i) > 0) {
-                copyOrigIds.add(workflowIds.get(i));
-                copyForkIds.add(forkIds.get(i));
-                copyStartSteps.add(startSteps.get(i));
-                copyAppNames.add(forkAppNames.get(i));
-              }
-            }
-            if (!copyOrigIds.isEmpty()) {
-              batchCopyWorkflowData(
-                  conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
+            // A fork from step 0 has nothing before its start step to copy.
+            var rowsToCopy = rows.stream().filter(row -> row.fork().startStep() > 0).toList();
+            if (!rowsToCopy.isEmpty()) {
+              batchCopyWorkflowData(conn, ctx.schema(), rowsToCopy);
             }
           });
     }
@@ -2768,6 +2758,9 @@ public class WorkflowDAO {
       String serialization,
       String attributes,
       @Nullable String applicationName) {}
+
+  /** A fork with what it takes from its original: the original's row, and the fork's app name. */
+  private record ForkRow(WorkflowFork fork, ForkWorkflowData original, @Nullable String appName) {}
 
   private static Map<String, ForkWorkflowData> fetchForkWorkflowData(
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
@@ -2816,14 +2809,11 @@ public class WorkflowDAO {
   private static void batchInsertForkedStatuses(
       Connection conn,
       String schema,
-      List<String> origIds,
-      List<String> forkIds,
-      List<ForkWorkflowData> dataList,
+      List<ForkRow> rows,
       String applicationVersion,
       String queueName,
       String queuePartitionKey,
-      @Nullable Long timeoutMs,
-      List<@Nullable String> forkAppNames)
+      @Nullable Long timeoutMs)
       throws SQLException {
 
     StringBuilder sql =
@@ -2839,17 +2829,17 @@ public class WorkflowDAO {
             """
                 .formatted(schema));
 
-    StringJoiner rows = new StringJoiner(", ");
-    for (int i = 0; i < origIds.size(); i++) {
-      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
+    StringJoiner values = new StringJoiner(", ");
+    for (int i = 0; i < rows.size(); i++) {
+      values.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
     }
-    sql.append(rows);
+    sql.append(values);
 
     try (var stmt = conn.prepareStatement(sql.toString())) {
       int p = 1;
-      for (int i = 0; i < origIds.size(); i++) {
-        ForkWorkflowData rd = dataList.get(i);
-        stmt.setString(p++, forkIds.get(i));
+      for (var row : rows) {
+        ForkWorkflowData rd = row.original();
+        stmt.setString(p++, row.fork().forkedWorkflowId());
         stmt.setString(p++, WorkflowState.ENQUEUED.name());
         stmt.setString(p++, rd.name());
         stmt.setString(p++, rd.className());
@@ -2865,10 +2855,10 @@ public class WorkflowDAO {
         stmt.setString(p++, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
         stmt.setString(p++, queuePartitionKey);
         stmt.setObject(p++, timeoutMs);
-        stmt.setString(p++, origIds.get(i));
+        stmt.setString(p++, row.fork().workflowId());
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
-        stmt.setString(p++, forkAppNames.get(i));
+        stmt.setString(p++, row.appName());
       }
       stmt.executeUpdate();
     }
@@ -2883,7 +2873,7 @@ public class WorkflowDAO {
             """
                 .formatted(schema));
     StringJoiner inputRows = new StringJoiner(", ");
-    for (int i = 0; i < forkIds.size(); i++) {
+    for (int i = 0; i < rows.size(); i++) {
       inputRows.add("(?, ?)");
     }
     inputSQL.append(inputRows);
@@ -2894,9 +2884,9 @@ public class WorkflowDAO {
 
     try (var stmt = conn.prepareStatement(inputSQL.toString())) {
       int p = 1;
-      for (int i = 0; i < forkIds.size(); i++) {
-        stmt.setString(p++, forkIds.get(i));
-        stmt.setString(p++, dataList.get(i).inputs());
+      for (var row : rows) {
+        stmt.setString(p++, row.fork().forkedWorkflowId());
+        stmt.setString(p++, row.original().inputs());
       }
       stmt.executeUpdate();
     }
@@ -2918,17 +2908,11 @@ public class WorkflowDAO {
     }
   }
 
-  private static void batchCopyWorkflowData(
-      Connection conn,
-      String schema,
-      List<String> origIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
-      List<@Nullable String> forkAppNames)
+  private static void batchCopyWorkflowData(Connection conn, String schema, List<ForkRow> rows)
       throws SQLException {
 
     StringJoiner valueRows = new StringJoiner(", ");
-    for (int i = 0; i < origIds.size(); i++) {
+    for (int i = 0; i < rows.size(); i++) {
       valueRows.add("(?::text, ?::text, ?::int, ?::text)");
     }
     String mappingCTE =
@@ -3001,12 +2985,12 @@ public class WorkflowDAO {
     for (String sql : List.of(ooSql, wehSql, weSql, streamSql)) {
       try (var stmt = conn.prepareStatement(sql)) {
         int p = 1;
-        for (int i = 0; i < origIds.size(); i++) {
-          stmt.setString(p++, origIds.get(i));
-          stmt.setString(p++, forkIds.get(i));
-          stmt.setInt(p++, startSteps.get(i));
+        for (var row : rows) {
+          stmt.setString(p++, row.fork().workflowId());
+          stmt.setString(p++, row.fork().forkedWorkflowId());
+          stmt.setInt(p++, row.fork().startStep());
           // The copied steps take the same app_name as the forked workflow row itself.
-          stmt.setString(p++, forkAppNames.get(i));
+          stmt.setString(p++, row.appName());
         }
         stmt.executeUpdate();
       }

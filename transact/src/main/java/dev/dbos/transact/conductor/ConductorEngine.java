@@ -95,6 +95,28 @@ public interface ConductorEngine {
   String forkWorkflow(String workflowId, int startStep, ForkOptions options);
 
   /**
+   * Forks workflows in one transaction, each under its own ID and from its own step: all of them
+   * are forked, or, if any does not exist, none is.
+   *
+   * <p>The caller chooses the forks' IDs, so a retried call writes the same forks: one that follows
+   * a committed attempt fails on the rows that attempt wrote rather than forking a second time.
+   *
+   * @param forks the forks to write
+   * @param applicationVersion the forks' application version, or {@code null} for the originals'
+   * @param queueName the queue the forks are enqueued on, or {@code null} for DBOS's internal queue
+   * @param queuePartitionKey the forks' partition key on a partitioned queue, or {@code null}
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
+   *     exist
+   * @throws IllegalArgumentException if the queue is not registered, or the partition key does not
+   *     match whether the queue is partitioned
+   */
+  void forkWorkflows(
+      List<WorkflowFork> forks,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey);
+
+  /**
    * Rewinds a workflow.
    *
    * @param workflowId the workflow to rewind

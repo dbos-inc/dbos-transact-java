@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.database.dao.ApplicationVersionDAO;
@@ -1640,6 +1641,20 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetryIncludingSerializationError(
         "forkWorkflow",
         () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+  }
+
+  public void forkWorkflows(
+      List<WorkflowFork> forks,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    dbRetryIncludingSerializationError(
+        "forkWorkflows",
+        () -> {
+          WorkflowDAO.forkWorkflows(
+              ctx, forks, applicationVersion, queueName, queuePartitionKey, null);
+          return null;
+        });
   }
 
   public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
