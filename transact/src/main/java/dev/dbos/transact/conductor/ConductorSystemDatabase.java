@@ -5,6 +5,8 @@ import java.util.Set;
 
 import javax.sql.DataSource;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The system database, for the Conductor-only operations {@code dev.dbos:transact-enterprise} runs
  * in SQL of its own. It is not application API, and it changes only as {@link ConductorEngine}
@@ -39,6 +41,18 @@ public interface ConductorSystemDatabase {
    * @throws SQLException if the database fails
    */
   Set<String> workflowChildren(String workflowId) throws SQLException;
+
+  /**
+   * Decodes a value as the system database stores it: a payload column and the serialization format
+   * stored beside it. A built-in format decodes with DBOS Transact's own serializer for it; any
+   * other with the serializer DBOS is configured with.
+   *
+   * @param value the stored value, or {@code null}
+   * @param serialization the stored format, or {@code null} for the configured serializer's
+   * @return the decoded value, or {@code null} if {@code value} is
+   * @throws IllegalArgumentException if no serializer here reads {@code serialization}
+   */
+  @Nullable Object deserialize(@Nullable String value, @Nullable String serialization);
 
   /**
    * Runs {@code work}, retrying it as DBOS Transact retries its own system-database calls: on a

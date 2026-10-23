@@ -20,6 +20,7 @@ import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1853,6 +1854,11 @@ public class SystemDatabase implements AutoCloseable {
       @Override
       public Set<String> workflowChildren(String workflowId) throws SQLException {
         return WorkflowDAO.getWorkflowChildren(ctx, workflowId);
+      }
+
+      @Override
+      public @Nullable Object deserialize(@Nullable String value, @Nullable String serialization) {
+        return SerializationUtil.deserializeValue(value, serialization, ctx.serializer());
       }
 
       @Override
