@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -194,5 +195,40 @@ class DBOSConductorEngineTest {
             });
     assertEquals(WorkflowState.SUCCESS.name(), status);
     assertEquals(Set.of(), database.workflowChildren(workflowId));
+  }
+
+  @Test
+  void decodesStoredValuesForConductorOnlySql() throws Exception {
+    var receiver = UUID.randomUUID().toString();
+    dbos.startWorkflow(() -> proxy.echo("hello"), new StartWorkflowOptions(receiver)).getResult();
+    dbos.send(receiver, Map.of("greeting", "hello"), "topic");
+
+    var database = engine.systemDatabase();
+    var sql =
+        "SELECT message, serialization FROM \"%s\".notifications WHERE destination_uuid = ?"
+            .formatted(database.schema());
+    var decoded =
+        database.retry(
+            () -> {
+              try (var conn = database.dataSource().getConnection();
+                  var stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, receiver);
+                try (var rs = stmt.executeQuery()) {
+                  rs.next();
+                  return database.deserialize(
+                      rs.getString("message"), rs.getString("serialization"));
+                }
+              }
+            });
+    assertEquals(Map.of("greeting", "hello"), decoded);
+
+    assertNull(database.deserialize(null, null));
+    assertEquals(
+        List.of(1, "two"),
+        database.deserialize(
+            SerializationUtil.serializeValue(List.of(1, "two"), "portable_json", null)
+                .serializedValue(),
+            "portable_json"));
+    assertThrows(IllegalArgumentException.class, () -> database.deserialize("x", "no-such-format"));
   }
 }
