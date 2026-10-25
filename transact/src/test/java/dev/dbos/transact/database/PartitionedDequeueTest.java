@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -160,6 +161,50 @@ public class PartitionedDequeueTest {
     // Every partition is now busy, so another sweep claims nothing.
     assertEquals(
         List.of(), claimOnce(queue, Long.MAX_VALUE, QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP));
+  }
+
+  @Test
+  public void saturatesAnOverflowingDeadline() throws Exception {
+    // As in the per-partition claim: a deadline that would overflow a bigint must not fail the
+    // batch, or no partition on the queue is ever dequeued again.
+    var queue = partitionedQueue("batched-near-max-timeout", null, 1);
+
+    // Written straight to the table, as another SDK's client could.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                """
+                  INSERT INTO "%s".workflow_status
+                      (workflow_uuid, status, name, queue_name, queue_partition_key,
+                       application_version, workflow_timeout_ms, recovery_attempts, priority)
+                  VALUES ('near-max', 'ENQUEUED', 'wf-name', ?, 'near-max', ?, ?, 0, 0)
+                """
+                    .formatted(ctx.schema()))) {
+      stmt.setString(1, queue.name());
+      stmt.setString(2, APP_VERSION);
+      stmt.setLong(3, Long.MAX_VALUE - 1000);
+      stmt.executeUpdate();
+    }
+    partitionOf.put("near-max", "near-max");
+
+    var ordinary =
+        WorkflowStatusInternalBuilder.create("ordinary")
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .queueName(queue.name())
+            .queuePartitionKey("ordinary")
+            .appVersion(APP_VERSION)
+            .timeout(Duration.ofMillis(60_000))
+            .build();
+    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(ordinary, 5).status());
+    partitionOf.put("ordinary", "ordinary");
+
+    var claimed = claimUntil(queue, 2, Long.MAX_VALUE, QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP);
+    assertEquals(Set.of("near-max", "ordinary"), Set.copyOf(claimed));
+
+    assertEquals(Long.MAX_VALUE, DBUtils.getWorkflowRow(dataSource, "near-max").deadlineEpochMs());
+    var ordinaryRow = DBUtils.getWorkflowRow(dataSource, "ordinary");
+    assertEquals(ordinaryRow.startedAtEpochMs() + 60_000L, ordinaryRow.deadlineEpochMs());
   }
 
   @Test

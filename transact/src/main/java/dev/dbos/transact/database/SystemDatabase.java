@@ -887,6 +887,18 @@ public class SystemDatabase implements AutoCloseable {
   public static final String NOW_EPOCH_MS = "(EXTRACT(epoch FROM now()) * 1000.0)::bigint";
 
   /**
+   * SQL for the deadline {@code timeoutMs} from {@link #NOW_EPOCH_MS}. A timeout within the current
+   * epoch milliseconds of the bigint maximum would overflow the sum, so the deadline saturates at
+   * that maximum instead, which never elapses. Null if {@code timeoutMs} is null.
+   *
+   * @param timeoutMs a SQL expression for the timeout, evaluated twice
+   */
+  public static String deadlineEpochMs(String timeoutMs) {
+    return "CASE WHEN %1$s > 9223372036854775807 - %2$s THEN 9223372036854775807 ELSE %2$s + %1$s END"
+        .formatted(timeoutMs, NOW_EPOCH_MS);
+  }
+
+  /**
    * The database's clock in epoch milliseconds as the statement evaluates it, for a {@link
    * DatabaseTime} reading. Unlike {@link #NOW_EPOCH_MS}, which is the transaction's start, it
    * includes the time the statement spent before returning, such as a wait on a lock, so a deadline
