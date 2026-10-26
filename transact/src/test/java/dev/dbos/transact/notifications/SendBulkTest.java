@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,7 @@ class BulkServiceImpl implements BulkService {
 class SendBulkTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose HikariDataSource dataSource;
 
   private DBOSConfig dbosConfig;
   @AutoClose private DBOS dbos;
@@ -60,13 +62,14 @@ class SendBulkTest {
   @BeforeEach
   void setup() {
     dbosConfig = pgContainer.dbosConfig();
+    dataSource = pgContainer.dataSource();
     dbos = new DBOS(dbosConfig);
     service = dbos.registerProxy(BulkService.class, new BulkServiceImpl(dbos));
     dbos.launch();
   }
 
   private List<DBUtils.Notification> notifications(String destination) throws SQLException {
-    return DBUtils.getNotifications(pgContainer.dataSource(), destination);
+    return DBUtils.getNotifications(dataSource, destination);
   }
 
   /** Starts a blocking recv workflow, providing a valid workflow_status row as a destination. */
