@@ -13,10 +13,6 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
 public class StreamsDAO {
@@ -226,39 +222,6 @@ public class StreamsDAO {
         SignalMap.awaitAny(dbPollingInterval, sub);
       }
     }
-  }
-
-  public static Map<String, List<Object>> getAllStreamEntries(DbContext ctx, String workflowId)
-      throws SQLException {
-    String sql =
-        """
-        SELECT key, value, serialization
-        FROM "%s".streams
-        WHERE workflow_uuid = ?
-        ORDER BY key, "offset"
-        """
-            .formatted(ctx.schema());
-
-    var streams = new LinkedHashMap<String, List<Object>>();
-    try (Connection conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          String key = rs.getString("key");
-          String value = rs.getString("value");
-          String serialization = rs.getString("serialization");
-
-          Object deserialized = SerializationUtil.deserializeValue(value, serialization, null);
-          if (STREAM_CLOSED_SENTINEL.equals(deserialized)) {
-            continue;
-          }
-
-          streams.computeIfAbsent(key, k -> new ArrayList<>()).add(deserialized);
-        }
-      }
-    }
-    return streams;
   }
 
   private static final org.slf4j.Logger logger =

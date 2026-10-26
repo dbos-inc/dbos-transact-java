@@ -1,21 +1,13 @@
 package dev.dbos.transact.conductor;
 
 import dev.dbos.transact.AlertHandler;
-import dev.dbos.transact.database.MetricData;
-import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.GetStepAggregatesInput;
-import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
-import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
-import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
@@ -34,12 +26,6 @@ import org.jspecify.annotations.Nullable;
  * within a minor this interface only gains methods: none is changed or removed, and neither are the
  * types its methods take and return. DBOS Transact implements it over its internal classes, which
  * absorb their own changes behind it.
- *
- * <p>The methods grouped at the end are the exception. They are Conductor-only operations moving
- * into {@code dev.dbos:transact-enterprise}, and each leaves this interface during the 1.3 previews
- * as it moves, before the 1.3.0 release. An enterprise preview that still calls one fails against a
- * core preview without it, so the enterprise build that stops calling it also raises its minimum
- * DBOS Transact version past the build that removed it.
  */
 public interface ConductorEngine {
   /** The application name. */
@@ -250,95 +236,4 @@ public interface ConductorEngine {
 
   /** The system database, for the Conductor-only operations that run their own SQL. */
   ConductorSystemDatabase systemDatabase();
-
-  // Conductor-only operations moving into dev.dbos:transact-enterprise before the 1.3.0 release.
-  // Unlike the methods above, each is removed from this interface as it moves; see the class
-  // documentation.
-
-  /**
-   * Exports a workflow.
-   *
-   * @param workflowId the workflow
-   * @param exportChildren whether to export its child workflows too
-   * @return the exported workflows
-   */
-  List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren);
-
-  /**
-   * Imports workflows.
-   *
-   * @param workflows the workflows to import
-   */
-  void importWorkflow(List<ExportedWorkflow> workflows);
-
-  /**
-   * Forks workflows from their first failed step.
-   *
-   * @param workflowIds the workflows to fork
-   * @param options the forks' options
-   * @return the forked workflows' IDs
-   */
-  List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options);
-
-  /**
-   * Runs one retention round over the whole system database, deleting finished workflows and then
-   * the payloads they leave behind. Does nothing if both limits are {@code null}, or if another
-   * round holds the retention lock.
-   *
-   * @param cutoff delete workflows that finished before this time; {@code null} means no age limit
-   * @param rowsThreshold the workflow count retention keeps to; {@code null} means no count limit
-   * @param batchSize the most rows to delete in one statement; must be positive
-   * @throws IllegalArgumentException if {@code batchSize} is not positive
-   */
-  void garbageCollect(@Nullable Instant cutoff, @Nullable Long rowsThreshold, int batchSize);
-
-  /**
-   * Cancels unfinished workflows created before a time.
-   *
-   * @param endTime cancel workflows created before this time
-   */
-  void globalTimeout(Instant endTime);
-
-  /**
-   * Returns metrics for the Conductor dashboard.
-   *
-   * @param startTime the start of the period
-   * @param endTime the end of the period
-   * @param applicationNames the applications to include; {@code null} means all
-   * @return the metrics
-   */
-  List<MetricData> getMetrics(
-      Instant startTime, Instant endTime, @Nullable List<String> applicationNames);
-
-  /**
-   * Returns workflow aggregates for the Conductor dashboard.
-   *
-   * @param input the filters and grouping
-   * @return the aggregate rows
-   */
-  List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input);
-
-  /**
-   * Returns step aggregates for the Conductor dashboard.
-   *
-   * @param input the filters and grouping
-   * @return the aggregate rows
-   */
-  List<StepAggregateRow> getStepAggregates(GetStepAggregatesInput input);
-
-  /**
-   * Returns the messages sent to a workflow.
-   *
-   * @param workflowId the workflow
-   * @return the messages
-   */
-  List<NotificationInfo> getAllNotifications(String workflowId);
-
-  /**
-   * Returns a workflow's streams.
-   *
-   * @param workflowId the workflow
-   * @return each stream's values, by key
-   */
-  Map<String, List<Object>> getAllStreamEntries(String workflowId);
 }

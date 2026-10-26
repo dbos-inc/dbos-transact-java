@@ -548,7 +548,7 @@ public class ClientTest {
     assertEquals("99-fan-out", parent.getResult());
 
     // Fork also received the notification (verified via DB since it is not executing)
-    assertEquals(1, sysdb.getAllNotifications(childId).size());
+    assertEquals(1, DBUtils.getNotifications(pgContainer.dataSource(), childId).size());
 
     // Re-send with same key is idempotent — {key}::{dest} UUIDs dedup via ON CONFLICT DO NOTHING
     try (var client = pgContainer.dbosClient()) {
@@ -556,7 +556,7 @@ public class ClientTest {
           List.of(new SendMessage(parent.workflowId(), "fan-out", "test-topic", key)),
           DBOSClient.SendOptions.defaults().withSendToForks(true));
     }
-    assertEquals(1, sysdb.getAllNotifications(childId).size());
+    assertEquals(1, DBUtils.getNotifications(pgContainer.dataSource(), childId).size());
   }
 
   @Test
