@@ -101,6 +101,9 @@ public class DBOSProperties {
     /** Conductor domain. */
     private String domain;
 
+    /** Whether Conductor receives only workflow metadata, never workflow data. */
+    private boolean metadataOnlyMode;
+
     public String getKey() {
       return key;
     }
@@ -115,6 +118,14 @@ public class DBOSProperties {
 
     public void setDomain(String domain) {
       this.domain = domain;
+    }
+
+    public boolean isMetadataOnlyMode() {
+      return metadataOnlyMode;
+    }
+
+    public void setMetadataOnlyMode(boolean metadataOnlyMode) {
+      this.metadataOnlyMode = metadataOnlyMode;
     }
   }
 
