@@ -15,7 +15,6 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -626,43 +625,5 @@ public class NotificationsDAO {
 
     return SerializationUtil.deserializeValue(
         result.value(), result.serialization(), ctx.serializer());
-  }
-
-  public static List<NotificationInfo> getAllNotifications(DbContext ctx, String workflowId)
-      throws SQLException {
-    DBOSSerializer serializer = ctx.serializer();
-    var sql =
-        """
-        SELECT topic, message, serialization, created_at_epoch_ms, consumed
-        FROM "%s".notifications
-        WHERE destination_uuid = ?
-        ORDER BY created_at_epoch_ms
-        """
-            .formatted(ctx.schema());
-
-    var notifications = new ArrayList<NotificationInfo>();
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var rawTopic = rs.getString("topic");
-          var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
-          var serialization = rs.getString("serialization");
-          var message =
-              SerializationUtil.deserializeValue(
-                  rs.getString("message"), serialization, serializer);
-          var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
-          var consumed = rs.getBoolean("consumed");
-          notifications.add(
-              new NotificationInfo(
-                  topic,
-                  message,
-                  createdAtEpochMs != 0 ? Instant.ofEpochMilli(createdAtEpochMs) : null,
-                  consumed));
-        }
-      }
-    }
-    return notifications;
   }
 }

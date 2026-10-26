@@ -8,7 +8,6 @@ import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
-import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -286,34 +285,6 @@ public class StepsDAO {
         completedAt == null ? null : Instant.ofEpochMilli(completedAt),
         rs.getString("serialization"),
         rs.getString("application_name"));
-  }
-
-  /**
-   * A workflow's steps for export: each step's metadata, and its output and error exactly as
-   * stored. Both lists come from one read, so they hold the same steps in the same order.
-   */
-  record ExportedSteps(List<StepInfo> steps, List<ExportedWorkflow.SerializedStep> stored) {}
-
-  /**
-   * Reads a workflow's steps for export. Nothing is deserialized: the payload fields of each {@link
-   * StepInfo} are left null, and the payloads are carried as stored strings instead.
-   */
-  static ExportedSteps exportWorkflowSteps(Connection conn, String schema, String workflowId)
-      throws SQLException {
-    var steps = new ArrayList<StepInfo>();
-    var stored = new ArrayList<ExportedWorkflow.SerializedStep>();
-    try (var stmt = conn.prepareStatement(workflowStepsSql(schema))) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          steps.add(stepInfo(rs, null, null));
-          stored.add(
-              new ExportedWorkflow.SerializedStep(
-                  rs.getInt("function_id"), rs.getString("output"), rs.getString("error")));
-        }
-      }
-    }
-    return new ExportedSteps(steps, stored);
   }
 
   public static void sleep(
