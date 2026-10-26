@@ -404,7 +404,10 @@ public class ConfigEnvTest {
                 TestConductorProvider.created()
                     .contains(
                         new ConductorOptions(
-                            "cloud-conductor-key", "cloud-conductor-app", "ws://localhost:1234")),
+                            "cloud-conductor-key",
+                            "cloud-conductor-app",
+                            "ws://localhost:1234",
+                            false)),
                 () -> "created: " + TestConductorProvider.created());
           }
         });

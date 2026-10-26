@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.utils.PgContainer;
@@ -138,6 +139,31 @@ public class ConfigTest {
     } finally {
       dbos.shutdown();
     }
+  }
+
+  @Test
+  public void conductorMetadataOnlyModeReachesTheConductorClient() throws Exception {
+    for (boolean metadataOnly : List.of(false, true)) {
+      var config =
+          pgContainer
+              .dbosConfig()
+              .withConductorKey("test-conductor-key")
+              .withConductorMetadataOnlyMode(metadataOnly);
+      try (var dbos = new DBOS(config)) {
+        dbos.launch();
+        var options =
+            DBOSExecutorTestAccess.getConductorOptions(DBOSTestAccess.getDbosExecutor(dbos));
+        assertEquals(metadataOnly, options.metadataOnlyMode());
+      }
+    }
+  }
+
+  @Test
+  public void conductorMetadataOnlyModeIsOffByDefault() {
+    assertFalse(DBOSConfig.defaults("app-name").conductorMetadataOnlyMode());
+    assertTrue(
+        new DBOSConfig(DBOSConfig.defaults("app-name").withConductorMetadataOnlyMode(true))
+            .conductorMetadataOnlyMode());
   }
 
   /**
