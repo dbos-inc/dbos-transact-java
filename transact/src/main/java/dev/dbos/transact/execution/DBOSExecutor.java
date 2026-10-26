@@ -429,7 +429,8 @@ public class DBOSExecutor implements AutoCloseable {
           || cloudUrl.isBlank()) {
         return null;
       }
-      return new ConductorOptions(cloudKey, cloudAppName, cloudUrl);
+      return new ConductorOptions(
+          cloudKey, cloudAppName, cloudUrl, config.conductorMetadataOnlyMode());
     }
     String conductorKey = config.conductorKey();
     if (conductorKey == null) {
@@ -439,7 +440,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (domain != null && domain.trim().isEmpty()) {
       domain = null;
     }
-    return new ConductorOptions(conductorKey, null, domain);
+    return new ConductorOptions(conductorKey, null, domain, config.conductorMetadataOnlyMode());
   }
 
   @Nullable ConductorOptions conductorOptions() {
