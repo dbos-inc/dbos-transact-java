@@ -26,6 +26,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.TimedWorkflowStatus;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSDelayPastLatestInstantException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -2833,7 +2834,7 @@ public class DBOSExecutor implements AutoCloseable {
       // the collision would let the parent take a path its replay cannot repeat.
       recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
       throw e;
-    } catch (SystemDatabase.DelayPastLatestInstantException e) {
+    } catch (DBOSDelayPastLatestInstantException e) {
       // Recorded for the same reason as a collision: whether the delay fits depends on the clock,
       // and a replay must not decide it again against a later one.
       recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);

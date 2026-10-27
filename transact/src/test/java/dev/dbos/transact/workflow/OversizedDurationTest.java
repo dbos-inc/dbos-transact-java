@@ -231,7 +231,7 @@ public class OversizedDurationTest {
   @Test
   void aChildRefusedForItsDelayIsRecordedAtItsParentsStep() throws Exception {
     var workflowId = UUID.randomUUID().toString();
-    var refusal = "DelayPastLatestInstantException";
+    var refusal = "DBOSDelayPastLatestInstantException";
     assertEquals(
         refusal,
         dbos.startWorkflow(

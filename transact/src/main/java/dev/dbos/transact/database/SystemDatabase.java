@@ -983,22 +983,7 @@ public class SystemDatabase implements AutoCloseable {
     try {
       return Math.addExact(System.currentTimeMillis(), delay.toMillis());
     } catch (ArithmeticException e) {
-      throw new DelayPastLatestInstantException();
-    }
-  }
-
-  /**
-   * A relative delay that carries this JVM's clock past the largest instant epoch milliseconds can
-   * hold. Refused rather than wrapped, which would release the workflow at once. Whether a delay
-   * does depends on the clock, so a parent starting a child records this at its step, as it does a
-   * deduplication collision, and a replay throws it again rather than deciding against a later
-   * clock.
-   */
-  public static final class DelayPastLatestInstantException extends IllegalArgumentException {
-    private static final long serialVersionUID = 1L;
-
-    public DelayPastLatestInstantException() {
-      super("delay must not end past the latest instant 64-bit epoch milliseconds can hold");
+      throw new DBOSDelayPastLatestInstantException();
     }
   }
 
