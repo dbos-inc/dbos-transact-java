@@ -24,22 +24,15 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
-import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.GetStepAggregatesInput;
-import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SendMessage;
-import dev.dbos.transact.workflow.StepAggregateRow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
-import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -1401,14 +1394,6 @@ public class SystemDatabase implements AutoCloseable {
                 caller));
   }
 
-  public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(ctx, input));
-  }
-
-  public List<StepAggregateRow> getStepAggregates(GetStepAggregatesInput input) {
-    return dbRetry(() -> WorkflowDAO.getStepAggregates(ctx, input));
-  }
-
   /** Returns the given executors' PENDING workflows to their queues; reports which rows moved. */
   public List<String> reenqueueForRecovery(
       List<String> executorIds, String appVersion, String recoveryQueueName) {
@@ -1679,11 +1664,6 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
   }
 
-  public List<String> forkFromFailure(List<String> workflowIds, ForkFromFailureOptions options) {
-    return dbRetryIncludingSerializationError(
-        "forkFromFailure", () -> WorkflowDAO.forkFromFailure(ctx, workflowIds, options));
-  }
-
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {
     dbRetryIncludingSerializationError(
         "createApplicationVersion",
@@ -1828,12 +1808,6 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ExternalStateDAO.upsertExternalState(ctx, state));
   }
 
-  public List<MetricData> getMetrics(
-      Instant startTime, Instant endTime, @Nullable List<String> applicationName) {
-    return dbRetryIncludingSerializationError(
-        "getMetrics", () -> WorkflowDAO.getMetrics(ctx, startTime, endTime, applicationName));
-  }
-
   public boolean patch(String workflowId, int functionId, String patchName, String ownerXid) {
     return dbRetryIncludingSerializationError(
         "patch", () -> StepsDAO.patch(ctx, workflowId, functionId, patchName, ownerXid));
@@ -1887,19 +1861,6 @@ public class SystemDatabase implements AutoCloseable {
 
   public Map<String, Object> getAllEvents(String workflowId) {
     return dbRetry(() -> WorkflowDAO.getAllEvents(ctx, workflowId));
-  }
-
-  public List<NotificationInfo> getAllNotifications(String workflowId) {
-    return dbRetry(() -> NotificationsDAO.getAllNotifications(ctx, workflowId));
-  }
-
-  public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
-    return dbRetry(() -> WorkflowDAO.exportWorkflow(ctx, workflowId, exportChildren));
-  }
-
-  public void importWorkflow(List<ExportedWorkflow> workflows) {
-    dbRetryIncludingSerializationError(
-        "importWorkflow", () -> WorkflowDAO.importWorkflow(ctx, workflows));
   }
 
   public void writeStreamFromStep(
@@ -1956,9 +1917,5 @@ public class SystemDatabase implements AutoCloseable {
         () ->
             StreamsDAO.readStream(
                 ctx, workflowId, key, offset, DB_POLLING_INTERVAL, createSubscription));
-  }
-
-  public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
-    return dbRetry(() -> StreamsDAO.getAllStreamEntries(ctx, workflowId));
   }
 }

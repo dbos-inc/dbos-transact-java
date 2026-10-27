@@ -3,21 +3,23 @@ package dev.dbos.transact.notifications;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +53,7 @@ class BulkServiceImpl implements BulkService {
 class SendBulkTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose HikariDataSource dataSource;
 
   private DBOSConfig dbosConfig;
   @AutoClose private DBOS dbos;
@@ -59,13 +62,14 @@ class SendBulkTest {
   @BeforeEach
   void setup() {
     dbosConfig = pgContainer.dbosConfig();
+    dataSource = pgContainer.dataSource();
     dbos = new DBOS(dbosConfig);
     service = dbos.registerProxy(BulkService.class, new BulkServiceImpl(dbos));
     dbos.launch();
   }
 
-  private SystemDatabase db() {
-    return DBOSTestAccess.getSystemDatabase(dbos);
+  private List<DBUtils.Notification> notifications(String destination) throws SQLException {
+    return DBUtils.getNotifications(dataSource, destination);
   }
 
   /** Starts a blocking recv workflow, providing a valid workflow_status row as a destination. */
@@ -106,9 +110,11 @@ class SendBulkTest {
             new SendMessage(dest1, "hello-2"),
             new SendMessage(dest2, "world")));
 
-    assertEquals(2, db().getAllNotifications(dest1).size());
-    assertEquals(1, db().getAllNotifications(dest2).size());
-    assertEquals("world", db().getAllNotifications(dest2).get(0).message());
+    assertEquals(2, notifications(dest1).size());
+    assertEquals(1, notifications(dest2).size());
+    var world = notifications(dest2).get(0);
+    assertEquals(
+        "world", SerializationUtil.deserializeValue(world.message(), world.serialization(), null));
 
     // Non-existent destination rolls back the entire batch
     String validDest = startDest("valid-" + UUID.randomUUID());
@@ -119,7 +125,7 @@ class SendBulkTest {
                 List.of(
                     new SendMessage(validDest, "first"),
                     new SendMessage("nonexistent-" + UUID.randomUUID(), "second"))));
-    assertEquals(0, db().getAllNotifications(validDest).size());
+    assertEquals(0, notifications(validDest).size());
   }
 
   // -------------------------------------------------------------------------
@@ -138,7 +144,7 @@ class SendBulkTest {
             new StartWorkflowOptions(senderWfId));
     handle.getResult();
 
-    assertEquals(1, db().getAllNotifications(dest).size());
+    assertEquals(1, notifications(dest).size());
 
     // The entire bulk send is recorded as exactly one step
     List<StepInfo> steps = dbos.listWorkflowSteps(senderWfId);
@@ -160,7 +166,7 @@ class SendBulkTest {
     dbos.sendBulk(messages);
 
     // Only one notification despite two calls
-    assertEquals(1, db().getAllNotifications(dest).size());
+    assertEquals(1, notifications(dest).size());
   }
 
   // -------------------------------------------------------------------------
@@ -181,7 +187,7 @@ class SendBulkTest {
                     new SendMessage(dest, "msg2", null, key))));
 
     // Nothing was delivered
-    assertEquals(0, db().getAllNotifications(dest).size());
+    assertEquals(0, notifications(dest).size());
   }
 
   // -------------------------------------------------------------------------
@@ -204,17 +210,17 @@ class SendBulkTest {
     dbos.sendBulk(List.of(new SendMessage(parentId, "fan-out", null, key)), true);
 
     // Fan-out reaches all descendants
-    assertEquals(1, db().getAllNotifications(parentId).size());
-    assertEquals(1, db().getAllNotifications(childId).size());
-    assertEquals(1, db().getAllNotifications(grandchildId).size());
+    assertEquals(1, notifications(parentId).size());
+    assertEquals(1, notifications(childId).size());
+    assertEquals(1, notifications(grandchildId).size());
 
     // Unrelated workflow untouched
-    assertEquals(0, db().getAllNotifications(unrelatedId).size());
+    assertEquals(0, notifications(unrelatedId).size());
 
     // Re-send with same key is idempotent (ON CONFLICT DO NOTHING via {key}::{dest} UUIDs)
     dbos.sendBulk(List.of(new SendMessage(parentId, "fan-out", null, key)), true);
-    assertEquals(1, db().getAllNotifications(parentId).size());
-    assertEquals(1, db().getAllNotifications(childId).size());
-    assertEquals(1, db().getAllNotifications(grandchildId).size());
+    assertEquals(1, notifications(parentId).size());
+    assertEquals(1, notifications(childId).size());
+    assertEquals(1, notifications(grandchildId).size());
   }
 }

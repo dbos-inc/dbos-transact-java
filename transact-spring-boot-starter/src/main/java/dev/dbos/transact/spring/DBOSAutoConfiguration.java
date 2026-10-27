@@ -130,6 +130,7 @@ public class DBOSAutoConfiguration {
     if (props.getConductor().getDomain() != null) {
       config = config.withConductorDomain(props.getConductor().getDomain());
     }
+    config = config.withConductorMetadataOnlyMode(props.getConductor().isMetadataOnlyMode());
     if (props.getApplication().getVersion() != null) {
       config = config.withAppVersion(props.getApplication().getVersion());
     }

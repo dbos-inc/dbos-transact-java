@@ -42,7 +42,6 @@ import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -430,7 +429,8 @@ public class DBOSExecutor implements AutoCloseable {
           || cloudUrl.isBlank()) {
         return null;
       }
-      return new ConductorOptions(cloudKey, cloudAppName, cloudUrl);
+      return new ConductorOptions(
+          cloudKey, cloudAppName, cloudUrl, config.conductorMetadataOnlyMode());
     }
     String conductorKey = config.conductorKey();
     if (conductorKey == null) {
@@ -440,7 +440,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (domain != null && domain.trim().isEmpty()) {
       domain = null;
     }
-    return new ConductorOptions(conductorKey, null, domain);
+    return new ConductorOptions(conductorKey, null, domain, config.conductorMetadataOnlyMode());
   }
 
   @Nullable ConductorOptions conductorOptions() {
@@ -1238,25 +1238,6 @@ public class DBOSExecutor implements AutoCloseable {
         "DBOS.rewindWorkflow",
         null);
     return retrieveWorkflow(workflowId);
-  }
-
-  public List<WorkflowHandle<Object, Exception>> forkFromFailure(
-      List<String> workflowIds, ForkFromFailureOptions options) {
-
-    List<String> forkedIds =
-        this.runDbosFunctionAsStep(
-            () -> {
-              logger.info("Forking {} workflow(s) from failure", workflowIds.size());
-
-              validateQueue(options.queueName(), options.queuePartitionKey());
-
-              return systemDatabase.forkFromFailure(workflowIds, options);
-            },
-            "DBOS.forkFromFailure",
-            null);
-    return forkedIds.stream()
-        .map(id -> (WorkflowHandle<Object, Exception>) retrieveWorkflow(id))
-        .collect(Collectors.toList());
   }
 
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {

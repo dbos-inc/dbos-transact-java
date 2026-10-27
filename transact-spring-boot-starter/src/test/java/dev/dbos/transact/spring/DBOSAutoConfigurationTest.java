@@ -72,6 +72,7 @@ class DBOSAutoConfigurationTest {
         .withPropertyValues(
             "dbos.conductor.key=my-key",
             "dbos.conductor.domain=my-domain",
+            "dbos.conductor.metadata-only-mode=true",
             "dbos.application.version=1.2.3",
             "dbos.executor-id=exec-1",
             "dbos.datasource.schema=my_schema",
@@ -86,6 +87,7 @@ class DBOSAutoConfigurationTest {
               var config = context.getBean(DBOSConfig.class);
               assertThat(config.conductorKey()).isEqualTo("my-key");
               assertThat(config.conductorDomain()).isEqualTo("my-domain");
+              assertThat(config.conductorMetadataOnlyMode()).isTrue();
               assertThat(config.appVersion()).isEqualTo("1.2.3");
               assertThat(config.executorId()).isEqualTo("exec-1");
               assertThat(config.databaseSchema()).isEqualTo("my_schema");

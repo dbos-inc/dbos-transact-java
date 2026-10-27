@@ -523,22 +523,8 @@ public class QueuesDAO {
    */
   private static String versionClause(DbContext ctx, Connection connection, String appVersion)
       throws SQLException {
-    boolean isLatestVersion = true;
-    String latestVersionQuery =
-        """
-        SELECT version_name FROM "%s".application_versions
-      """
-                .formatted(ctx.schema())
-            + ctx.whereAppScope()
-            + " ORDER BY version_timestamp DESC LIMIT 1";
-    try (var ps = connection.prepareStatement(latestVersionQuery)) {
-      ctx.bindAppScope(ps, 1);
-      try (ResultSet rs = ps.executeQuery()) {
-        if (rs.next()) {
-          isLatestVersion = rs.getString(1).equals(appVersion);
-        }
-      }
-    }
+    var latest = ApplicationVersionDAO.latestApplicationVersion(ctx, connection);
+    boolean isLatestVersion = latest == null || latest.versionName().equals(appVersion);
     return isLatestVersion
         ? "(application_version = ? OR application_version IS NULL)"
         : "application_version = ?";
