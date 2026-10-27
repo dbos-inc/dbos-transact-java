@@ -3,6 +3,7 @@ package dev.dbos.transact.database.dao;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.workflow.VersionInfo;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -133,24 +134,52 @@ public class ApplicationVersionDAO {
   }
 
   public static VersionInfo getLatestApplicationVersion(DbContext ctx) throws SQLException {
-    String sql =
-        """
-          SELECT version_id, version_name, version_timestamp, created_at, application_name
-          FROM "%s".application_versions
-        """
-                .formatted(ctx.schema())
-            + ctx.whereAppScope()
-            + " ORDER BY version_timestamp DESC LIMIT 1";
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      ctx.bindAppScope(stmt, 1);
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return versionFromResultSet(rs);
-        }
+    try (var conn = ctx.getConnection()) {
+      var latest = latestApplicationVersion(ctx, conn);
+      if (latest != null) {
+        return latest;
       }
     }
     throw new RuntimeException("No application versions found");
+  }
+
+  /**
+   * The newest version this application can see: its own plus unclaimed ones, or every
+   * application's for a nameless owner, as {@link DbContext#whereAppScope} scopes them. Null if
+   * there are none.
+   */
+  static @Nullable VersionInfo latestApplicationVersion(DbContext ctx, Connection conn)
+      throws SQLException {
+    try (var stmt = conn.prepareStatement(latestApplicationVersionSql(ctx))) {
+      ctx.bindAppScope(stmt, 1);
+      try (var rs = stmt.executeQuery()) {
+        return rs.next() ? versionFromResultSet(rs) : null;
+      }
+    }
+  }
+
+  /**
+   * {@link #latestApplicationVersion}'s query. Bind its parameter with {@link
+   * DbContext#bindAppScope}.
+   */
+  public static String latestApplicationVersionSql(DbContext ctx) {
+    var columns = "version_id, version_name, version_timestamp, created_at, application_name";
+    var table = "\"%s\".application_versions".formatted(ctx.schema());
+    if (ctx.appName() == null) {
+      return "SELECT %s FROM %s ORDER BY version_timestamp DESC LIMIT 1".formatted(columns, table);
+    }
+    // Probe each eligible owner separately; an OR filter can scan an unbounded history of newer
+    // peer versions. Keep the constant owner in the ordering so the IS NULL probe uses the
+    // composite index too.
+    return """
+        (SELECT %1$s FROM %2$s WHERE application_name = ?
+          ORDER BY application_name, version_timestamp DESC LIMIT 1)
+        UNION ALL
+        (SELECT %1$s FROM %2$s WHERE application_name IS NULL
+          ORDER BY application_name, version_timestamp DESC LIMIT 1)
+        ORDER BY version_timestamp DESC LIMIT 1
+        """
+        .formatted(columns, table);
   }
 
   private static VersionInfo versionFromResultSet(java.sql.ResultSet rs) throws SQLException {
