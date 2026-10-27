@@ -26,6 +26,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.TimedWorkflowStatus;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSDelayPastLatestInstantException;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -1065,6 +1066,11 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (context.getWorkflowId() == null) {
       throw new IllegalStateException("sleep() must be called from within a workflow");
+    }
+    // Before the step id is taken, so a refused sleep moves no counter. A duration that fits but
+    // carries the wake time past the largest instant is refused inside the step, and recorded.
+    if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
+      throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
     }
 
     systemDatabase.sleep(
@@ -2840,6 +2846,11 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (DBOSWorkflowIdInUseException e) {
       // Recorded for the same reason as a collision: the holder of the ID can go away, and a replay
       // must not then start the child the first run was refused.
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
+      throw e;
+    } catch (DBOSDelayPastLatestInstantException e) {
+      // Recorded for the same reason as a collision: whether the delay fits depends on the clock,
+      // and a replay must not decide it again against a later one.
       recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
       throw e;
     } catch (DBOSWorkflowExecutionConflictException e) {

@@ -271,7 +271,7 @@ public class NotificationsDAO {
         """
             .formatted(ctx.schema());
 
-    var timeoutAt = StepsDAO.durableSleepEndTime(ctx, workflowId, timeoutStepId, timeout, ownerXid);
+    var timeoutAt = StepsDAO.durableDeadline(ctx, workflowId, timeoutStepId, timeout, ownerXid);
     while (true) {
       ctx.checkClosed();
       try (var messageSignal = createSubscription.apply(messageKey)) {
@@ -570,9 +570,10 @@ public class NotificationsDAO {
     var eventKey = new SignalKey.Event(workflowId, key);
     var timeoutAt =
         caller != null
-            ? StepsDAO.durableSleepEndTime(
+            ? StepsDAO.durableDeadline(
                 ctx, caller.workflowId(), caller.timeoutStepId(), timeout, caller.ownerXid())
-            : Instant.now().plus(timeout);
+            // Held at the largest instant, as inside a workflow, rather than overflowing.
+            : Instant.ofEpochMilli(StepsDAO.deadlineEpochMs(System.currentTimeMillis(), timeout));
     GetEventResult result = null;
 
     while (true) {

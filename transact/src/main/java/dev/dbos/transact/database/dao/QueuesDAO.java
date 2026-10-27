@@ -226,13 +226,16 @@ public class QueuesDAO {
                 -- The timeout runs from the claim, on the database's clock like every deadline.
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN %2$s + workflow_timeout_ms
+                    THEN %3$s
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE workflow_uuid = ?
               AND status = ?
           """
-                    .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS)
+                    .formatted(
+                        ctx.schema(),
+                        SystemDatabase.NOW_EPOCH_MS,
+                        SystemDatabase.deadlineEpochMs("workflow_timeout_ms"))
                 // Re-check ownership alongside status: the candidate SELECT scoped the row, and the
                 // claim must not widen that.
                 + ctx.andAppScope();
@@ -458,13 +461,17 @@ public class QueuesDAO {
                 -- The database's clock, as in the per-partition dequeue.
                 workflow_deadline_epoch_ms = CASE
                     WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN %2$s + workflow_timeout_ms
+                    THEN %4$s
                     ELSE workflow_deadline_epoch_ms
                 END
             WHERE %3$s
             RETURNING workflow_uuid
             """
-                .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS, claimGuard);
+                .formatted(
+                    ctx.schema(),
+                    SystemDatabase.NOW_EPOCH_MS,
+                    claimGuard,
+                    SystemDatabase.deadlineEpochMs("workflow_timeout_ms"));
 
         var flippedIds = new HashSet<String>();
         try (var ps = connection.prepareStatement(updateQuery)) {

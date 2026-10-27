@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
@@ -84,6 +86,9 @@ public record WorkflowStatusInternal(
     if (nullableIsNotPositive(delay)) {
       throw new IllegalArgumentException("delay must be a positive non-zero duration");
     }
+    if (nullableExceedsMillis(delay)) {
+      throw new IllegalArgumentException(exceedsMillis("delay"));
+    }
     if (isDebounced && (queueName == null || delay == null)) {
       throw new IllegalArgumentException("a debounced workflow needs a queue and a delay");
     }
@@ -112,6 +117,9 @@ public record WorkflowStatusInternal(
     // Note, appId can be empty
     if (nullableIsNotPositive(timeout)) {
       throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+    }
+    if (nullableExceedsMillis(timeout)) {
+      throw new IllegalArgumentException(exceedsMillis("timeout"));
     }
     if (nullableIsEmpty(parentWorkflowId)) {
       throw new IllegalArgumentException("parentWorkflowId must not be empty");

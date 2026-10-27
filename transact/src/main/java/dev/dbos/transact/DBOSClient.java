@@ -1,5 +1,7 @@
 package dev.dbos.transact;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
@@ -383,6 +385,10 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("timeout must be positive, non-zero duration");
       }
 
+      if (nullableExceedsMillis(timeout)) {
+        throw new IllegalArgumentException(exceedsMillis("timeout"));
+      }
+
       if (nullableIsEmpty(deduplicationId)) {
         throw new IllegalArgumentException("deduplicationId must not be empty");
       }
@@ -393,6 +399,10 @@ public class DBOSClient implements AutoCloseable {
 
       if (nullableIsNotPositive(delay)) {
         throw new IllegalArgumentException("delay must be positive, non-zero duration");
+      }
+
+      if (nullableExceedsMillis(delay)) {
+        throw new IllegalArgumentException(exceedsMillis("delay"));
       }
 
       if (nullableIsEmpty(applicationName)) {

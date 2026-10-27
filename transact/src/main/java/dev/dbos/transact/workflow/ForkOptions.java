@@ -1,5 +1,8 @@
 package dev.dbos.transact.workflow;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
+
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
@@ -21,6 +24,9 @@ public record ForkOptions(
     if (timeout != null && (timeout.isNegative() || timeout.isZero())) {
       throw new IllegalArgumentException(
           "ForkOptions timeout must be a positive non-zero duration");
+    }
+    if (nullableExceedsMillis(timeout)) {
+      throw new IllegalArgumentException(exceedsMillis("ForkOptions timeout"));
     }
   }
 
