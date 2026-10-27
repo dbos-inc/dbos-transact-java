@@ -10,6 +10,7 @@ import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.StepCheckpointStore;
+import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.Debouncer;
@@ -460,6 +461,10 @@ public class DBOS implements AutoCloseable {
    * @param duration amount of time to sleep
    */
   public void sleep(@NonNull Duration duration) {
+    // Refused wherever it is called, so the same call does not fail differently inside a workflow.
+    if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
+      throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
+    }
     if (!DBOSContext.inWorkflow() || DBOSContext.inStep()) {
       try {
         Thread.sleep(duration.toMillis());

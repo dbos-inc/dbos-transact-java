@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.logging.Logger;
@@ -524,6 +525,95 @@ public class SystemDatabaseTest {
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertEquals(WorkflowState.PENDING.name(), row.status());
     assertEquals(1, row.recoveryAttempts(), "the claim must count this dispatch");
+  }
+
+  @Test
+  public void claimSaturatesAnOverflowingDeadline() throws Exception {
+    // The claim adds the timeout to the database's clock. For a timeout within the current epoch
+    // milliseconds of the bigint maximum the sum overflows, and since the claim is one UPDATE for
+    // the whole batch, the error used to roll back every candidate and block the queue.
+    var queue = new Queue("near-max-timeout-q");
+    var appVersion = "v-near-max-timeout";
+
+    // Written straight to the table, as another SDK's client could: nothing on this path checks
+    // the timeout.
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                """
+                  INSERT INTO "dbos".workflow_status
+                      (workflow_uuid, status, name, queue_name, application_version,
+                       workflow_timeout_ms, recovery_attempts, priority)
+                  VALUES ('near-max', 'ENQUEUED', 'wf-name', ?, ?, ?, 0, 0)
+                """)) {
+      stmt.setString(1, queue.name());
+      stmt.setString(2, appVersion);
+      stmt.setLong(3, Long.MAX_VALUE - 1000);
+      stmt.executeUpdate();
+    }
+
+    var ordinary =
+        WorkflowStatusInternalBuilder.create("ordinary")
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .queueName(queue.name())
+            .appVersion(appVersion)
+            .timeout(Duration.ofMillis(60_000))
+            .build();
+    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(ordinary, 5).status());
+
+    // Polled, as in theClaimCountsTheDispatch.
+    var claimed = new ArrayList<String>();
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (claimed.size() < 2 && System.currentTimeMillis() < deadline) {
+      var batch =
+          sysdb.startQueuedWorkflows(
+              queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
+      claimed.addAll(batch);
+      if (batch.isEmpty()) Thread.sleep(100);
+    }
+    assertEquals(Set.of("near-max", "ordinary"), Set.copyOf(claimed));
+
+    var nearMaxRow = DBUtils.getWorkflowRow(dataSource, "near-max");
+    assertEquals(WorkflowState.PENDING.name(), nearMaxRow.status());
+    assertEquals(Long.MAX_VALUE, nearMaxRow.deadlineEpochMs());
+
+    var ordinaryRow = DBUtils.getWorkflowRow(dataSource, "ordinary");
+    assertEquals(ordinaryRow.startedAtEpochMs() + 60_000L, ordinaryRow.deadlineEpochMs());
+  }
+
+  @Test
+  public void directStartSaturatesAnOverflowingDeadline() throws Exception {
+    // A direct start computes the deadline in the insert itself, from the timeout parameter.
+    var nearMax =
+        WorkflowStatusInternalBuilder.create("near-max-direct")
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .timeout(Duration.ofMillis(Long.MAX_VALUE - 1000))
+            .build();
+    assertEquals(WorkflowState.PENDING, sysdb.initWorkflowStatus(nearMax, 5).status());
+    var nearMaxRow = DBUtils.getWorkflowRow(dataSource, "near-max-direct");
+    assertEquals(Long.MAX_VALUE - 1000, nearMaxRow.timeoutMs());
+    assertEquals(Long.MAX_VALUE, nearMaxRow.deadlineEpochMs());
+
+    // An ordinary timeout still lands on created_at + timeout, and no timeout means no deadline.
+    var ordinary =
+        WorkflowStatusInternalBuilder.create("ordinary-direct")
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .timeout(Duration.ofMillis(60_000))
+            .build();
+    assertEquals(WorkflowState.PENDING, sysdb.initWorkflowStatus(ordinary, 5).status());
+    var ordinaryRow = DBUtils.getWorkflowRow(dataSource, "ordinary-direct");
+    assertEquals(ordinaryRow.createdAt() + 60_000L, ordinaryRow.deadlineEpochMs());
+
+    var untimed =
+        WorkflowStatusInternalBuilder.create("untimed-direct")
+            .workflowName("wf-name")
+            .inputs("wf-inputs")
+            .build();
+    assertEquals(WorkflowState.PENDING, sysdb.initWorkflowStatus(untimed, 5).status());
+    assertNull(DBUtils.getWorkflowRow(dataSource, "untimed-direct").deadlineEpochMs());
   }
 
   @Test

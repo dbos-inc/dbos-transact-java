@@ -340,7 +340,7 @@ public class WorkflowDAO {
             ?, ?, ?,
             ?, ?, ?,
             %2$s, %2$s, ?,
-            ?, COALESCE(?::bigint, %2$s + ?::bigint),
+            ?, COALESCE(?::bigint, (SELECT %4$s FROM (VALUES (?::bigint)) AS t(timeout_ms))),
             ?, ?, ?, ?, ?::jsonb, ?,
             ?, ?, ?
           )
@@ -351,7 +351,12 @@ public class WorkflowDAO {
           RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, creator_xid, serialization, %3$s AS db_now
         """
             .formatted(
-                schema, SystemDatabase.NOW_EPOCH_MS, SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS);
+                schema,
+                SystemDatabase.NOW_EPOCH_MS,
+                SystemDatabase.CLOCK_TIMESTAMP_EPOCH_MS,
+                // Wrapped so the timeout parameter is bound once though the expression reads it
+                // twice.
+                SystemDatabase.deadlineEpochMs("t.timeout_ms"));
 
     Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");

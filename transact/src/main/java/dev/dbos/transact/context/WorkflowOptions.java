@@ -1,5 +1,7 @@
 package dev.dbos.transact.context;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
@@ -48,6 +50,10 @@ public record WorkflowOptions(
 
     if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
+    }
+
+    if (timeout instanceof Timeout.Explicit explicit && nullableExceedsMillis(explicit.value())) {
+      throw new IllegalArgumentException(exceedsMillis("explicit timeout"));
     }
 
     if (authenticatedRoles instanceof Field.Present<List<String>> p && p.value() != null) {
