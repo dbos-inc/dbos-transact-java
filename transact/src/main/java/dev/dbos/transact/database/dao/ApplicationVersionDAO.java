@@ -111,13 +111,17 @@ public class ApplicationVersionDAO {
     }
   }
 
+  /** The columns {@link #versionFromResultSet} reads. */
+  private static final String VERSION_COLUMNS =
+      "version_id, version_name, version_timestamp, created_at, application_name";
+
   public static List<VersionInfo> listApplicationVersions(DbContext ctx) throws SQLException {
     String sql =
         """
-          SELECT version_id, version_name, version_timestamp, created_at, application_name
+          SELECT %s
           FROM "%s".application_versions
         """
-                .formatted(ctx.schema())
+                .formatted(VERSION_COLUMNS, ctx.schema())
             + ctx.whereAppScope()
             + " ORDER BY version_timestamp DESC";
     List<VersionInfo> results = new ArrayList<>();
@@ -163,7 +167,7 @@ public class ApplicationVersionDAO {
    * DbContext#bindAppScope}.
    */
   public static String latestApplicationVersionSql(DbContext ctx) {
-    var columns = "version_id, version_name, version_timestamp, created_at, application_name";
+    var columns = VERSION_COLUMNS;
     var table = "\"%s\".application_versions".formatted(ctx.schema());
     if (ctx.appName() == null) {
       return "SELECT %s FROM %s ORDER BY version_timestamp DESC LIMIT 1".formatted(columns, table);

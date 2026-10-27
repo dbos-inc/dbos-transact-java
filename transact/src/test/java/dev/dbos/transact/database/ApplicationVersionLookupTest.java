@@ -45,20 +45,30 @@ public class ApplicationVersionLookupTest {
     try (var sysdb = systemDatabase(null)) {
       schema = sysdb.context().schema();
     }
+  }
+
+  /**
+   * Registers {@code 3 * perOwner} versions, numbered in timestamp order: the oldest third this
+   * application's, the next unclaimed, and the newest a peer's, so a global timestamp scan with an
+   * owner filter is insufficient.
+   */
+  private void seedVersions(int perOwner) throws Exception {
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
-      // The newest third belongs to a peer, so a global timestamp scan with an owner filter is
-      // insufficient.
       stmt.execute(
           """
           INSERT INTO "%s".application_versions
             (version_id, version_name, version_timestamp, created_at, application_name)
           SELECT i::text, 'version-' || i, i, i,
-                 CASE WHEN i <= 10000 THEN 'ours' WHEN i <= 20000 THEN NULL ELSE 'peer' END
-          FROM generate_series(1, 30000) AS i
+                 CASE WHEN i <= %d THEN 'ours' WHEN i <= %d THEN NULL ELSE 'peer' END
+          FROM generate_series(1, %d) AS i
           """
-              .formatted(schema));
-      stmt.execute("ANALYZE \"%s\".application_versions".formatted(schema));
+              .formatted(schema, perOwner, 2 * perOwner, 3 * perOwner));
+      if (!PgContainer.USE_COCKROACH_DB) {
+        // The pooled database is cleared with DELETE, which leaves the previous run's dead rows
+        // under the same keys for the probes to step over.
+        stmt.execute("VACUUM ANALYZE \"%s\".application_versions".formatted(schema));
+      }
     }
   }
 
@@ -68,19 +78,17 @@ public class ApplicationVersionLookupTest {
 
   @ParameterizedTest
   @CsvSource(
-      value = {
-        "ours, version-20000",
-        "absent, version-20000",
-        "peer, version-30000",
-        "NULL, version-30000"
-      },
+      value = {"ours, 2", "absent, 2", "peer, 3", "NULL, 3"},
       nullValues = "NULL")
-  void findsTheLatestWithoutScanningVersionHistory(@Nullable String owner, String expected)
+  void findsTheLatestWithoutScanningVersionHistory(@Nullable String owner, int expectedThird)
       throws Exception {
+    // A history long enough to tell an index probe from a scan, on Postgres, where EXPLAIN's JSON
+    // output can show which ran.
+    int perOwner = PgContainer.USE_COCKROACH_DB ? 10 : 10_000;
+    seedVersions(perOwner);
     try (var sysdb = systemDatabase(owner)) {
-      assertEquals(expected, sysdb.getLatestApplicationVersion().versionName());
-
-      // EXPLAIN's JSON output is Postgres's.
+      assertEquals(
+          "version-" + expectedThird * perOwner, sysdb.getLatestApplicationVersion().versionName());
       if (PgContainer.USE_COCKROACH_DB) {
         return;
       }
@@ -118,12 +126,13 @@ public class ApplicationVersionLookupTest {
 
   @Test
   void promotionAndReRegistrationPreserveVersionIdentityAndCreationTime() throws Exception {
+    seedVersions(10);
     try (var sysdb = systemDatabase("ours")) {
-      sysdb.updateApplicationVersionTimestamp("version-1", Instant.ofEpochMilli(40000), null);
+      sysdb.updateApplicationVersionTimestamp("version-1", Instant.ofEpochMilli(100), null);
       var promoted = sysdb.getLatestApplicationVersion();
       assertEquals(
           new VersionInfo(
-              "1", "version-1", Instant.ofEpochMilli(40000), Instant.ofEpochMilli(1), "ours"),
+              "1", "version-1", Instant.ofEpochMilli(100), Instant.ofEpochMilli(1), "ours"),
           promoted);
       sysdb.createApplicationVersion("version-1", null);
       assertEquals(promoted, sysdb.getLatestApplicationVersion());
@@ -132,6 +141,7 @@ public class ApplicationVersionLookupTest {
 
   @Test
   void anEmptyScopeKeepsTheMissingVersionError() throws Exception {
+    seedVersions(10);
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.execute(

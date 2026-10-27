@@ -1763,6 +1763,8 @@ public class MigrationManager {
           ADD COLUMN IF NOT EXISTS "creator_xid" TEXT DEFAULT NULL;
       """;
 
+  // Migration 124: index version timestamps, so a lookup of the latest version across every
+  // application reads one row however long the deployment history grows.
   static String migration124(boolean isCockroach) {
     return "CREATE INDEX "
         + concurrently(isCockroach)
@@ -1770,6 +1772,8 @@ public class MigrationManager {
         + " ON \"%1$s\".\"application_versions\" (\"version_timestamp\" DESC)";
   }
 
+  // Migration 125: index version timestamps per owner, so the latest-version lookup on dequeue
+  // probes this application's newest version and the newest unclaimed one, a row each.
   static String migration125(boolean isCockroach) {
     return "CREATE INDEX "
         + concurrently(isCockroach)
