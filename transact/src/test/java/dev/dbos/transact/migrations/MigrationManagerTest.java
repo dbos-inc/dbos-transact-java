@@ -595,7 +595,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(123, latest, "The shared history currently ends at migration 123");
+    assertEquals(125, latest, "The shared history currently ends at migration 125");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -720,6 +720,50 @@ class MigrationManagerTest {
       assertEquals(migrations.size(), getVersion(conn));
       assertColumnExists(conn, "notifications", "consumed_by_function_id");
     }
+  }
+
+  @Test
+  void testMigrations124And125_IndexApplicationVersions() throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var config = pgContainer.dbosConfig();
+    var migrations =
+        MigrationManager.getMigrations(
+            schema, !PgContainer.USE_COCKROACH_DB, PgContainer.USE_COCKROACH_DB);
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.ensureDbosSchema(conn, schema);
+      MigrationManager.ensureMigrationTable(conn, schema);
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 123));
+      assertIndexAbsent(conn, "idx_application_versions_timestamp");
+      assertIndexAbsent(conn, "idx_application_versions_owner_timestamp");
+    }
+
+    MigrationManager.runMigrations(config);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      assertEquals(migrations.size(), getVersion(conn));
+      for (var name :
+          List.of(
+              "idx_application_versions_timestamp", "idx_application_versions_owner_timestamp")) {
+        assertIndexExists(conn, name);
+        try (var result =
+            stmt.executeQuery(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname = '%s' AND indexname = '%s'"
+                    .formatted(schema, name))) {
+          assertTrue(result.next());
+          var definition = result.getString(1);
+          assertTrue(definition.contains("version_timestamp DESC"));
+          assertEquals(name.contains("owner"), definition.contains("application_name"));
+          assertFalse(definition.contains("INCLUDE"));
+        }
+      }
+      // Re-execute the DDL as well as the runner's normal already-current path.
+      for (var migration : migrations.subList(123, 125)) {
+        stmt.execute(migration);
+      }
+    }
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(config));
   }
 
   @Test
