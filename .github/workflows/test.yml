@@ -12,7 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         jdk-version: ['17', '21', '25']
-        jdk-distro: ['oracle', 'temurin' ]
+        # Oracle JDK and Temurin run the same HotSpot code, so one distribution is enough.
+        jdk-distro: ['temurin']
 
     steps:
       - name: Checkout code
@@ -30,7 +31,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Run tests
-        run: ./gradlew clean build
+        run: ./gradlew clean build --parallel
         env:
           PGPASSWORD: dbos
           SCALE_TEST: "true"

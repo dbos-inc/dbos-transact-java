@@ -1,6 +1,5 @@
 package dev.dbos.transact.admin;
 
-import dev.dbos.transact.conductor.protocol.StringOrListDeserializer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 

@@ -12,6 +12,10 @@ jobs:
   publish:
     needs: test
     uses: ./.github/workflows/publish.yml
+    # A called workflow's jobs can't have more permissions than the caller grants.
+    permissions:
+      contents: write
+      packages: write
     secrets:
       MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
       MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}

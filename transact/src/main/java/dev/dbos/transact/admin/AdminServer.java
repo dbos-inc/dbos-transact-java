@@ -1,6 +1,5 @@
 package dev.dbos.transact.admin;
 
-import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JsonUtility;

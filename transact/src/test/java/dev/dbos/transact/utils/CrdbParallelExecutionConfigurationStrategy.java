@@ -12,7 +12,7 @@ public class CrdbParallelExecutionConfigurationStrategy
   public ParallelExecutionConfiguration createConfiguration(
       ConfigurationParameters configurationParameters) {
     if (PgContainer.USE_COCKROACH_DB) {
-      int parallelism = Runtime.getRuntime().availableProcessors() >= 8 ? 2 : 1;
+      int parallelism = Runtime.getRuntime().availableProcessors() >= 4 ? 2 : 1;
       return fixedConfig(parallelism);
     }
     return DefaultParallelExecutionConfigurationStrategy.DYNAMIC.createConfiguration(

@@ -13,9 +13,15 @@ on:
       required: true
   workflow_dispatch:
 
+# Each destination is its own job, so "Re-run failed jobs" retries only the publish that failed.
+# Neither registry accepts a version twice, so rerunning one that succeeded fails.
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      prerelease: ${{ steps.get_version.outputs.prerelease }}
+      is_tagged: ${{ steps.get_version.outputs.is_tagged }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -27,41 +33,12 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Build
-        run: ./gradlew assemble
-
-      # only publish main & release/* builds to maven central
-      - name: Publish to Maven Central
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
-        run: ./gradlew publishToMavenCentral
-        env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
-
-      - name: Upload jars
-        uses: actions/upload-artifact@v7
-        with:
-          name: jars
-          path: transact*/build/libs/*.jar
-
-  release:
-    needs: [publish]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/heads/release/')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # fetch-depth 0 needed for version calculation
-
-      - name: Set up OpenJDK 21
-        uses: actions/setup-java@v5
-        with:
-          java-version: '21'
-          distribution: 'temurin'
+        run: ./gradlew assemble --parallel
 
       - name: Get Gradle project version
         id: get_version
@@ -85,6 +62,79 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Upload jars
+        uses: actions/upload-artifact@v7
+        with:
+          name: jars
+          path: transact*/build/libs/*.jar
+
+  # Every main and release/* build goes to GitHub Packages
+  publish-github-packages:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Publish the version the build job computed, not one recomputed from tags added since.
+      DBOS_VERSION_OVERRIDE: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up OpenJDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Publish to GitHub Packages
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --parallel
+        env:
+          ORG_GRADLE_PROJECT_GitHubPackagesUsername: ${{ github.actor }}
+          ORG_GRADLE_PROJECT_GitHubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
+
+  # Only full releases go to Maven Central
+  publish-maven-central:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/release/') && needs.build.outputs.prerelease == 'false'
+    env:
+      # Publish the version the build job computed, not one recomputed from tags added since.
+      DBOS_VERSION_OVERRIDE: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up OpenJDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Publish to Maven Central
+        run: ./gradlew publishToMavenCentral
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+  # A GitHub Release for each full release, once it is on Maven Central
+  release:
+    needs: [build, publish-maven-central]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/release/') && needs.build.outputs.is_tagged == 'true'
+    permissions:
+      contents: write
+    steps:
       - name: Download jars
         uses: actions/download-artifact@v7
         with:
@@ -92,19 +142,17 @@ jobs:
           path: jars
 
       - name: Stage release assets
-        id: stage
         run: |
           mkdir -p release-assets
           find jars -name '*.jar' -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Github Release
-        if: steps.get_version.outputs.is_tagged == 'true'
         uses: softprops/action-gh-release@v2.1.0
         with:
-          name: ${{ steps.get_version.outputs.version }}
-          tag_name: ${{ steps.get_version.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
+          tag_name: ${{ needs.build.outputs.version }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ steps.get_version.outputs.prerelease }}
+          prerelease: ${{ needs.build.outputs.prerelease }}
           files: |
             release-assets/*

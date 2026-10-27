@@ -1,11 +1,11 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.DebounceCaller;
-import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
@@ -26,20 +26,11 @@ import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ErrorResult;
-import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.ForkFromFailureOptions;
 import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.GetStepAggregatesInput;
-import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.RewindOptions;
-import dev.dbos.transact.workflow.StepAggregateRow;
-import dev.dbos.transact.workflow.WorkflowAggregateRow;
-import dev.dbos.transact.workflow.WorkflowEvent;
-import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -60,7 +51,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,8 +61,6 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.Nullable;
@@ -1640,333 +1628,6 @@ public class WorkflowDAO {
     return workflows;
   }
 
-  public static List<WorkflowAggregateRow> getWorkflowAggregates(
-      DbContext ctx, GetWorkflowAggregatesInput input) throws SQLException {
-
-    if (input == null) {
-      input = new GetWorkflowAggregatesInput();
-    }
-
-    // --- GROUP BY dimensions (stable order) ---
-    record GroupDim(String name, String expr) {}
-    var dims = new ArrayList<GroupDim>();
-    if (input.groupByStatus()) dims.add(new GroupDim("status", "status"));
-    if (input.groupByName()) dims.add(new GroupDim("name", "name"));
-    if (input.groupByQueueName()) dims.add(new GroupDim("queue_name", "queue_name"));
-    if (input.groupByExecutorId()) dims.add(new GroupDim("executor_id", "executor_id"));
-    if (input.groupByApplicationVersion())
-      dims.add(new GroupDim("application_version", "application_version"));
-    if (input.groupByApplicationName())
-      dims.add(new GroupDim("application_name", "application_name"));
-    // Time bucket: floor(created_at / bucket) * bucket
-    boolean hasBucket = input.timeBucketSize() != null;
-    if (hasBucket) {
-      long ms = input.timeBucketSize().toMillis();
-      String bucketExpr = "(floor(created_at / %d) * %d)::bigint".formatted(ms, ms);
-      dims.add(new GroupDim("time_bucket", bucketExpr));
-    }
-
-    if (dims.isEmpty()) {
-      throw new IllegalArgumentException(
-          "GetWorkflowAggregatesInput requires at least one groupBy* flag set to true"
-              + " (e.g. groupByStatus, groupByName, groupByQueueName)");
-    }
-
-    // --- SELECT metrics ---
-    record Metric(String alias, String expr) {}
-    var metrics = new ArrayList<Metric>();
-    if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
-    if (input.selectMinCreatedAt()) metrics.add(new Metric("min_created_at", "MIN(created_at)"));
-    if (input.selectMaxQueueWait())
-      metrics.add(new Metric("max_queue_wait_ms", "MAX(started_at_epoch_ms - created_at)"));
-    if (input.selectMaxTotalLatency())
-      metrics.add(new Metric("max_total_latency_ms", "MAX(completed_at - created_at)"));
-
-    if (metrics.isEmpty()) {
-      throw new IllegalArgumentException(
-          "GetWorkflowAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMinCreatedAt, selectMaxQueueWait)");
-    }
-
-    List<Object> parameters = new ArrayList<>();
-    StringBuilder sqlBuilder = new StringBuilder("SELECT ");
-
-    StringJoiner selectCols = new StringJoiner(", ");
-    for (var dim : dims) selectCols.add(dim.expr() + " AS " + dim.name());
-    for (var m : metrics) selectCols.add(m.expr() + " AS " + m.alias());
-    sqlBuilder.append(selectCols).append(" FROM \"%s\".workflow_status".formatted(ctx.schema()));
-
-    // --- WHERE ---
-    StringJoiner whereConditions = new StringJoiner(" AND ");
-
-    if (input.workflowName() != null && !input.workflowName().isEmpty()) {
-      whereConditions.add("name = ANY(?)");
-      parameters.add(input.workflowName());
-    }
-    if (input.status() != null && !input.status().isEmpty()) {
-      whereConditions.add("status = ANY(?)");
-      parameters.add(input.status());
-    }
-    if (input.queueName() != null && !input.queueName().isEmpty()) {
-      whereConditions.add("queue_name = ANY(?)");
-      parameters.add(input.queueName());
-    }
-    if (input.executorIds() != null && !input.executorIds().isEmpty()) {
-      whereConditions.add("executor_id = ANY(?)");
-      parameters.add(input.executorIds());
-    }
-    if (input.applicationVersion() != null && !input.applicationVersion().isEmpty()) {
-      whereConditions.add("application_version = ANY(?)");
-      parameters.add(input.applicationVersion());
-    }
-    if (input.startTime() != null) {
-      whereConditions.add("created_at >= ?");
-      parameters.add(input.startTime().toEpochMilli());
-    }
-    if (input.endTime() != null) {
-      whereConditions.add("created_at <= ?");
-      parameters.add(input.endTime().toEpochMilli());
-    }
-    if (input.completedAfter() != null) {
-      whereConditions.add("completed_at >= ?");
-      parameters.add(input.completedAfter().toEpochMilli());
-    }
-    if (input.completedBefore() != null) {
-      whereConditions.add("completed_at <= ?");
-      parameters.add(input.completedBefore().toEpochMilli());
-    }
-    if (input.dequeuedAfter() != null) {
-      whereConditions.add("started_at_epoch_ms >= ?");
-      parameters.add(input.dequeuedAfter().toEpochMilli());
-    }
-    if (input.dequeuedBefore() != null) {
-      whereConditions.add("started_at_epoch_ms <= ?");
-      parameters.add(input.dequeuedBefore().toEpochMilli());
-    }
-    if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
-      StringJoiner prefixOr = new StringJoiner(" OR ", "(", ")");
-      for (var prefix : input.workflowIdPrefix()) {
-        prefixOr.add("workflow_uuid LIKE ?");
-        parameters.add(prefix + "%");
-      }
-      whereConditions.add(prefixOr.toString());
-    }
-    if (input.attributes() != null && !input.attributes().isEmpty()) {
-      // Containment (@>) is served by the GIN index on the attributes column and matches
-      // workflows whose attributes contain all the given key-value pairs.
-      whereConditions.add("attributes @> ?::jsonb");
-      parameters.add(JsonUtility.toJson(input.attributes()));
-    }
-    addAppScope(ctx, whereConditions, parameters, input.applicationName(), false);
-
-    if (whereConditions.length() > 0) {
-      sqlBuilder.append(" WHERE ").append(whereConditions);
-    }
-
-    // --- GROUP BY ---
-    StringJoiner groupByCols = new StringJoiner(", ");
-    for (var dim : dims) groupByCols.add(dim.expr());
-    sqlBuilder.append(" GROUP BY ").append(groupByCols);
-
-    List<WorkflowAggregateRow> results = new ArrayList<>();
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
-      List<Array> arrays = new ArrayList<>();
-      try {
-        for (int i = 0; i < parameters.size(); i++) {
-          Object param = parameters.get(i);
-          if (param instanceof Long v) {
-            pstmt.setLong(i + 1, v);
-          } else if (param instanceof List<?> v) {
-            Array sqlArray = connection.createArrayOf("text", v.toArray());
-            arrays.add(sqlArray);
-            pstmt.setArray(i + 1, sqlArray);
-          } else {
-            pstmt.setObject(i + 1, param);
-          }
-        }
-        try (ResultSet rs = pstmt.executeQuery()) {
-          int groupCount = dims.size();
-          while (rs.next()) {
-            var group = new LinkedHashMap<String, String>();
-            for (int i = 0; i < groupCount; i++) {
-              String val = rs.getString(dims.get(i).name());
-              group.put(dims.get(i).name(), val);
-            }
-            Long count = null;
-            Instant minCreatedAt = null;
-            Duration maxQueueWait = null;
-            Duration maxTotalLatency = null;
-            for (var m : metrics) {
-              Object v = rs.getObject(m.alias());
-              Long lv = v == null ? null : ((Number) v).longValue();
-              switch (m.alias()) {
-                case "count" -> count = lv;
-                case "min_created_at" ->
-                    minCreatedAt = lv != null ? Instant.ofEpochMilli(lv) : null;
-                case "max_queue_wait_ms" ->
-                    maxQueueWait = lv != null ? Duration.ofMillis(lv) : null;
-                case "max_total_latency_ms" ->
-                    maxTotalLatency = lv != null ? Duration.ofMillis(lv) : null;
-              }
-            }
-            results.add(
-                new WorkflowAggregateRow(
-                    group, count, minCreatedAt, maxQueueWait, maxTotalLatency));
-          }
-        }
-      } finally {
-        for (Array array : arrays) {
-          array.free();
-        }
-      }
-    }
-
-    return results;
-  }
-
-  public static List<StepAggregateRow> getStepAggregates(
-      DbContext ctx, GetStepAggregatesInput input) throws SQLException {
-
-    if (input == null) {
-      input = new GetStepAggregatesInput();
-    }
-
-    // Status is derived: error IS NULL → SUCCESS, otherwise ERROR
-    String statusExpr = "CASE WHEN error IS NULL THEN 'SUCCESS' ELSE 'ERROR' END";
-
-    // --- GROUP BY dimensions ---
-    record GroupDim(String name, String expr) {}
-    var dims = new ArrayList<GroupDim>();
-    if (input.groupByFunctionName()) dims.add(new GroupDim("function_name", "function_name"));
-    if (input.groupByStatus()) dims.add(new GroupDim("status", statusExpr));
-    if (input.timeBucketSize() != null) {
-      long ms = input.timeBucketSize().toMillis();
-      String bucketExpr = "(floor(completed_at_epoch_ms / %d) * %d)::bigint".formatted(ms, ms);
-      dims.add(new GroupDim("time_bucket", bucketExpr));
-    }
-
-    if (dims.isEmpty()) {
-      throw new IllegalArgumentException(
-          "GetStepAggregatesInput requires at least one groupBy* flag set to true"
-              + " (e.g. groupByFunctionName, groupByStatus)");
-    }
-
-    // --- SELECT metrics ---
-    record Metric(String alias, String expr) {}
-    var metrics = new ArrayList<Metric>();
-    if (input.selectCount()) metrics.add(new Metric("count", "COUNT(*)"));
-    if (input.selectMaxDuration())
-      metrics.add(
-          new Metric("max_duration_ms", "MAX(completed_at_epoch_ms - started_at_epoch_ms)"));
-
-    if (metrics.isEmpty()) {
-      throw new IllegalArgumentException(
-          "GetStepAggregatesInput requires at least one select* flag set to true"
-              + " (e.g. selectCount, selectMaxDuration)");
-    }
-
-    List<Object> parameters = new ArrayList<>();
-    StringBuilder sqlBuilder = new StringBuilder("SELECT ");
-
-    StringJoiner selectCols = new StringJoiner(", ");
-    for (var dim : dims) selectCols.add(dim.expr() + " AS " + dim.name());
-    for (var m : metrics) selectCols.add(m.expr() + " AS " + m.alias());
-    sqlBuilder.append(selectCols).append(" FROM \"%s\".operation_outputs".formatted(ctx.schema()));
-
-    // --- WHERE ---
-    StringJoiner whereConditions = new StringJoiner(" AND ");
-
-    if (input.status() != null && !input.status().isEmpty()) {
-      // Translate status filter to error IS NULL / IS NOT NULL conditions
-      boolean wantSuccess = input.status().contains("SUCCESS");
-      boolean wantError = input.status().contains("ERROR");
-      if (wantSuccess && !wantError) {
-        whereConditions.add("error IS NULL");
-      } else if (wantError && !wantSuccess) {
-        whereConditions.add("error IS NOT NULL");
-      }
-      // if both or neither: no filter needed
-    }
-    if (input.functionName() != null && !input.functionName().isEmpty()) {
-      whereConditions.add("function_name = ANY(?)");
-      parameters.add(input.functionName());
-    }
-    if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
-      StringJoiner prefixOr = new StringJoiner(" OR ", "(", ")");
-      for (var prefix : input.workflowIdPrefix()) {
-        prefixOr.add("workflow_uuid LIKE ?");
-        parameters.add(prefix + "%");
-      }
-      whereConditions.add(prefixOr.toString());
-    }
-    if (input.completedAfter() != null) {
-      whereConditions.add("completed_at_epoch_ms >= ?");
-      parameters.add(input.completedAfter().toEpochMilli());
-    }
-    if (input.completedBefore() != null) {
-      whereConditions.add("completed_at_epoch_ms <= ?");
-      parameters.add(input.completedBefore().toEpochMilli());
-    }
-    addAppScope(ctx, whereConditions, parameters, input.applicationName(), false);
-
-    if (whereConditions.length() > 0) {
-      sqlBuilder.append(" WHERE ").append(whereConditions);
-    }
-
-    // --- GROUP BY ---
-    StringJoiner groupByCols = new StringJoiner(", ");
-    for (var dim : dims) groupByCols.add(dim.expr());
-    sqlBuilder.append(" GROUP BY ").append(groupByCols);
-
-    List<StepAggregateRow> results = new ArrayList<>();
-    try (Connection connection = ctx.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
-      List<Array> arrays = new ArrayList<>();
-      try {
-        for (int i = 0; i < parameters.size(); i++) {
-          Object param = parameters.get(i);
-          if (param instanceof Long v) {
-            pstmt.setLong(i + 1, v);
-          } else if (param instanceof List<?> v) {
-            Array sqlArray = connection.createArrayOf("text", v.toArray());
-            arrays.add(sqlArray);
-            pstmt.setArray(i + 1, sqlArray);
-          } else {
-            pstmt.setObject(i + 1, param);
-          }
-        }
-        try (ResultSet rs = pstmt.executeQuery()) {
-          int groupCount = dims.size();
-          while (rs.next()) {
-            var group = new LinkedHashMap<String, String>();
-            for (int i = 0; i < groupCount; i++) {
-              String val = rs.getString(dims.get(i).name());
-              group.put(dims.get(i).name(), val);
-            }
-            Long count = null;
-            Duration maxDuration = null;
-            for (var m : metrics) {
-              Object v = rs.getObject(m.alias());
-              Long lv = v == null ? null : ((Number) v).longValue();
-              switch (m.alias()) {
-                case "count" -> count = lv;
-                case "max_duration_ms" -> maxDuration = lv != null ? Duration.ofMillis(lv) : null;
-              }
-            }
-            results.add(new StepAggregateRow(group, count, maxDuration));
-          }
-        }
-      } finally {
-        for (Array array : arrays) {
-          array.free();
-        }
-      }
-    }
-
-    return results;
-  }
-
   private static WorkflowStatus resultsToWorkflowStatus(
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
@@ -2379,9 +2040,7 @@ public class WorkflowDAO {
 
     forkWorkflows(
         ctx,
-        List.of(workflowId),
-        List.of(forkedWorkflowId),
-        List.of(startStep),
+        List.of(new WorkflowFork(workflowId, forkedWorkflowId, startStep)),
         options.applicationVersion(),
         options.queueName(),
         options.queuePartitionKey(),
@@ -2585,119 +2244,23 @@ public class WorkflowDAO {
     return state;
   }
 
-  public static List<String> forkFromFailure(
-      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options) throws SQLException {
-
-    Objects.requireNonNull(options, "ForkFromFailureOptions must not be null");
-
-    if (workflowIds.isEmpty()) {
-      return List.of();
-    }
-
-    var startSteps =
-        (options instanceof ForkFromFailureOptions.FromStep fromStep)
-            ? workflowIds.stream().map(ignored -> fromStep.step()).collect(Collectors.toList())
-            : resolveStartSteps(ctx, workflowIds, options);
-
-    List<String> forkedIds = new ArrayList<>(workflowIds.size());
-    for (int i = 0; i < workflowIds.size(); i++) {
-      forkedIds.add(UUID.randomUUID().toString());
-    }
-
-    forkWorkflows(
-        ctx,
-        workflowIds,
-        forkedIds,
-        startSteps,
-        options.applicationVersion(),
-        options.queueName(),
-        options.queuePartitionKey(),
-        null);
-    return forkedIds;
-  }
-
-  private static List<Integer> resolveStartSteps(
-      DbContext ctx, List<String> workflowIds, ForkFromFailureOptions options) throws SQLException {
-
-    String sql =
-        (options instanceof ForkFromFailureOptions.FromLastFailure
-                ? """
-                    SELECT workflow_uuid,
-                          COALESCE(
-                            MAX(function_id) FILTER (WHERE error IS NOT NULL),
-                            MAX(function_id)
-                          ) AS start_step
-                    FROM "%s".operation_outputs
-                    WHERE workflow_uuid = ANY(?)
-                    GROUP BY workflow_uuid
-                  """
-                : options instanceof ForkFromFailureOptions.FromLastStep
-                    ? """
-                        SELECT workflow_uuid, MAX(function_id) AS start_step
-                        FROM "%s".operation_outputs
-                        WHERE workflow_uuid = ANY(?)
-                        GROUP BY workflow_uuid
-                      """
-                    : """
-                        SELECT workflow_uuid, MAX(function_id) AS start_step
-                        FROM "%s".operation_outputs
-                        WHERE workflow_uuid = ANY(?) AND function_name = ?
-                        GROUP BY workflow_uuid
-                      """)
-            .formatted(ctx.schema());
-
-    Map<String, Integer> startStepByWorkflowId = new HashMap<>();
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
-      try {
-        stmt.setArray(1, array);
-        if (options instanceof ForkFromFailureOptions.FromStepName fromStepName) {
-          stmt.setString(2, fromStepName.stepName());
-        }
-        try (var rs = stmt.executeQuery()) {
-          while (rs.next()) {
-            startStepByWorkflowId.put(rs.getString("workflow_uuid"), rs.getInt("start_step"));
-          }
-        }
-      } finally {
-        array.free();
-      }
-    }
-
-    List<Integer> startSteps = new ArrayList<>(workflowIds.size());
-    for (String wid : workflowIds) {
-      if (!startStepByWorkflowId.containsKey(wid)) {
-        if (options instanceof ForkFromFailureOptions.FromStepName fromStepName) {
-          throw new IllegalArgumentException(
-              "Workflow " + wid + " has no step named '" + fromStepName.stepName() + "'");
-        }
-        throw new IllegalArgumentException("Workflow " + wid + " has no steps");
-      }
-      startSteps.add(startStepByWorkflowId.get(wid));
-    }
-    return startSteps;
-  }
-
-  private static void forkWorkflows(
+  /**
+   * Forks workflows in one transaction, each under its fork's ID and from its fork's start step.
+   * Fails, writing nothing, if any of them does not exist.
+   */
+  public static void forkWorkflows(
       DbContext ctx,
-      List<String> workflowIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
+      List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey,
       @Nullable Duration timeout)
       throws SQLException {
 
-    if (workflowIds.isEmpty()) {
+    if (forks.isEmpty()) {
       return;
     }
-
-    if (workflowIds.size() != forkIds.size() || workflowIds.size() != startSteps.size()) {
-      throw new IllegalArgumentException(
-          "workflowIds, forkIds and startSteps must have the same length");
-    }
+    var workflowIds = forks.stream().map(WorkflowFork::workflowId).toList();
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
     final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
@@ -2712,44 +2275,36 @@ public class WorkflowDAO {
                 throw new DBOSNonExistentWorkflowException(id);
               }
             }
-            var dataList = workflowIds.stream().map(wfDataMap::get).toList();
-
-            // One app name per fork, shared by its status row and its copied steps: the source's,
-            // or this application claiming an unclaimed one. Matches Python, TypeScript, and Go.
-            List<@Nullable String> forkAppNames = new ArrayList<>(forkIds.size());
-            for (var rd : dataList) {
-              forkAppNames.add(rd.applicationName() != null ? rd.applicationName() : ctx.appName());
-            }
+            var rows =
+                forks.stream()
+                    .map(
+                        fork -> {
+                          var original = wfDataMap.get(fork.workflowId());
+                          // One app name per fork, shared by its status row and its copied steps:
+                          // the source's, or this application claiming an unclaimed one.
+                          var appName =
+                              original.applicationName() != null
+                                  ? original.applicationName()
+                                  : ctx.appName();
+                          return new ForkRow(fork, original, appName);
+                        })
+                    .toList();
 
             batchInsertForkedStatuses(
                 conn,
                 ctx.schema(),
-                workflowIds,
-                forkIds,
-                dataList,
+                rows,
                 applicationVersion,
                 forkQueueName,
                 queuePartitionKey,
-                timeoutMs,
-                forkAppNames);
+                timeoutMs);
 
             markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
-            List<String> copyOrigIds = new ArrayList<>();
-            List<String> copyForkIds = new ArrayList<>();
-            List<Integer> copyStartSteps = new ArrayList<>();
-            List<@Nullable String> copyAppNames = new ArrayList<>();
-            for (int i = 0; i < workflowIds.size(); i++) {
-              if (startSteps.get(i) > 0) {
-                copyOrigIds.add(workflowIds.get(i));
-                copyForkIds.add(forkIds.get(i));
-                copyStartSteps.add(startSteps.get(i));
-                copyAppNames.add(forkAppNames.get(i));
-              }
-            }
-            if (!copyOrigIds.isEmpty()) {
-              batchCopyWorkflowData(
-                  conn, ctx.schema(), copyOrigIds, copyForkIds, copyStartSteps, copyAppNames);
+            // A fork from step 0 has nothing before its start step to copy.
+            var rowsToCopy = rows.stream().filter(row -> row.fork().startStep() > 0).toList();
+            if (!rowsToCopy.isEmpty()) {
+              batchCopyWorkflowData(conn, ctx.schema(), rowsToCopy);
             }
           });
     }
@@ -2768,6 +2323,9 @@ public class WorkflowDAO {
       String serialization,
       String attributes,
       @Nullable String applicationName) {}
+
+  /** A fork with what it takes from its original: the original's row, and the fork's app name. */
+  private record ForkRow(WorkflowFork fork, ForkWorkflowData original, @Nullable String appName) {}
 
   private static Map<String, ForkWorkflowData> fetchForkWorkflowData(
       Connection conn, String schema, List<String> workflowIds) throws SQLException {
@@ -2816,14 +2374,11 @@ public class WorkflowDAO {
   private static void batchInsertForkedStatuses(
       Connection conn,
       String schema,
-      List<String> origIds,
-      List<String> forkIds,
-      List<ForkWorkflowData> dataList,
+      List<ForkRow> rows,
       String applicationVersion,
       String queueName,
       String queuePartitionKey,
-      @Nullable Long timeoutMs,
-      List<@Nullable String> forkAppNames)
+      @Nullable Long timeoutMs)
       throws SQLException {
 
     StringBuilder sql =
@@ -2839,17 +2394,17 @@ public class WorkflowDAO {
             """
                 .formatted(schema));
 
-    StringJoiner rows = new StringJoiner(", ");
-    for (int i = 0; i < origIds.size(); i++) {
-      rows.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
+    StringJoiner values = new StringJoiner(", ");
+    for (int i = 0; i < rows.size(); i++) {
+      values.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
     }
-    sql.append(rows);
+    sql.append(values);
 
     try (var stmt = conn.prepareStatement(sql.toString())) {
       int p = 1;
-      for (int i = 0; i < origIds.size(); i++) {
-        ForkWorkflowData rd = dataList.get(i);
-        stmt.setString(p++, forkIds.get(i));
+      for (var row : rows) {
+        ForkWorkflowData rd = row.original();
+        stmt.setString(p++, row.fork().forkedWorkflowId());
         stmt.setString(p++, WorkflowState.ENQUEUED.name());
         stmt.setString(p++, rd.name());
         stmt.setString(p++, rd.className());
@@ -2865,10 +2420,10 @@ public class WorkflowDAO {
         stmt.setString(p++, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
         stmt.setString(p++, queuePartitionKey);
         stmt.setObject(p++, timeoutMs);
-        stmt.setString(p++, origIds.get(i));
+        stmt.setString(p++, row.fork().workflowId());
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
-        stmt.setString(p++, forkAppNames.get(i));
+        stmt.setString(p++, row.appName());
       }
       stmt.executeUpdate();
     }
@@ -2883,7 +2438,7 @@ public class WorkflowDAO {
             """
                 .formatted(schema));
     StringJoiner inputRows = new StringJoiner(", ");
-    for (int i = 0; i < forkIds.size(); i++) {
+    for (int i = 0; i < rows.size(); i++) {
       inputRows.add("(?, ?)");
     }
     inputSQL.append(inputRows);
@@ -2894,9 +2449,9 @@ public class WorkflowDAO {
 
     try (var stmt = conn.prepareStatement(inputSQL.toString())) {
       int p = 1;
-      for (int i = 0; i < forkIds.size(); i++) {
-        stmt.setString(p++, forkIds.get(i));
-        stmt.setString(p++, dataList.get(i).inputs());
+      for (var row : rows) {
+        stmt.setString(p++, row.fork().forkedWorkflowId());
+        stmt.setString(p++, row.original().inputs());
       }
       stmt.executeUpdate();
     }
@@ -2918,17 +2473,11 @@ public class WorkflowDAO {
     }
   }
 
-  private static void batchCopyWorkflowData(
-      Connection conn,
-      String schema,
-      List<String> origIds,
-      List<String> forkIds,
-      List<Integer> startSteps,
-      List<@Nullable String> forkAppNames)
+  private static void batchCopyWorkflowData(Connection conn, String schema, List<ForkRow> rows)
       throws SQLException {
 
     StringJoiner valueRows = new StringJoiner(", ");
-    for (int i = 0; i < origIds.size(); i++) {
+    for (int i = 0; i < rows.size(); i++) {
       valueRows.add("(?::text, ?::text, ?::int, ?::text)");
     }
     String mappingCTE =
@@ -3001,12 +2550,12 @@ public class WorkflowDAO {
     for (String sql : List.of(ooSql, wehSql, weSql, streamSql)) {
       try (var stmt = conn.prepareStatement(sql)) {
         int p = 1;
-        for (int i = 0; i < origIds.size(); i++) {
-          stmt.setString(p++, origIds.get(i));
-          stmt.setString(p++, forkIds.get(i));
-          stmt.setInt(p++, startSteps.get(i));
+        for (var row : rows) {
+          stmt.setString(p++, row.fork().workflowId());
+          stmt.setString(p++, row.fork().forkedWorkflowId());
+          stmt.setInt(p++, row.fork().startStep());
           // The copied steps take the same app_name as the forked workflow row itself.
-          stmt.setString(p++, forkAppNames.get(i));
+          stmt.setString(p++, row.appName());
         }
         stmt.executeUpdate();
       }
@@ -3528,83 +3077,7 @@ public class WorkflowDAO {
   /** One payload batch's outcome: the watermark to resume from, and how many rows it took. */
   private record PayloadBatch(@Nullable Long step, int deleted) {}
 
-  /**
-   * @param applicationName count only workflows and steps owned by these applications, plus
-   *     unclaimed ones. Null counts this application's own; an explicitly empty list covers every
-   *     application's.
-   */
-  public static List<MetricData> getMetrics(
-      DbContext ctx, Instant startTime, Instant endTime, @Nullable List<String> applicationName)
-      throws SQLException {
-    final var start = Objects.requireNonNull(startTime).toEpochMilli();
-    final var end = Objects.requireNonNull(endTime).toEpochMilli();
-    logger.debug("getMetrics {} {}", start, end);
-    List<MetricData> metrics = new ArrayList<>();
-    final var names = ctx.scopeNames(applicationName);
-    final var scope =
-        names == null ? "" : " AND (application_name = ANY(?) OR application_name IS NULL)";
-    final var wfSQL =
-        """
-          SELECT name, COUNT(workflow_uuid) as count
-          FROM "%s".workflow_status
-          WHERE created_at >= ? AND created_at < ?
-        """
-                .formatted(ctx.schema())
-            + scope
-            + " GROUP BY name";
-    final var stepSQL =
-        """
-          SELECT function_name, COUNT(*) as count
-          FROM "%s".operation_outputs
-          WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
-        """
-                .formatted(ctx.schema())
-            + scope
-            + " GROUP BY function_name";
-
-    try (var conn = ctx.getConnection();
-        var ps1 = conn.prepareStatement(wfSQL);
-        var ps2 = conn.prepareStatement(stepSQL)) {
-
-      Array namesArray = names == null ? null : conn.createArrayOf("text", names.toArray());
-
-      ps1.setLong(1, start);
-      ps1.setLong(2, end);
-      if (namesArray != null) {
-        ps1.setArray(3, namesArray);
-      }
-
-      try (var rs = ps1.executeQuery()) {
-        while (rs.next()) {
-          var name = rs.getString("name");
-          var count = rs.getInt("count");
-          metrics.add(new MetricData("workflow_count", name, count));
-        }
-      }
-
-      ps2.setLong(1, start);
-      ps2.setLong(2, end);
-      if (namesArray != null) {
-        ps2.setArray(3, namesArray);
-      }
-
-      try (var rs = ps2.executeQuery()) {
-        while (rs.next()) {
-          var name = rs.getString("function_name");
-          var count = rs.getInt("count");
-          metrics.add(new MetricData("step_count", name, count));
-        }
-      } finally {
-        if (namesArray != null) {
-          namesArray.free();
-        }
-      }
-    }
-
-    return metrics;
-  }
-
-  static List<WorkflowEvent> listWorkflowEvents(Connection conn, String schema, String workflowId)
+  public static Map<String, Object> getAllEvents(DbContext ctx, String workflowId)
       throws SQLException {
     var sql =
         """
@@ -3612,449 +3085,21 @@ public class WorkflowDAO {
         FROM "%s".workflow_events
         WHERE workflow_uuid = ?
         """
-            .formatted(schema);
+            .formatted(ctx.schema());
 
-    var events = new ArrayList<WorkflowEvent>();
-    try (var stmt = conn.prepareStatement(sql)) {
+    var result = new LinkedHashMap<String, Object>();
+    try (var conn = ctx.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var serialization = rs.getString("serialization");
-          events.add(new WorkflowEvent(key, value, serialization));
+          result.put(
+              rs.getString("key"),
+              SerializationUtil.deserializeValue(
+                  rs.getString("value"), rs.getString("serialization"), ctx.serializer()));
         }
       }
     }
-    return events;
-  }
-
-  static List<WorkflowEventHistory> listWorkflowEventHistory(
-      Connection conn, String schema, String workflowId) throws SQLException {
-    var sql =
-        """
-        SELECT key, value, function_id, serialization
-        FROM "%s".workflow_events_history
-        WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-
-    var history = new ArrayList<WorkflowEventHistory>();
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var stepId = rs.getInt("function_id");
-          var serialization = rs.getString("serialization");
-          history.add(new WorkflowEventHistory(key, value, stepId, serialization));
-        }
-      }
-    }
-    return history;
-  }
-
-  static List<WorkflowStream> listWorkflowStreams(Connection conn, String schema, String workflowId)
-      throws SQLException {
-    var sql =
-        """
-        SELECT key, value, "offset", function_id, serialization
-        FROM "%s".streams
-        WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-
-    var streams = new ArrayList<WorkflowStream>();
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var offset = rs.getInt("offset");
-          var stepId = rs.getInt("function_id");
-          var serialization = rs.getString("serialization");
-          streams.add(new WorkflowStream(key, value, offset, stepId, serialization));
-        }
-      }
-    }
-    return streams;
-  }
-
-  /**
-   * Refuse to import a workflow with a payload this runtime would have to re-serialize but cannot.
-   *
-   * <p>Payloads carried as stored strings are written back unchanged and need no serializer. Only
-   * an export written before payloads travelled that way carries them deserialized, in the
-   * workflow's status and its steps, and re-serializing those needs the format that wrote them. A
-   * payload dropped on the way through would restore a workflow that never had it.
-   */
-  private static void requireSerializerFor(ExportedWorkflow workflow, DBOSSerializer serializer) {
-    var status = workflow.status();
-    var payloads = workflow.payloads();
-    var formats = new LinkedHashSet<String>();
-    if (payloads == null && !SerializationUtil.canDeserialize(status.serialization(), serializer)) {
-      formats.add(status.serialization());
-    }
-    var storedSteps = storedStepsById(payloads);
-    for (var step : workflow.steps()) {
-      if (!storedSteps.containsKey(step.functionId())
-          && !SerializationUtil.canDeserialize(step.serialization(), serializer)) {
-        formats.add(step.serialization());
-      }
-    }
-    if (!formats.isEmpty()) {
-      throw new IllegalStateException(
-          "Cannot import workflow %s: it is serialized as %s, which this application has no serializer for"
-              .formatted(status.workflowId(), String.join(", ", formats)));
-    }
-  }
-
-  private static Map<Integer, ExportedWorkflow.SerializedStep> storedStepsById(
-      ExportedWorkflow.@Nullable SerializedPayloads payloads) {
-    if (payloads == null) {
-      return Map.of();
-    }
-    return payloads.steps().stream()
-        .collect(Collectors.toMap(ExportedWorkflow.SerializedStep::stepId, s -> s));
-  }
-
-  /**
-   * Exports a workflow, and its children when asked, with every payload exactly as stored.
-   *
-   * <p>Nothing is deserialized: the payloads travel as stored strings in {@link
-   * ExportedWorkflow#payloads()}, so an export keeps the payloads' types however the export is
-   * encoded, and needs no serializer for them. A workflow written in a format this application
-   * cannot read exports like any other.
-   */
-  public static List<ExportedWorkflow> exportWorkflow(
-      DbContext ctx, String workflowId, boolean exportChildren) throws SQLException {
-
-    var workflowIds =
-        exportChildren
-            ? Stream.concat(
-                    getWorkflowChildren(ctx, workflowId).stream(), List.of(workflowId).stream())
-                .toList()
-            : List.of(workflowId);
-
-    var workflows = new ArrayList<ExportedWorkflow>();
-    for (var wfid : workflowIds) {
-      try (var conn = ctx.getConnection()) {
-        WorkflowStatus status = null;
-        String serialization = null;
-        String inputs = null;
-        String output = null;
-        String error = null;
-        try (var stmt = conn.prepareStatement(workflowStatusByIdSql(ctx.schema()))) {
-          stmt.setString(1, wfid);
-          try (var rs = stmt.executeQuery()) {
-            if (rs.next()) {
-              // The metadata only: the payloads are taken below as the strings they are stored as.
-              status = resultsToWorkflowStatus(rs, false, false, ctx.serializer());
-              serialization = rs.getString("serialization");
-              inputs = rs.getString("inputs");
-              output = rs.getString("output");
-              error = rs.getString("error");
-            }
-          }
-        }
-        var steps = StepsDAO.exportWorkflowSteps(conn, ctx.schema(), wfid);
-        var payloads =
-            status == null
-                ? null
-                : new ExportedWorkflow.SerializedPayloads(
-                    serialization, inputs, output, error, steps.stored());
-        var events = listWorkflowEvents(conn, ctx.schema(), wfid);
-        var eventHistory = listWorkflowEventHistory(conn, ctx.schema(), wfid);
-        var streams = listWorkflowStreams(conn, ctx.schema(), wfid);
-        workflows.add(
-            new ExportedWorkflow(status, steps.steps(), events, eventHistory, streams, payloads));
-      }
-    }
-    return workflows;
-  }
-
-  public static void importWorkflow(DbContext ctx, List<ExportedWorkflow> workflows)
-      throws SQLException {
-
-    DBOSSerializer serializer = ctx.serializer();
-    // The whole batch, before anything is written: export and import are a single-SDK affair but
-    // not a single-configuration one, and a payload we cannot re-serialize imports empty.
-    for (var workflow : workflows) {
-      requireSerializerFor(workflow, serializer);
-    }
-
-    var wfSQL =
-        """
-        INSERT INTO "%s".workflow_status (
-          workflow_uuid, status,
-          name, class_name, config_name,
-          authenticated_user, assumed_role, authenticated_roles,
-          executor_id, application_version, application_id,
-          created_at, updated_at, started_at_epoch_ms,
-          queue_name, deduplication_id, priority, queue_partition_key,
-          workflow_timeout_ms, workflow_deadline_epoch_ms,
-          recovery_attempts, forked_from, parent_workflow_id, serialization,
-          delay_until_epoch_ms, completed_at, was_forked_from, attributes, schedule_name,
-          application_name, is_debounced, debounce_deadline_epoch_ms
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?,
-          ?, ?
-        )
-        """
-            .formatted(ctx.schema());
-
-    // retention_timestamp takes the column default, so retention starts at import. The export
-    // carries no retention timestamp to restore, and the original ones would be long past the
-    // cutoff, getting the payloads collected immediately.
-    var wfInputSQL =
-        """
-        INSERT INTO "%s".workflow_input (workflow_uuid, inputs) VALUES (?, ?)
-        """
-            .formatted(ctx.schema());
-
-    var wfOutputSQL =
-        """
-        INSERT INTO "%s".workflow_output (workflow_uuid, output, error) VALUES (?, ?, ?)
-        """
-            .formatted(ctx.schema());
-
-    var stepSQL =
-        """
-        INSERT INTO "%s".operation_outputs (
-          workflow_uuid, function_id, function_name,
-          output, error, child_workflow_id,
-          started_at_epoch_ms, completed_at_epoch_ms,
-          serialization, application_name
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(ctx.schema());
-
-    var eventSQL =
-        """
-        INSERT INTO "%s".workflow_events (
-          workflow_uuid, key, value, serialization
-        ) VALUES (
-          ?, ?, ?, ?
-        )
-        """
-            .formatted(ctx.schema());
-
-    var eventHistorySQL =
-        """
-        INSERT INTO "%s".workflow_events_history (
-          workflow_uuid, key, value, function_id, serialization
-        ) VALUES (
-          ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(ctx.schema());
-
-    var streamsSQL =
-        """
-        INSERT INTO "%s".streams (
-          workflow_uuid, key, value, function_id, "offset", serialization
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(ctx.schema());
-
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            try (var wfStmt = conn.prepareStatement(wfSQL);
-                var wfInputStmt = conn.prepareStatement(wfInputSQL);
-                var wfOutputStmt = conn.prepareStatement(wfOutputSQL);
-                var stepStmt = conn.prepareStatement(stepSQL);
-                var eventStmt = conn.prepareStatement(eventSQL);
-                var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
-                var streamsStmt = conn.prepareStatement(streamsSQL)) {
-
-              for (var workflow : workflows) {
-                var status = workflow.status();
-                var payloads = workflow.payloads();
-                // Stored strings are written back unchanged. Only an export that predates them
-                // carries its payloads deserialized, and those are re-serialized here.
-                var serialization =
-                    payloads != null ? payloads.serialization() : status.serialization();
-                var storedSteps = storedStepsById(payloads);
-
-                wfStmt.setString(1, status.workflowId());
-                wfStmt.setString(2, status.status().name());
-                wfStmt.setString(3, status.workflowName());
-                wfStmt.setString(4, status.className());
-                wfStmt.setString(5, status.instanceName());
-                wfStmt.setString(6, status.authenticatedUser());
-                wfStmt.setString(7, status.assumedRole());
-                wfStmt.setString(
-                    8,
-                    status.authenticatedRoles() == null
-                        ? null
-                        : JsonUtility.toJson(status.authenticatedRoles()));
-                String inputs;
-                String output;
-                String error;
-                if (payloads != null) {
-                  inputs = payloads.inputs();
-                  output = payloads.output();
-                  error = payloads.error();
-                } else {
-                  inputs =
-                      status.input() == null
-                          ? null
-                          : SerializationUtil.serializeArgs(
-                                  status.input(), null, status.serialization(), serializer)
-                              .serializedValue();
-                  output =
-                      status.output() == null
-                          ? null
-                          : SerializationUtil.serializeValue(
-                                  status.output(), status.serialization(), serializer)
-                              .serializedValue();
-                  error =
-                      status.error() == null
-                          ? null
-                          : SerializationUtil.serializeError(
-                                  status.error().throwable(), status.serialization(), serializer)
-                              .serializedValue();
-                }
-
-                wfStmt.setString(9, status.executorId());
-                wfStmt.setString(10, status.appVersion());
-                wfStmt.setString(11, status.appId());
-                wfStmt.setObject(12, status.createdAtEpochMs());
-                wfStmt.setObject(13, status.updatedAtEpochMs());
-                wfStmt.setObject(14, status.startedAtEpochMs());
-                wfStmt.setString(15, status.queueName());
-                wfStmt.setString(16, status.deduplicationId());
-                wfStmt.setObject(17, status.priority());
-                wfStmt.setString(18, status.queuePartitionKey());
-                wfStmt.setObject(19, status.timeoutMs());
-                wfStmt.setObject(20, status.deadlineEpochMs());
-                wfStmt.setObject(21, status.recoveryAttempts());
-                wfStmt.setString(22, status.forkedFrom());
-                wfStmt.setString(23, status.parentWorkflowId());
-                wfStmt.setString(24, serialization);
-                wfStmt.setObject(25, status.delayUntilEpochMs());
-                wfStmt.setObject(26, status.completedAtEpochMs());
-                // NOT NULL column: an export predating it carries no value, so fall back to false.
-                wfStmt.setBoolean(27, Boolean.TRUE.equals(status.wasForkedFrom()));
-                wfStmt.setString(28, attributesToJson(status.attributes()));
-                wfStmt.setString(29, status.scheduleName());
-                wfStmt.setString(30, status.applicationName());
-                // NOT NULL column: an export predating it carries no value, so fall back to false.
-                wfStmt.setBoolean(31, Boolean.TRUE.equals(status.isDebounced()));
-                wfStmt.setObject(32, status.debounceDeadlineEpochMs());
-                wfStmt.addBatch();
-
-                // Every workflow has an input row, as in Python; an output row only once there is
-                // an output or an error to hold.
-                wfInputStmt.setString(1, status.workflowId());
-                wfInputStmt.setString(2, inputs);
-                wfInputStmt.addBatch();
-                if (output != null || error != null) {
-                  wfOutputStmt.setString(1, status.workflowId());
-                  wfOutputStmt.setString(2, output);
-                  wfOutputStmt.setString(3, error);
-                  wfOutputStmt.addBatch();
-                }
-
-                for (var step : workflow.steps()) {
-                  stepStmt.setString(1, status.workflowId());
-                  stepStmt.setInt(2, step.functionId());
-                  stepStmt.setString(3, step.functionName());
-                  var stored = storedSteps.get(step.functionId());
-                  if (stored != null) {
-                    stepStmt.setString(4, stored.output());
-                    stepStmt.setString(5, stored.error());
-                  } else {
-                    stepStmt.setString(
-                        4,
-                        step.output() == null
-                            ? null
-                            : SerializationUtil.serializeValue(
-                                    step.output(), step.serialization(), serializer)
-                                .serializedValue());
-                    stepStmt.setString(
-                        5, step.error() == null ? null : step.error().serializedError());
-                  }
-                  stepStmt.setString(6, step.childWorkflowId());
-                  stepStmt.setObject(7, step.startedAtEpochMs());
-                  stepStmt.setObject(8, step.completedAtEpochMs());
-                  stepStmt.setString(9, step.serialization());
-                  // A step keeps exactly the app_name it was exported with. An export that predates
-                  // the column carries no app_name, so its steps import unclaimed rather than
-                  // inheriting a guess from the workflow -- the same choice Python and TypeScript
-                  // make.
-                  stepStmt.setString(10, step.applicationName());
-                  stepStmt.addBatch();
-                }
-
-                for (var event : workflow.events()) {
-                  eventStmt.setString(1, status.workflowId());
-                  eventStmt.setString(2, event.key());
-                  eventStmt.setString(3, event.value());
-                  eventStmt.setString(4, event.serialization());
-                  eventStmt.addBatch();
-                }
-
-                for (var history : workflow.eventHistory()) {
-                  eventHistoryStmt.setString(1, status.workflowId());
-                  eventHistoryStmt.setString(2, history.key());
-                  eventHistoryStmt.setString(3, history.value());
-                  eventHistoryStmt.setInt(4, history.stepId());
-                  eventHistoryStmt.setString(5, history.serialization());
-                  eventHistoryStmt.addBatch();
-                }
-
-                for (var stream : workflow.streams()) {
-                  streamsStmt.setString(1, status.workflowId());
-                  streamsStmt.setString(2, stream.key());
-                  streamsStmt.setString(3, stream.value());
-                  streamsStmt.setInt(4, stream.stepId());
-                  streamsStmt.setInt(5, stream.offset());
-                  streamsStmt.setString(6, stream.serialization());
-                  streamsStmt.addBatch();
-                }
-              }
-
-              wfStmt.executeBatch();
-
-              // The status inserts fail on an existing row, so any payload under these IDs is a
-              // leftover retention has not swept yet. Clear it before writing this import's own.
-              deleteWorkflowChildRows(
-                  conn,
-                  ctx.schema(),
-                  workflows.stream().map(w -> w.status().workflowId()).toArray(String[]::new));
-
-              wfInputStmt.executeBatch();
-              wfOutputStmt.executeBatch();
-              stepStmt.executeBatch();
-              eventStmt.executeBatch();
-              eventHistoryStmt.executeBatch();
-              streamsStmt.executeBatch();
-            }
-          });
-    }
-  }
-
-  public static Map<String, Object> getAllEvents(DbContext ctx, String workflowId)
-      throws SQLException {
-    try (var conn = ctx.getConnection()) {
-      var events = listWorkflowEvents(conn, ctx.schema(), workflowId);
-      var result = new LinkedHashMap<String, Object>();
-      for (var event : events) {
-        result.put(
-            event.key(),
-            SerializationUtil.deserializeValue(
-                event.value(), event.serialization(), ctx.serializer()));
-      }
-      return result;
-    }
+    return result;
   }
 }

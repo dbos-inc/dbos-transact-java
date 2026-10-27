@@ -1,8 +1,12 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.WorkflowHandle;
+
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
  * Note that this class is in the `dev.dbos.transact.execution` package and allows access to
@@ -19,6 +23,19 @@ public class DBOSExecutorTestAccess {
 
   public static SchedulerService getSchedulerService(DBOSExecutor exec) {
     return exec.getSchedulerService();
+  }
+
+  /** Tasks queued on the executor's timeout scheduler: workflow timers and periodic upkeep. */
+  public static int queuedTimeoutTasks(DBOSExecutor exec) {
+    return ((ScheduledThreadPoolExecutor) exec.timeoutScheduler()).getQueue().size();
+  }
+
+  public static ConductorOptions getConductorOptions(DBOSExecutor exec) {
+    return exec.conductorOptions();
+  }
+
+  public static ConductorProvider getConductorProvider(DBOSExecutor exec) {
+    return exec.conductorProvider();
   }
 
   /**

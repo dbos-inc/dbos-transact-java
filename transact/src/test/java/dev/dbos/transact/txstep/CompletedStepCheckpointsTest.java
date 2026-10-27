@@ -2,6 +2,7 @@ package dev.dbos.transact.txstep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -20,6 +21,7 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
@@ -49,6 +51,8 @@ interface CompletionService {
   String stepResultNotRecorded() throws SQLException;
 
   String interruptedThenFails() throws SQLException;
+
+  String cleanupOutlastsTheDeadline() throws SQLException;
 }
 
 class CompletionServiceImpl implements CompletionService {
@@ -58,6 +62,7 @@ class CompletionServiceImpl implements CompletionService {
   final CountDownLatch gate = new CountDownLatch(1);
   StepCheckpointStore brokenStore;
   StepCheckpointStore recordingStore;
+  StepCheckpointStore blockingStore;
   final AtomicInteger unrecordedRuns = new AtomicInteger();
 
   CompletionServiceImpl(DBOS dbos, JdbcStepFactory factory) {
@@ -116,6 +121,14 @@ class CompletionServiceImpl implements CompletionService {
     factory.txStep((Connection conn) -> {}, "one");
     Thread.currentThread().interrupt();
     throw new IllegalStateException("interrupted");
+  }
+
+  @Override
+  @Workflow
+  public String cleanupOutlastsTheDeadline() throws SQLException {
+    dbos.integration().useStepCheckpointStore(blockingStore);
+    factory.txStep((Connection conn) -> {}, "one");
+    return "done";
   }
 
   @Override
@@ -255,6 +268,44 @@ public class CompletedStepCheckpointsTest {
     assertEquals("owner-result", done.get(30, TimeUnit.SECONDS));
     assertEquals(1, cleanups.get());
     assertEquals(1, checkpoints(workflowId));
+  }
+
+  /**
+   * Deleting the checkpoints comes before the outcome is written, so the deadline still applies to
+   * it: a cleanup that outlasts the deadline doesn't hold the handle past it.
+   */
+  @Test
+  public void aCleanupThatOutlastsTheDeadlineStillEndsTheWaitAtIt() throws Exception {
+    launch(false);
+    var cleanupGate = new CountDownLatch(1);
+    impl.blockingStore =
+        new StepCheckpointStore() {
+          @Override
+          public void deleteCheckpoints(String workflowId, int fromStepId) {}
+
+          @Override
+          public void deleteCheckpoints(Collection<String> workflowIds) {}
+
+          @Override
+          public void deleteCompletedCheckpoints(String workflowId) {
+            try {
+              cleanupGate.await(60, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+          }
+        };
+    try {
+      var handle =
+          dbos.startWorkflow(
+              proxy::cleanupOutlastsTheDeadline,
+              new StartWorkflowOptions("wf-slow-cleanup").withTimeout(Duration.ofSeconds(2)));
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> assertTimeoutPreemptively(Duration.ofSeconds(15), () -> handle.getResult()));
+    } finally {
+      cleanupGate.countDown();
+    }
   }
 
   @Test

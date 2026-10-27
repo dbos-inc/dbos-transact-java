@@ -92,11 +92,17 @@ public class DBOSProperties {
   /** DBOS Cloud conductor connection properties. */
   public static class Conductor {
 
-    /** Conductor API key. */
+    /**
+     * Conductor API key. Connecting to Conductor requires {@code dev.dbos:transact-enterprise} on
+     * the class path.
+     */
     private String key;
 
     /** Conductor domain. */
     private String domain;
+
+    /** Whether Conductor receives only workflow metadata, never workflow data. */
+    private boolean metadataOnlyMode;
 
     public String getKey() {
       return key;
@@ -112,6 +118,14 @@ public class DBOSProperties {
 
     public void setDomain(String domain) {
       this.domain = domain;
+    }
+
+    public boolean isMetadataOnlyMode() {
+      return metadataOnlyMode;
+    }
+
+    public void setMetadataOnlyMode(boolean metadataOnlyMode) {
+      this.metadataOnlyMode = metadataOnlyMode;
     }
   }
 

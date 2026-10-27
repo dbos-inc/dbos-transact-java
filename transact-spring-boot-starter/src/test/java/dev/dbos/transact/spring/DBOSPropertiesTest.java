@@ -36,6 +36,7 @@ class DBOSPropertiesTest {
     assertNotNull(props.getConductor());
     assertNull(props.getConductor().getKey());
     assertNull(props.getConductor().getDomain());
+    assertFalse(props.getConductor().isMetadataOnlyMode());
     assertNull(props.getExecutorId());
     assertNull(props.getDatasource().getSchema());
     assertNull(props.getSchedulerPollingInterval());
@@ -88,9 +89,18 @@ class DBOSPropertiesTest {
 
   @Test
   void bindsConductorProperties() {
-    var props = bind(Map.of("dbos.conductor.key", "my-key", "dbos.conductor.domain", "my-domain"));
+    var props =
+        bind(
+            Map.of(
+                "dbos.conductor.key",
+                "my-key",
+                "dbos.conductor.domain",
+                "my-domain",
+                "dbos.conductor.metadata-only-mode",
+                "true"));
     assertEquals("my-key", props.getConductor().getKey());
     assertEquals("my-domain", props.getConductor().getDomain());
+    assertTrue(props.getConductor().isMetadataOnlyMode());
   }
 
   @Test
