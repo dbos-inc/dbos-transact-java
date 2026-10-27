@@ -357,8 +357,49 @@ public class StepsDAO {
     }
   }
 
+  /**
+   * A durable sleep's wake time, recorded at {@code functionId} so a replay wakes at the same
+   * instant. A wake time past the largest instant epoch milliseconds can hold is refused with an
+   * {@link IllegalArgumentException}, and the refusal is recorded in its place: whether the sum
+   * fits depends on the clock, so a replay throws what the first run recorded rather than deciding
+   * again against a later clock.
+   */
   static Instant durableSleepEndTime(
       DbContext ctx, String workflowUuid, int functionId, Duration duration, String ownerXid)
+      throws SQLException {
+    return durableEndTime(ctx, workflowUuid, functionId, duration, ownerXid, true);
+  }
+
+  /**
+   * A blocking read's deadline, recorded at {@code functionId} as a sleep's wake time is. A
+   * deadline too far out to store is one that never elapses, which is what the caller asked for, so
+   * it is held at the largest instant rather than refused. See {@link #deadlineEpochMs}.
+   */
+  static Instant durableDeadline(
+      DbContext ctx, String workflowUuid, int functionId, Duration timeout, String ownerXid)
+      throws SQLException {
+    return durableEndTime(ctx, workflowUuid, functionId, timeout, ownerXid, false);
+  }
+
+  /**
+   * {@code timeout} from {@code nowEpochMs}, held within the range of epoch milliseconds where the
+   * sum would leave it: a deadline too far out to store never elapses.
+   */
+  static long deadlineEpochMs(long nowEpochMs, Duration timeout) {
+    try {
+      return Math.addExact(nowEpochMs, timeout.toMillis());
+    } catch (ArithmeticException e) {
+      return timeout.isNegative() ? Long.MIN_VALUE : Long.MAX_VALUE;
+    }
+  }
+
+  private static Instant durableEndTime(
+      DbContext ctx,
+      String workflowUuid,
+      int functionId,
+      Duration duration,
+      String ownerXid,
+      boolean isSleep)
       throws SQLException {
 
     DBOSSerializer serializer = ctx.serializer();
@@ -376,6 +417,16 @@ public class StepsDAO {
     if (recordedOutput != null) {
       logger.debug(
           "Replaying sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
+      // Only a sleep records a refusal; a deadline is held at the largest instant instead.
+      if (isSleep && recordedOutput.error() != null) {
+        var refusal =
+            SerializationUtil.deserializeError(
+                recordedOutput.error(), recordedOutput.serialization(), serializer);
+        if (refusal instanceof RuntimeException runtimeException) {
+          throw runtimeException;
+        }
+        throw new RuntimeException(refusal.getMessage(), refusal);
+      }
       if (recordedOutput.output() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
@@ -391,7 +442,39 @@ public class StepsDAO {
       logger.debug(
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
 
-      var endTime = System.currentTimeMillis() + duration.toMillis();
+      var now = System.currentTimeMillis();
+      long endTime;
+      if (isSleep) {
+        try {
+          endTime = Math.addExact(now, duration.toMillis());
+        } catch (ArithmeticException e) {
+          // Recording a different wake time would wake the workflow at the wrong time on every
+          // replay, so the sleep is refused, and the refusal recorded as the step's outcome.
+          var refusal =
+              new IllegalArgumentException(
+                  "sleep duration must not end past the latest instant 64-bit epoch milliseconds"
+                      + " can hold");
+          var serializedError =
+              SerializationUtil.serializeError(
+                  refusal, serializer != null ? serializer.name() : null, serializer);
+          recordStepResult(
+              ctx,
+              new StepResult(
+                  workflowUuid,
+                  functionId,
+                  functionName,
+                  null,
+                  serializedError.serializedValue(),
+                  null,
+                  serializedError.serialization()),
+              startTime,
+              System.currentTimeMillis(),
+              ownerXid);
+          throw refusal;
+        }
+      } else {
+        endTime = deadlineEpochMs(now, duration);
+      }
       var serializedValue =
           SerializationUtil.serializeValue(
               endTime, serializer != null ? serializer.name() : null, serializer);

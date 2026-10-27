@@ -1,5 +1,7 @@
 package dev.dbos.transact;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import static dev.dbos.transact.internal.Validation.validateAttributes;
@@ -126,6 +128,10 @@ public record EnqueueOptions(
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
 
+    if (timeout instanceof Timeout.Explicit explicit && nullableExceedsMillis(explicit.value())) {
+      throw new IllegalArgumentException(exceedsMillis("explicit timeout"));
+    }
+
     // Two bounds for one workflow contradict each other. No timeout, or an inherited one, does not:
     // the deadline then acts alone.
     if (timeout instanceof Timeout.Explicit && deadline != null) {
@@ -142,6 +148,10 @@ public record EnqueueOptions(
 
     if (nullableIsNotPositive(delay)) {
       throw new IllegalArgumentException("delay must be positive, non-zero duration");
+    }
+
+    if (nullableExceedsMillis(delay)) {
+      throw new IllegalArgumentException(exceedsMillis("delay"));
     }
 
     if (nullableIsEmpty(applicationName)) {

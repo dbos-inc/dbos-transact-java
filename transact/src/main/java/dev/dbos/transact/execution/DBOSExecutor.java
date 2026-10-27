@@ -1065,6 +1065,11 @@ public class DBOSExecutor implements AutoCloseable {
     if (context.getWorkflowId() == null) {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
+    // Before the step id is taken, so a refused sleep moves no counter. A duration that fits but
+    // carries the wake time past the largest instant is refused inside the step, and recorded.
+    if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
+      throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
+    }
 
     systemDatabase.sleep(
         context.getWorkflowId(),
@@ -2826,27 +2831,12 @@ public class DBOSExecutor implements AutoCloseable {
       // owns the parent: one that does not is refused here, and stops.
       // A failure to record it is thrown instead, with the collision attached: thrown unrecorded,
       // the collision would let the parent take a path its replay cannot repeat.
-      if (parent != null) {
-        // In the native format whatever serializer is configured: a replay must rebuild the exact
-        // type the parent and Debouncer catch, which a custom serializer need not preserve.
-        var error = SerializationUtil.serializeError(e, SerializationUtil.NATIVE, null);
-        try {
-          systemDatabase.recordStepResult(
-              new StepResult(
-                  parent.workflowId(),
-                  parent.functionId(),
-                  workflowName,
-                  null,
-                  error.serializedValue(),
-                  null,
-                  error.serialization()),
-              startTime,
-              parent.ownerXid());
-        } catch (RuntimeException recordFailure) {
-          recordFailure.addSuppressed(e);
-          throw recordFailure;
-        }
-      }
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
+      throw e;
+    } catch (SystemDatabase.DelayPastLatestInstantException e) {
+      // Recorded for the same reason as a collision: whether the delay fits depends on the clock,
+      // and a replay must not decide it again against a later one.
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
       throw e;
     } catch (DBOSWorkflowExecutionConflictException e) {
       // A parent that no longer owns its workflow was refused: the fence working, not a failure.
@@ -2857,6 +2847,37 @@ public class DBOSExecutor implements AutoCloseable {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
       throw e;
+    }
+  }
+
+  /** Records a child enqueue's refusal as its parent's step, if it has a parent. */
+  private static void recordRefusalAtParent(
+      SystemDatabase systemDatabase,
+      @Nullable WorkflowInfo parent,
+      String workflowName,
+      RuntimeException refusal,
+      long startTime) {
+    if (parent == null) {
+      return;
+    }
+    // In the native format whatever serializer is configured: a replay must rebuild the exact
+    // type the parent and Debouncer catch, which a custom serializer need not preserve.
+    var error = SerializationUtil.serializeError(refusal, SerializationUtil.NATIVE, null);
+    try {
+      systemDatabase.recordStepResult(
+          new StepResult(
+              parent.workflowId(),
+              parent.functionId(),
+              workflowName,
+              null,
+              error.serializedValue(),
+              null,
+              error.serialization()),
+          startTime,
+          parent.ownerXid());
+    } catch (RuntimeException recordFailure) {
+      recordFailure.addSuppressed(refusal);
+      throw recordFailure;
     }
   }
 

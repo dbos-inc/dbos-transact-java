@@ -1,5 +1,8 @@
 package dev.dbos.transact.workflow;
 
+import static dev.dbos.transact.internal.Validation.exceedsMillis;
+import static dev.dbos.transact.internal.Validation.nullableExceedsMillis;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -10,7 +13,10 @@ public sealed interface WorkflowDelay permits WorkflowDelay.Delay, WorkflowDelay
 
   record Delay(@NonNull Duration delay) implements WorkflowDelay {
     public Delay {
-      Objects.requireNonNull(delay);
+      // Refused here, before setWorkflowDelay takes a step, so a refused call records nothing.
+      if (nullableExceedsMillis(Objects.requireNonNull(delay))) {
+        throw new IllegalArgumentException(exceedsMillis("delay"));
+      }
     }
   }
 

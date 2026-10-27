@@ -43,6 +43,28 @@ public class Validation {
   }
 
   /**
+   * Whether {@code value} is too long to store as milliseconds in a 64-bit integer, which is how
+   * the system database records every timeout, delay and wake time. Such a value is refused rather
+   * than left to {@link Duration#toMillis} to throw wherever it is first converted.
+   */
+  public static boolean nullableExceedsMillis(@Nullable Duration value) {
+    if (value == null) {
+      return false;
+    }
+    try {
+      value.toMillis();
+      return false;
+    } catch (ArithmeticException e) {
+      return true;
+    }
+  }
+
+  /** The message every refusal of a duration {@link #nullableExceedsMillis} rejects uses. */
+  public static String exceedsMillis(String what) {
+    return what + " must fit in milliseconds as a 64-bit integer";
+  }
+
+  /**
    * Validate that the supplied workflow attributes are JSON-serializable and return an unmodifiable
    * defensive copy (or {@code null}). Fails fast here rather than surfacing an opaque error later
    * when the workflow status is recorded as JSON. {@code null} values within the map are permitted.
