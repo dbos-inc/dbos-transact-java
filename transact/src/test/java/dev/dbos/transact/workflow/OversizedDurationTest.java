@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -27,6 +28,10 @@ interface DurationService {
   String recvWithTimeout(boolean tooLongForMillis);
 
   String setEvent();
+
+  String getEventWithTimeoutTooFarOut(String targetId);
+
+  String setWorkflowDelayPastTheLatestInstant();
 
   String enqueueChildPastTheLatestInstant();
 
@@ -73,6 +78,24 @@ class DurationServiceImpl implements DurationService {
   public String setEvent() {
     dbos.setEvent("key", "value");
     return "set";
+  }
+
+  @Override
+  @Workflow
+  public String getEventWithTimeoutTooFarOut(String targetId) {
+    return dbos.<String>getEvent(targetId, "key", Duration.ofMillis(Long.MAX_VALUE))
+        .orElse("timed out");
+  }
+
+  @Override
+  @Workflow
+  public String setWorkflowDelayPastTheLatestInstant() {
+    try {
+      dbos.setWorkflowDelay("any-workflow", Duration.ofMillis(Long.MAX_VALUE));
+      return "delayed";
+    } catch (IllegalArgumentException e) {
+      return e.getClass().getSimpleName();
+    }
   }
 
   @Override
@@ -132,6 +155,14 @@ public class OversizedDurationTest {
     assertThrows(
         IllegalArgumentException.class, () -> new ForkOptions(null, null, tooLong, null, null));
     assertThrows(IllegalArgumentException.class, () -> new WorkflowDelay.Delay(tooLong));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new EnqueueOptions("wf", new QueueName(QUEUE)).withTimeout(tooLong));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new EnqueueOptions("wf", new QueueName(QUEUE)).withDelay(tooLong));
+    // A sleep outside a workflow too, so the call does not fail differently by where it runs.
+    assertThrows(IllegalArgumentException.class, () -> dbos.sleep(tooLong));
 
     // The largest duration that converts is accepted.
     var largest = Duration.ofMillis(Long.MAX_VALUE);
@@ -197,6 +228,9 @@ public class OversizedDurationTest {
       Thread.sleep(50);
     }
     assertEquals(Long.MAX_VALUE, deadline.output(), "the deadline is held at the largest instant");
+    assertTrue(
+        deadline.completedAt().isBefore(java.time.Instant.now().plusSeconds(60)),
+        "a deadline step is stamped with the time it was recorded, not the deadline");
 
     dbos.send(workflowId, "hello", "topic");
     assertEquals("hello", handle.getResult());
@@ -247,6 +281,57 @@ public class OversizedDurationTest {
 
     // A replay throws the recorded refusal rather than deciding again.
     assertEquals(refusal, dbos.<String, RuntimeException>forkWorkflow(workflowId, 1).getResult());
+  }
+
+  @Test
+  void aGetEventInsideAWorkflowWithATimeoutTooFarOutToStoreNeverTimesOut() throws Exception {
+    var getterId = UUID.randomUUID().toString();
+    var targetId = UUID.randomUUID().toString();
+    var getter =
+        dbos.startWorkflow(
+            () -> proxy.getEventWithTimeoutTooFarOut(targetId),
+            new StartWorkflowOptions().withWorkflowId(getterId));
+    var deadline = awaitDeadline(getterId);
+    assertEquals(Long.MAX_VALUE, deadline.output(), "the deadline is held at the largest instant");
+
+    dbos.startWorkflow(() -> proxy.setEvent(), new StartWorkflowOptions().withWorkflowId(targetId))
+        .getResult();
+    assertEquals("value", getter.getResult());
+  }
+
+  @Test
+  void aWorkflowDelayPastTheLatestInstantIsRefusedAndTheRefusalReplayed() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    var refusal = "DBOSDelayPastLatestInstantException";
+    assertEquals(
+        refusal,
+        dbos.startWorkflow(
+                () -> proxy.setWorkflowDelayPastTheLatestInstant(),
+                new StartWorkflowOptions().withWorkflowId(workflowId))
+            .getResult());
+
+    var steps = dbos.listWorkflowSteps(workflowId);
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.setWorkflowDelay", steps.get(0).functionName());
+    assertNotNull(steps.get(0).error(), "the refusal is recorded as the step's outcome");
+
+    assertEquals(refusal, dbos.<String, RuntimeException>forkWorkflow(workflowId, 1).getResult());
+  }
+
+  /** Waits for a read's deadline step in {@code workflowId} to be recorded, and returns it. */
+  private StepInfo awaitDeadline(String workflowId) throws InterruptedException {
+    long giveUp = System.currentTimeMillis() + 10_000;
+    while (true) {
+      assertTrue(System.currentTimeMillis() < giveUp, "the read never recorded its deadline");
+      var deadline =
+          dbos.listWorkflowSteps(workflowId).stream()
+              .filter(step -> step.functionName().equals("DBOS.sleep"))
+              .findFirst();
+      if (deadline.isPresent()) {
+        return deadline.get();
+      }
+      Thread.sleep(50);
+    }
   }
 
   private String lastWorkflowId(String workflowName) {

@@ -454,9 +454,10 @@ public class StepsDAO {
               new IllegalArgumentException(
                   "sleep duration must not end past the latest instant 64-bit epoch milliseconds"
                       + " can hold");
+          // In the native format whatever serializer is configured, as a child start's refusal is:
+          // a replay must rebuild the exact type a workflow catches.
           var serializedError =
-              SerializationUtil.serializeError(
-                  refusal, serializer != null ? serializer.name() : null, serializer);
+              SerializationUtil.serializeError(refusal, SerializationUtil.NATIVE, null);
           recordStepResult(
               ctx,
               new StepResult(
@@ -490,7 +491,9 @@ public class StepsDAO {
       // A conflict means this execution no longer owns the workflow. It propagates, so this run
       // stops and adopts the workflow's recorded outcome rather than sleeping to a wake time the
       // workflow never recorded.
-      recordStepResult(ctx, output, startTime, (long) endTime, ownerXid);
+      // A sleep completes at its wake time. A deadline only bounds a wait, and may be held at the
+      // largest instant, so it is stamped with the time it was recorded.
+      recordStepResult(ctx, output, startTime, isSleep ? endTime : now, ownerXid);
       return Instant.ofEpochMilli(endTime);
     }
   }
