@@ -7,6 +7,7 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -73,6 +74,10 @@ import org.jspecify.annotations.Nullable;
  * @param applicationName The application that owns the enqueued workflow, and whose executors
  *     therefore dequeue and run it. Optional; defaults to the enqueueing application. Set it to
  *     enqueue work for a peer sharing this system database.
+ * @param workflowIdReusePolicy What to do when a workflow with {@code workflowId} already exists,
+ *     whatever its status: attach to it ({@link WorkflowIdReusePolicy#RETURN_EXISTING}, the
+ *     default) or refuse with {@link dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}
+ *     ({@link WorkflowIdReusePolicy#REJECT}). May be null.
  */
 public record EnqueueOptions(
     @NonNull String workflowName,
@@ -92,7 +97,8 @@ public record EnqueueOptions(
     @Nullable String assumedRole,
     @Nullable List<String> authenticatedRoles,
     @Nullable Map<String, Object> attributes,
-    @Nullable String applicationName) {
+    @Nullable String applicationName,
+    @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
 
   public EnqueueOptions {
     Objects.requireNonNull(workflowName, "workflowName must not be null");
@@ -224,6 +230,7 @@ public record EnqueueOptions(
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -253,7 +260,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -284,7 +292,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -314,7 +323,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -390,7 +400,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -419,7 +430,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -447,7 +459,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -477,7 +490,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -506,7 +520,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -536,7 +551,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -564,7 +580,8 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -592,7 +609,8 @@ public record EnqueueOptions(
         assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -620,7 +638,8 @@ public record EnqueueOptions(
         this.assumedRole,
         authenticatedRoles != null ? List.of(authenticatedRoles) : null,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -650,7 +669,8 @@ public record EnqueueOptions(
         this.assumedRole,
         authenticatedRoles != null ? List.of(authenticatedRoles) : null,
         this.attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -680,7 +700,41 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         attributes,
-        this.applicationName);
+        this.applicationName,
+        this.workflowIdReusePolicy);
+  }
+
+  /**
+   * Returns a new EnqueueOptions with the specified workflow ID reuse policy.
+   *
+   * @param workflowIdReusePolicy what to do when a workflow with this ID already exists: {@link
+   *     WorkflowIdReusePolicy#RETURN_EXISTING} (the default) attaches to it, {@link
+   *     WorkflowIdReusePolicy#REJECT} refuses with {@link
+   *     dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}
+   * @return a new EnqueueOptions with the updated policy
+   */
+  public @NonNull EnqueueOptions withWorkflowIdReusePolicy(
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return new EnqueueOptions(
+        this.workflowName,
+        this.className,
+        this.instanceName,
+        this.queueName,
+        this.workflowId,
+        this.appVersion,
+        this.timeout,
+        this.deadline,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.applicationName,
+        workflowIdReusePolicy);
   }
 
   /**
@@ -712,6 +766,7 @@ public record EnqueueOptions(
         this.assumedRole,
         this.authenticatedRoles,
         this.attributes,
-        applicationName);
+        applicationName,
+        this.workflowIdReusePolicy);
   }
 }

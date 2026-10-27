@@ -1016,7 +1016,9 @@ public class DBOSClient implements AutoCloseable {
           assumedRole,
           authenticatedRoles,
           attributes,
-          applicationName);
+          applicationName,
+          // workflowIdReusePolicy: this deprecated type has none.
+          null);
     }
   }
 

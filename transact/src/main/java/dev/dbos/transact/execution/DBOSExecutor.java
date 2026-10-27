@@ -33,6 +33,7 @@ import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
+import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
@@ -2559,20 +2560,28 @@ public class DBOSExecutor implements AutoCloseable {
               options.claimedAt(),
               options.claimedOwnerXid());
     } else {
-      initResult =
-          persistWorkflow(
-              systemDatabase,
-              workflow.workflowName(),
-              workflow.className(),
-              workflow.instanceName(),
-              maxRetries,
-              args,
-              null,
-              executorId(),
-              appId(),
-              parent,
-              options,
-              null); // applicationName: this executor's own
+      var startTime = System.currentTimeMillis();
+      try {
+        initResult =
+            persistWorkflow(
+                systemDatabase,
+                workflow.workflowName(),
+                workflow.className(),
+                workflow.instanceName(),
+                maxRetries,
+                args,
+                null,
+                executorId(),
+                appId(),
+                parent,
+                options,
+                null); // applicationName: this executor's own
+      } catch (DBOSWorkflowIdInUseException e) {
+        // The parent records the refusal as its step, as it does a refused enqueue, so a replay
+        // throws it again rather than starting the child once the ID is free.
+        recordRefusalAtParent(systemDatabase, parent, workflow.workflowName(), e, startTime);
+        throw e;
+      }
     }
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
@@ -2826,27 +2835,12 @@ public class DBOSExecutor implements AutoCloseable {
       // owns the parent: one that does not is refused here, and stops.
       // A failure to record it is thrown instead, with the collision attached: thrown unrecorded,
       // the collision would let the parent take a path its replay cannot repeat.
-      if (parent != null) {
-        // In the native format whatever serializer is configured: a replay must rebuild the exact
-        // type the parent and Debouncer catch, which a custom serializer need not preserve.
-        var error = SerializationUtil.serializeError(e, SerializationUtil.NATIVE, null);
-        try {
-          systemDatabase.recordStepResult(
-              new StepResult(
-                  parent.workflowId(),
-                  parent.functionId(),
-                  workflowName,
-                  null,
-                  error.serializedValue(),
-                  null,
-                  error.serialization()),
-              startTime,
-              parent.ownerXid());
-        } catch (RuntimeException recordFailure) {
-          recordFailure.addSuppressed(e);
-          throw recordFailure;
-        }
-      }
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
+      throw e;
+    } catch (DBOSWorkflowIdInUseException e) {
+      // Recorded for the same reason as a collision: the holder of the ID can go away, and a replay
+      // must not then start the child the first run was refused.
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
       throw e;
     } catch (DBOSWorkflowExecutionConflictException e) {
       // A parent that no longer owns its workflow was refused: the fence working, not a failure.
@@ -2857,6 +2851,37 @@ public class DBOSExecutor implements AutoCloseable {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
       throw e;
+    }
+  }
+
+  /** Records a child start's refusal as its parent's step, if it has a parent. */
+  private static void recordRefusalAtParent(
+      SystemDatabase systemDatabase,
+      @Nullable WorkflowInfo parent,
+      String workflowName,
+      RuntimeException refusal,
+      long startTime) {
+    if (parent == null) {
+      return;
+    }
+    // In the native format whatever serializer is configured: a replay must rebuild the exact
+    // type the parent and Debouncer catch, which a custom serializer need not preserve.
+    var error = SerializationUtil.serializeError(refusal, SerializationUtil.NATIVE, null);
+    try {
+      systemDatabase.recordStepResult(
+          new StepResult(
+              parent.workflowId(),
+              parent.functionId(),
+              workflowName,
+              null,
+              error.serializedValue(),
+              null,
+              error.serialization()),
+          startTime,
+          parent.ownerXid());
+    } catch (RuntimeException recordFailure) {
+      recordFailure.addSuppressed(refusal);
+      throw recordFailure;
     }
   }
 
@@ -2966,7 +2991,8 @@ public class DBOSExecutor implements AutoCloseable {
         options.scheduleName(),
         applicationName,
         options.isDebounced(),
-        options.debounceDeadline());
+        options.debounceDeadline(),
+        options.workflowIdReusePolicy());
   }
 
   private boolean persistWorkflowOutput(
@@ -3027,6 +3053,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             false,
+            null,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }

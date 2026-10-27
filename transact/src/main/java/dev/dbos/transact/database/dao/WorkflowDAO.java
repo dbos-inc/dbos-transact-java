@@ -18,6 +18,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
+import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
@@ -29,6 +30,7 @@ import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.RewindOptions;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -174,6 +176,16 @@ public class WorkflowDAO {
                 delayUntilEpochMs,
                 creatorXid,
                 owner(ctx, initStatus));
+        boolean created = creatorXid.equals(resRow.creatorXid);
+
+        // A row carrying another creator token was already there; a retry whose first attempt
+        // committed finds its own, and is not refused. Thrown before anything else is checked, and
+        // rolled back, so a refused call writes nothing: the insert wrote no input for a row it
+        // did not create, and its conflict arm changes nothing.
+        if (!created && initStatus.workflowIdReusePolicy() == WorkflowIdReusePolicy.REJECT) {
+          throw new DBOSWorkflowIdInUseException(
+              initStatus.workflowId(), resRow.status(), resRow.workflowName());
+        }
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -198,7 +210,6 @@ public class WorkflowDAO {
         }
 
         var state = resRow.status;
-        boolean created = creatorXid.equals(resRow.creatorXid);
 
         // A row this call created can't be dead-lettered yet, so only a found row is checked.
         if (!created && resRow.status == WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED) {

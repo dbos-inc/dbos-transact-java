@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow.internal;
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
 import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -50,7 +52,12 @@ public record WorkflowStatusInternal(
      * The latest a debounced workflow's delay may be extended to, by its first delay or by any
      * later bounce; null for no cap. Set only by the debouncers.
      */
-    Instant debounceDeadline) {
+    Instant debounceDeadline,
+    /**
+     * What the insert does when a workflow with this ID already exists. Null is {@link
+     * WorkflowIdReusePolicy#RETURN_EXISTING}. Not stored: it governs only this insert.
+     */
+    WorkflowIdReusePolicy workflowIdReusePolicy) {
 
   public WorkflowStatusInternal {
     if (nullableIsEmpty(workflowId)) {
@@ -82,6 +89,12 @@ public record WorkflowStatusInternal(
     }
     if (debounceDeadline != null && !isDebounced) {
       throw new IllegalArgumentException("only a debounced workflow takes a debounce deadline");
+    }
+    // A debounce owns its workflow's ID and coalesces later calls onto it.
+    if (isDebounced && workflowIdReusePolicy == WorkflowIdReusePolicy.REJECT) {
+      throw new IllegalArgumentException(
+          "a debounced workflow cannot use WorkflowIdReusePolicy.REJECT: a debounce owns how its"
+              + " workflow is started");
     }
     // Normalize empty strings to null for auth fields — other SDKs (TypeScript, Go) send ""
     // rather than null when auth context is absent, so we treat them equivalently.

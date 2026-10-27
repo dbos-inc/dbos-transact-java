@@ -5,15 +5,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.WorkflowDAO;
+import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -111,6 +114,54 @@ public class WorkflowInsertOwnershipTest {
     assertTrue(retried.shouldExecuteOnThisExecutor(), "the retry recognizes its own row");
     assertEquals(WorkflowState.CANCELLED, retried.status());
     assertNull(retried.ownerXid(), "a row no longer PENDING is owned by nobody");
+  }
+
+  // WorkflowIdReusePolicy.REJECT refuses an ID another caller's insert created, whatever its
+  // status,
+  // and the refused insert writes nothing: no input, no updated_at.
+  @Test
+  public void aRejectingInsertFindingAnotherCallersRowIsRefusedAndWritesNothing() throws Exception {
+    var workflowId = "insert-reject-%d".formatted(System.nanoTime());
+    insert(
+        WorkflowStatusInternalBuilder.create(workflowId).workflowName("wf").inputs("first").build(),
+        UUID.randomUUID().toString());
+    var before = DBUtils.getWorkflowRow(dataSource, workflowId);
+
+    var rejecting =
+        WorkflowStatusInternalBuilder.create(workflowId)
+            .workflowName("wf")
+            .inputs("second")
+            .workflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
+            .build();
+    var refused =
+        assertThrows(
+            DBOSWorkflowIdInUseException.class,
+            () -> insert(rejecting, UUID.randomUUID().toString()));
+
+    assertEquals(workflowId, refused.workflowId());
+    assertEquals(WorkflowState.PENDING, refused.workflowStatus());
+    assertEquals("wf", refused.workflowName());
+    var after = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertEquals("first", after.inputs());
+    assertEquals(before.updatedAt(), after.updatedAt());
+  }
+
+  // A retry whose first attempt committed but lost its acknowledgement finds its own token, so
+  // REJECT does not refuse the row that attempt created.
+  @Test
+  public void aRetriedRejectingInsertFindingItsOwnRowIsNotRefused() throws Exception {
+    var workflowId = "insert-reject-retry-%d".formatted(System.nanoTime());
+    var token = UUID.randomUUID().toString();
+    var status =
+        WorkflowStatusInternalBuilder.create(workflowId)
+            .workflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
+            .build();
+    insert(status, token);
+
+    var retried = insert(status, token);
+
+    assertTrue(retried.shouldExecuteOnThisExecutor(), "the retry recognizes its own row");
+    assertEquals(token, retried.ownerXid());
   }
 
   // The owner check locks the workflow's row, so a step record can deadlock with a write that locks
