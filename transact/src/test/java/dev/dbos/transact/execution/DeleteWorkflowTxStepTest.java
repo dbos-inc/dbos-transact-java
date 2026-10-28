@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.txstep.JdbcStepFactory;
@@ -13,6 +14,7 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -119,6 +121,17 @@ class DeleteWorkflowTxStepTest {
     cancelAfterTxStep("wf1");
 
     dbos.deleteWorkflow("wf1");
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf1").size());
+    assertEquals(2, rerun("wf1"));
+  }
+
+  @Test
+  void conductorDeleteRemovesTxStepCheckpoints() throws Exception {
+    cancelAfterTxStep("wf1");
+
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    new DBOSConductorEngine(executor, executor.getSystemDatabase())
+        .deleteWorkflows(List.of("wf1"), false);
     assertEquals(0, DBUtils.getTxStepRows(dataSource, "wf1").size());
     assertEquals(2, rerun("wf1"));
   }

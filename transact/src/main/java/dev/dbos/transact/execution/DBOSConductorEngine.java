@@ -73,7 +73,7 @@ final class DBOSConductorEngine implements ConductorEngine {
 
   @Override
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
+    executor.deleteWorkflows(workflowIds, deleteChildren);
   }
 
   @Override
