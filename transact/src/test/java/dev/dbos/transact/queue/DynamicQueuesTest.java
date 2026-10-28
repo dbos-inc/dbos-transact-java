@@ -223,9 +223,8 @@ public class DynamicQueuesTest {
 
   @Test
   public void aQueueWideRateLimitMustBeWhole() throws Exception {
-    // The other half of what the constructor cannot check. A stored row with a zero limit has to
-    // stay loadable -- the constructor is the read path -- so the write paths are the only place
-    // this rule is ever applied, on both of them.
+    // A stored row with a zero limit has to stay loadable -- the constructor is the read path --
+    // so the write paths are the only place this rule is ever applied, on both of them.
     dbos.launch();
 
     assertThrows(
@@ -620,6 +619,82 @@ public class DynamicQueuesTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withConcurrency(0)));
+  }
+
+  @Test
+  public void aRowNoWriteWouldAcceptDoesNotHideTheOtherQueues() throws Exception {
+    // The system database is shared, so it can hold a row this library's own writes refuse, such
+    // as a zero concurrency stored to pause a queue. Reading it must not fail the whole listing,
+    // or every queue disappears from listQueues and no new queue is discovered.
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+
+    insertQueueRow("q-zero", 0, null, 1.0);
+    insertQueueRow("q-zero-poll", null, null, 0.0);
+    dbos.registerQueue("q-ok", new QueueOptions().withConcurrency(3));
+
+    var names = dbos.listQueues().stream().map(Queue::name).toList();
+    assertTrue(names.containsAll(List.of("q-zero", "q-zero-poll", "q-ok")), names.toString());
+
+    var zero = dbos.findQueue("q-zero").orElseThrow();
+    assertEquals(0, zero.concurrency());
+    // A non-positive polling interval would spin the listener, so it reads as unset.
+    assertEquals(
+        Queue.DEFAULT_POLLING_INTERVAL,
+        dbos.findQueue("q-zero-poll").orElseThrow().pollingInterval());
+
+    // The dynamic queue listener still discovers a queue registered after the row appeared.
+    awaitCondition(() -> qs.findDynamicQueue("q-ok").isPresent());
+    awaitCondition(() -> qs.findDynamicQueue("q-zero").isPresent());
+  }
+
+  @Test
+  public void aZeroLimitPausesTheQueue() throws Exception {
+    // A stored zero concurrency or worker concurrency leaves no room under the limit, so nothing
+    // is dequeued until the limit is raised.
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    insertQueueRow("q-paused", 0, null, 1.0);
+    insertQueueRow("q-paused-worker", null, 0, 1.0);
+    awaitCondition(() -> qs.findDynamicQueue("q-paused").isPresent());
+    awaitCondition(() -> qs.findDynamicQueue("q-paused-worker").isPresent());
+
+    var paused =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("a"), new StartWorkflowOptions().withQueue("q-paused"));
+    var pausedWorker =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("b"),
+            new StartWorkflowOptions().withQueue("q-paused-worker"));
+
+    Thread.sleep(1_000);
+    assertEquals(WorkflowState.ENQUEUED, paused.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, pausedWorker.getStatus().status());
+
+    dbos.updateQueue("q-paused", new QueueOptions().withConcurrency(1));
+    dbos.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(1));
+    assertEquals("aa", paused.getResult());
+    assertEquals("bb", pausedWorker.getResult());
+  }
+
+  /** Writes a queue row directly, bypassing this library's validation. */
+  private void insertQueueRow(
+      String name, Integer concurrency, Integer workerConcurrency, double pollingIntervalSec)
+      throws Exception {
+    var sql =
+        "INSERT INTO dbos.queues (name, concurrency, worker_concurrency, priority_enabled,"
+            + " polling_interval_sec) VALUES (?, ?, ?, TRUE, ?)";
+    try (Connection connection = DBUtils.getConnection(dbosConfig);
+        PreparedStatement ps = connection.prepareStatement(sql)) {
+      ps.setString(1, name);
+      ps.setObject(2, concurrency, java.sql.Types.INTEGER);
+      ps.setObject(3, workerConcurrency, java.sql.Types.INTEGER);
+      ps.setDouble(4, pollingIntervalSec);
+      assertEquals(1, ps.executeUpdate());
+    }
   }
 
   @Test

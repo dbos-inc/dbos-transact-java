@@ -26,10 +26,9 @@ public class QueueRegistry {
           String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
     }
 
-    // The same write-time rules the database-backed path applies. The Queue constructor cannot
-    // enforce them, because it is also the read path -- see validateForRegistration -- so a queue
-    // built by hand for this registry reaches here unchecked, and until now a zero rate-limit max
-    // or period was accepted here while the same configuration was refused after launch.
+    // The same write-time rules the database-backed path applies. The Queue constructor enforces
+    // none of them, because it is also the read path -- see validateForRegistration -- so a queue
+    // built by hand for this registry reaches here unchecked.
     queue.validateForRegistration();
 
     // Per-partition limits are a database-backed feature, and permanently so. An in-memory queue

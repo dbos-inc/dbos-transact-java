@@ -665,7 +665,7 @@ public class QueuesDAO {
       @Nullable String applicationName)
       throws SQLException {
     Queue queue = queueFromOptions(name, options);
-    // The rules the constructor cannot apply, because it is also the read path.
+    // The constructor checks no limits, because it is also the read path.
     queue.validateForRegistration();
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
@@ -1036,8 +1036,8 @@ public class QueuesDAO {
   }
 
   /**
-   * The queue a partial update would produce, built through the {@link Queue} constructor so it is
-   * checked by the same rules that reading the row back would apply.
+   * The queue a partial update would produce, as a whole row, so that {@link
+   * Queue#validateForRegistration} can check rules that span fields the update did not all supply.
    */
   @SuppressWarnings("removal") // reads the legacy partitionQueue option verbatim
   private static Queue applyUpdate(Queue current, QueueOptions update) {
@@ -1167,6 +1167,14 @@ public class QueuesDAO {
         pollingIntervalSec != null
             ? Duration.ofMillis((long) (pollingIntervalSec * 1000))
             : Queue.DEFAULT_POLLING_INTERVAL;
+    // Writes refuse a non-positive interval, but a row is loaded as stored, and polling on one
+    // would spin: read it as unset.
+    if (pollingInterval.isNegative() || pollingInterval.isZero()) {
+      pollingInterval = Queue.DEFAULT_POLLING_INTERVAL;
+    }
+    // Built without validation, as the row stands: a limit no write would accept, such as a zero
+    // concurrency, is still a limit the dequeue enforces, and refusing to load the row would hide
+    // the queue from listQueues and leave its listener polling on stale configuration.
     return new Queue(
         name,
         concurrency,

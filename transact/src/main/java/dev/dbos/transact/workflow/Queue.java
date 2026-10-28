@@ -62,49 +62,11 @@ public record Queue(
     // here also covers rows written as false by earlier versions.
     priorityEnabled = true;
     Objects.requireNonNull(pollingInterval, "Queue pollingInterval must not be null");
-    if (concurrency != null && concurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue concurrency must be greater than zero");
-    if (workerConcurrency != null && workerConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue workerConcurrency must be greater than zero");
-    if (partitionConcurrency != null && partitionConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue partitionConcurrency must be greater than zero");
-    if (partitionWorkerConcurrency != null && partitionWorkerConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue partitionWorkerConcurrency must be greater than zero");
-    // A limit enforced at a narrower scope can never usefully exceed one enforced at a wider
-    // scope: the wider limit would bind first and the narrower one would never be reached.
-    if (partitionWorkerConcurrency != null
-        && partitionConcurrency != null
-        && partitionWorkerConcurrency > partitionConcurrency)
-      throw new IllegalArgumentException(
-          "Queue partitionConcurrency must be greater than or equal to partitionWorkerConcurrency");
-    if (partitionWorkerConcurrency != null
-        && workerConcurrency != null
-        && partitionWorkerConcurrency > workerConcurrency)
-      throw new IllegalArgumentException(
-          "Queue workerConcurrency must be greater than or equal to partitionWorkerConcurrency");
-    if (partitionConcurrency != null && concurrency != null && partitionConcurrency > concurrency)
-      throw new IllegalArgumentException(
-          "Queue concurrency must be greater than or equal to partitionConcurrency");
-    if (partitionWorkerConcurrency != null
-        && concurrency != null
-        && partitionWorkerConcurrency > concurrency)
-      throw new IllegalArgumentException(
-          "Queue concurrency must be greater than or equal to partitionWorkerConcurrency");
-    // Only the per-partition rate limit is validated here. The queue-wide one is not, and
-    // neither is concurrency >= workerConcurrency, though Go, Python and TypeScript check both:
-    // this constructor is also the read path (QueuesDAO.queueFromResultSet builds through it),
-    // so a rule added here rejects rows already in the database, and one unreadable row takes
-    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules are
-    // enforced on write instead, by validateForRegistration. The per-partition rate limit can stay
-    // here: its columns are new, and every SDK that writes them validates them, so no stored row
-    // should fail this check.
-    validateRateLimit("partitionRateLimit", partitionRateLimit);
-    if (pollingInterval.isNegative() || pollingInterval.isZero())
-      throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
+    // No limit is validated here: this constructor is also the read path
+    // (QueuesDAO.queueFromResultSet builds every row it loads through it), so a rule enforced here
+    // makes any stored row that breaks it unreadable, and one unreadable row takes listQueues --
+    // and with it dynamic queue discovery -- down with it. The rules are enforced where a row is
+    // written instead, by validateForRegistration.
   }
 
   private static void validateRateLimit(String name, @Nullable RateLimit rateLimit) {
@@ -274,21 +236,60 @@ public record Queue(
   }
 
   /**
-   * Checks the rules that can only be applied to a queue being written, not to one being read.
+   * Checks the rules a queue must satisfy to be written: every limit is positive, no limit enforced
+   * at a narrower scope exceeds one enforced at a wider scope, and the polling interval is
+   * positive.
    *
-   * <p>Go, Python and TypeScript enforce these in the constructor. Java cannot, because its
-   * constructor is also the read path -- {@code QueuesDAO.queueFromResultSet} builds a {@code
-   * Queue} out of every row it loads -- and Java accepted {@code workerConcurrency > concurrency}
-   * for long enough that such rows exist. Enforcing them on read would make those rows unloadable,
-   * and one unloadable row stops queue discovery for the whole process, silently.
+   * <p>None of these is checked by the constructor, because the constructor is also the read path
+   * -- {@code QueuesDAO.queueFromResultSet} builds a {@code Queue} out of every row it loads -- and
+   * the system database can hold rows that break them: earlier versions of this library accepted
+   * {@code workerConcurrency > concurrency}, and the database is shared with writers that apply
+   * none of these rules, such as one storing a zero {@code concurrency} to pause a queue. Enforcing
+   * them on read would make those rows unloadable, and one unloadable row stops queue discovery for
+   * the whole process.
    *
-   * <p>So they are enforced where a row is created or changed instead, which is where the other
-   * three SDKs enforce them too. A row already stored in violation keeps loading, and is only
-   * rejected if something tries to write it again.
+   * <p>So they are enforced where a row is created or changed instead. A row already stored in
+   * violation keeps loading, and is only rejected if something tries to write it again. A stored
+   * zero or negative limit is honoured as a limit with no room: nothing is dequeued under it.
    *
    * @throws IllegalArgumentException if this queue may not be written
    */
   public void validateForRegistration() {
+    if (concurrency != null && concurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue concurrency must be greater than zero");
+    if (workerConcurrency != null && workerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue workerConcurrency must be greater than zero");
+    if (partitionConcurrency != null && partitionConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionConcurrency must be greater than zero");
+    if (partitionWorkerConcurrency != null && partitionWorkerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionWorkerConcurrency must be greater than zero");
+    // A limit enforced at a narrower scope can never usefully exceed one enforced at a wider
+    // scope: the wider limit would bind first and the narrower one would never be reached.
+    if (partitionWorkerConcurrency != null
+        && partitionConcurrency != null
+        && partitionWorkerConcurrency > partitionConcurrency)
+      throw new IllegalArgumentException(
+          "Queue partitionConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionWorkerConcurrency != null
+        && workerConcurrency != null
+        && partitionWorkerConcurrency > workerConcurrency)
+      throw new IllegalArgumentException(
+          "Queue workerConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionConcurrency != null && concurrency != null && partitionConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionConcurrency");
+    if (partitionWorkerConcurrency != null
+        && concurrency != null
+        && partitionWorkerConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionWorkerConcurrency");
+    validateRateLimit("partitionRateLimit", partitionRateLimit);
+    if (pollingInterval.isNegative() || pollingInterval.isZero())
+      throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
     if (workerConcurrency != null && concurrency != null && workerConcurrency > concurrency)
       throw new IllegalArgumentException(
           "Queue concurrency must be greater than or equal to workerConcurrency");

@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.QueueOptions;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -239,8 +240,10 @@ public class QueueLimitResolutionTest {
   @DisplayName("validation, in the order Go, Python and TypeScript apply it")
   class Validation {
 
-    private static String rejects(Runnable construct) {
-      return assertThrows(IllegalArgumentException.class, construct::run).getMessage();
+    private static String rejects(Supplier<Queue> construct) {
+      var queue = construct.get();
+      return assertThrows(IllegalArgumentException.class, queue::validateForRegistration)
+          .getMessage();
     }
 
     @Test
@@ -273,33 +276,36 @@ public class QueueLimitResolutionTest {
       assertTrue(
           rejects(() -> queue(2, null, false, null, null, 3, null))
               .contains("greater than or equal to partitionWorkerConcurrency"));
+      // workerConcurrency <= concurrency
+      assertTrue(
+          rejects(() -> plain(2, 5, null))
+              .contains("concurrency must be greater than or equal to workerConcurrency"));
     }
 
     @Test
-    void theTwoQueueWideRulesAreDeferredBecauseThisIsAlsoTheReadPath() {
-      // Go, Python and TypeScript reject both of these. Java cannot yet: this constructor is how
-      // QueuesDAO.queueFromResultSet loads a row, so a rule added here rejects rows already in
-      // the database -- and one unreadable row takes listQueues, and dynamic queue discovery
-      // with it, down too. Both land with the write-side guard in the persistence slice.
-      var q = plain(2, 5, null);
-      assertEquals(2, q.concurrency());
-      assertEquals(5, q.workerConcurrency());
-      assertEquals(
-          0, plain(null, null, new RateLimit(0, Duration.ofSeconds(1))).rateLimit().limit());
+    void theConstructorAcceptsWhatAWriteWouldRefuseBecauseItIsAlsoTheReadPath() {
+      // QueuesDAO.queueFromResultSet loads every row through this constructor, so a rule enforced
+      // here would make a stored row that breaks it unreadable -- and one unreadable row takes
+      // listQueues, and dynamic queue discovery with it, down too.
+      var q = plain(0, 0, new RateLimit(0, Duration.ofSeconds(1)));
+      assertEquals(0, q.concurrency());
+      assertEquals(0, q.workerConcurrency());
+      assertEquals(0, q.rateLimit().limit());
+      var crossed = queue(2, 5, false, null, 3, 6, new RateLimit(1, Duration.ZERO));
+      assertEquals(3, crossed.partitionConcurrency());
+      assertEquals(6, crossed.partitionWorkerConcurrency());
     }
 
     @Test
     void equalLimitsAtAdjacentScopesAreAllowed() {
       var q = queue(4, 4, false, null, 4, 4, null);
+      q.validateForRegistration();
       assertEquals(4, q.concurrency());
       assertEquals(4, q.partitionWorkerConcurrency());
     }
 
     @Test
-    void aPerPartitionRateLimitMustBeWhole() {
-      // Safe to validate: a per-partition column cannot appear in a row written before it
-      // existed, so this rule has nothing already stored to reject. The queue-wide pair is
-      // deliberately unvalidated here -- see the deferral test above.
+    void everyRateLimitMustBeWhole() {
       assertTrue(
           rejects(
                   () ->
@@ -315,6 +321,12 @@ public class QueueLimitResolutionTest {
       assertTrue(
           rejects(() -> queue(null, null, false, null, null, null, new RateLimit(1, Duration.ZERO)))
               .contains("partitionRateLimit period"));
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(0, Duration.ofSeconds(1))))
+              .contains("rateLimit limit"));
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(1, Duration.ZERO)))
+              .contains("rateLimit period"));
     }
   }
 
