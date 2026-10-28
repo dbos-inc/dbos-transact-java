@@ -1039,7 +1039,7 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null);
+      systemDatabase.initWorkflowStatus(status, null, null);
     }
 
     var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
@@ -1124,7 +1124,7 @@ public class DynamicQueuesTest {
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
-      systemDatabase.initWorkflowStatus(status, null);
+      systemDatabase.initWorkflowStatus(status, null, null);
     }
 
     // executor2
@@ -1133,7 +1133,7 @@ public class DynamicQueuesTest {
       String wfid = "id" + i;
       var status =
           builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
-      systemDatabase.initWorkflowStatus(status, null);
+      systemDatabase.initWorkflowStatus(status, null, null);
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }

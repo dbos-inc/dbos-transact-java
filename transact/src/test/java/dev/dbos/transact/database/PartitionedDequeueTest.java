@@ -97,7 +97,7 @@ public class PartitionedDequeueTest {
             // application_versions.
             .appVersion(APP_VERSION)
             .build();
-    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5).status());
+    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5, null).status());
     partitionOf.put(workflowId, partition);
   }
 
@@ -196,7 +196,7 @@ public class PartitionedDequeueTest {
             .appVersion(APP_VERSION)
             .timeout(Duration.ofMillis(60_000))
             .build();
-    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(ordinary, 5).status());
+    assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(ordinary, 5, null).status());
     partitionOf.put("ordinary", "ordinary");
 
     var claimed = claimUntil(queue, 2, Long.MAX_VALUE, QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP);
@@ -293,7 +293,7 @@ public class PartitionedDequeueTest {
             .queuePartitionKey("b")
             .appVersion("v-someone-else")
             .build();
-    sysdb.initWorkflowStatus(foreign, 5);
+    sysdb.initWorkflowStatus(foreign, 5, null);
     enqueue(queue, "mine", "c");
 
     assertEquals(

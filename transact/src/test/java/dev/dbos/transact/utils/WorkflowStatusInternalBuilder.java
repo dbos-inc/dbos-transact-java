@@ -1,6 +1,5 @@
 package dev.dbos.transact.utils;
 
-import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
@@ -31,7 +30,6 @@ public class WorkflowStatusInternalBuilder {
   private String serialization;
   private String scheduleName;
   private Map<String, Object> attributes;
-  private WorkflowIdReusePolicy workflowIdReusePolicy;
 
   public static WorkflowStatusInternalBuilder create(String workflowId) {
     return new WorkflowStatusInternalBuilder().workflowId(workflowId);
@@ -147,12 +145,6 @@ public class WorkflowStatusInternalBuilder {
     return this;
   }
 
-  public WorkflowStatusInternalBuilder workflowIdReusePolicy(
-      WorkflowIdReusePolicy workflowIdReusePolicy) {
-    this.workflowIdReusePolicy = workflowIdReusePolicy;
-    return this;
-  }
-
   public WorkflowStatusInternal build() {
     return new WorkflowStatusInternal(
         workflowId,
@@ -179,7 +171,6 @@ public class WorkflowStatusInternalBuilder {
         scheduleName,
         null,
         false,
-        null,
-        workflowIdReusePolicy);
+        null);
   }
 }

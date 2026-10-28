@@ -155,6 +155,7 @@ public class WorkflowDAO {
       @Nullable Long delayUntilEpochMs,
       @Nullable Integer maxRetries,
       String creatorXid,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy,
       @Nullable ChildOf parent)
       throws SQLException {
 
@@ -182,7 +183,7 @@ public class WorkflowDAO {
         // committed finds its own, and is not refused. Thrown before anything else is checked, and
         // rolled back, so a refused call writes nothing: the insert wrote no input for a row it
         // did not create, and its conflict arm changes nothing.
-        if (!created && initStatus.workflowIdReusePolicy() == WorkflowIdReusePolicy.REJECT) {
+        if (!created && workflowIdReusePolicy == WorkflowIdReusePolicy.REJECT) {
           throw new DBOSWorkflowIdInUseException(
               initStatus.workflowId(), resRow.status(), resRow.workflowName());
         }

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,9 +53,13 @@ public class WorkflowInsertOwnershipTest {
     dataSource = pgContainer.dataSource();
   }
 
-  private WorkflowInitResult insert(WorkflowStatusInternal status, String creatorXid)
+  private WorkflowInitResult insert(
+      WorkflowStatusInternal status,
+      String creatorXid,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy)
       throws SQLException {
-    return WorkflowDAO.initWorkflowStatus(sysdb.context(), status, null, null, creatorXid, null);
+    return WorkflowDAO.initWorkflowStatus(
+        sysdb.context(), status, null, null, creatorXid, workflowIdReusePolicy, null);
   }
 
   @Test
@@ -62,7 +67,7 @@ public class WorkflowInsertOwnershipTest {
     var workflowId = "insert-direct-%d".formatted(System.nanoTime());
     var token = UUID.randomUUID().toString();
 
-    var result = insert(WorkflowStatusInternalBuilder.create(workflowId).build(), token);
+    var result = insert(WorkflowStatusInternalBuilder.create(workflowId).build(), token, null);
 
     assertTrue(result.shouldExecuteOnThisExecutor());
     assertEquals(token, result.ownerXid());
@@ -74,7 +79,7 @@ public class WorkflowInsertOwnershipTest {
     var workflowId = "insert-enqueued-%d".formatted(System.nanoTime());
     var status = WorkflowStatusInternalBuilder.create(workflowId).queueName("q").build();
 
-    var result = insert(status, UUID.randomUUID().toString());
+    var result = insert(status, UUID.randomUUID().toString(), null);
 
     assertEquals(WorkflowState.ENQUEUED, result.status());
     assertNull(result.ownerXid());
@@ -85,12 +90,14 @@ public class WorkflowInsertOwnershipTest {
   public void aSecondStartOwnsNothingAndChangesNothing() throws Exception {
     var workflowId = "insert-second-%d".formatted(System.nanoTime());
     var token = UUID.randomUUID().toString();
-    insert(WorkflowStatusInternalBuilder.create(workflowId).executorId("exec-a").build(), token);
+    insert(
+        WorkflowStatusInternalBuilder.create(workflowId).executorId("exec-a").build(), token, null);
 
     var second =
         insert(
             WorkflowStatusInternalBuilder.create(workflowId).executorId("exec-b").build(),
-            UUID.randomUUID().toString());
+            UUID.randomUUID().toString(),
+            null);
 
     assertFalse(second.shouldExecuteOnThisExecutor());
     assertNull(second.ownerXid());
@@ -106,10 +113,10 @@ public class WorkflowInsertOwnershipTest {
     var workflowId = "insert-retried-%d".formatted(System.nanoTime());
     var token = UUID.randomUUID().toString();
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
-    insert(status, token);
+    insert(status, token, null);
     sysdb.cancelWorkflows(List.of(workflowId), false);
 
-    var retried = insert(status, token);
+    var retried = insert(status, token, null);
 
     assertTrue(retried.shouldExecuteOnThisExecutor(), "the retry recognizes its own row");
     assertEquals(WorkflowState.CANCELLED, retried.status());
@@ -117,26 +124,25 @@ public class WorkflowInsertOwnershipTest {
   }
 
   // WorkflowIdReusePolicy.REJECT refuses an ID another caller's insert created, whatever its
-  // status,
-  // and the refused insert writes nothing: no input, no updated_at.
+  // status, and the refused insert writes nothing: no input, no updated_at.
   @Test
   public void aRejectingInsertFindingAnotherCallersRowIsRefusedAndWritesNothing() throws Exception {
     var workflowId = "insert-reject-%d".formatted(System.nanoTime());
     insert(
         WorkflowStatusInternalBuilder.create(workflowId).workflowName("wf").inputs("first").build(),
-        UUID.randomUUID().toString());
+        UUID.randomUUID().toString(),
+        null);
     var before = DBUtils.getWorkflowRow(dataSource, workflowId);
 
     var rejecting =
         WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("wf")
             .inputs("second")
-            .workflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
             .build();
     var refused =
         assertThrows(
             DBOSWorkflowIdInUseException.class,
-            () -> insert(rejecting, UUID.randomUUID().toString()));
+            () -> insert(rejecting, UUID.randomUUID().toString(), WorkflowIdReusePolicy.REJECT));
 
     assertEquals(workflowId, refused.workflowId());
     assertEquals(WorkflowState.PENDING, refused.workflowStatus());
@@ -152,13 +158,10 @@ public class WorkflowInsertOwnershipTest {
   public void aRetriedRejectingInsertFindingItsOwnRowIsNotRefused() throws Exception {
     var workflowId = "insert-reject-retry-%d".formatted(System.nanoTime());
     var token = UUID.randomUUID().toString();
-    var status =
-        WorkflowStatusInternalBuilder.create(workflowId)
-            .workflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
-            .build();
-    insert(status, token);
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    insert(status, token, WorkflowIdReusePolicy.REJECT);
 
-    var retried = insert(status, token);
+    var retried = insert(status, token, WorkflowIdReusePolicy.REJECT);
 
     assertTrue(retried.shouldExecuteOnThisExecutor(), "the retry recognizes its own row");
     assertEquals(token, retried.ownerXid());
@@ -171,7 +174,8 @@ public class WorkflowInsertOwnershipTest {
   @ResourceLock(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT)
   public void aStepRecordIsReplayedAfterADeadlock() throws Exception {
     var workflowId = "insert-deadlock-%d".formatted(System.nanoTime());
-    var token = insert(WorkflowStatusInternalBuilder.create(workflowId).build(), "t").ownerXid();
+    var token =
+        insert(WorkflowStatusInternalBuilder.create(workflowId).build(), "t", null).ownerXid();
     assertNotNull(token);
 
     DebugTriggers.setDebugTrigger(

@@ -87,6 +87,13 @@ public record ExecutionOptions(
       throw new IllegalArgumentException("priority must not be negative");
     }
 
+    // A debounce owns its workflow's ID and coalesces later calls onto it.
+    if (isDebounced && workflowIdReusePolicy == WorkflowIdReusePolicy.REJECT) {
+      throw new IllegalArgumentException(
+          "a debounced workflow cannot use WorkflowIdReusePolicy.REJECT: a debounce owns how its"
+              + " workflow is started");
+    }
+
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 

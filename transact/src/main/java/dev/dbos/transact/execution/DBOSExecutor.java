@@ -2928,11 +2928,13 @@ public class DBOSExecutor implements AutoCloseable {
             applicationName);
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     if (parentWorkflow == null) {
-      return systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
+      return systemDatabase.initWorkflowStatus(
+          workflowStatusInternal, retries, options.workflowIdReusePolicy());
     }
     return systemDatabase.initChildWorkflowStatus(
         workflowStatusInternal,
         retries,
+        options.workflowIdReusePolicy(),
         new ChildOf(
             parentWorkflow.workflowId(),
             parentWorkflow.functionId(),
@@ -3002,8 +3004,7 @@ public class DBOSExecutor implements AutoCloseable {
         options.scheduleName(),
         applicationName,
         options.isDebounced(),
-        options.debounceDeadline(),
-        options.workflowIdReusePolicy());
+        options.debounceDeadline());
   }
 
   private boolean persistWorkflowOutput(
@@ -3064,7 +3065,6 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             false,
-            null,
             null);
     systemDatabase.recordErrorForUnstartedWorkflow(initStatus, serializedError.serializedValue());
   }
