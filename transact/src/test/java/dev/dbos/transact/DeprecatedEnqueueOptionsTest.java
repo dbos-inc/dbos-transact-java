@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Duration;
@@ -50,7 +51,8 @@ class DeprecatedEnqueueOptionsTest {
             "role",
             List.of("r1", "r2"),
             Map.of("k", "v"),
-            "peer-app");
+            "peer-app",
+            WorkflowIdReusePolicy.REJECT);
     // An explicit timeout and a deadline can't be set together, so the deadline is carried by a
     // second conversion.
     var withDeadline = legacy.withTimeout(null).withDeadline(Instant.parse("2030-01-01T00:00:00Z"));
