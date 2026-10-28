@@ -8,6 +8,7 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +34,9 @@ import org.jspecify.annotations.Nullable;
  *     for removal: set a timeout instead.
  * @param attributes Custom JSON-serializable attributes to attach to the next workflow. Recorded in
  *     the workflow status at creation and not inherited by child workflows.
+ * @param workflowIdReusePolicy What starting the next workflow does when a workflow with its ID
+ *     already exists; null is {@link WorkflowIdReusePolicy#RETURN_EXISTING}. It goes with {@code
+ *     workflowId}: it applies only to a workflow that takes that ID, and needs one.
  */
 public record WorkflowOptions(
     @Nullable String workflowId,
@@ -41,7 +45,8 @@ public record WorkflowOptions(
     @NonNull Field<String> authenticatedUser,
     @NonNull Field<String> assumedRole,
     @NonNull Field<List<String>> authenticatedRoles,
-    @Nullable Map<String, Object> attributes) {
+    @Nullable Map<String, Object> attributes,
+    @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
 
   public WorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -65,12 +70,12 @@ public record WorkflowOptions(
 
   /** Create a WorkflowOptions with no ID and no timout */
   public WorkflowOptions() {
-    this(null, null, null, Field.absent(), Field.absent(), Field.absent(), null);
+    this(null, null, null, Field.absent(), Field.absent(), Field.absent(), null, null);
   }
 
   /** Create a WorkflowOptions with a specified workflow ID and no timout */
   public WorkflowOptions(@Nullable String workflowId) {
-    this(workflowId, null, null, Field.absent(), Field.absent(), Field.absent(), null);
+    this(workflowId, null, null, Field.absent(), Field.absent(), Field.absent(), null, null);
   }
 
   /** Create a workflow options like this one, but with the workflowId set */
@@ -82,7 +87,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -98,7 +104,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -148,7 +155,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a workflow options like this one, but without a timeout */
@@ -160,7 +168,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user set */
@@ -172,7 +181,8 @@ public record WorkflowOptions(
         Field.of(authenticatedUser),
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user cleared */
@@ -184,7 +194,8 @@ public record WorkflowOptions(
         Field.of(null),
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the assumed role set */
@@ -196,7 +207,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         Field.of(assumedRole),
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the assumed role cleared */
@@ -208,7 +220,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         Field.of(null),
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated roles set */
@@ -220,7 +233,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated roles cleared */
@@ -232,7 +246,8 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         Field.of(null),
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user and roles set */
@@ -245,7 +260,8 @@ public record WorkflowOptions(
         Field.of(authenticatedUser),
         this.assumedRole,
         authenticatedRoles != null ? Field.of(List.of(authenticatedRoles)) : Field.of(null),
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /** Create a WorkflowOptions like this one, but with the authenticated user and roles cleared */
@@ -257,7 +273,8 @@ public record WorkflowOptions(
         Field.of(null),
         Field.of(null),
         Field.of(null),
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -280,7 +297,28 @@ public record WorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        attributes);
+        attributes,
+        this.workflowIdReusePolicy);
+  }
+
+  /**
+   * Create a WorkflowOptions like this one, but with the workflow ID reuse policy set. It applies
+   * to the next workflow only if that workflow takes this options' workflow ID, so it needs one.
+   *
+   * @param workflowIdReusePolicy what starting the next workflow does when a workflow with its ID
+   *     already exists; null is {@link WorkflowIdReusePolicy#RETURN_EXISTING}
+   */
+  public @NonNull WorkflowOptions withWorkflowIdReusePolicy(
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return new WorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        workflowIdReusePolicy);
   }
 
   /**
@@ -293,12 +331,17 @@ public record WorkflowOptions(
       throw new IllegalArgumentException(
           "WorkflowOptions explicit timeout and deadline cannot both be set");
     }
+    if (workflowIdReusePolicy != null && workflowId == null) {
+      throw new IllegalArgumentException(
+          "WorkflowOptions workflowIdReusePolicy applies to a workflow ID, and none is set");
+    }
 
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
 
+    // The policy goes with the ID, so a block setting another ID drops an outer block's policy.
     if (workflowId != null) {
-      ctx.nextWorkflowId = workflowId;
+      ctx.nextWorkflowId = new DBOSContext.AssignedWorkflowId(workflowId, workflowIdReusePolicy);
     }
     // A timeout and a deadline are one bound, so setting either replaces an outer block's bound
     // as a whole, as options given for the call do. Taken field by field, an outer deadline would
@@ -326,7 +369,7 @@ public record WorkflowOptions(
   public static class Guard implements AutoCloseable {
 
     private final DBOSContext ctx;
-    private final String nextWorkflowId;
+    private final DBOSContext.AssignedWorkflowId nextWorkflowId;
     private final Timeout timeout;
     private final Instant deadline;
     private final Field<String> authenticatedUser;

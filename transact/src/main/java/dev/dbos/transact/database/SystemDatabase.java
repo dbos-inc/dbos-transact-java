@@ -34,6 +34,7 @@ import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -931,29 +932,41 @@ public class SystemDatabase implements AutoCloseable {
    * @param initStatus The initial workflow status details.
    * @param maxRetries The workflow's configured attempt budget, reported if it is already
    *     dead-lettered.
+   * @param workflowIdReusePolicy What to do when a workflow with this ID already exists; null is
+   *     {@link WorkflowIdReusePolicy#RETURN_EXISTING}.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
    * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
+   * @throws DBOSWorkflowIdInUseException If the policy is {@link WorkflowIdReusePolicy#REJECT} and
+   *     a workflow with this ID already exists.
    * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow has already been
    *     dead-lettered.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries) {
-    return initWorkflowStatus(initStatus, maxRetries, null);
+      WorkflowStatusInternal initStatus,
+      @Nullable Integer maxRetries,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return initWorkflowStatus(initStatus, maxRetries, workflowIdReusePolicy, null);
   }
 
   /**
-   * As {@link #initWorkflowStatus(WorkflowStatusInternal, Integer)}, for a child workflow: the
-   * child's row and its parent's step recording it are written in one transaction, and only while
-   * the parent's execution still owns the parent, so a parent that has lost its workflow can
-   * neither start a child nor record one.
+   * As {@link #initWorkflowStatus(WorkflowStatusInternal, Integer, WorkflowIdReusePolicy)}, for a
+   * child workflow: the child's row and its parent's step recording it are written in one
+   * transaction, and only while the parent's execution still owns the parent, so a parent that has
+   * lost its workflow can neither start a child nor record one.
    */
   public WorkflowInitResult initChildWorkflowStatus(
-      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries, ChildOf parent) {
-    return initWorkflowStatus(initStatus, maxRetries, parent);
+      WorkflowStatusInternal initStatus,
+      @Nullable Integer maxRetries,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy,
+      ChildOf parent) {
+    return initWorkflowStatus(initStatus, maxRetries, workflowIdReusePolicy, parent);
   }
 
   private WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, @Nullable Integer maxRetries, @Nullable ChildOf parent) {
+      WorkflowStatusInternal initStatus,
+      @Nullable Integer maxRetries,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy,
+      @Nullable ChildOf parent) {
     // The token tells this call whether it created the row or found one already there. Generated
     // outside the retry loop, so an attempt that committed but lost its acknowledgement recognizes
     // its own row on the retry. A row created PENDING is also owned by it.
@@ -968,7 +981,13 @@ public class SystemDatabase implements AutoCloseable {
         "initWorkflowStatus",
         () ->
             WorkflowDAO.initWorkflowStatus(
-                ctx, initStatus, delayUntilEpochMs, maxRetries, creatorXid, parent));
+                ctx,
+                initStatus,
+                delayUntilEpochMs,
+                maxRetries,
+                creatorXid,
+                workflowIdReusePolicy,
+                parent));
   }
 
   /**

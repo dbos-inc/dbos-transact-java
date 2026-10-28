@@ -34,6 +34,7 @@ import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
+import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
@@ -2047,9 +2048,9 @@ public class DBOSExecutor implements AutoCloseable {
     String childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
+    var next = ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     var td = ctx.resolveTimeoutAndDeadline();
 
@@ -2058,7 +2059,8 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(ctx.resolveNextAssumedRole())
             .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
-            .withAttributes(ctx.resolveNextAttributes());
+            .withAttributes(ctx.resolveNextAttributes())
+            .withWorkflowIdReusePolicy(next.workflowIdReusePolicy());
     if (workflow.serializationStrategy() != null) {
       options = options.withSerialization(workflow.serializationStrategy().formatName());
     }
@@ -2145,16 +2147,21 @@ public class DBOSExecutor implements AutoCloseable {
             ? ctx.resolveTimeoutAndDeadline()
             : ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
 
+    // An ID given for the call leaves the one set with WorkflowOptions, and its policy, in place.
+    var next =
+        options != null && options.workflowId() != null
+            ? new DBOSContext.NextWorkflowId(options.workflowId(), null)
+            : ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            options != null ? options.workflowId() : null,
-            () ->
-                Objects.requireNonNullElseGet(
-                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)
+            .withWorkflowIdReusePolicy(
+                options != null && options.workflowIdReusePolicy() != null
+                    ? options.workflowIdReusePolicy()
+                    : next.workflowIdReusePolicy())
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
             .withAuthenticatedUser(
@@ -2204,12 +2211,13 @@ public class DBOSExecutor implements AutoCloseable {
     // than enqueueing a second workflow.
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    // An ID given for the call leaves the one set with WorkflowOptions, and its policy, in place.
+    var next =
+        options.workflowId() != null
+            ? new DBOSContext.NextWorkflowId(options.workflowId(), null)
+            : ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            options.workflowId(),
-            () ->
-                Objects.requireNonNullElseGet(
-                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     if (parent != null) {
       var childId = recordedChild(parent, options.workflowName(), false);
@@ -2237,7 +2245,11 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedRoles(
                 options.authenticatedRoles() != null
                     ? options.authenticatedRoles()
-                    : ctx.resolveNextAuthenticatedRoles());
+                    : ctx.resolveNextAuthenticatedRoles())
+            .withWorkflowIdReusePolicy(
+                options.workflowIdReusePolicy() != null
+                    ? options.workflowIdReusePolicy()
+                    : next.workflowIdReusePolicy());
 
     enqueueWorkflow(
         options.workflowName(),
@@ -2565,20 +2577,28 @@ public class DBOSExecutor implements AutoCloseable {
               options.claimedAt(),
               options.claimedOwnerXid());
     } else {
-      initResult =
-          persistWorkflow(
-              systemDatabase,
-              workflow.workflowName(),
-              workflow.className(),
-              workflow.instanceName(),
-              maxRetries,
-              args,
-              null,
-              executorId(),
-              appId(),
-              parent,
-              options,
-              null); // applicationName: this executor's own
+      var startTime = System.currentTimeMillis();
+      try {
+        initResult =
+            persistWorkflow(
+                systemDatabase,
+                workflow.workflowName(),
+                workflow.className(),
+                workflow.instanceName(),
+                maxRetries,
+                args,
+                null,
+                executorId(),
+                appId(),
+                parent,
+                options,
+                null); // applicationName: this executor's own
+      } catch (DBOSWorkflowIdInUseException e) {
+        // The parent records the refusal as its step, as it does a refused enqueue, so a replay
+        // throws it again rather than starting the child once the ID is free.
+        recordRefusalAtParent(systemDatabase, parent, workflow.workflowName(), e, startTime);
+        throw e;
+      }
     }
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
@@ -2834,6 +2854,11 @@ public class DBOSExecutor implements AutoCloseable {
       // the collision would let the parent take a path its replay cannot repeat.
       recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
       throw e;
+    } catch (DBOSWorkflowIdInUseException e) {
+      // Recorded for the same reason as a collision: the holder of the ID can go away, and a replay
+      // must not then start the child the first run was refused.
+      recordRefusalAtParent(systemDatabase, parent, workflowName, e, startTime);
+      throw e;
     } catch (DBOSDelayPastLatestInstantException e) {
       // Recorded for the same reason as a collision: whether the delay fits depends on the clock,
       // and a replay must not decide it again against a later one.
@@ -2851,7 +2876,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  /** Records a child enqueue's refusal as its parent's step, if it has a parent. */
+  /** Records a child start's refusal as its parent's step, if it has a parent. */
   private static void recordRefusalAtParent(
       SystemDatabase systemDatabase,
       @Nullable WorkflowInfo parent,
@@ -2914,11 +2939,13 @@ public class DBOSExecutor implements AutoCloseable {
             applicationName);
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     if (parentWorkflow == null) {
-      return systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
+      return systemDatabase.initWorkflowStatus(
+          workflowStatusInternal, retries, options.workflowIdReusePolicy());
     }
     return systemDatabase.initChildWorkflowStatus(
         workflowStatusInternal,
         retries,
+        options.workflowIdReusePolicy(),
         new ChildOf(
             parentWorkflow.workflowId(),
             parentWorkflow.functionId(),

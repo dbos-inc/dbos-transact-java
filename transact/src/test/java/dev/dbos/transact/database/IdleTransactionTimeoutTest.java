@@ -109,7 +109,8 @@ public class IdleTransactionTimeoutTest {
       var workflowId = "idle-stranded-%d".formatted(System.nanoTime());
       var owner =
           sysdb
-              .initWorkflowStatus(WorkflowStatusInternalBuilder.create(workflowId).build(), null)
+              .initWorkflowStatus(
+                  WorkflowStatusInternalBuilder.create(workflowId).build(), null, null)
               .ownerXid();
 
       var ctx = sysdb.context();

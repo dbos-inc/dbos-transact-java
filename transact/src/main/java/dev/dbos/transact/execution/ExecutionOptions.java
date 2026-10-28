@@ -7,6 +7,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
@@ -45,7 +46,9 @@ public record ExecutionOptions(
     // Set only by the debouncers, which enqueue their workflow flagged as debounced, its delay
     // capped at the debounce deadline if there is one. No public option reaches either.
     boolean isDebounced,
-    Instant debounceDeadline) {
+    Instant debounceDeadline,
+    // What the insert does when a workflow with this ID already exists; null is RETURN_EXISTING.
+    WorkflowIdReusePolicy workflowIdReusePolicy) {
   public ExecutionOptions {
     if (nullableIsEmpty(workflowId)) {
       throw new IllegalArgumentException("workflowId must not be empty");
@@ -84,6 +87,13 @@ public record ExecutionOptions(
       throw new IllegalArgumentException("priority must not be negative");
     }
 
+    // A debounce owns its workflow's ID and coalesces later calls onto it.
+    if (isDebounced && workflowIdReusePolicy == WorkflowIdReusePolicy.REJECT) {
+      throw new IllegalArgumentException(
+          "a debounced workflow cannot use WorkflowIdReusePolicy.REJECT: a debounce owns how its"
+              + " workflow is started");
+    }
+
     authenticatedRoles = authenticatedRoles != null ? List.copyOf(authenticatedRoles) : null;
   }
 
@@ -118,6 +128,7 @@ public record ExecutionOptions(
         null,
         null,
         false,
+        null,
         null);
   }
 
@@ -142,6 +153,7 @@ public record ExecutionOptions(
         null,
         null,
         false,
+        null,
         null);
   }
 
@@ -166,6 +178,7 @@ public record ExecutionOptions(
         null,
         null,
         false,
+        null,
         null);
   }
 
@@ -194,7 +207,8 @@ public record ExecutionOptions(
         ownerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -219,7 +233,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        options.workflowIdReusePolicy());
   }
 
   @SuppressWarnings("removal") // honors the deprecated deadline option
@@ -247,7 +262,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        options.workflowIdReusePolicy());
   }
 
   public ExecutionOptions withSerialization(String serialization) {
@@ -271,7 +287,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withAppVersion(String appVersion) {
@@ -295,7 +312,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withAuthenticatedUser(String authenticatedUser) {
@@ -319,7 +337,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withAssumedRole(String assumedRole) {
@@ -343,7 +362,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withAuthenticatedRoles(List<String> authenticatedRoles) {
@@ -367,7 +387,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withAttributes(Map<String, Object> attributes) {
@@ -391,7 +412,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withQueueName(String queueName) {
@@ -415,7 +437,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withTimeout(Duration timeout) {
@@ -439,7 +462,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withDeadline(Instant deadline) {
@@ -463,7 +487,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public ExecutionOptions withScheduleName(String scheduleName) {
@@ -487,7 +512,33 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         scheduleName,
         this.isDebounced,
-        this.debounceDeadline);
+        this.debounceDeadline,
+        this.workflowIdReusePolicy);
+  }
+
+  public ExecutionOptions withWorkflowIdReusePolicy(WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.claimedStatus,
+        this.claimedAt,
+        this.claimedOwnerXid,
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline,
+        workflowIdReusePolicy);
   }
 
   /** Marks the workflow as debounced, its delay capped at {@code debounceDeadline} if not null. */
@@ -512,7 +563,8 @@ public record ExecutionOptions(
         this.claimedOwnerXid,
         this.scheduleName,
         true,
-        debounceDeadline);
+        debounceDeadline,
+        this.workflowIdReusePolicy);
   }
 
   public Duration timeoutDuration() {

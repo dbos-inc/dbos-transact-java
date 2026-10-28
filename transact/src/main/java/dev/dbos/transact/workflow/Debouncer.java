@@ -279,6 +279,14 @@ public final class Debouncer<R> {
       throw new IllegalArgumentException(
           "a queue must be configured with withQueue to specify a priority");
     }
+    // A debounce owns its workflow's ID and coalesces later calls onto it. The refused ID is taken,
+    // so it and its policy do not go on to the caller's next workflow.
+    if (DBOSContextHolder.get().peekNextWorkflowIdReusePolicy() == WorkflowIdReusePolicy.REJECT) {
+      DBOSContextHolder.get().takeNextWorkflowId(null);
+      throw new IllegalArgumentException(
+          "a debounced workflow cannot use WorkflowIdReusePolicy.REJECT: a debounce owns how its"
+              + " workflow is started");
+    }
 
     DBOSExecutor.Invocation invocation = executor.captureInvocation(wfLambda);
     RegisteredWorkflow userWorkflow =
@@ -509,7 +517,7 @@ public final class Debouncer<R> {
   /** The ids the first step assigns: the pre-assigned user workflow and the message id. */
   private DebounceIds freshDebounceIds() {
     return new DebounceIds(
-        DBOSContextHolder.get().getNextWorkflowId(UUID.randomUUID().toString()),
+        DBOSContextHolder.get().takeNextWorkflowId(UUID.randomUUID().toString()).workflowId(),
         UUID.randomUUID().toString(),
         null,
         null);

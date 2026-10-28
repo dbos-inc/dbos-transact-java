@@ -9,6 +9,7 @@ import static dev.dbos.transact.internal.Validation.validateAttributes;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -60,6 +61,10 @@ import org.jspecify.annotations.Nullable;
  *     null.
  * @param attributes Optional JSON-serializable custom attributes to associate with the workflow.
  *     May be null.
+ * @param workflowIdReusePolicy What to do when a workflow with {@code workflowId} already exists,
+ *     whatever its status: attach to it ({@link WorkflowIdReusePolicy#RETURN_EXISTING}, the
+ *     default) or refuse with {@link dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}
+ *     ({@link WorkflowIdReusePolicy#REJECT}). May be null.
  */
 public record StartWorkflowOptions(
     @Nullable String workflowId,
@@ -74,7 +79,8 @@ public record StartWorkflowOptions(
     @Nullable String authenticatedUser,
     @Nullable String assumedRole,
     @Nullable List<String> authenticatedRoles,
-    @Nullable Map<String, Object> attributes) {
+    @Nullable Map<String, Object> attributes,
+    @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
 
   public StartWorkflowOptions {
     if (nullableIsEmpty(workflowId)) {
@@ -128,7 +134,7 @@ public record StartWorkflowOptions(
 
   /** Construct with default options (all fields null). */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -137,7 +143,7 @@ public record StartWorkflowOptions(
    * @param workflowId the workflow ID to assign
    */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -149,7 +155,21 @@ public record StartWorkflowOptions(
    * @param queue name of the queue to enqueue on
    */
   public StartWorkflowOptions(@NonNull QueueName queue) {
-    this(null, null, null, queue.value(), null, null, null, null, null, null, null, null, null);
+    this(
+        null,
+        null,
+        null,
+        queue.value(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -160,7 +180,8 @@ public record StartWorkflowOptions(
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null, null, null, null, null, null, null);
+    this(
+        null, null, null, queue.name(), null, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -183,7 +204,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -206,7 +228,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -274,7 +297,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -297,7 +321,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -343,7 +368,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -368,7 +394,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -391,7 +418,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -414,7 +442,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -437,7 +466,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -460,7 +490,8 @@ public record StartWorkflowOptions(
         authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -483,7 +514,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         assumedRole,
         this.authenticatedRoles,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -507,7 +539,8 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -532,7 +565,8 @@ public record StartWorkflowOptions(
         authenticatedUser,
         this.assumedRole,
         authenticatedRoles != null ? List.of(authenticatedRoles) : null,
-        this.attributes);
+        this.attributes,
+        this.workflowIdReusePolicy);
   }
 
   /**
@@ -559,7 +593,36 @@ public record StartWorkflowOptions(
         this.authenticatedUser,
         this.assumedRole,
         this.authenticatedRoles,
-        attributes);
+        attributes,
+        this.workflowIdReusePolicy);
+  }
+
+  /**
+   * Returns a new StartWorkflowOptions with the specified workflow ID reuse policy.
+   *
+   * @param workflowIdReusePolicy what to do when a workflow with this ID already exists: {@link
+   *     WorkflowIdReusePolicy#RETURN_EXISTING} (the default) attaches to it, {@link
+   *     WorkflowIdReusePolicy#REJECT} refuses with {@link
+   *     dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}
+   * @return a new StartWorkflowOptions with the updated policy
+   */
+  public @NonNull StartWorkflowOptions withWorkflowIdReusePolicy(
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        workflowIdReusePolicy);
   }
 
   /**

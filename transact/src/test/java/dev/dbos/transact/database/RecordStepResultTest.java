@@ -73,6 +73,7 @@ public class RecordStepResultTest {
                 .appVersion("1.0.0")
                 .priority(0)
                 .build(),
+            null,
             null)
         .ownerXid();
   }

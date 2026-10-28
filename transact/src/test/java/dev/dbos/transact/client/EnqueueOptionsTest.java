@@ -105,7 +105,7 @@ public class EnqueueOptionsTest {
         () ->
             new EnqueueOptions(
                 "wf", null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null));
+                null, null, null, null, null));
   }
 
   @Test
@@ -125,7 +125,7 @@ public class EnqueueOptionsTest {
         () ->
             new EnqueueOptions(
                 "wf", null, null, "  ", null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null));
+                null, null, null, null, null));
   }
 
   /**

@@ -33,6 +33,7 @@ import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InternalWorkflows;
@@ -334,6 +335,7 @@ public class DBOSClient implements AutoCloseable {
    * @param authenticatedRoles The authenticated roles to associate with the workflow. Optional.
    * @param attributes Custom JSON-serializable attributes to attach to the workflow. Optional.
    * @param applicationName The application that owns the enqueued workflow. Optional.
+   * @param workflowIdReusePolicy What to do when a workflow with this ID already exists. Optional.
    */
   @Deprecated(since = "1.1", forRemoval = true)
   public record EnqueueOptions(
@@ -354,7 +356,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String assumedRole,
       @Nullable List<String> authenticatedRoles,
       @Nullable Map<String, Object> attributes,
-      @Nullable String applicationName) {
+      @Nullable String applicationName,
+      @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
 
     public EnqueueOptions {
       if (nullableIsEmpty(workflowName)) {
@@ -440,6 +443,7 @@ public class DBOSClient implements AutoCloseable {
           null,
           null,
           null,
+          null,
           null);
     }
 
@@ -483,6 +487,52 @@ public class DBOSClient implements AutoCloseable {
           assumedRole,
           authenticatedRoles,
           attributes,
+          null,
+          null);
+    }
+
+    /**
+     * Constructs options with no workflow ID reuse policy, which attaches to a workflow that
+     * already has this ID.
+     */
+    public EnqueueOptions(
+        @NonNull String workflowName,
+        @Nullable String className,
+        @Nullable String instanceName,
+        @NonNull String queueName,
+        @Nullable String workflowId,
+        @Nullable String appVersion,
+        @Nullable Duration timeout,
+        @Nullable Instant deadline,
+        @Nullable String deduplicationId,
+        @Nullable Integer priority,
+        @Nullable String queuePartitionKey,
+        @Nullable Duration delay,
+        @Nullable SerializationStrategy serialization,
+        @Nullable String authenticatedUser,
+        @Nullable String assumedRole,
+        @Nullable List<String> authenticatedRoles,
+        @Nullable Map<String, Object> attributes,
+        @Nullable String applicationName) {
+      this(
+          workflowName,
+          className,
+          instanceName,
+          queueName,
+          workflowId,
+          appVersion,
+          timeout,
+          deadline,
+          deduplicationId,
+          priority,
+          queuePartitionKey,
+          delay,
+          serialization,
+          authenticatedUser,
+          assumedRole,
+          authenticatedRoles,
+          attributes,
+          applicationName,
           null);
     }
 
@@ -493,6 +543,7 @@ public class DBOSClient implements AutoCloseable {
           className,
           null,
           queueName,
+          null,
           null,
           null,
           null,
@@ -534,7 +585,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -563,7 +615,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -594,7 +647,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -623,7 +677,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -652,7 +707,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -681,7 +737,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -710,7 +767,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -738,7 +796,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -768,7 +827,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -797,7 +857,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -828,7 +889,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -856,7 +918,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -884,7 +947,8 @@ public class DBOSClient implements AutoCloseable {
           assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -912,7 +976,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -942,7 +1007,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           authenticatedRoles != null ? List.of(authenticatedRoles) : null,
           this.attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -972,7 +1038,8 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           attributes,
-          this.applicationName);
+          this.applicationName,
+          this.workflowIdReusePolicy);
     }
 
     /**
@@ -1004,7 +1071,40 @@ public class DBOSClient implements AutoCloseable {
           this.assumedRole,
           this.authenticatedRoles,
           this.attributes,
-          applicationName);
+          applicationName,
+          this.workflowIdReusePolicy);
+    }
+
+    /**
+     * Specify what enqueueing does when a workflow with this ID already exists.
+     *
+     * @param workflowIdReusePolicy {@link WorkflowIdReusePolicy#RETURN_EXISTING} (the default)
+     *     attaches to it, {@link WorkflowIdReusePolicy#REJECT} refuses with {@link
+     *     dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}
+     * @return New `EnqueueOptions` with the policy set
+     */
+    public @NonNull EnqueueOptions withWorkflowIdReusePolicy(
+        @Nullable WorkflowIdReusePolicy workflowIdReusePolicy) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          this.delay,
+          this.serialization,
+          this.authenticatedUser,
+          this.assumedRole,
+          this.authenticatedRoles,
+          this.attributes,
+          this.applicationName,
+          workflowIdReusePolicy);
     }
 
     dev.dbos.transact.EnqueueOptions toEnqueueOptions() {
@@ -1026,7 +1126,8 @@ public class DBOSClient implements AutoCloseable {
           assumedRole,
           authenticatedRoles,
           attributes,
-          applicationName);
+          applicationName,
+          workflowIdReusePolicy);
     }
   }
 
