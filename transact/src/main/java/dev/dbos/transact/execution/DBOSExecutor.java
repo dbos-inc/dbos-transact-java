@@ -2048,9 +2048,9 @@ public class DBOSExecutor implements AutoCloseable {
     String childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
+    var next = ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     var td = ctx.resolveTimeoutAndDeadline();
 
@@ -2059,7 +2059,8 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedUser(ctx.resolveNextAuthenticatedUser())
             .withAssumedRole(ctx.resolveNextAssumedRole())
             .withAuthenticatedRoles(ctx.resolveNextAuthenticatedRoles())
-            .withAttributes(ctx.resolveNextAttributes());
+            .withAttributes(ctx.resolveNextAttributes())
+            .withWorkflowIdReusePolicy(next.workflowIdReusePolicy());
     if (workflow.serializationStrategy() != null) {
       options = options.withSerialization(workflow.serializationStrategy().formatName());
     }
@@ -2146,16 +2147,21 @@ public class DBOSExecutor implements AutoCloseable {
             ? ctx.resolveTimeoutAndDeadline()
             : ctx.resolveTimeoutAndDeadline(options.timeout(), options.deadline());
 
+    // An ID given for the call leaves the one set with WorkflowOptions, and its policy, in place.
+    var next =
+        options != null && options.workflowId() != null
+            ? new DBOSContext.NextWorkflowId(options.workflowId(), null)
+            : ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            options != null ? options.workflowId() : null,
-            () ->
-                Objects.requireNonNullElseGet(
-                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     var execOptions =
         new ExecutionOptions(workflowId)
             .withOptions(options)
+            .withWorkflowIdReusePolicy(
+                options != null && options.workflowIdReusePolicy() != null
+                    ? options.workflowIdReusePolicy()
+                    : next.workflowIdReusePolicy())
             .withTimeout(td.timeout())
             .withDeadline(td.deadline())
             .withAuthenticatedUser(
@@ -2205,12 +2211,13 @@ public class DBOSExecutor implements AutoCloseable {
     // than enqueueing a second workflow.
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    // An ID given for the call leaves the one set with WorkflowOptions, and its policy, in place.
+    var next =
+        options.workflowId() != null
+            ? new DBOSContext.NextWorkflowId(options.workflowId(), null)
+            : ctx.takeNextWorkflowId(childWorkflowId);
     var workflowId =
-        Objects.requireNonNullElseGet(
-            options.workflowId(),
-            () ->
-                Objects.requireNonNullElseGet(
-                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+        Objects.requireNonNullElseGet(next.workflowId(), () -> UUID.randomUUID().toString());
 
     if (parent != null) {
       var childId = recordedChild(parent, options.workflowName(), false);
@@ -2238,7 +2245,11 @@ public class DBOSExecutor implements AutoCloseable {
             .withAuthenticatedRoles(
                 options.authenticatedRoles() != null
                     ? options.authenticatedRoles()
-                    : ctx.resolveNextAuthenticatedRoles());
+                    : ctx.resolveNextAuthenticatedRoles())
+            .withWorkflowIdReusePolicy(
+                options.workflowIdReusePolicy() != null
+                    ? options.workflowIdReusePolicy()
+                    : next.workflowIdReusePolicy());
 
     enqueueWorkflow(
         options.workflowName(),

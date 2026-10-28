@@ -5,6 +5,7 @@ import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -21,6 +22,8 @@ public class DBOSContext {
 
   // assigned context options
   String nextWorkflowId;
+  // Set and taken only with nextWorkflowId, so it governs only the workflow taking that ID.
+  WorkflowIdReusePolicy nextWorkflowIdReusePolicy;
   Timeout nextTimeout;
   Instant nextDeadline;
   Field<String> nextAuthenticatedUser = Field.absent();
@@ -96,6 +99,7 @@ public class DBOSContext {
       Integer functionId,
       CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
+    this.nextWorkflowIdReusePolicy = other.nextWorkflowIdReusePolicy;
     this.nextTimeout = other.nextTimeout;
     this.nextDeadline = other.nextDeadline;
     this.nextAuthenticatedUser = other.nextAuthenticatedUser;
@@ -179,18 +183,27 @@ public class DBOSContext {
     return parent;
   }
 
-  public String getNextWorkflowId() {
-    return getNextWorkflowId(null);
-  }
+  /** A workflow's ID, and the reuse policy set with it; the policy is null for a defaulted ID. */
+  public record NextWorkflowId(String workflowId, WorkflowIdReusePolicy workflowIdReusePolicy) {}
 
-  public String getNextWorkflowId(String workflowId) {
+  /**
+   * Takes the ID set with {@code WorkflowOptions}, and its reuse policy, for the next workflow, so
+   * neither applies to the one after. With none set, {@code workflowId} with no policy.
+   */
+  public NextWorkflowId takeNextWorkflowId(String workflowId) {
     if (nextWorkflowId != null) {
-      var value = nextWorkflowId;
+      var next = new NextWorkflowId(nextWorkflowId, nextWorkflowIdReusePolicy);
       this.nextWorkflowId = null;
-      return value;
+      this.nextWorkflowIdReusePolicy = null;
+      return next;
     }
 
-    return workflowId;
+    return new NextWorkflowId(workflowId, null);
+  }
+
+  /** The reuse policy set with the next workflow's ID, without taking either. */
+  public WorkflowIdReusePolicy peekNextWorkflowIdReusePolicy() {
+    return nextWorkflowIdReusePolicy;
   }
 
   public Timeout getNextTimeout() {

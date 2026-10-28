@@ -516,6 +516,31 @@ public record ExecutionOptions(
         this.workflowIdReusePolicy);
   }
 
+  public ExecutionOptions withWorkflowIdReusePolicy(WorkflowIdReusePolicy workflowIdReusePolicy) {
+    return new ExecutionOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        this.delay,
+        this.appVersion,
+        this.serialization,
+        this.authenticatedUser,
+        this.assumedRole,
+        this.authenticatedRoles,
+        this.attributes,
+        this.claimedStatus,
+        this.claimedAt,
+        this.claimedOwnerXid,
+        this.scheduleName,
+        this.isDebounced,
+        this.debounceDeadline,
+        workflowIdReusePolicy);
+  }
+
   /** Marks the workflow as debounced, its delay capped at {@code debounceDeadline} if not null. */
   public ExecutionOptions withDebounce(Instant debounceDeadline) {
     return new ExecutionOptions(

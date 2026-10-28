@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.DebugTriggers;
@@ -35,7 +36,8 @@ interface ReuseService {
 
   String waitForMessage();
 
-  String startChild(String childId, boolean queued);
+  /** Starts {@code childId} with REJECT: {@code how} is "start", "enqueue" or "call" (directly). */
+  String startChild(String childId, String how);
 
   String startSameChildTwice(String childId);
 }
@@ -68,15 +70,23 @@ class ReuseServiceImpl implements ReuseService {
 
   @Override
   @Workflow
-  public String startChild(String childId, boolean queued) {
-    var options =
-        new StartWorkflowOptions()
-            .withWorkflowId(childId)
-            .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.REJECT);
-    if (queued) {
-      options = options.withQueue(WorkflowIdReusePolicyTest.QUEUE);
-    }
+  public String startChild(String childId, String how) {
     try {
+      if (how.equals("call")) {
+        try (var _o =
+            new WorkflowOptions(childId)
+                .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
+                .setContext()) {
+          return proxy.quick("child");
+        }
+      }
+      var options =
+          new StartWorkflowOptions()
+              .withWorkflowId(childId)
+              .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.REJECT);
+      if (how.equals("enqueue")) {
+        options = options.withQueue(WorkflowIdReusePolicyTest.QUEUE);
+      }
       return dbos.startWorkflow(() -> proxy.quick("child"), options).getResult();
     } catch (DBOSWorkflowIdInUseException e) {
       return "in use: " + e.workflowStatus();
@@ -334,16 +344,109 @@ public class WorkflowIdReusePolicyTest {
     assertEquals("first", dbos.startWorkflow(() -> proxy.quick("second"), options).getResult());
   }
 
+  private static WorkflowOptions.Guard rejectingBlock(String workflowId) {
+    return new WorkflowOptions(workflowId)
+        .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.REJECT)
+        .setContext();
+  }
+
+  @Test
+  void aWorkflowOptionsPolicyRefusesADirectCallOnATakenId() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    holdId(workflowId, WorkflowState.SUCCESS);
+    var before = DBUtils.getWorkflowRow(dataSource, workflowId);
+
+    try (var _o = rejectingBlock(workflowId)) {
+      var refused = assertThrows(DBOSWorkflowIdInUseException.class, () -> proxy.quick("second"));
+      assertEquals(WorkflowState.SUCCESS, refused.workflowStatus());
+    }
+    var after = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertEquals(before.inputs(), after.inputs(), "the holder's input is untouched");
+    assertEquals(before.updatedAt(), after.updatedAt(), "the holder's row is untouched");
+  }
+
+  @Test
+  void aWorkflowOptionsPolicyLetsADirectCallOnAFreshIdRun() throws Exception {
+    try (var _o = rejectingBlock(UUID.randomUUID().toString())) {
+      assertEquals("fresh", proxy.quick("fresh"));
+    }
+  }
+
+  // A start or enqueue that takes the block's ID takes its policy too.
   @ParameterizedTest
   @ValueSource(booleans = {true, false})
-  void aRefusedChildIsRecordedAtItsParentsStepAndReplayed(boolean queued) throws Exception {
+  void aWorkflowOptionsPolicyRefusesAStartTakingItsId(boolean queued) throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    holdId(workflowId, WorkflowState.SUCCESS);
+    var options = queued ? new StartWorkflowOptions().withQueue(QUEUE) : new StartWorkflowOptions();
+
+    try (var _o = rejectingBlock(workflowId)) {
+      assertThrows(
+          DBOSWorkflowIdInUseException.class,
+          () -> dbos.startWorkflow(() -> proxy.quick("second"), options));
+    }
+  }
+
+  @Test
+  void aWorkflowOptionsPolicyRefusesAnEnqueueTakingItsId() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+    holdId(workflowId, WorkflowState.SUCCESS);
+    var options =
+        new EnqueueOptions("quick", ReuseServiceImpl.class.getName(), QueueName.of(QUEUE));
+
+    try (var _o = rejectingBlock(workflowId)) {
+      assertThrows(
+          DBOSWorkflowIdInUseException.class,
+          () -> dbos.enqueueWorkflow(options, new Object[] {"second"}));
+    }
+  }
+
+  // The policy goes with the block's ID: a call giving its own ID, and a nested block setting
+  // another ID, are not governed by it, and the workflow that takes the block's ID is.
+  @Test
+  void aWorkflowOptionsPolicyAppliesOnlyToTheWorkflowTakingItsId() throws Exception {
+    var takenId = UUID.randomUUID().toString();
+    holdId(takenId, WorkflowState.SUCCESS);
+
+    try (var _o = rejectingBlock(UUID.randomUUID().toString())) {
+      assertEquals(
+          "first", dbos.startWorkflow(() -> proxy.quick("second"), withId(takenId)).getResult());
+
+      try (var _i = new WorkflowOptions(takenId).setContext()) {
+        assertEquals("first", proxy.quick("second"));
+      }
+
+      assertEquals("fresh", proxy.quick("fresh"));
+    }
+  }
+
+  @Test
+  void aWorkflowOptionsPolicyNeedsAWorkflowId() {
+    var options = new WorkflowOptions().withWorkflowIdReusePolicy(WorkflowIdReusePolicy.REJECT);
+    assertThrows(IllegalArgumentException.class, options::setContext);
+  }
+
+  @Test
+  void aDebounceRefusesAWorkflowOptionsRejectPolicy() {
+    try (var _o = rejectingBlock(UUID.randomUUID().toString())) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              dbos.<String>debouncer()
+                  .debounce("key", Duration.ofSeconds(1), () -> proxy.quick("x")));
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"start", "enqueue", "call"})
+  void aRefusedChildIsRecordedAtItsParentsStepAndReplayed(String how) throws Exception {
     var childId = UUID.randomUUID().toString();
     holdId(childId, WorkflowState.SUCCESS);
     var parentId = UUID.randomUUID().toString();
 
     assertEquals(
         "in use: SUCCESS",
-        dbos.startWorkflow(() -> proxy.startChild(childId, queued), withId(parentId)).getResult());
+        dbos.startWorkflow(() -> proxy.startChild(childId, how), withId(parentId)).getResult());
 
     var steps = dbos.listWorkflowSteps(parentId);
     assertEquals(1, steps.size());
