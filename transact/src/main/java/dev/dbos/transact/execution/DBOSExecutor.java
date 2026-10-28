@@ -1103,7 +1103,12 @@ public class DBOSExecutor implements AutoCloseable {
               "Deleting workflow(s) {}{}",
               workflowIds,
               deleteChildren ? " and their children" : "");
-          systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
+          // The system database delete finds the children before it deletes anything and
+          // returns every ID it targeted, so the checkpoints can be deleted after it.
+          var deleted = systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
+          if (!deleted.isEmpty()) {
+            deleteStepCheckpointsBestEffort(deleted);
+          }
           return null;
         },
         "DBOS.deleteWorkflow",
@@ -1173,6 +1178,22 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(
             "Failed to delete the transactional step checkpoints of "
                 + describeWorkflows(workflowIds),
+            e);
+      }
+    }
+  }
+
+  // A checkpoint left behind here would be replayed by a new workflow started under the same ID,
+  // but the workflows are already gone, so a failure is logged rather than thrown. Every store is
+  // tried, so one that fails doesn't keep the others from deleting theirs.
+  private void deleteStepCheckpointsBestEffort(Collection<String> workflowIds) {
+    for (var store : stepCheckpointStores) {
+      try {
+        store.deleteCheckpoints(workflowIds);
+      } catch (Exception e) {
+        logger.warn(
+            "Failed to delete the transactional step checkpoints of {}",
+            describeWorkflows(workflowIds),
             e);
       }
     }

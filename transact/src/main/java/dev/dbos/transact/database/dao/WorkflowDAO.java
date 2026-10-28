@@ -1948,11 +1948,16 @@ public class WorkflowDAO {
     }
   }
 
-  public static void deleteWorkflows(
+  /**
+   * Deletes the workflows and, when {@code deleteChildren}, their descendants. Returns the IDs it
+   * targeted: the given IDs (nulls and blanks dropped) plus any descendants found, whether or not a
+   * status row existed for them.
+   */
+  public static List<String> deleteWorkflows(
       DbContext ctx, List<String> workflowIds, boolean deleteChildren) throws SQLException {
     var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
-      return;
+      return List.of();
     }
 
     var wfIdSet = new HashSet<String>(filtered);
@@ -1987,6 +1992,7 @@ public class WorkflowDAO {
             deleteWorkflowChildRows(c, ctx.schema(), ids);
           });
     }
+    return List.of(ids);
   }
 
   private static List<String> getDirectChildren(DbContext ctx, Collection<String> workflowIds)

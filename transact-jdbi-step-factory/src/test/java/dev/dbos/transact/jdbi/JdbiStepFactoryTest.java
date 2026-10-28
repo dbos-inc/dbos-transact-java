@@ -257,6 +257,25 @@ public class JdbiStepFactoryTest {
   }
 
   @Test
+  public void testDeleteRerunsTheTransactionUnderTheSameId() throws Exception {
+    var wfid = "wf-delete-reuse";
+    var user = "reuseUser";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(1, proxy.insertWorkflow(user).greetCount());
+    }
+    assertEquals(1, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    // Deleting the workflow deletes the step's checkpoint, so a new workflow under the same ID
+    // runs the transaction again rather than replaying the deleted one's result.
+    dbos.deleteWorkflow(wfid);
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(2, proxy.insertWorkflow(user).greetCount());
+    }
+    assertEquals(2, getGreetCount(user));
+  }
+
+  @Test
   public void testRewindRerunsTheTransaction() throws Exception {
     var wfid = "wf-rewind";
     var user = "rewindUser";
