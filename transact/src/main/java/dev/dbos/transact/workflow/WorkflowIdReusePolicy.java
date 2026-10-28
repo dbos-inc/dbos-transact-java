@@ -12,8 +12,9 @@ public enum WorkflowIdReusePolicy {
   RETURN_EXISTING,
 
   /**
-   * Refuse the call with {@link dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}, and
-   * write nothing. A retried call whose first attempt created the workflow is not refused.
+   * Refuse the call with {@link dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException}, leaving
+   * the existing workflow as it was. The SDK's own retry of an insert whose first attempt committed
+   * is not refused; calling again with the same ID is.
    */
   REJECT,
 }

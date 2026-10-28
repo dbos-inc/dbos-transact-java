@@ -21,9 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class DBOSContext {
 
   // assigned context options
-  String nextWorkflowId;
-  // Set and taken only with nextWorkflowId, so it governs only the workflow taking that ID.
-  WorkflowIdReusePolicy nextWorkflowIdReusePolicy;
+  // Shared by reference with the WorkflowOptions blocks that save and restore it, so an ID a
+  // workflow has taken stays taken when an inner block closes.
+  AssignedWorkflowId nextWorkflowId;
   Timeout nextTimeout;
   Instant nextDeadline;
   Field<String> nextAuthenticatedUser = Field.absent();
@@ -99,7 +99,6 @@ public class DBOSContext {
       Integer functionId,
       CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
-    this.nextWorkflowIdReusePolicy = other.nextWorkflowIdReusePolicy;
     this.nextTimeout = other.nextTimeout;
     this.nextDeadline = other.nextDeadline;
     this.nextAuthenticatedUser = other.nextAuthenticatedUser;
@@ -183,19 +182,32 @@ public class DBOSContext {
     return parent;
   }
 
+  /**
+   * An ID set with {@code WorkflowOptions}, the reuse policy set with it, and whether it is used.
+   */
+  static final class AssignedWorkflowId {
+    final String workflowId;
+    final WorkflowIdReusePolicy workflowIdReusePolicy;
+    boolean taken;
+
+    AssignedWorkflowId(String workflowId, WorkflowIdReusePolicy workflowIdReusePolicy) {
+      this.workflowId = workflowId;
+      this.workflowIdReusePolicy = workflowIdReusePolicy;
+    }
+  }
+
   /** A workflow's ID, and the reuse policy set with it; the policy is null for a defaulted ID. */
   public record NextWorkflowId(String workflowId, WorkflowIdReusePolicy workflowIdReusePolicy) {}
 
   /**
    * Takes the ID set with {@code WorkflowOptions}, and its reuse policy, for the next workflow, so
-   * neither applies to the one after. With none set, {@code workflowId} with no policy.
+   * neither applies to a later one. With none set, or the one set already taken, {@code workflowId}
+   * with no policy.
    */
   public NextWorkflowId takeNextWorkflowId(String workflowId) {
-    if (nextWorkflowId != null) {
-      var next = new NextWorkflowId(nextWorkflowId, nextWorkflowIdReusePolicy);
-      this.nextWorkflowId = null;
-      this.nextWorkflowIdReusePolicy = null;
-      return next;
+    if (nextWorkflowId != null && !nextWorkflowId.taken) {
+      nextWorkflowId.taken = true;
+      return new NextWorkflowId(nextWorkflowId.workflowId, nextWorkflowId.workflowIdReusePolicy);
     }
 
     return new NextWorkflowId(workflowId, null);
@@ -203,7 +215,9 @@ public class DBOSContext {
 
   /** The reuse policy set with the next workflow's ID, without taking either. */
   public WorkflowIdReusePolicy peekNextWorkflowIdReusePolicy() {
-    return nextWorkflowIdReusePolicy;
+    return nextWorkflowId != null && !nextWorkflowId.taken
+        ? nextWorkflowId.workflowIdReusePolicy
+        : null;
   }
 
   public Timeout getNextTimeout() {

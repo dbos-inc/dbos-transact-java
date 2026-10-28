@@ -341,8 +341,7 @@ public record WorkflowOptions(
 
     // The policy goes with the ID, so a block setting another ID drops an outer block's policy.
     if (workflowId != null) {
-      ctx.nextWorkflowId = workflowId;
-      ctx.nextWorkflowIdReusePolicy = workflowIdReusePolicy;
+      ctx.nextWorkflowId = new DBOSContext.AssignedWorkflowId(workflowId, workflowIdReusePolicy);
     }
     // A timeout and a deadline are one bound, so setting either replaces an outer block's bound
     // as a whole, as options given for the call do. Taken field by field, an outer deadline would
@@ -370,8 +369,7 @@ public record WorkflowOptions(
   public static class Guard implements AutoCloseable {
 
     private final DBOSContext ctx;
-    private final String nextWorkflowId;
-    private final WorkflowIdReusePolicy nextWorkflowIdReusePolicy;
+    private final DBOSContext.AssignedWorkflowId nextWorkflowId;
     private final Timeout timeout;
     private final Instant deadline;
     private final Field<String> authenticatedUser;
@@ -382,7 +380,6 @@ public record WorkflowOptions(
     private Guard(@NonNull DBOSContext ctx) {
       this.ctx = ctx;
       this.nextWorkflowId = ctx.nextWorkflowId;
-      this.nextWorkflowIdReusePolicy = ctx.nextWorkflowIdReusePolicy;
       this.timeout = ctx.nextTimeout;
       this.deadline = ctx.nextDeadline;
       this.authenticatedUser = ctx.nextAuthenticatedUser;
@@ -394,7 +391,6 @@ public record WorkflowOptions(
     @Override
     public void close() {
       ctx.nextWorkflowId = nextWorkflowId;
-      ctx.nextWorkflowIdReusePolicy = nextWorkflowIdReusePolicy;
       ctx.nextTimeout = timeout;
       ctx.nextDeadline = deadline;
       ctx.nextAuthenticatedUser = authenticatedUser;

@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -402,22 +403,67 @@ public class WorkflowIdReusePolicyTest {
   }
 
   // The policy goes with the block's ID: a call giving its own ID, and a nested block setting
-  // another ID, are not governed by it, and the workflow that takes the block's ID is.
+  // another ID, are not governed by it, and the workflow that takes the block's ID still is.
   @Test
   void aWorkflowOptionsPolicyAppliesOnlyToTheWorkflowTakingItsId() throws Exception {
     var takenId = UUID.randomUUID().toString();
     holdId(takenId, WorkflowState.SUCCESS);
+    var freshId = UUID.randomUUID().toString();
 
-    try (var _o = rejectingBlock(UUID.randomUUID().toString())) {
+    try (var _o = rejectingBlock(takenId)) {
       assertEquals(
           "first", dbos.startWorkflow(() -> proxy.quick("second"), withId(takenId)).getResult());
 
-      try (var _i = new WorkflowOptions(takenId).setContext()) {
-        assertEquals("first", proxy.quick("second"));
+      try (var _i = new WorkflowOptions(freshId).setContext()) {
+        assertEquals("fresh", proxy.quick("fresh"));
+      }
+      try (var _i = new WorkflowOptions(freshId).setContext()) {
+        assertEquals("fresh", proxy.quick("again"), "the nested ID attaches; no REJECT applies");
       }
 
-      assertEquals("fresh", proxy.quick("fresh"));
+      assertThrows(DBOSWorkflowIdInUseException.class, () -> proxy.quick("second"));
     }
+  }
+
+  // A policy given for the call overrides the block's, for the workflow taking the block's ID.
+  @Test
+  void aPolicyGivenForTheCallOverridesTheWorkflowOptionsPolicy() throws Exception {
+    var takenId = UUID.randomUUID().toString();
+    holdId(takenId, WorkflowState.SUCCESS);
+
+    try (var _o = rejectingBlock(takenId)) {
+      var options =
+          new StartWorkflowOptions()
+              .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.RETURN_EXISTING);
+      var handle = dbos.startWorkflow(() -> proxy.quick("second"), options);
+      assertEquals(takenId, handle.workflowId());
+      assertEquals("first", handle.getResult());
+    }
+    try (var _o = rejectingBlock(takenId)) {
+      var options =
+          new EnqueueOptions("quick", ReuseServiceImpl.class.getName(), QueueName.of(QUEUE))
+              .withWorkflowIdReusePolicy(WorkflowIdReusePolicy.RETURN_EXISTING);
+      var handle = dbos.<String, RuntimeException>enqueueWorkflow(options, new Object[] {"second"});
+      assertEquals(takenId, handle.workflowId());
+      assertEquals("first", handle.getResult());
+    }
+  }
+
+  // Once a workflow takes the block's ID, closing an inner block does not hand it out again: the
+  // next workflow gets an ID of its own rather than being refused on the used one.
+  @Test
+  void aWorkflowOptionsIdTakenInsideANestedBlockStaysTaken() throws Exception {
+    var workflowId = UUID.randomUUID().toString();
+
+    try (var _o = rejectingBlock(workflowId)) {
+      try (var _i = new WorkflowOptions().withTimeout(Duration.ofMinutes(1)).setContext()) {
+        assertEquals("first", proxy.quick("first"));
+      }
+      var next = dbos.startWorkflow(() -> proxy.quick("next"), new StartWorkflowOptions());
+      assertEquals("next", next.getResult());
+      assertNotEquals(workflowId, next.workflowId(), "the used ID is not taken again");
+    }
+    assertEquals("first", dbos.<String, RuntimeException>retrieveWorkflow(workflowId).getResult());
   }
 
   @Test
@@ -427,13 +473,19 @@ public class WorkflowIdReusePolicyTest {
   }
 
   @Test
-  void aDebounceRefusesAWorkflowOptionsRejectPolicy() {
-    try (var _o = rejectingBlock(UUID.randomUUID().toString())) {
+  void aDebounceRefusesAWorkflowOptionsRejectPolicy() throws Exception {
+    var takenId = UUID.randomUUID().toString();
+    holdId(takenId, WorkflowState.SUCCESS);
+
+    try (var _o = rejectingBlock(takenId)) {
       assertThrows(
           IllegalArgumentException.class,
           () ->
               dbos.<String>debouncer()
                   .debounce("key", Duration.ofSeconds(1), () -> proxy.quick("x")));
+      // The refusal took the block's ID, so it and its REJECT do not refuse the next workflow.
+      var next = dbos.startWorkflow(() -> proxy.quick("next"), new StartWorkflowOptions());
+      assertEquals("next", next.getResult());
     }
   }
 

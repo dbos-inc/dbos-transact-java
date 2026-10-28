@@ -5,7 +5,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 /**
  * {@code DBOSWorkflowIdInUseException} is thrown when a workflow is started or enqueued with {@link
  * dev.dbos.transact.workflow.WorkflowIdReusePolicy#REJECT} and a workflow with its ID already
- * exists, in any status. Nothing is written.
+ * exists, in any status. The existing workflow is left as it was, and no workflow is created.
  *
  * <p>A child workflow refused this way is recorded at its parent's step, so a replay of the parent
  * throws it again.
