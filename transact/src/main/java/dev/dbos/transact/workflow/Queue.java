@@ -18,7 +18,8 @@ import org.jspecify.annotations.Nullable;
  * partitions the queue; there is no separate switch for it.
  *
  * <p>A {@code concurrency} or {@code workerConcurrency} of 0 pauses the queue: nothing is dequeued
- * from it until the limit is raised.
+ * from it until the limit is raised. A queue with a per-partition concurrency limit cannot be
+ * paused this way, since that limit must be at least 1 and may not exceed the queue-wide ones.
  */
 public record Queue(
     @NonNull String name,
@@ -82,6 +83,17 @@ public record Queue(
         || rateLimit.period().isZero())
       throw new IllegalArgumentException(
           "Queue %s period must be greater than zero".formatted(name));
+    requireAtLeastOneMilli(name + " period", rateLimit.period());
+  }
+
+  /**
+   * Refuses a positive duration shorter than a millisecond, the precision it is stored at: it would
+   * be stored as zero, which disables a rate limit and reads back as the default polling interval.
+   */
+  private static void requireAtLeastOneMilli(String name, Duration duration) {
+    if (duration.compareTo(Duration.ofMillis(1)) < 0)
+      throw new IllegalArgumentException(
+          "Queue %s must be at least one millisecond".formatted(name));
   }
 
   /**
@@ -224,8 +236,10 @@ public record Queue(
    * time: the queue is partitioned, each partition runs one workflow at a time, and nothing is
    * limited queue-wide or by rate.
    *
-   * <p>A per-partition worker limit does not disqualify it: that limit cannot exceed a partition
-   * concurrency of 1, which the dequeue already enforces across every worker.
+   * <p>A positive per-partition worker limit does not disqualify it: that limit cannot exceed a
+   * partition concurrency of 1, which the dequeue already enforces across every worker. One of 0 or
+   * less, which no write accepts but a stored row can hold, does: the batched claim reads no worker
+   * limit, so it is left to the per-partition dequeue, which enforces it as no room.
    *
    * @return true if the queue can be dequeued in one batched sweep across its partitions
    */
@@ -233,6 +247,7 @@ public record Queue(
     var limits = resolveLimits();
     return isPartitioned()
         && Integer.valueOf(1).equals(limits.partitionConcurrency())
+        && (limits.partitionWorkerConcurrency() == null || limits.partitionWorkerConcurrency() > 0)
         && limits.concurrency() == null
         && limits.rateLimit() == null
         && limits.partitionRateLimit() == null;
@@ -241,22 +256,26 @@ public record Queue(
   /**
    * Checks the rules a queue must satisfy to be written: no limit is negative, the per-partition
    * concurrency limits are positive, no limit enforced at a narrower scope exceeds one enforced at
-   * a wider scope, and the polling interval is positive.
+   * a wider scope, and the polling interval and rate-limit periods are at least a millisecond.
    *
    * <p>A {@code concurrency} or {@code workerConcurrency} of 0 is allowed and pauses the queue:
    * nothing is dequeued from it until the limit is raised. Because a narrower limit may not exceed
-   * a wider one, a queue with other limits set pauses only once those are 0 or unset too.
+   * a wider one, pausing with {@code concurrency} needs {@code workerConcurrency} to be 0 or unset
+   * too, and a queue with a per-partition concurrency limit, which must be at least 1, cannot be
+   * paused this way at all.
    *
    * <p>None of these is checked by the constructor, because the constructor is also the read path
    * -- {@code QueuesDAO.queueFromResultSet} builds a {@code Queue} out of every row it loads -- and
    * the system database can hold rows that break them: earlier versions of this library accepted
-   * {@code workerConcurrency > concurrency}, and the database is shared with writers that apply
-   * none of these rules. Enforcing them on read would make those rows unloadable, and one
-   * unloadable row stops queue discovery for the whole process.
+   * {@code workerConcurrency > concurrency}, and the database is shared with writers that apply not
+   * all of these rules. Enforcing them on read would make those rows unloadable, and one unloadable
+   * row stops queue discovery for the whole process.
    *
    * <p>So they are enforced where a row is created or changed instead. A row already stored in
    * violation keeps loading, and is only rejected if something tries to write it again. A stored
-   * negative limit is honoured as a limit with no room, the same as 0.
+   * concurrency limit of 0 or less, at any scope, and a rate-limit max of 0 or less, are honoured
+   * as no room. A stored rate-limit period of 0 or less is a window that holds no starts, so it
+   * limits nothing.
    *
    * @throws IllegalArgumentException if this queue may not be written
    */
@@ -295,6 +314,7 @@ public record Queue(
     validateRateLimit("partitionRateLimit", partitionRateLimit);
     if (pollingInterval.isNegative() || pollingInterval.isZero())
       throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
+    requireAtLeastOneMilli("pollingInterval", pollingInterval);
     if (workerConcurrency != null && concurrency != null && workerConcurrency > concurrency)
       throw new IllegalArgumentException(
           "Queue concurrency must be greater than or equal to workerConcurrency");

@@ -532,6 +532,63 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void aStoredRateLimitNoWriteAcceptsHasADefinedMeaning() throws Exception {
+    // A queue is loaded as its row stands, so the dequeue meets limits no write stores. A window
+    // of no length holds no starts, so a positive max over it limits nothing; a max of 0 leaves no
+    // room whatever the window.
+    var appVersion = "v-stored-rate-limits";
+    var noWindow =
+        new Queue(
+            "no-window-q",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(1, Duration.ZERO),
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    var noMax =
+        new Queue(
+            "no-max-q",
+            null,
+            null,
+            false,
+            false,
+            new Queue.RateLimit(0, Duration.ofSeconds(60)),
+            Queue.DEFAULT_POLLING_INTERVAL,
+            null);
+    for (var queue : List.of(noWindow, noMax)) {
+      for (int i = 0; i < 3; i++) {
+        var status =
+            WorkflowStatusInternalBuilder.create(queue.name() + "-" + i)
+                .workflowName("wf-name")
+                .inputs("wf-inputs")
+                .queueName(queue.name())
+                .appVersion(appVersion)
+                .build();
+        assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5, null).status());
+      }
+    }
+
+    // Polled to the first claim that takes anything, as in theClaimCountsTheDispatch; that one
+    // claim must take every workflow, not one per poll.
+    List<String> claimed = List.of();
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
+      claimed =
+          sysdb.startQueuedWorkflows(
+              noWindow, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
+      if (claimed.isEmpty()) Thread.sleep(100);
+    }
+    assertEquals(3, claimed.size(), claimed.toString());
+
+    assertEquals(
+        List.of(),
+        sysdb.startQueuedWorkflows(
+            noMax, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim"));
+  }
+
+  @Test
   public void claimSaturatesAnOverflowingDeadline() throws Exception {
     // The claim adds the timeout to the database's clock. For a timeout within the current epoch
     // milliseconds of the bigint maximum the sum overflows, and since the claim is one UPDATE for

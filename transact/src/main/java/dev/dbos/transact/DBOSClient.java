@@ -2109,7 +2109,9 @@ public class DBOSClient implements AutoCloseable {
    * {@code options} are written; absent fields are left unchanged.
    *
    * <p>Setting {@code concurrency} or {@code workerConcurrency} to 0 pauses the queue: nothing more
-   * is dequeued from it until the limit is raised again.
+   * is dequeued from it until the limit is raised again. A queue with a per-partition concurrency
+   * limit cannot be paused this way, since that limit must be at least 1 and may not exceed the
+   * queue-wide ones.
    *
    * @param name Queue name
    * @param options Fields to update

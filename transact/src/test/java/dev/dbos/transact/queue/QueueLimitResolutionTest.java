@@ -237,7 +237,7 @@ public class QueueLimitResolutionTest {
   }
 
   @Nested
-  @DisplayName("validation, in the order Go, Python and TypeScript apply it")
+  @DisplayName("validation on write")
   class Validation {
 
     private static String rejects(Supplier<Queue> construct) {
@@ -343,6 +343,31 @@ public class QueueLimitResolutionTest {
           rejects(() -> plain(null, null, new RateLimit(1, Duration.ZERO)))
               .contains("rateLimit period"));
     }
+
+    @Test
+    void aDurationMustBeAtLeastTheMillisecondItIsStoredAt() {
+      // Stored in whole milliseconds, so anything shorter would be stored as zero.
+      var subMilli = Duration.ofNanos(500_000);
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(1, subMilli)))
+              .contains("rateLimit period must be at least one millisecond"));
+      assertTrue(
+          rejects(() -> queue(null, null, false, null, null, null, new RateLimit(1, subMilli)))
+              .contains("partitionRateLimit period must be at least one millisecond"));
+      assertTrue(
+          rejects(() -> polledEvery(subMilli))
+              .contains("pollingInterval must be at least one millisecond"));
+
+      plain(null, null, new RateLimit(1, Duration.ofMillis(1))).validateForRegistration();
+      queue(null, null, false, null, null, null, new RateLimit(1, Duration.ofMillis(1)))
+          .validateForRegistration();
+      polledEvery(Duration.ofMillis(1)).validateForRegistration();
+    }
+
+    private static Queue polledEvery(Duration pollingInterval) {
+      return new Queue(
+          "q", null, null, false, false, null, null, null, null, pollingInterval, null);
+    }
   }
 
   @Test
@@ -354,6 +379,11 @@ public class QueueLimitResolutionTest {
     assertTrue(queue(null, 4, false, null, 1, 1, null).canBatchPartitionedDequeue());
     // The legacy flag enforces its queue-wide limits per partition, so concurrency 1 qualifies.
     assertTrue(queue(1, null, true, null, null, null, null).canBatchPartitionedDequeue());
+
+    // The batched claim reads no worker limit, so a stored one that leaves no room must take the
+    // per-partition path, which enforces it.
+    assertFalse(queue(null, null, false, null, 1, 0, null).canBatchPartitionedDequeue());
+    assertFalse(queue(null, null, false, null, 1, -1, null).canBatchPartitionedDequeue());
 
     assertFalse(plain(1, null, null).canBatchPartitionedDequeue());
     assertFalse(queue(null, null, true, null, null, null, null).canBatchPartitionedDequeue());
