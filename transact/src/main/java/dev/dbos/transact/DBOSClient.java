@@ -2108,6 +2108,9 @@ public class DBOSClient implements AutoCloseable {
    * Update the configuration of a database-backed dynamic queue. Only fields that are present in
    * {@code options} are written; absent fields are left unchanged.
    *
+   * <p>Setting {@code concurrency} or {@code workerConcurrency} to 0 pauses the queue: nothing more
+   * is dequeued from it until the limit is raised again.
+   *
    * @param name Queue name
    * @param options Fields to update
    */

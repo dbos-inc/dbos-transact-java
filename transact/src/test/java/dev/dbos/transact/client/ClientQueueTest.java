@@ -69,6 +69,31 @@ public class ClientQueueTest {
   }
 
   @Test
+  public void testClientZeroConcurrencyPausesAndNegativeIsRefused() {
+    try (var client = pgContainer.dbosClient()) {
+      client.registerQueue(
+          "cq-paused", new QueueOptions().withConcurrency(0).withWorkerConcurrency(0));
+      var paused = client.findQueue("cq-paused").orElseThrow();
+      assertEquals(0, paused.concurrency());
+      assertEquals(0, paused.workerConcurrency());
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.registerQueue("cq-negative", new QueueOptions().withConcurrency(-1)));
+      assertTrue(client.findQueue("cq-negative").isEmpty());
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.updateQueue("cq-paused", new QueueOptions().withWorkerConcurrency(-1)));
+
+      client.registerQueue("cq-running", new QueueOptions().withConcurrency(5));
+      client.updateQueue("cq-running", new QueueOptions().withConcurrency(0));
+      assertEquals(0, client.findQueue("cq-running").orElseThrow().concurrency());
+      client.updateQueue("cq-running", new QueueOptions().withConcurrency(3));
+      assertEquals(3, client.findQueue("cq-running").orElseThrow().concurrency());
+    }
+  }
+
+  @Test
   public void testClientNeverUpdate() {
     try (var client = pgContainer.dbosClient()) {
       client.registerQueue("cq-never", new QueueOptions().withConcurrency(5));

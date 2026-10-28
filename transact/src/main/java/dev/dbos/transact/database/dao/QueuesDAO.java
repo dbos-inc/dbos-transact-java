@@ -1172,9 +1172,9 @@ public class QueuesDAO {
     if (pollingInterval.isNegative() || pollingInterval.isZero()) {
       pollingInterval = Queue.DEFAULT_POLLING_INTERVAL;
     }
-    // Built without validation, as the row stands: a limit no write would accept, such as a zero
-    // concurrency, is still a limit the dequeue enforces, and refusing to load the row would hide
-    // the queue from listQueues and leave its listener polling on stale configuration.
+    // Built without validation, as the row stands: a limit no write would accept, such as a
+    // negative concurrency, is still a limit the dequeue enforces, and refusing to load the row
+    // would hide the queue from listQueues and leave its listener polling on stale configuration.
     return new Queue(
         name,
         concurrency,

@@ -615,29 +615,38 @@ public class DynamicQueuesTest {
             dbos.registerQueue(
                 "q-bad-poll", new QueueOptions().withPollingInterval(Duration.ZERO)));
 
-    // Zero or negative concurrency should fail.
+    // Negative concurrency should fail; zero pauses the queue.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withConcurrency(0)));
+        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withConcurrency(-1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withWorkerConcurrency(-1)));
+    assertTrue(dbos.findQueue("q-bad-conc").isEmpty());
+
+    dbos.registerQueue("q-zero-conc", new QueueOptions().withConcurrency(0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-zero-conc", new QueueOptions().withConcurrency(-1)));
+    assertEquals(0, dbos.findQueue("q-zero-conc").orElseThrow().concurrency());
   }
 
   @Test
   public void aRowNoWriteWouldAcceptDoesNotHideTheOtherQueues() throws Exception {
     // The system database is shared, so it can hold a row this library's own writes refuse, such
-    // as a zero concurrency stored to pause a queue. Reading it must not fail the whole listing,
-    // or every queue disappears from listQueues and no new queue is discovered.
+    // as a negative concurrency. Reading it must not fail the whole listing, or every queue
+    // disappears from listQueues and no new queue is discovered.
     dbos.launch();
     var qs = DBOSTestAccess.getQueueService(dbos);
 
-    insertQueueRow("q-zero", 0, null, 1.0);
+    insertQueueRow("q-negative", -1, null, 1.0);
     insertQueueRow("q-zero-poll", null, null, 0.0);
     dbos.registerQueue("q-ok", new QueueOptions().withConcurrency(3));
 
     var names = dbos.listQueues().stream().map(Queue::name).toList();
-    assertTrue(names.containsAll(List.of("q-zero", "q-zero-poll", "q-ok")), names.toString());
+    assertTrue(names.containsAll(List.of("q-negative", "q-zero-poll", "q-ok")), names.toString());
 
-    var zero = dbos.findQueue("q-zero").orElseThrow();
-    assertEquals(0, zero.concurrency());
+    assertEquals(-1, dbos.findQueue("q-negative").orElseThrow().concurrency());
     // A non-positive polling interval would spin the listener, so it reads as unset.
     assertEquals(
         Queue.DEFAULT_POLLING_INTERVAL,
@@ -645,39 +654,52 @@ public class DynamicQueuesTest {
 
     // The dynamic queue listener still discovers a queue registered after the row appeared.
     awaitCondition(() -> qs.findDynamicQueue("q-ok").isPresent());
-    awaitCondition(() -> qs.findDynamicQueue("q-zero").isPresent());
+    awaitCondition(() -> qs.findDynamicQueue("q-negative").isPresent());
   }
 
   @Test
   public void aZeroLimitPausesTheQueue() throws Exception {
-    // A stored zero concurrency or worker concurrency leaves no room under the limit, so nothing
-    // is dequeued until the limit is raised.
+    // A zero concurrency or worker concurrency leaves no room under the limit, so nothing is
+    // dequeued until the limit is raised. Both write paths, runtime and client, accept it.
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.setSpeedupForTest();
 
-    insertQueueRow("q-paused", 0, null, 1.0);
-    insertQueueRow("q-paused-worker", null, 0, 1.0);
-    awaitCondition(() -> qs.findDynamicQueue("q-paused").isPresent());
-    awaitCondition(() -> qs.findDynamicQueue("q-paused-worker").isPresent());
+    try (var client = pgContainer.dbosClient()) {
+      // Paused at registration, and by an update.
+      dbos.registerQueue("q-paused", new QueueOptions().withConcurrency(0));
+      client.registerQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(2));
+      client.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(0));
+      assertEquals(0, dbos.findQueue("q-paused").orElseThrow().concurrency());
+      assertEquals(0, dbos.findQueue("q-paused-worker").orElseThrow().workerConcurrency());
 
-    var paused =
-        dbos.startWorkflow(
-            () -> serviceQ.simpleQWorkflow("a"), new StartWorkflowOptions().withQueue("q-paused"));
-    var pausedWorker =
-        dbos.startWorkflow(
-            () -> serviceQ.simpleQWorkflow("b"),
-            new StartWorkflowOptions().withQueue("q-paused-worker"));
+      // A paused queue still takes an update that leaves it paused.
+      dbos.updateQueue("q-paused", new QueueOptions().withPollingInterval(Duration.ofMillis(500)));
+      assertEquals(
+          Duration.ofMillis(500), dbos.findQueue("q-paused").orElseThrow().pollingInterval());
 
-    Thread.sleep(1_000);
-    assertEquals(WorkflowState.ENQUEUED, paused.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED, pausedWorker.getStatus().status());
+      awaitCondition(() -> qs.findDynamicQueue("q-paused").isPresent());
+      awaitCondition(() -> qs.findDynamicQueue("q-paused-worker").isPresent());
 
-    dbos.updateQueue("q-paused", new QueueOptions().withConcurrency(1));
-    dbos.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(1));
-    assertEquals("aa", paused.getResult());
-    assertEquals("bb", pausedWorker.getResult());
+      var paused =
+          dbos.startWorkflow(
+              () -> serviceQ.simpleQWorkflow("a"),
+              new StartWorkflowOptions().withQueue("q-paused"));
+      var pausedWorker =
+          dbos.startWorkflow(
+              () -> serviceQ.simpleQWorkflow("b"),
+              new StartWorkflowOptions().withQueue("q-paused-worker"));
+
+      Thread.sleep(1_000);
+      assertEquals(WorkflowState.ENQUEUED, paused.getStatus().status());
+      assertEquals(WorkflowState.ENQUEUED, pausedWorker.getStatus().status());
+
+      dbos.updateQueue("q-paused", new QueueOptions().withConcurrency(1));
+      client.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(1));
+      assertEquals("aa", paused.getResult());
+      assertEquals("bb", pausedWorker.getResult());
+    }
   }
 
   /** Writes a queue row directly, bypassing this library's validation. */

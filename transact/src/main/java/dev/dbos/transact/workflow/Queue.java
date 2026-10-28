@@ -16,6 +16,9 @@ import org.jspecify.annotations.Nullable;
  * per-partition limits ({@code partitionConcurrency}, {@code partitionWorkerConcurrency}, {@code
  * partitionRateLimit}) bound each partition key independently. Setting any per-partition limit
  * partitions the queue; there is no separate switch for it.
+ *
+ * <p>A {@code concurrency} or {@code workerConcurrency} of 0 pauses the queue: nothing is dequeued
+ * from it until the limit is raised.
  */
 public record Queue(
     @NonNull String name,
@@ -236,31 +239,33 @@ public record Queue(
   }
 
   /**
-   * Checks the rules a queue must satisfy to be written: every limit is positive, no limit enforced
-   * at a narrower scope exceeds one enforced at a wider scope, and the polling interval is
-   * positive.
+   * Checks the rules a queue must satisfy to be written: no limit is negative, the per-partition
+   * concurrency limits are positive, no limit enforced at a narrower scope exceeds one enforced at
+   * a wider scope, and the polling interval is positive.
+   *
+   * <p>A {@code concurrency} or {@code workerConcurrency} of 0 is allowed and pauses the queue:
+   * nothing is dequeued from it until the limit is raised. Because a narrower limit may not exceed
+   * a wider one, a queue with other limits set pauses only once those are 0 or unset too.
    *
    * <p>None of these is checked by the constructor, because the constructor is also the read path
    * -- {@code QueuesDAO.queueFromResultSet} builds a {@code Queue} out of every row it loads -- and
    * the system database can hold rows that break them: earlier versions of this library accepted
    * {@code workerConcurrency > concurrency}, and the database is shared with writers that apply
-   * none of these rules, such as one storing a zero {@code concurrency} to pause a queue. Enforcing
-   * them on read would make those rows unloadable, and one unloadable row stops queue discovery for
-   * the whole process.
+   * none of these rules. Enforcing them on read would make those rows unloadable, and one
+   * unloadable row stops queue discovery for the whole process.
    *
    * <p>So they are enforced where a row is created or changed instead. A row already stored in
    * violation keeps loading, and is only rejected if something tries to write it again. A stored
-   * zero or negative limit is honoured as a limit with no room: nothing is dequeued under it.
+   * negative limit is honoured as a limit with no room, the same as 0.
    *
    * @throws IllegalArgumentException if this queue may not be written
    */
   public void validateForRegistration() {
-    if (concurrency != null && concurrency <= 0)
+    if (concurrency != null && concurrency < 0)
+      throw new IllegalArgumentException("If specified, queue concurrency must not be negative");
+    if (workerConcurrency != null && workerConcurrency < 0)
       throw new IllegalArgumentException(
-          "If specified, queue concurrency must be greater than zero");
-    if (workerConcurrency != null && workerConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue workerConcurrency must be greater than zero");
+          "If specified, queue workerConcurrency must not be negative");
     if (partitionConcurrency != null && partitionConcurrency <= 0)
       throw new IllegalArgumentException(
           "If specified, queue partitionConcurrency must be greater than zero");
@@ -329,7 +334,7 @@ public record Queue(
 
   /**
    * Produces a new Queue with the assigned global concurrency. `null` may be specified to remove
-   * the concurrency limit.
+   * the concurrency limit; 0 pauses the queue.
    *
    * @deprecated Configure a queue with {@link QueueOptions} at registration.
    */
@@ -347,7 +352,7 @@ public record Queue(
 
   /**
    * Produces a new Queue with the assigned per-worker concurrency. `null` may be specified to
-   * remove the concurrency limit.
+   * remove the concurrency limit; 0 pauses the queue.
    *
    * @deprecated Configure a queue with {@link QueueOptions} at registration.
    */

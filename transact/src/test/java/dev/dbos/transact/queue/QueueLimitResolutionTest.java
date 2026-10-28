@@ -247,9 +247,16 @@ public class QueueLimitResolutionTest {
     }
 
     @Test
-    void everyLimitMustBePositive() {
-      assertTrue(rejects(() -> plain(0, null, null)).contains("concurrency"));
-      assertTrue(rejects(() -> plain(null, 0, null)).contains("workerConcurrency"));
+    void aQueueWideConcurrencyMayBeZeroButNotNegative() {
+      // Zero pauses the queue.
+      plain(0, 0, null).validateForRegistration();
+      assertTrue(rejects(() -> plain(-1, null, null)).contains("concurrency must not be negative"));
+      assertTrue(
+          rejects(() -> plain(null, -1, null)).contains("workerConcurrency must not be negative"));
+    }
+
+    @Test
+    void aPartitionConcurrencyMustBePositive() {
       assertTrue(
           rejects(() -> queue(null, null, false, null, 0, null, null))
               .contains("partitionConcurrency"));
@@ -280,6 +287,14 @@ public class QueueLimitResolutionTest {
       assertTrue(
           rejects(() -> plain(2, 5, null))
               .contains("concurrency must be greater than or equal to workerConcurrency"));
+      // A paused queue still bounds the narrower limits: pausing one that has them means
+      // pausing those too.
+      assertTrue(
+          rejects(() -> plain(0, 1, null))
+              .contains("concurrency must be greater than or equal to workerConcurrency"));
+      assertTrue(
+          rejects(() -> queue(0, null, false, null, 1, null, null))
+              .contains("greater than or equal to partitionConcurrency"));
     }
 
     @Test
