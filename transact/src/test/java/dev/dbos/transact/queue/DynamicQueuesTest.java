@@ -758,9 +758,10 @@ public class DynamicQueuesTest {
   }
 
   @Test
-  public void aStoredRateLimitPeriodOfZeroLimitsNothing() throws Exception {
-    // No write stores one, but a row can hold it. A window of no length holds no starts, so the
-    // limit admits everything rather than pausing the queue or spinning on it.
+  public void aStoredRateLimitPeriodOfZeroAllowsTheMaxPerPoll() throws Exception {
+    // No write stores one, but a row can hold it. A window of no length counts no earlier starts,
+    // so each poll may start up to the max: the queue drains, a poll at a time, without failing.
+    // SystemDatabaseTest pins how much one claim takes.
     ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
     var qs = DBOSTestAccess.getQueueService(dbos);
@@ -770,11 +771,11 @@ public class DynamicQueuesTest {
         "q-rl-zero",
         Map.of(
             "rate_limit_max",
-            1,
+            2,
             "rate_limit_period_sec",
             0.0,
             "partition_rate_limit_max",
-            1,
+            2,
             "partition_rate_limit_period_sec",
             0.0,
             "partition_queue",

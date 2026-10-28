@@ -88,7 +88,8 @@ public record Queue(
 
   /**
    * Refuses a positive duration shorter than a millisecond, the precision it is stored at: it would
-   * be stored as zero, which disables a rate limit and reads back as the default polling interval.
+   * be stored as zero, which turns a rate limit into one counted per poll and reads back as the
+   * default polling interval.
    */
   private static void requireAtLeastOneMilli(String name, Duration duration) {
     if (duration.compareTo(Duration.ofMillis(1)) < 0)
@@ -274,8 +275,8 @@ public record Queue(
    * <p>So they are enforced where a row is created or changed instead. A row already stored in
    * violation keeps loading, and is only rejected if something tries to write it again. A stored
    * concurrency limit of 0 or less, at any scope, and a rate-limit max of 0 or less, are honoured
-   * as no room. A stored rate-limit period of 0 or less is a window that holds no starts, so it
-   * limits nothing.
+   * as no room. A stored rate-limit period of 0 or less counts no earlier starts, so each poll may
+   * start up to the max.
    *
    * @throws IllegalArgumentException if this queue may not be written
    */

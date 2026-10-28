@@ -534,8 +534,8 @@ public class SystemDatabaseTest {
   @Test
   public void aStoredRateLimitNoWriteAcceptsHasADefinedMeaning() throws Exception {
     // A queue is loaded as its row stands, so the dequeue meets limits no write stores. A window
-    // of no length holds no starts, so a positive max over it limits nothing; a max of 0 leaves no
-    // room whatever the window.
+    // of no length counts no earlier starts, so each claim may take up to the max; a max of 0
+    // leaves no room whatever the window.
     var appVersion = "v-stored-rate-limits";
     var noWindow =
         new Queue(
@@ -544,7 +544,7 @@ public class SystemDatabaseTest {
             null,
             false,
             false,
-            new Queue.RateLimit(1, Duration.ZERO),
+            new Queue.RateLimit(2, Duration.ZERO),
             Queue.DEFAULT_POLLING_INTERVAL,
             null);
     var noMax =
@@ -570,17 +570,24 @@ public class SystemDatabaseTest {
       }
     }
 
-    // Polled to the first claim that takes anything, as in theClaimCountsTheDispatch; that one
-    // claim must take every workflow, not one per poll.
-    List<String> claimed = List.of();
+    // Polled, as in theClaimCountsTheDispatch, collecting each claim that takes anything. The
+    // first takes the max, and the queue is not stuck: the next takes the rest.
+    var claims = new ArrayList<List<String>>();
+    int claimed = 0;
     long deadline = System.currentTimeMillis() + 5_000;
-    while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
-      claimed =
+    while (claimed < 3 && System.currentTimeMillis() < deadline) {
+      var batch =
           sysdb.startQueuedWorkflows(
               noWindow, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
-      if (claimed.isEmpty()) Thread.sleep(100);
+      if (batch.isEmpty()) {
+        Thread.sleep(100);
+      } else {
+        claims.add(batch);
+        claimed += batch.size();
+      }
     }
-    assertEquals(3, claimed.size(), claimed.toString());
+    assertEquals(2, claims.get(0).size(), claims.toString());
+    assertEquals(3, claimed, claims.toString());
 
     assertEquals(
         List.of(),

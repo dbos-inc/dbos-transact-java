@@ -734,14 +734,11 @@ public class QueuesDAO {
       Queue.RateLimit rateLimit,
       @Nullable String partitionKey)
       throws SQLException {
-    // Neither of these is a limit any write stores, but a row is loaded as it stands. A max of 0
-    // or less leaves no room, whatever the window; a window of no length holds no starts, so a
-    // positive max over it limits nothing.
+    // No write stores either of these, but a row is loaded as it stands. A max of 0 or less leaves
+    // no room, whatever the window. A period of 0 or less counts no earlier starts, so each poll
+    // may start up to the max.
     if (rateLimit.limit() <= 0) {
       return 0;
-    }
-    if (rateLimit.period().isNegative() || rateLimit.period().isZero()) {
-      return Integer.MAX_VALUE;
     }
     var sql =
         """
@@ -1185,8 +1182,8 @@ public class QueuesDAO {
     // Built without validation, as the row stands, and refusing to load it would hide the queue
     // from listQueues and leave its listener polling on stale configuration. Every dequeue path
     // gives a limit no write would accept a defined meaning: a concurrency limit or rate-limit max
-    // of 0 or less, at any scope, leaves no room, and a rate-limit period of 0 or less limits
-    // nothing (see rateLimitRemaining).
+    // of 0 or less, at any scope, leaves no room, and a rate-limit period of 0 or less allows up to
+    // the max per poll (see rateLimitRemaining).
     return new Queue(
         name,
         concurrency,
