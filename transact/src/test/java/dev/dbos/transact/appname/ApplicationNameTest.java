@@ -520,7 +520,8 @@ public class ApplicationNameTest {
       dequeued =
           DBOSTestAccess.getSystemDatabase(dbosA)
               .startQueuedWorkflows(
-                  new Queue(queueName), "exec-a", appVersion, null, 0, 0, "test-claim");
+                  new Queue(queueName), "exec-a", appVersion, null, 0, 0, "test-claim")
+              .workflowIds();
       if (dequeued.isEmpty()) Thread.sleep(100);
     }
 

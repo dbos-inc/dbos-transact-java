@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.DequeueResult;
 import dev.dbos.transact.database.dao.QueuesDAO;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.QueueService;
@@ -38,6 +39,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 
 import ch.qos.logback.classic.Level;
@@ -1273,17 +1275,19 @@ public class DynamicQueuesTest {
     assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
 
     assertEquals(2, idsToRun.size());
 
     // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun =
+    var stopped =
         systemDatabase.startQueuedWorkflows(
             qwithWCLimit, executorId, appVersion, null, 2, 2, "test-claim");
-    assertEquals(0, idsToRun.size());
+    assertEquals(0, stopped.workflowIds().size());
+    assertEquals(DequeueResult.StopReason.WORKER_CONCURRENCY, stopped.stopReason());
 
     // mark the first 2 as success
     DBUtils.updateAllWorkflowStates(
@@ -1291,21 +1295,24 @@ public class DynamicQueuesTest {
 
     // next 2 get dequeued
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            Constants.DEFAULT_EXECUTORID,
-            Constants.DEFAULT_APP_VERSION,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(0, idsToRun.size());
   }
 
@@ -1365,25 +1372,110 @@ public class DynamicQueuesTest {
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
 
-    List<String> idsToRun =
+    // The count a partitioned sweep takes up front sees what the claim below counts against the
+    // limit: every executor's running workflows, and not the two still enqueued.
+    assertEquals(3, systemDatabase.countPendingQueueWorkflows("QwithWCLimit"));
+
+    var stopped =
         systemDatabase.startQueuedWorkflows(
             qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
     // 0 because global concurrency limit is reached
-    assertEquals(0, idsToRun.size());
+    assertEquals(0, stopped.workflowIds().size());
+    assertEquals(DequeueResult.StopReason.CONCURRENCY, stopped.stopReason());
+    List<String> idsToRun;
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            // executorId,
-            executor2,
-            appVersion,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                // executorId,
+                executor2,
+                appVersion,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
+  }
+
+  /**
+   * A claim names the limit that left it no room, at the scope the limit is enforced at. A
+   * partitioned sweep ends on a queue-wide stop and moves on past a partition's own, so a legacy
+   * queue, whose rate limit applies per partition, must report that limit as a partition's.
+   */
+  @Test
+  @SuppressWarnings("removal") // registers a queue with the deprecated partitionQueue flag
+  public void aClaimNamesTheLimitThatLeftNoRoom() throws Exception {
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var queueService = DBOSTestAccess.getQueueService(dbos);
+    String executorId = dbosExecutor.executorId();
+    String appVersion = dbosExecutor.appVersion();
+
+    var oneAMinute = Duration.ofSeconds(60);
+    dbos.registerQueue(
+        "legacy-rl", new QueueOptions().withRateLimit(1, oneAMinute).andPartitionQueue(true));
+    dbos.registerQueue(
+        "wide-rl", new QueueOptions().withRateLimit(1, oneAMinute).withPartitionConcurrency(5));
+    dbos.registerQueue("part-conc", new QueueOptions().withPartitionConcurrency(1));
+
+    // Nothing else may claim these rows while the test does.
+    queueService.close();
+    while (!queueService.isStopped()) {
+      Thread.sleep(100);
+    }
+
+    var builder =
+        new WorkflowStatusInternalBuilder()
+            .workflowName("StopReasonWorkflow")
+            .className("com.example.StopReason")
+            .executorId(executorId)
+            .appVersion(appVersion)
+            .priority(1)
+            .inputs("[]");
+    for (var queueName : List.of("legacy-rl", "wide-rl", "part-conc")) {
+      for (var id : List.of("a1", "a2", "b1")) {
+        systemDatabase.initWorkflowStatus(
+            builder
+                .workflowId(queueName + "-" + id)
+                .queueName(queueName)
+                .queuePartitionKey(id.substring(0, 1))
+                .build(),
+            null,
+            null);
+      }
+    }
+
+    BiFunction<String, String, DequeueResult> claim =
+        (queueName, partition) ->
+            systemDatabase.startQueuedWorkflows(
+                dbos.findQueue(queueName).orElseThrow(),
+                executorId,
+                appVersion,
+                partition,
+                0,
+                0,
+                "test-claim");
+
+    // Legacy: the queue's one start a minute is per partition, so b still has room.
+    assertEquals(1, claim.apply("legacy-rl", "a").workflowIds().size());
+    assertEquals(
+        DequeueResult.StopReason.PARTITION_RATE_LIMIT, claim.apply("legacy-rl", "a").stopReason());
+    assertEquals(List.of("legacy-rl-b1"), claim.apply("legacy-rl", "b").workflowIds());
+
+    // Queue-wide: the one start a minute is shared, so b has none left either.
+    assertEquals(1, claim.apply("wide-rl", "a").workflowIds().size());
+    assertEquals(DequeueResult.StopReason.RATE_LIMIT, claim.apply("wide-rl", "b").stopReason());
+
+    // A partition's own concurrency: a is full, b is not.
+    assertEquals(1, claim.apply("part-conc", "a").workflowIds().size());
+    assertEquals(
+        DequeueResult.StopReason.PARTITION_CONCURRENCY, claim.apply("part-conc", "a").stopReason());
+    assertEquals(List.of("part-conc-b1"), claim.apply("part-conc", "b").workflowIds());
   }
 
   @Test

@@ -1445,6 +1445,13 @@ public class SystemDatabase implements AutoCloseable {
     return dbOnce(() -> QueuesDAO.getQueuePartitions(ctx, queueName));
   }
 
+  /**
+   * How many of this queue's workflows are running across every executor; see {@link QueuesDAO}.
+   */
+  public int countPendingQueueWorkflows(String queueName) {
+    return dbOnce(() -> QueuesDAO.countPendingQueueWorkflows(ctx, queueName));
+  }
+
   public boolean upsertQueue(
       String name, QueueOptions options, boolean updateExisting, @Nullable String applicationName) {
     if (Constants.DBOS_INTERNAL_QUEUE.equals(name)) {
@@ -1520,7 +1527,7 @@ public class SystemDatabase implements AutoCloseable {
                 ctx, DB_POLLING_INTERVAL, workflowId, failIfMissing));
   }
 
-  public List<String> startQueuedWorkflows(
+  public DequeueResult startQueuedWorkflows(
       Queue queue,
       String executorId,
       String appVersion,

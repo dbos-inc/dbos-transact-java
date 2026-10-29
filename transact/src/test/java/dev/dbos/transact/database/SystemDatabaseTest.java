@@ -520,8 +520,10 @@ public class SystemDatabaseTest {
     long deadline = System.currentTimeMillis() + 5_000;
     while (claimed.isEmpty() && System.currentTimeMillis() < deadline) {
       claimed =
-          sysdb.startQueuedWorkflows(
-              queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
+          sysdb
+              .startQueuedWorkflows(
+                  queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim")
+              .workflowIds();
       if (claimed.isEmpty()) Thread.sleep(100);
     }
     assertEquals(List.of(wfid), claimed);
@@ -577,8 +579,10 @@ public class SystemDatabaseTest {
     long deadline = System.currentTimeMillis() + 5_000;
     while (claimed < 3 && System.currentTimeMillis() < deadline) {
       var batch =
-          sysdb.startQueuedWorkflows(
-              noWindow, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
+          sysdb
+              .startQueuedWorkflows(
+                  noWindow, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim")
+              .workflowIds();
       if (batch.isEmpty()) {
         Thread.sleep(100);
       } else {
@@ -591,8 +595,10 @@ public class SystemDatabaseTest {
 
     assertEquals(
         List.of(),
-        sysdb.startQueuedWorkflows(
-            noMax, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim"));
+        sysdb
+            .startQueuedWorkflows(
+                noMax, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim")
+            .workflowIds());
   }
 
   @Test
@@ -622,12 +628,15 @@ public class SystemDatabaseTest {
           sysdb
               .startQueuedWorkflows(
                   limitOne, Constants.DEFAULT_EXECUTORID, appVersion, partition, 0, 0, "test-claim")
+              .workflowIds()
               .size());
       var stored = concurrencyLimited(name, perPartition, Integer.MIN_VALUE);
       assertEquals(
           List.of(),
-          sysdb.startQueuedWorkflows(
-              stored, Constants.DEFAULT_EXECUTORID, appVersion, partition, 0, 0, "test-claim"),
+          sysdb
+              .startQueuedWorkflows(
+                  stored, Constants.DEFAULT_EXECUTORID, appVersion, partition, 0, 0, "test-claim")
+              .workflowIds(),
           name);
     }
   }
@@ -687,8 +696,10 @@ public class SystemDatabaseTest {
     long deadline = System.currentTimeMillis() + 5_000;
     while (claimed.size() < 2 && System.currentTimeMillis() < deadline) {
       var batch =
-          sysdb.startQueuedWorkflows(
-              queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim");
+          sysdb
+              .startQueuedWorkflows(
+                  queue, Constants.DEFAULT_EXECUTORID, appVersion, null, 0, 0, "test-claim")
+              .workflowIds();
       claimed.addAll(batch);
       if (batch.isEmpty()) Thread.sleep(100);
     }
