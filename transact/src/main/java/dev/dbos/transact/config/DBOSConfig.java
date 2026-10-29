@@ -58,7 +58,7 @@ import org.jspecify.annotations.Nullable;
  * @param serializer custom {@link DBOSSerializer} for workflow arguments and return values; {@code
  *     null} uses the default JSON serializer
  * @param schedulerPollingInterval how often the cron scheduler polls for due tasks; {@code null}
- *     uses the system default
+ *     uses the 30s default; must be at least 1ms
  * @param useListenNotify whether to use PostgreSQL {@code LISTEN}/{@code NOTIFY} for real-time
  *     workflow wake-ups instead of polling
  * @param notificationCoalesceInterval how often stream and workflow-event wake-ups this process
@@ -108,6 +108,12 @@ public record DBOSConfig(
   /** Smallest configurable flush interval; below this the batching buys nothing. */
   public static final Duration MIN_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(1);
 
+  /**
+   * Smallest configurable scheduler polling interval: the scheduler polls in whole milliseconds,
+   * and a period of zero is refused.
+   */
+  public static final Duration MIN_SCHEDULER_POLLING_INTERVAL = Duration.ofMillis(1);
+
   /** Default idle-in-transaction timeout for the system database connections DBOS creates. */
   public static final Duration DEFAULT_SYSTEM_DATABASE_IDLE_TRANSACTION_TIMEOUT =
       Duration.ofMinutes(1);
@@ -135,6 +141,16 @@ public record DBOSConfig(
       throw new IllegalArgumentException(
           "DBOSConfig.notificationCoalesceInterval must be at least "
               + MIN_NOTIFICATION_COALESCE_INTERVAL.toMillis()
+              + "ms if specified");
+    }
+
+    // The scheduler polls at a fixed rate in whole milliseconds, which refuses a period of zero.
+    // Checked here, so a bad setting fails before launch starts anything, naming itself.
+    if (schedulerPollingInterval != null
+        && schedulerPollingInterval.compareTo(MIN_SCHEDULER_POLLING_INTERVAL) < 0) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.schedulerPollingInterval must be at least "
+              + MIN_SCHEDULER_POLLING_INTERVAL.toMillis()
               + "ms if specified");
     }
 
