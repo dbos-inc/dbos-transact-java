@@ -94,6 +94,31 @@ public class ClientQueueTest {
   }
 
   @Test
+  @SuppressWarnings("removal") // sets the deprecated partitionQueue flag to see it refused
+  public void testClientRefusesPartitionQueueAlongsidePartitionLimit() {
+    try (var client = pgContainer.dbosClient()) {
+      var ex =
+          assertThrows(
+              IllegalArgumentException.class,
+              () ->
+                  client.registerQueue(
+                      "cq-flag-and-limit",
+                      new QueueOptions().andPartitionQueue(true).withPartitionConcurrency(2)));
+      assertTrue(ex.getMessage().contains("set only one of them"), ex.getMessage());
+      assertTrue(client.findQueue("cq-flag-and-limit").isEmpty());
+
+      client.registerQueue("cq-flag-update", new QueueOptions().withConcurrency(4));
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              client.updateQueue(
+                  "cq-flag-update",
+                  new QueueOptions().andPartitionQueue(true).withPartitionWorkerConcurrency(1)));
+      assertFalse(client.findQueue("cq-flag-update").orElseThrow().isPartitioned());
+    }
+  }
+
+  @Test
   public void testClientNeverUpdate() {
     try (var client = pgContainer.dbosClient()) {
       client.registerQueue("cq-never", new QueueOptions().withConcurrency(5));

@@ -490,28 +490,61 @@ public class PartitionedQueuesTest {
   }
 
   /**
-   * partitionQueue and the per-partition limits are two ways to ask for the same thing, so setting
-   * both is redundant rather than contradictory: the flag only ever asked for partitioning, which
-   * the limits already say, and its legacy enforcement is defined as the case where no
-   * per-partition limit is set.
+   * partitionQueue and the per-partition limits are two ways to ask for partitioning, and they
+   * disagree about what the queue-wide limits mean: under the flag alone those apply per partition.
+   * So a registration may use only one of them, whichever per-partition limit it sets.
    */
   @Test
-  public void testPartitionQueueAlongsidePartitionLimitsResolves() throws Exception {
-    String queue = "redundant-flag-queue";
+  public void testPartitionQueueAlongsidePartitionLimitsIsRefused() throws Exception {
     dbos.launch();
+
+    var withLimits =
+        List.of(
+            new QueueOptions().withPartitionConcurrency(2),
+            new QueueOptions().withPartitionWorkerConcurrency(2),
+            new QueueOptions().withPartitionRateLimit(5, Duration.ofSeconds(1)));
+    for (int i = 0; i < withLimits.size(); i++) {
+      String queue = "redundant-flag-queue-" + i;
+      var options = withLimits.get(i).withConcurrency(10).andPartitionQueue(true);
+      var ex =
+          assertThrows(IllegalArgumentException.class, () -> dbos.registerQueue(queue, options));
+      assertTrue(ex.getMessage().contains("set only one of them"), ex.getMessage());
+      assertTrue(ex.getMessage().contains(queue), ex.getMessage());
+      assertTrue(dbos.findQueue(queue).isEmpty());
+    }
+
+    // Each on its own still registers.
     dbos.registerQueue(
-        queue,
-        new QueueOptions().withConcurrency(10).andPartitionQueue(true).withPartitionConcurrency(2));
+        "flag-only-queue", new QueueOptions().withConcurrency(4).andPartitionQueue(true));
+    assertTrue(dbos.findQueue("flag-only-queue").orElseThrow().isLegacyPartitioned());
+    dbos.registerQueue("limits-only-queue", new QueueOptions().withPartitionConcurrency(2));
+    var limitsOnly = dbos.findQueue("limits-only-queue").orElseThrow();
+    assertTrue(limitsOnly.isPartitioned());
+    assertFalse(limitsOnly.isLegacyPartitioned());
+  }
 
-    var q = dbos.findQueue(queue).orElseThrow();
-    assertTrue(q.isPartitioned());
-    assertTrue(q.hasPartitionLimits());
-    // The explicit limits win, so this is not the legacy mode however the flag was set.
-    assertFalse(q.isLegacyPartitioned());
+  /**
+   * An update that sets partitionQueue together with a per-partition limit is refused as a
+   * registration would be, and leaves the queue as it was.
+   */
+  @Test
+  public void testUpdateSettingPartitionQueueAndPartitionLimitIsRefused() throws Exception {
+    String queue = "update-flag-and-limit-queue";
+    dbos.launch();
+    dbos.registerQueue(queue, new QueueOptions().withConcurrency(10));
 
-    var limits = q.resolveLimits();
-    assertEquals(10, limits.concurrency());
-    assertEquals(2, limits.partitionConcurrency());
+    var ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                dbos.updateQueue(
+                    queue, new QueueOptions().andPartitionQueue(true).withPartitionConcurrency(2)));
+    assertTrue(ex.getMessage().contains("set only one of them"), ex.getMessage());
+
+    var unchanged = dbos.findQueue(queue).orElseThrow();
+    assertEquals(10, unchanged.concurrency());
+    assertNull(unchanged.partitionConcurrency());
+    assertFalse(unchanged.isPartitioned());
   }
 
   /**

@@ -257,7 +257,8 @@ public record Queue(
   /**
    * Checks the rules a queue must satisfy to be written: no limit is negative, the per-partition
    * concurrency limits are positive, no limit enforced at a narrower scope exceeds one enforced at
-   * a wider scope, and the polling interval and rate-limit periods are at least a millisecond.
+   * a wider scope, the polling interval and rate-limit periods are at least a millisecond, and the
+   * deprecated partitioning flag is not set alongside a per-partition limit.
    *
    * <p>A {@code concurrency} or {@code workerConcurrency} of 0 is allowed and pauses the queue:
    * nothing is dequeued from it until the limit is raised. Because a narrower limit may not exceed
@@ -281,6 +282,14 @@ public record Queue(
    * @throws IllegalArgumentException if this queue may not be written
    */
   public void validateForRegistration() {
+    // A per-partition limit already partitions the queue, so the flag could add nothing to it. A
+    // queue read back from the system database carries both, its flag derived from those limits,
+    // but no write path passes the stored flag on.
+    if (partitioningEnabled && hasPartitionLimits())
+      throw new IllegalArgumentException(
+          ("Queue %s: partitionQueue is deprecated in favor of the partition limits; set only one"
+                  + " of them")
+              .formatted(name));
     if (concurrency != null && concurrency < 0)
       throw new IllegalArgumentException("If specified, queue concurrency must not be negative");
     if (workerConcurrency != null && workerConcurrency < 0)
@@ -407,7 +416,8 @@ public record Queue(
   }
 
   /**
-   * Produces a new Queue with partitioning enabled/disabled.
+   * Produces a new Queue with partitioning enabled/disabled. Registration refuses a queue with
+   * partitioning enabled and a per-partition limit set.
    *
    * @deprecated Set a per-partition limit instead, which partitions the queue on its own.
    */

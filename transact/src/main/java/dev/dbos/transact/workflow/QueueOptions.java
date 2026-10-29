@@ -21,10 +21,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A queue can carry flow control at two scopes at once: the queue-wide limits bound the queue as
  * a whole, and the per-partition limits bound each partition key independently. Setting any
- * per-partition limit is what partitions the queue, so {@code partitionQueue} is redundant
- * alongside one: registration accepts it and it adds nothing, while an update refuses it on a queue
- * already partitioned by its per-partition limits. A queue registered with {@code partitionQueue}
- * alone keeps its limits frozen; re-register it with per-partition limits to move it across.
+ * per-partition limit is what partitions the queue, so the deprecated {@code partitionQueue} may
+ * not be set alongside one: registration and update both refuse the two together. A queue
+ * registered with {@code partitionQueue} alone keeps its limits frozen; re-register it with
+ * per-partition limits to move it across.
  *
  * <p>A rate limit's max and period are set and cleared together, at registration and on update
  * alike; supplying only one of them is refused.
@@ -49,8 +49,9 @@ import org.jspecify.annotations.Nullable;
  *     paired with {@code partitionRateLimitMax}
  * @param priorityEnabled ignored: every queue dispatches in priority order
  * @param partitionQueue whether to partition queue entries so each partition key gets its own
- *     concurrency slot, with the queue-wide limits applied per partition; {@link Optional#empty()}
- *     means use the default or leave unchanged
+ *     concurrency slot, with the queue-wide limits applied per partition; may not be {@code true}
+ *     together with a per-partition limit; {@link Optional#empty()} means use the default or leave
+ *     unchanged
  * @param pollingInterval how often workers poll the database for new queue entries; {@link
  *     Optional#empty()} means use the default or leave unchanged
  */
