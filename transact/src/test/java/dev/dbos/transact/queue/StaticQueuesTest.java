@@ -598,16 +598,18 @@ public class StaticQueuesTest {
     assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
 
     assertEquals(2, idsToRun.size());
 
     // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 2, 2, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 2, 2, "test-claim")
+            .workflowIds();
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -616,21 +618,24 @@ public class StaticQueuesTest {
 
     // next 2 get dequeued
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            Constants.DEFAULT_EXECUTORID,
-            Constants.DEFAULT_APP_VERSION,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(0, idsToRun.size());
   }
 
@@ -689,23 +694,26 @@ public class StaticQueuesTest {
     }
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            // executorId,
-            executor2,
-            appVersion,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                // executorId,
+                executor2,
+                appVersion,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
   }
 

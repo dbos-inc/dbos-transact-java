@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import dev.dbos.transact.database.DequeueResult;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
@@ -53,6 +54,17 @@ public class QueueServicePollTest {
   private static final Queue WORKER_BUDGETED =
       new Queue("q", null, 3, false, false, null, 1, null, null, Duration.ofMillis(200), null);
 
+  /**
+   * Partitioned by a per-partition limit, with a queue-wide concurrency limit of two shared by
+   * every executor. Not batchable, because of that queue-wide limit, so it takes the sweep.
+   */
+  private static final Queue QUEUE_BUDGETED =
+      new Queue("q", 2, null, false, false, null, 1, null, null, Duration.ofMillis(200), null);
+
+  /** The deprecated flag with a concurrency, which that flag enforces per partition. */
+  private static final Queue LEGACY_WITH_CONCURRENCY =
+      new Queue("q", 1, null, false, true, null, Duration.ofMillis(200), null);
+
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
   private QueueService queueService;
@@ -60,6 +72,11 @@ public class QueueServicePollTest {
   /** A contention failure as it arrives from the DAO: wrapped by dbRetry, SQLSTATE intact. */
   private static RuntimeException contention(String sqlState) {
     return new RuntimeException(new SQLException("contended", sqlState));
+  }
+
+  /** A claim of {@code ids} that looked for candidates, as every stub here but the stopped ones. */
+  private static DequeueResult claimed(String... ids) {
+    return new DequeueResult(List.of(ids), null);
   }
 
   @BeforeEach
@@ -82,7 +99,7 @@ public class QueueServicePollTest {
         .thenThrow(contention("55P03"));
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), eq("b"), anyLong(), anyLong(), anyString()))
-        .thenReturn(List.of("wf-b"));
+        .thenReturn(claimed("wf-b"));
 
     taskFor(PARTITIONED).sweepPartitions();
 
@@ -117,7 +134,7 @@ public class QueueServicePollTest {
   public void failedDispatchDoesNotStrandTheBatch() {
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), eq(null), anyLong(), anyLong(), anyString()))
-        .thenReturn(List.of("wf-1", "wf-2"));
+        .thenReturn(claimed("wf-1", "wf-2"));
     when(dbosExecutor.executeWorkflowById(eq("wf-1"), anyString())).thenThrow(contention("40001"));
 
     taskFor(PLAIN).processPartition(null, 0);
@@ -136,10 +153,10 @@ public class QueueServicePollTest {
     when(dbosExecutor.queueActiveCount("q")).thenReturn(1L);
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), eq("a"), anyLong(), anyLong(), anyString()))
-        .thenReturn(List.of("wf-a"));
+        .thenReturn(claimed("wf-a"));
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), eq("b"), anyLong(), anyLong(), anyString()))
-        .thenReturn(List.of("wf-b"));
+        .thenReturn(claimed("wf-b"));
 
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
@@ -191,7 +208,7 @@ public class QueueServicePollTest {
     when(dbosExecutor.queueActiveCount("q")).thenReturn(2L);
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
-        .thenReturn(List.of("wf-1"));
+        .thenReturn(claimed("wf-1"));
 
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
@@ -209,6 +226,80 @@ public class QueueServicePollTest {
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
     verify(systemDatabase, never())
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a spent queue-wide concurrency limit skips the sweep, partitions unlisted")
+  public void aSpentQueueWideLimitSkipsTheSweep() {
+    // Every partition's claim would be its own transaction finding no room: thousands of them per
+    // poll on a queue with that many partitions waiting.
+    when(systemDatabase.countPendingQueueWorkflows("q")).thenReturn(2);
+
+    taskFor(QUEUE_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, never()).getQueuePartitions(any());
+    verify(systemDatabase, never())
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a sweep stops once its claims have used the queue-wide room")
+  public void theSweepStopsAtTheQueueWideRoom() {
+    when(systemDatabase.countPendingQueueWorkflows("q")).thenReturn(0);
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c", "d"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(claimed("wf-a"), claimed("wf-b"), claimed("wf-c"), claimed("wf-d"));
+
+    taskFor(QUEUE_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(2))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a claim that finds a queue-wide limit spent ends the sweep")
+  public void aQueueWideStopEndsTheSweep() {
+    // The count said there was room, but peers filled it before the first claim ran.
+    when(systemDatabase.countPendingQueueWorkflows("q")).thenReturn(0);
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.CONCURRENCY));
+
+    taskFor(QUEUE_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(1))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a claim that finds only its own partition full leaves the sweep going")
+  public void aPartitionScopedStopDoesNotEndTheSweep() {
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.PARTITION_CONCURRENCY));
+
+    taskFor(WORKER_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(3))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a legacy partitioned queue's concurrency is per partition, so nothing is counted")
+  public void aLegacyQueueHasNoQueueWideRoomToCount() {
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(claimed("wf-a"), claimed("wf-b"));
+
+    taskFor(LEGACY_WITH_CONCURRENCY).sweepPartitions();
+
+    verify(systemDatabase, never()).countPendingQueueWorkflows(any());
+    verify(systemDatabase, times(2))
         .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
   }
 
@@ -247,7 +338,7 @@ public class QueueServicePollTest {
             inv -> {
               claiming.countDown();
               assertTrue(release.await(10, TimeUnit.SECONDS), "claim never released");
-              return claimed;
+              return new DequeueResult(claimed, null);
             });
   }
 
@@ -310,7 +401,7 @@ public class QueueServicePollTest {
   public void nothingRunsAfterPauseReturns() {
     queueService.pause();
 
-    assertEquals(0, taskFor(PLAIN).processPartition(null, 0));
+    assertEquals(0, taskFor(PLAIN).processPartition(null, 0).workflowIds().size());
     queueService.transitionDelayedWorkflows();
 
     verifyNoInteractions(systemDatabase);
@@ -364,6 +455,6 @@ public class QueueServicePollTest {
       poll.join(10_000);
     }
     // Still paused: giving up the wait does not give up the pause.
-    assertEquals(0, taskFor(PLAIN).processPartition(null, 0));
+    assertEquals(0, taskFor(PLAIN).processPartition(null, 0).workflowIds().size());
   }
 }

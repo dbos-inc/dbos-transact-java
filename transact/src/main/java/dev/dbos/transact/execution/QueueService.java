@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.DequeueResult;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
@@ -242,10 +243,20 @@ public class QueueService implements AutoCloseable {
      * budget before the rest were reached, starving them for as long as they stayed behind in the
      * ordering.
      *
+     * <p>The sweep also stops once the queue-wide limits leave no room. Each partition's claim is a
+     * transaction of its own, and with a queue-wide concurrency limit spent every one of them would
+     * claim nothing, so a queue waiting on thousands of partitions would spend its whole poll, and
+     * the system database's CPU, on empty transactions. The room is counted once up front, and the
+     * sweep ends when its claims have used it up or when a claim finds a queue-wide limit spent.
+     * Each claim still checks every limit in its own transaction, so a stale count costs at most a
+     * slot freed mid-sweep waiting for the next poll.
+     *
      * <p>Contention listing the partitions is left to propagate: it is not scoped to any one
      * partition, so it backs the whole queue off.
      */
     void sweepPartitions() {
+      long queueBudget = queueBudget();
+      if (queueBudget <= 0) return;
       var partitions = new ArrayList<>(systemDatabase.getQueuePartitions(queue.name()));
       Collections.shuffle(partitions, ThreadLocalRandom.current());
       // Snapshot the running count once and carry this sweep's own claims forward in `claimed`:
@@ -254,9 +265,13 @@ public class QueueService implements AutoCloseable {
       long running = dbosExecutor.queueActiveCount(queue.name());
       long claimed = 0;
       for (var partition : partitions) {
-        if (workerBudget(running + claimed) <= 0) break;
+        if (workerBudget(running + claimed) <= 0 || claimed >= queueBudget) break;
         try {
-          claimed += processPartition(partition, running + claimed);
+          var result = processPartition(partition, running + claimed);
+          claimed += result.workflowIds().size();
+          // A queue-wide limit spent, perhaps by peers since the count, leaves every other
+          // partition without room too.
+          if (result.stopReason() != null && result.stopReason().isQueueWide()) break;
         } catch (Exception e) {
           // Skip just this partition, no queue-wide backoff -- deliberately including 40001,
           // which would back off from a non-partitioned dequeue. The other partitions are
@@ -293,6 +308,17 @@ public class QueueService implements AutoCloseable {
     }
 
     /**
+     * Room left under the queue-wide concurrency limit across every executor, as of one count.
+     * Unbounded when the queue has none; a legacy partitioned queue's concurrency is enforced per
+     * partition, so it has none.
+     */
+    private long queueBudget() {
+      var concurrency = queue.resolveLimits().concurrency();
+      if (concurrency == null) return Long.MAX_VALUE;
+      return (long) concurrency - systemDatabase.countPendingQueueWorkflows(queue.name());
+    }
+
+    /**
      * Room left under this worker's queue-wide concurrency limit, given how many of its workflows
      * are already running or claimed. Unbounded when only a per-partition worker limit is set,
      * which the dequeue enforces within each partition instead.
@@ -309,19 +335,20 @@ public class QueueService implements AutoCloseable {
      *
      * @param running how many of this queue's workflows this worker is already running or has
      *     claimed earlier in this sweep
-     * @return how many workflows this call claimed
+     * @return what this call claimed, and which limit left no room if it claimed nothing for that
+     *     reason
      */
-    int processPartition(@Nullable String partition, long running) {
+    DequeueResult processPartition(@Nullable String partition, long running) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       // The claim and the dispatch of what it claimed are one pass: pause() waits for both.
-      if (!beginPass()) return 0;
+      if (!beginPass()) return new DequeueResult(List.of(), null);
       try {
         // The two worker-scoped limits count different things: workerConcurrency bounds the queue
         // across every partition, partitionWorkerConcurrency bounds this partition alone.
         long partitionLocalRunningCount =
             partition == null ? running : dbosExecutor.queueActiveCount(queue.name(), partition);
         var ownerXid = UUID.randomUUID().toString();
-        var workflowIds =
+        var result =
             systemDatabase.startQueuedWorkflows(
                 queue,
                 executorId,
@@ -330,8 +357,8 @@ public class QueueService implements AutoCloseable {
                 running,
                 partitionLocalRunningCount,
                 ownerXid);
-        startClaimedWorkflows(workflowIds, ownerXid, partitionLog);
-        return workflowIds.size();
+        startClaimedWorkflows(result.workflowIds(), ownerXid, partitionLog);
+        return result;
       } finally {
         endPass();
       }

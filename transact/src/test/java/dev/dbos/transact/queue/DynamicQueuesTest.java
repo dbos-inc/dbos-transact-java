@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.DequeueResult;
 import dev.dbos.transact.database.dao.QueuesDAO;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.execution.QueueService;
@@ -1273,17 +1274,19 @@ public class DynamicQueuesTest {
     assertEquals(List.of("admin", "operator"), readBack.authenticatedRoles());
 
     List<String> idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
 
     assertEquals(2, idsToRun.size());
 
     // 2 are now in Pending; pass localRunningCount=2 to simulate in-memory tracking.
     // So no de queueing
-    idsToRun =
+    var stopped =
         systemDatabase.startQueuedWorkflows(
             qwithWCLimit, executorId, appVersion, null, 2, 2, "test-claim");
-    assertEquals(0, idsToRun.size());
+    assertEquals(0, stopped.workflowIds().size());
+    assertEquals(DequeueResult.StopReason.WORKER_CONCURRENCY, stopped.stopReason());
 
     // mark the first 2 as success
     DBUtils.updateAllWorkflowStates(
@@ -1291,21 +1294,24 @@ public class DynamicQueuesTest {
 
     // next 2 get dequeued
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            Constants.DEFAULT_EXECUTORID,
-            Constants.DEFAULT_APP_VERSION,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(0, idsToRun.size());
   }
 
@@ -1365,24 +1371,32 @@ public class DynamicQueuesTest {
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
 
-    List<String> idsToRun =
+    // The count a partitioned sweep takes up front sees what the claim below counts against the
+    // limit: every executor's running workflows, and not the two still enqueued.
+    assertEquals(3, systemDatabase.countPendingQueueWorkflows("QwithWCLimit"));
+
+    var stopped =
         systemDatabase.startQueuedWorkflows(
             qwithWCLimit, executorId, appVersion, null, 0, 0, "test-claim");
     // 0 because global concurrency limit is reached
-    assertEquals(0, idsToRun.size());
+    assertEquals(0, stopped.workflowIds().size());
+    assertEquals(DequeueResult.StopReason.CONCURRENCY, stopped.stopReason());
+    List<String> idsToRun;
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
-        systemDatabase.startQueuedWorkflows(
-            qwithWCLimit,
-            // executorId,
-            executor2,
-            appVersion,
-            null,
-            0,
-            0,
-            "test-claim");
+        systemDatabase
+            .startQueuedWorkflows(
+                qwithWCLimit,
+                // executorId,
+                executor2,
+                appVersion,
+                null,
+                0,
+                0,
+                "test-claim")
+            .workflowIds();
     assertEquals(2, idsToRun.size());
   }
 

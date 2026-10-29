@@ -1,6 +1,8 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
+import dev.dbos.transact.database.DequeueResult;
+import dev.dbos.transact.database.DequeueResult.StopReason;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
@@ -28,7 +30,7 @@ public class QueuesDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  public static List<String> startQueuedWorkflows(
+  public static DequeueResult startQueuedWorkflows(
       DbContext ctx,
       Queue queue,
       String executorId,
@@ -84,18 +86,22 @@ public class QueuesDAO {
           }
           maxTasks =
               Math.min(maxTasks, Math.max(0, limits.workerConcurrency() - localRunningCount));
+          if (maxTasks == 0) {
+            // Nothing claimable. End the transaction here rather than leaving it open for
+            // the pool to roll back on return.
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.WORKER_CONCURRENCY);
+          }
         }
         if (limits.partitionWorkerConcurrency() != null) {
           maxTasks =
               Math.min(
                   maxTasks,
                   Math.max(0, limits.partitionWorkerConcurrency() - partitionLocalRunningCount));
-        }
-        if (maxTasks == 0) {
-          // Nothing claimable. End the transaction here rather than leaving it open for
-          // the pool to roll back on return.
-          connection.rollback();
-          return List.of();
+          if (maxTasks == 0) {
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.PARTITION_WORKER_CONCURRENCY);
+          }
         }
 
         // Bound the claim by each limiter's remaining slots, so a backlogged queue locks and
@@ -105,6 +111,10 @@ public class QueuesDAO {
               Math.min(
                   maxTasks,
                   rateLimitRemaining(ctx, connection, queue.name(), limits.rateLimit(), null));
+          if (maxTasks == 0) {
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.RATE_LIMIT);
+          }
         }
         if (limits.partitionRateLimit() != null) {
           maxTasks =
@@ -112,12 +122,10 @@ public class QueuesDAO {
                   maxTasks,
                   rateLimitRemaining(
                       ctx, connection, queue.name(), limits.partitionRateLimit(), partition));
-        }
-        if (maxTasks == 0) {
-          // Nothing claimable. End the transaction here rather than leaving it open for the pool
-          // to roll back, so the candidate SELECT's row locks are released at the return.
-          connection.rollback();
-          return List.of();
+          if (maxTasks == 0) {
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.PARTITION_RATE_LIMIT);
+          }
         }
 
         // Concurrency at either shared scope still requires a DB query — other workers may be
@@ -133,6 +141,10 @@ public class QueuesDAO {
           }
           // In long: a stored limit near Integer.MIN_VALUE less the pending count would wrap.
           maxTasks = Math.min(maxTasks, Math.max(0, (long) limits.concurrency() - pending));
+          if (maxTasks == 0) {
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.CONCURRENCY);
+          }
         }
         if (limits.partitionConcurrency() != null) {
           int pending = pendingCount(ctx, connection, queue.name(), partition);
@@ -147,10 +159,10 @@ public class QueuesDAO {
           }
           maxTasks =
               Math.min(maxTasks, Math.max(0, (long) limits.partitionConcurrency() - pending));
-        }
-        if (maxTasks == 0) {
-          connection.rollback();
-          return List.of();
+          if (maxTasks == 0) {
+            connection.rollback();
+            return DequeueResult.stopped(StopReason.PARTITION_CONCURRENCY);
+          }
         }
 
         String versionClause = versionClause(ctx, connection, appVersion);
@@ -276,7 +288,7 @@ public class QueuesDAO {
           connection.rollback();
         }
 
-        return updatedWorkflowIds;
+        return new DequeueResult(updatedWorkflowIds, null);
       } catch (Throwable t) {
         // No path may leave the transaction open: it may hold FOR UPDATE locks on rows other
         // executors are waiting to claim.
@@ -598,6 +610,17 @@ public class QueuesDAO {
    * <p>Walks them with {@link #partitionKeysCte}, so the cost grows with the number of partitions
    * rather than the backlog: SELECT DISTINCT reads every ENQUEUED row to find the same keys.
    */
+  /**
+   * How many of this queue's workflows are running across every executor, counted as the dequeue
+   * counts them against the queue-wide concurrency limit.
+   */
+  public static int countPendingQueueWorkflows(DbContext ctx, String queueName)
+      throws SQLException {
+    try (Connection connection = ctx.getConnection()) {
+      return pendingCount(ctx, connection, queueName, null);
+    }
+  }
+
   public static List<String> getQueuePartitions(DbContext ctx, String queueName)
       throws SQLException {
 
