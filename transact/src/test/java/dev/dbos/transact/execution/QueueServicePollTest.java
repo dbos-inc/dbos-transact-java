@@ -29,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * What one poll does when part of it fails. Driven through {@code QueueListenerTask} directly
@@ -61,9 +63,21 @@ public class QueueServicePollTest {
   private static final Queue QUEUE_BUDGETED =
       new Queue("q", 2, null, false, false, null, 1, null, null, Duration.ofMillis(200), null);
 
-  /** The deprecated flag with a concurrency, which that flag enforces per partition. */
-  private static final Queue LEGACY_WITH_CONCURRENCY =
-      new Queue("q", 1, null, false, true, null, Duration.ofMillis(200), null);
+  /**
+   * The deprecated flag with a concurrency and a rate limit, both of which that flag enforces per
+   * partition. The rate limit keeps it off the batched sweep, which this queue would otherwise
+   * take.
+   */
+  private static final Queue LEGACY_LIMITED =
+      new Queue(
+          "q",
+          2,
+          null,
+          false,
+          true,
+          new Queue.RateLimit(5, Duration.ofSeconds(1)),
+          Duration.ofMillis(200),
+          null);
 
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -258,15 +272,19 @@ public class QueueServicePollTest {
         .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(
+      value = DequeueResult.StopReason.class,
+      names = {"CONCURRENCY", "RATE_LIMIT"})
   @DisplayName("a claim that finds a queue-wide limit spent ends the sweep")
-  public void aQueueWideStopEndsTheSweep() {
-    // The count said there was room, but peers filled it before the first claim ran.
+  public void aQueueWideStopEndsTheSweep(DequeueResult.StopReason reason) {
+    // The count said there was room, but peers filled it, or the rate limit ran out, before the
+    // first claim ran.
     when(systemDatabase.countPendingQueueWorkflows("q")).thenReturn(0);
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
-        .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.CONCURRENCY));
+        .thenReturn(DequeueResult.stopped(reason));
 
     taskFor(QUEUE_BUDGETED).sweepPartitions();
 
@@ -291,15 +309,50 @@ public class QueueServicePollTest {
   @Test
   @DisplayName("a legacy partitioned queue's concurrency is per partition, so nothing is counted")
   public void aLegacyQueueHasNoQueueWideRoomToCount() {
+    assertFalse(LEGACY_LIMITED.canBatchPartitionedDequeue(), "the fixture must take the sweep");
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
     when(systemDatabase.startQueuedWorkflows(
             any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
         .thenReturn(claimed("wf-a"), claimed("wf-b"));
 
-    taskFor(LEGACY_WITH_CONCURRENCY).sweepPartitions();
+    taskFor(LEGACY_LIMITED).sweepPartitions();
 
     verify(systemDatabase, never()).countPendingQueueWorkflows(any());
     verify(systemDatabase, times(2))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a per-partition limit of zero leaves no partition room, so none is visited")
+  public void aZeroPartitionLimitSkipsTheSweep() {
+    var noPartitionRoom =
+        List.of(
+            // A legacy queue paused through its concurrency, which the flag enforces per partition.
+            new Queue("q", 0, null, false, true, null, Duration.ofMillis(200), null),
+            // Stored rows no write accepts, at each per-partition scope.
+            new Queue(
+                "q", null, null, false, false, null, 0, null, null, Duration.ofMillis(200), null),
+            new Queue(
+                "q", null, null, false, false, null, null, 0, null, Duration.ofMillis(200), null),
+            new Queue(
+                "q",
+                null,
+                null,
+                false,
+                false,
+                null,
+                null,
+                null,
+                new Queue.RateLimit(0, Duration.ofSeconds(1)),
+                Duration.ofMillis(200),
+                null));
+    for (var queue : noPartitionRoom) {
+      assertFalse(queue.canBatchPartitionedDequeue(), queue.toString());
+      taskFor(queue).sweepPartitions();
+    }
+
+    verify(systemDatabase, never()).getQueuePartitions(any());
+    verify(systemDatabase, never())
         .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
   }
 

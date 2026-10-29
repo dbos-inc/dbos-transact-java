@@ -605,12 +605,6 @@ public class QueuesDAO {
   }
 
   /**
-   * The partition keys with an ENQUEUED workflow on the queue, in no guaranteed order.
-   *
-   * <p>Walks them with {@link #partitionKeysCte}, so the cost grows with the number of partitions
-   * rather than the backlog: SELECT DISTINCT reads every ENQUEUED row to find the same keys.
-   */
-  /**
    * How many of this queue's workflows are running across every executor, counted as the dequeue
    * counts them against the queue-wide concurrency limit.
    */
@@ -621,6 +615,12 @@ public class QueuesDAO {
     }
   }
 
+  /**
+   * The partition keys with an ENQUEUED workflow on the queue, in no guaranteed order.
+   *
+   * <p>Walks them with {@link #partitionKeysCte}, so the cost grows with the number of partitions
+   * rather than the backlog: SELECT DISTINCT reads every ENQUEUED row to find the same keys.
+   */
   public static List<String> getQueuePartitions(DbContext ctx, String queueName)
       throws SQLException {
 

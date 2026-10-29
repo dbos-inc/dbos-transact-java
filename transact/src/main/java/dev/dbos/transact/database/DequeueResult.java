@@ -9,7 +9,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param workflowIds the workflows claimed
  * @param stopReason the limit that left no room, so the dequeue claimed nothing without looking for
- *     candidates; null when it looked, whatever it found
+ *     candidates; null when it looked, whatever it found, or did not run because the queue service
+ *     is paused
  */
 public record DequeueResult(List<String> workflowIds, @Nullable StopReason stopReason) {
 

@@ -883,9 +883,7 @@ public class SystemDatabaseTest {
       List<Runnable> polls =
           List.of(
               () -> db.getQueuePartitions("q"),
-              () ->
-                  db.startQueuedWorkflows(new Queue("q"), "exec", "v1", null, 0, 0, "test-claim")
-                      .workflowIds(),
+              () -> db.startQueuedWorkflows(new Queue("q"), "exec", "v1", null, 0, 0, "test-claim"),
               () -> db.startQueuedPartitionedWorkflows(partitioned, "exec", "v1", 1, "test-claim"));
       for (var poll : polls) {
         clearInvocations(conn);
@@ -2242,8 +2240,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-wc").withWorkerConcurrency(2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim")
-        .workflowIds();
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_READ_COMMITTED,
@@ -2257,8 +2254,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-gc").withConcurrency(3);
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim")
-        .workflowIds();
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,
@@ -2307,8 +2303,7 @@ public class SystemDatabaseTest {
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(
-            recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim")
-        .workflowIds();
+        recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_SERIALIZABLE,
@@ -2325,8 +2320,7 @@ public class SystemDatabaseTest {
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(
-            recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim")
-        .workflowIds();
+        recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,
@@ -2343,8 +2337,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("rl-batch").withRateLimit(limit, Duration.ofSeconds(60));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim")
-        .workflowIds();
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     var candidateSelect =
         ds.preparedSql.stream()
@@ -2405,10 +2398,7 @@ public class SystemDatabaseTest {
 
       assertThrows(
           Exception.class,
-          () ->
-              sysdb
-                  .startQueuedWorkflows(queue, "exec", "v1", null, 0, 0, "test-claim")
-                  .workflowIds(),
+          () -> sysdb.startQueuedWorkflows(queue, "exec", "v1", null, 0, 0, "test-claim"),
           "a rate-limited dequeue must not skip past a peer's open claim");
       peer.rollback();
     }
@@ -2474,8 +2464,7 @@ public class SystemDatabaseTest {
     Queue queue = new Queue("iso-rl").withRateLimit(5, Duration.ofSeconds(1));
     var ds = new IsolationRecordingDataSource(dataSource);
 
-    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim")
-        .workflowIds();
+    QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
     assertEquals(
         Connection.TRANSACTION_REPEATABLE_READ,

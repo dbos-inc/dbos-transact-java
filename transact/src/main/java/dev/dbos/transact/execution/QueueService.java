@@ -249,12 +249,14 @@ public class QueueService implements AutoCloseable {
      * the system database's CPU, on empty transactions. The room is counted once up front, and the
      * sweep ends when its claims have used it up or when a claim finds a queue-wide limit spent.
      * Each claim still checks every limit in its own transaction, so a stale count costs at most a
-     * slot freed mid-sweep waiting for the next poll.
+     * slot freed mid-sweep waiting for the next poll. Nor is the sweep run when a per-partition
+     * limit of 0 or less leaves no partition any room.
      *
      * <p>Contention listing the partitions is left to propagate: it is not scoped to any one
      * partition, so it backs the whole queue off.
      */
     void sweepPartitions() {
+      if (noPartitionHasRoom()) return;
       long queueBudget = queueBudget();
       if (queueBudget <= 0) return;
       var partitions = new ArrayList<>(systemDatabase.getQueuePartitions(queue.name()));
@@ -265,6 +267,8 @@ public class QueueService implements AutoCloseable {
       long running = dbosExecutor.queueActiveCount(queue.name());
       long claimed = 0;
       for (var partition : partitions) {
+        // A pause refuses every claim from here on, so the rest of the sweep has nothing to do.
+        if (paused.get()) break;
         if (workerBudget(running + claimed) <= 0 || claimed >= queueBudget) break;
         try {
           var result = processPartition(partition, running + claimed);
@@ -305,6 +309,20 @@ public class QueueService implements AutoCloseable {
       } finally {
         endPass();
       }
+    }
+
+    /**
+     * Whether a per-partition limit of 0 or less leaves every partition without room. A legacy
+     * partitioned queue paused with a concurrency or workerConcurrency of 0 has that 0 enforced per
+     * partition, and a stored row can hold a per-partition limit no write accepts; either way each
+     * partition's claim would be an empty transaction.
+     */
+    private boolean noPartitionHasRoom() {
+      var limits = queue.resolveLimits();
+      return (limits.partitionConcurrency() != null && limits.partitionConcurrency() <= 0)
+          || (limits.partitionWorkerConcurrency() != null
+              && limits.partitionWorkerConcurrency() <= 0)
+          || (limits.partitionRateLimit() != null && limits.partitionRateLimit().limit() <= 0);
     }
 
     /**
