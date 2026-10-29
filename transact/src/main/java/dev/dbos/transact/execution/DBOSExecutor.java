@@ -374,7 +374,8 @@ public class DBOSExecutor implements AutoCloseable {
 
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
-              config.schedulerPollingInterval(), () -> Duration.ofSeconds(30));
+              config.schedulerPollingInterval(),
+              () -> DBOSConfig.DEFAULT_SCHEDULER_POLLING_INTERVAL);
       schedulerService = new SchedulerService(this, systemDatabase, schedulerPollingInterval);
       schedulerService.start();
 
