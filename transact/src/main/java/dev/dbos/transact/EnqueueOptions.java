@@ -61,7 +61,8 @@ import org.jspecify.annotations.Nullable;
  * @param deadline The absolute time by which the workflow must start or complete. Optional. A
  *     timeout or deadline given here replaces both the timeout and the deadline set with {@code
  *     WorkflowOptions}. Deprecated for removal: set a timeout instead.
- * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
+ * @param deduplicationId An optional ID to prevent duplicate enqueued workflows, across every
+ *     partition of the queue. Optional.
  * @param priority The priority to assign; lower values are dequeued first, and the default is 0.
  *     Must not be negative. Optional.
  * @param queuePartitionKey The partition key for distributing workflows across queue partitions.
@@ -418,6 +419,12 @@ public record EnqueueOptions(
    * Specify a queue deduplication ID for the workflow to be enqueued. Queue requests with the same
    * deduplication ID will be rejected.
    *
+   * <p>Deduplication spans the whole queue, across its partitions: until a workflow enqueued with
+   * this ID finishes, another enqueue with the same ID is refused with {@link
+   * dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key. To
+   * deduplicate within one partition, include the partition key in the ID, such as {@code
+   * "<partition>:<key>"}.
+   *
    * @param deduplicationId Queue deduplication ID
    * @return New `EnqueueOptions` with the deduplication ID set
    */
@@ -476,7 +483,8 @@ public record EnqueueOptions(
   /**
    * Creates a new EnqueueOptions instance with the specified queue partition key. The partition key
    * is used to determine which partition of the queue the workflow should be enqueued to, allowing
-   * for better load distribution and ordering guarantees.
+   * for better load distribution and ordering guarantees. A deduplication ID still applies across
+   * every partition of the queue; see {@link #withDeduplicationId(String)}.
    *
    * @param partitionKey the partition key to use for queue partitioning, can be null
    * @return a new EnqueueOptions instance with the specified partition key

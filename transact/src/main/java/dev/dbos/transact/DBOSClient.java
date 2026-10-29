@@ -715,6 +715,12 @@ public class DBOSClient implements AutoCloseable {
      * Specify a queue deduplication ID for the workflow to be enqueued. Queue requests with the
      * same deduplication ID will be rejected.
      *
+     * <p>Deduplication spans the whole queue, across its partitions: until a workflow enqueued with
+     * this ID finishes, another enqueue with the same ID is refused with {@link
+     * dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key. To
+     * deduplicate within one partition, include the partition key in the ID, such as {@code
+     * "<partition>:<key>"}.
+     *
      * @param deduplicationId Queue deduplication ID
      * @return New `EnqueueOptions` with the deduplication ID set
      */
@@ -803,7 +809,8 @@ public class DBOSClient implements AutoCloseable {
     /**
      * Creates a new EnqueueOptions instance with the specified queue partition key. The partition
      * key is used to determine which partition of the queue the workflow should be enqueued to,
-     * allowing for better load distribution and ordering guarantees.
+     * allowing for better load distribution and ordering guarantees. A deduplication ID still
+     * applies across every partition of the queue; see {@link #withDeduplicationId(String)}.
      *
      * @param partitionKey the partition key to use for queue partitioning, can be null
      * @return a new EnqueueOptions instance with the specified partition key

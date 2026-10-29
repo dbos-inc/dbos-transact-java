@@ -2818,10 +2818,6 @@ public class DBOSExecutor implements AutoCloseable {
     if (Objects.requireNonNull(options.queueName(), "queueName must not be null").isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }
-    if (options.queuePartitionKey() != null && options.deduplicationId() != null) {
-      throw new IllegalArgumentException(
-          "queuePartitionKey and deduplicationId cannot both be set");
-    }
 
     logger.debug(
         "enqueueWorkflow {}:{}:{}",
