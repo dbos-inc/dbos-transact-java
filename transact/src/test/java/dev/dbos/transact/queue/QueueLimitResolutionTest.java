@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.Queue.RateLimit;
 import dev.dbos.transact.workflow.QueueOptions;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -105,8 +106,9 @@ public class QueueLimitResolutionTest {
 
     @Test
     void theFlagIsNotLegacyOncePartitionLimitsAreSet() {
-      // Both set: the per-partition limits win and the flag adds nothing, so the queue-wide
-      // limits keep their own scope rather than being reinterpreted.
+      // Both set, as a queue read back from the database is, its stored flag derived from the
+      // limits: the per-partition limits win, so the queue-wide limits keep their own scope rather
+      // than being reinterpreted. No write accepts this combination.
       var q = queue(10, 5, true, LIMIT, 2, null, null);
       assertTrue(q.isPartitioned());
       assertFalse(q.isLegacyPartitioned());
@@ -244,6 +246,20 @@ public class QueueLimitResolutionTest {
       var queue = construct.get();
       return assertThrows(IllegalArgumentException.class, queue::validateForRegistration)
           .getMessage();
+    }
+
+    @Test
+    void theLegacyFlagMayNotBeSetAlongsideAPartitionLimit() {
+      for (Supplier<Queue> flagAndLimit :
+          List.<Supplier<Queue>>of(
+              () -> queue(10, null, true, null, 2, null, null),
+              () -> queue(10, null, true, null, null, 2, null),
+              () -> queue(10, null, true, null, null, null, PARTITION_LIMIT))) {
+        assertTrue(rejects(flagAndLimit).contains("set only one of them"));
+      }
+      // Either on its own may be written.
+      queue(10, 5, true, LIMIT, null, null, null).validateForRegistration();
+      queue(10, 5, false, LIMIT, 2, 1, PARTITION_LIMIT).validateForRegistration();
     }
 
     @Test
