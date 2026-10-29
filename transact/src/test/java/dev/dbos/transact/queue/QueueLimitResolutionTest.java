@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.QueueOptions;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -236,17 +237,26 @@ public class QueueLimitResolutionTest {
   }
 
   @Nested
-  @DisplayName("validation, in the order Go, Python and TypeScript apply it")
+  @DisplayName("validation on write")
   class Validation {
 
-    private static String rejects(Runnable construct) {
-      return assertThrows(IllegalArgumentException.class, construct::run).getMessage();
+    private static String rejects(Supplier<Queue> construct) {
+      var queue = construct.get();
+      return assertThrows(IllegalArgumentException.class, queue::validateForRegistration)
+          .getMessage();
     }
 
     @Test
-    void everyLimitMustBePositive() {
-      assertTrue(rejects(() -> plain(0, null, null)).contains("concurrency"));
-      assertTrue(rejects(() -> plain(null, 0, null)).contains("workerConcurrency"));
+    void aQueueWideConcurrencyMayBeZeroButNotNegative() {
+      // Zero pauses the queue.
+      plain(0, 0, null).validateForRegistration();
+      assertTrue(rejects(() -> plain(-1, null, null)).contains("concurrency must not be negative"));
+      assertTrue(
+          rejects(() -> plain(null, -1, null)).contains("workerConcurrency must not be negative"));
+    }
+
+    @Test
+    void aPartitionConcurrencyMustBePositive() {
       assertTrue(
           rejects(() -> queue(null, null, false, null, 0, null, null))
               .contains("partitionConcurrency"));
@@ -273,33 +283,44 @@ public class QueueLimitResolutionTest {
       assertTrue(
           rejects(() -> queue(2, null, false, null, null, 3, null))
               .contains("greater than or equal to partitionWorkerConcurrency"));
+      // workerConcurrency <= concurrency
+      assertTrue(
+          rejects(() -> plain(2, 5, null))
+              .contains("concurrency must be greater than or equal to workerConcurrency"));
+      // A paused queue still bounds the narrower limits: pausing one that has them means
+      // pausing those too.
+      assertTrue(
+          rejects(() -> plain(0, 1, null))
+              .contains("concurrency must be greater than or equal to workerConcurrency"));
+      assertTrue(
+          rejects(() -> queue(0, null, false, null, 1, null, null))
+              .contains("greater than or equal to partitionConcurrency"));
     }
 
     @Test
-    void theTwoQueueWideRulesAreDeferredBecauseThisIsAlsoTheReadPath() {
-      // Go, Python and TypeScript reject both of these. Java cannot yet: this constructor is how
-      // QueuesDAO.queueFromResultSet loads a row, so a rule added here rejects rows already in
-      // the database -- and one unreadable row takes listQueues, and dynamic queue discovery
-      // with it, down too. Both land with the write-side guard in the persistence slice.
-      var q = plain(2, 5, null);
-      assertEquals(2, q.concurrency());
-      assertEquals(5, q.workerConcurrency());
-      assertEquals(
-          0, plain(null, null, new RateLimit(0, Duration.ofSeconds(1))).rateLimit().limit());
+    void theConstructorAcceptsWhatAWriteWouldRefuseBecauseItIsAlsoTheReadPath() {
+      // QueuesDAO.queueFromResultSet loads every row through this constructor, so a rule enforced
+      // here would make a stored row that breaks it unreadable -- and one unreadable row takes
+      // listQueues, and dynamic queue discovery with it, down too.
+      var q = plain(0, 0, new RateLimit(0, Duration.ofSeconds(1)));
+      assertEquals(0, q.concurrency());
+      assertEquals(0, q.workerConcurrency());
+      assertEquals(0, q.rateLimit().limit());
+      var crossed = queue(2, 5, false, null, 3, 6, new RateLimit(1, Duration.ZERO));
+      assertEquals(3, crossed.partitionConcurrency());
+      assertEquals(6, crossed.partitionWorkerConcurrency());
     }
 
     @Test
     void equalLimitsAtAdjacentScopesAreAllowed() {
       var q = queue(4, 4, false, null, 4, 4, null);
+      q.validateForRegistration();
       assertEquals(4, q.concurrency());
       assertEquals(4, q.partitionWorkerConcurrency());
     }
 
     @Test
-    void aPerPartitionRateLimitMustBeWhole() {
-      // Safe to validate: a per-partition column cannot appear in a row written before it
-      // existed, so this rule has nothing already stored to reject. The queue-wide pair is
-      // deliberately unvalidated here -- see the deferral test above.
+    void everyRateLimitMustBeWhole() {
       assertTrue(
           rejects(
                   () ->
@@ -315,6 +336,37 @@ public class QueueLimitResolutionTest {
       assertTrue(
           rejects(() -> queue(null, null, false, null, null, null, new RateLimit(1, Duration.ZERO)))
               .contains("partitionRateLimit period"));
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(0, Duration.ofSeconds(1))))
+              .contains("rateLimit limit"));
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(1, Duration.ZERO)))
+              .contains("rateLimit period"));
+    }
+
+    @Test
+    void aDurationMustBeAtLeastTheMillisecondItIsStoredAt() {
+      // Stored in whole milliseconds, so anything shorter would be stored as zero.
+      var subMilli = Duration.ofNanos(500_000);
+      assertTrue(
+          rejects(() -> plain(null, null, new RateLimit(1, subMilli)))
+              .contains("rateLimit period must be at least one millisecond"));
+      assertTrue(
+          rejects(() -> queue(null, null, false, null, null, null, new RateLimit(1, subMilli)))
+              .contains("partitionRateLimit period must be at least one millisecond"));
+      assertTrue(
+          rejects(() -> polledEvery(subMilli))
+              .contains("pollingInterval must be at least one millisecond"));
+
+      plain(null, null, new RateLimit(1, Duration.ofMillis(1))).validateForRegistration();
+      queue(null, null, false, null, null, null, new RateLimit(1, Duration.ofMillis(1)))
+          .validateForRegistration();
+      polledEvery(Duration.ofMillis(1)).validateForRegistration();
+    }
+
+    private static Queue polledEvery(Duration pollingInterval) {
+      return new Queue(
+          "q", null, null, false, false, null, null, null, null, pollingInterval, null);
     }
   }
 
@@ -327,6 +379,11 @@ public class QueueLimitResolutionTest {
     assertTrue(queue(null, 4, false, null, 1, 1, null).canBatchPartitionedDequeue());
     // The legacy flag enforces its queue-wide limits per partition, so concurrency 1 qualifies.
     assertTrue(queue(1, null, true, null, null, null, null).canBatchPartitionedDequeue());
+
+    // The batched claim reads no worker limit, so a stored one that leaves no room must take the
+    // per-partition path, which enforces it.
+    assertFalse(queue(null, null, false, null, 1, 0, null).canBatchPartitionedDequeue());
+    assertFalse(queue(null, null, false, null, 1, -1, null).canBatchPartitionedDequeue());
 
     assertFalse(plain(1, null, null).canBatchPartitionedDequeue());
     assertFalse(queue(null, null, true, null, null, null, null).canBatchPartitionedDequeue());

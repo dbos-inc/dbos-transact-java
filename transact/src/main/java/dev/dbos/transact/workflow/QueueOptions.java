@@ -29,12 +29,12 @@ import org.jspecify.annotations.Nullable;
  * <p>A rate limit's max and period are set and cleared together, at registration and on update
  * alike; supplying only one of them is refused.
  *
- * @param concurrency max concurrent executions of this queue across all workers; {@link
- *     Field#absent()} means no limit on creation or leave unchanged on update; {@code
- *     Field.of(null)} clears the column
- * @param workerConcurrency max concurrent executions of this queue per worker process; {@link
- *     Field#absent()} means no limit on creation or leave unchanged on update; {@code
- *     Field.of(null)} clears the column
+ * @param concurrency max concurrent executions of this queue across all workers, where 0 pauses a
+ *     queue with no per-partition concurrency limit; {@link Field#absent()} means no limit on
+ *     creation or leave unchanged on update; {@code Field.of(null)} clears the column
+ * @param workerConcurrency max concurrent executions of this queue per worker process, where 0
+ *     pauses a queue with no per-partition concurrency limit; {@link Field#absent()} means no limit
+ *     on creation or leave unchanged on update; {@code Field.of(null)} clears the column
  * @param rateLimitMax maximum number of starts allowed in each rate-limit window; must be paired
  *     with {@code rateLimitPeriod}; {@link Field#absent()} means no rate limit or leave unchanged
  * @param rateLimitPeriod duration of the rolling rate-limit window; must be paired with {@code
@@ -578,7 +578,8 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code concurrency} set to the given value.
    *
-   * @param value the concurrency limit, or {@code (Integer) null} to clear the column
+   * @param value the concurrency limit, 0 to pause a queue with no per-partition concurrency limit,
+   *     or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withConcurrency(@Nullable Integer value) {
     return withConcurrency(Field.of(value));
@@ -587,7 +588,8 @@ public record QueueOptions(
   /**
    * Returns a copy of these options with {@code workerConcurrency} set to the given value.
    *
-   * @param value the per-worker concurrency limit, or {@code (Integer) null} to clear the column
+   * @param value the per-worker concurrency limit, 0 to pause a queue with no per-partition
+   *     concurrency limit, or {@code (Integer) null} to clear the column
    */
   public @NonNull QueueOptions withWorkerConcurrency(@Nullable Integer value) {
     return withWorkerConcurrency(Field.of(value));

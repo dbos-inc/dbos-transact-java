@@ -74,7 +74,8 @@ public class QueuesDAO {
 
         // Both worker-scoped limits use the caller-supplied in-memory counts — no DB round trip.
         if (limits.workerConcurrency() != null) {
-          if (localRunningCount > limits.workerConcurrency()) {
+          // A limit of 0 or less is a paused queue, not one running over its limit.
+          if (limits.workerConcurrency() > 0 && localRunningCount > limits.workerConcurrency()) {
             logger.warn(
                 "Local running workflows ({}) on queue {} exceeds the worker concurrency limit ({})",
                 localRunningCount,
@@ -123,18 +124,19 @@ public class QueuesDAO {
         // running workflows too.
         if (limits.concurrency() != null) {
           int pending = pendingCount(ctx, connection, queue.name(), null);
-          if (pending > limits.concurrency()) {
+          if (limits.concurrency() > 0 && pending > limits.concurrency()) {
             logger.warn(
                 "Total pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
                 pending,
                 queue.name(),
                 limits.concurrency());
           }
-          maxTasks = Math.min(maxTasks, Math.max(0, limits.concurrency() - pending));
+          // In long: a stored limit near Integer.MIN_VALUE less the pending count would wrap.
+          maxTasks = Math.min(maxTasks, Math.max(0, (long) limits.concurrency() - pending));
         }
         if (limits.partitionConcurrency() != null) {
           int pending = pendingCount(ctx, connection, queue.name(), partition);
-          if (pending > limits.partitionConcurrency()) {
+          if (limits.partitionConcurrency() > 0 && pending > limits.partitionConcurrency()) {
             logger.warn(
                 "Total pending workflows ({}) on partition {} of queue {} exceeds the partition"
                     + " concurrency limit ({})",
@@ -143,7 +145,8 @@ public class QueuesDAO {
                 queue.name(),
                 limits.partitionConcurrency());
           }
-          maxTasks = Math.min(maxTasks, Math.max(0, limits.partitionConcurrency() - pending));
+          maxTasks =
+              Math.min(maxTasks, Math.max(0, (long) limits.partitionConcurrency() - pending));
         }
         if (maxTasks == 0) {
           connection.rollback();
@@ -665,7 +668,7 @@ public class QueuesDAO {
       @Nullable String applicationName)
       throws SQLException {
     Queue queue = queueFromOptions(name, options);
-    // The rules the constructor cannot apply, because it is also the read path.
+    // The constructor checks no limits, because it is also the read path.
     queue.validateForRegistration();
     var requestedOwner = applicationName != null ? applicationName : ctx.appName();
     final String insertSql =
@@ -733,6 +736,12 @@ public class QueuesDAO {
       Queue.RateLimit rateLimit,
       @Nullable String partitionKey)
       throws SQLException {
+    // No write stores either of these, but a row is loaded as it stands. A max of 0 or less leaves
+    // no room, whatever the window. A period of 0 or less counts no earlier starts, so each poll
+    // may start up to the max.
+    if (rateLimit.limit() <= 0) {
+      return 0;
+    }
     var sql =
         """
         SELECT COUNT(*)
@@ -1036,8 +1045,8 @@ public class QueuesDAO {
   }
 
   /**
-   * The queue a partial update would produce, built through the {@link Queue} constructor so it is
-   * checked by the same rules that reading the row back would apply.
+   * The queue a partial update would produce, as a whole row, so that {@link
+   * Queue#validateForRegistration} can check rules that span fields the update did not all supply.
    */
   @SuppressWarnings("removal") // reads the legacy partitionQueue option verbatim
   private static Queue applyUpdate(Queue current, QueueOptions update) {
@@ -1167,6 +1176,16 @@ public class QueuesDAO {
         pollingIntervalSec != null
             ? Duration.ofMillis((long) (pollingIntervalSec * 1000))
             : Queue.DEFAULT_POLLING_INTERVAL;
+    // Writes refuse a non-positive interval, but a row is loaded as stored, and polling on one
+    // would spin: read it as unset.
+    if (pollingInterval.isNegative() || pollingInterval.isZero()) {
+      pollingInterval = Queue.DEFAULT_POLLING_INTERVAL;
+    }
+    // Built without validation, as the row stands, and refusing to load it would hide the queue
+    // from listQueues and leave its listener polling on stale configuration. Every dequeue path
+    // gives a limit no write would accept a defined meaning: a concurrency limit or rate-limit max
+    // of 0 or less, at any scope, leaves no room, and a rate-limit period of 0 or less allows up to
+    // the max per poll (see rateLimitRemaining).
     return new Queue(
         name,
         concurrency,

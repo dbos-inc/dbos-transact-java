@@ -12,9 +12,12 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.dao.QueuesDAO;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
+import dev.dbos.transact.execution.QueueService;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.LogCapture;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -33,9 +36,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
+import ch.qos.logback.classic.Level;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
@@ -223,9 +228,8 @@ public class DynamicQueuesTest {
 
   @Test
   public void aQueueWideRateLimitMustBeWhole() throws Exception {
-    // The other half of what the constructor cannot check. A stored row with a zero limit has to
-    // stay loadable -- the constructor is the read path -- so the write paths are the only place
-    // this rule is ever applied, on both of them.
+    // A stored row with a zero limit has to stay loadable -- the constructor is the read path --
+    // so the write paths are the only place this rule is ever applied, on both of them.
     dbos.launch();
 
     assertThrows(
@@ -616,10 +620,233 @@ public class DynamicQueuesTest {
             dbos.registerQueue(
                 "q-bad-poll", new QueueOptions().withPollingInterval(Duration.ZERO)));
 
-    // Zero or negative concurrency should fail.
+    // Negative concurrency should fail; zero pauses the queue.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withConcurrency(0)));
+        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withConcurrency(-1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue("q-bad-conc", new QueueOptions().withWorkerConcurrency(-1)));
+    assertTrue(dbos.findQueue("q-bad-conc").isEmpty());
+
+    dbos.registerQueue("q-zero-conc", new QueueOptions().withConcurrency(0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.updateQueue("q-zero-conc", new QueueOptions().withConcurrency(-1)));
+    assertEquals(0, dbos.findQueue("q-zero-conc").orElseThrow().concurrency());
+  }
+
+  @Test
+  public void aRowNoWriteWouldAcceptDoesNotHideTheOtherQueues() throws Exception {
+    // The system database is shared, so it can hold a row this library's own writes refuse, such
+    // as a negative concurrency. Reading it must not fail the whole listing, or every queue
+    // disappears from listQueues and no new queue is discovered.
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    insertQueueRow("q-negative", Map.of("concurrency", -1));
+    insertQueueRow("q-zero-poll", Map.of("polling_interval_sec", 0.0));
+    dbos.registerQueue("q-ok", new QueueOptions().withConcurrency(3));
+
+    var names = dbos.listQueues().stream().map(Queue::name).toList();
+    assertTrue(names.containsAll(List.of("q-negative", "q-zero-poll", "q-ok")), names.toString());
+
+    assertEquals(-1, dbos.findQueue("q-negative").orElseThrow().concurrency());
+    // A non-positive polling interval would spin the listener, so it reads as unset.
+    assertEquals(
+        Queue.DEFAULT_POLLING_INTERVAL,
+        dbos.findQueue("q-zero-poll").orElseThrow().pollingInterval());
+
+    // The dynamic queue listener still discovers a queue registered after the row appeared.
+    awaitCondition(() -> qs.findDynamicQueue("q-ok").isPresent());
+    awaitCondition(() -> qs.findDynamicQueue("q-negative").isPresent());
+
+    // A negative limit leaves no room, and is not reported as a queue running over its limit.
+    try (var logs = new LogCapture(QueueService.class, QueuesDAO.class)) {
+      var held =
+          dbos.startWorkflow(
+              () -> serviceQ.simpleQWorkflow("n"),
+              new StartWorkflowOptions().withQueue("q-negative"));
+      assertHeldWhileOthersRun(serviceQ, "q-ok", List.of(held));
+      assertQuiet(logs, "q-negative");
+    }
+  }
+
+  @Test
+  public void aZeroLimitPausesTheQueue() throws Exception {
+    // A zero concurrency or worker concurrency leaves no room under the limit, so nothing is
+    // dequeued until the limit is raised. Both write paths, runtime and client, accept it.
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    try (var client = pgContainer.dbosClient();
+        var logs = new LogCapture(QueueService.class, QueuesDAO.class)) {
+      // Paused at registration, and by an update.
+      dbos.registerQueue("q-paused", new QueueOptions().withConcurrency(0));
+      client.registerQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(2));
+      client.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(0));
+      dbos.registerQueue("q-running", new QueueOptions());
+      assertEquals(0, dbos.findQueue("q-paused").orElseThrow().concurrency());
+      assertEquals(0, dbos.findQueue("q-paused-worker").orElseThrow().workerConcurrency());
+
+      // A paused queue still takes an update that leaves it paused.
+      dbos.updateQueue("q-paused", new QueueOptions().withPollingInterval(Duration.ofMillis(500)));
+      assertEquals(
+          Duration.ofMillis(500), dbos.findQueue("q-paused").orElseThrow().pollingInterval());
+
+      awaitCondition(() -> qs.findDynamicQueue("q-paused").isPresent());
+      awaitCondition(() -> qs.findDynamicQueue("q-paused-worker").isPresent());
+
+      var paused =
+          dbos.startWorkflow(
+              () -> serviceQ.simpleQWorkflow("a"),
+              new StartWorkflowOptions().withQueue("q-paused"));
+      var pausedWorker =
+          dbos.startWorkflow(
+              () -> serviceQ.simpleQWorkflow("b"),
+              new StartWorkflowOptions().withQueue("q-paused-worker"));
+
+      assertHeldWhileOthersRun(serviceQ, "q-running", List.of(paused, pausedWorker));
+      assertQuiet(logs, "q-paused");
+
+      dbos.updateQueue("q-paused", new QueueOptions().withConcurrency(1));
+      client.updateQueue("q-paused-worker", new QueueOptions().withWorkerConcurrency(1));
+      assertEquals("aa", paused.getResult());
+      assertEquals("bb", pausedWorker.getResult());
+    }
+  }
+
+  @Test
+  public void aStoredPartitionWorkerLimitOfZeroLeavesNoRoom() throws Exception {
+    // No write stores one, but a row can hold it. With a partition concurrency of 1 the queue
+    // would otherwise take the batched dequeue, which reads no worker limit at all.
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    insertQueueRow(
+        "q-pwc-zero",
+        Map.of(
+            "partition_concurrency",
+            1,
+            "partition_worker_concurrency",
+            0,
+            "partition_queue",
+            true));
+    dbos.registerQueue("q-running", new QueueOptions());
+    assertTrue(dbos.listQueues().stream().anyMatch(q -> q.name().equals("q-pwc-zero")));
+    awaitCondition(() -> qs.findDynamicQueue("q-pwc-zero").isPresent());
+
+    try (var logs = new LogCapture(QueueService.class, QueuesDAO.class)) {
+      var held = new ArrayList<WorkflowHandle<String, RuntimeException>>();
+      for (var partition : List.of("a", "b")) {
+        held.add(
+            dbos.startWorkflow(
+                () -> serviceQ.simpleQWorkflow(partition),
+                new StartWorkflowOptions()
+                    .withQueue("q-pwc-zero")
+                    .withQueuePartitionKey(partition)));
+      }
+      assertHeldWhileOthersRun(serviceQ, "q-running", held);
+      assertQuiet(logs, "q-pwc-zero");
+    }
+  }
+
+  @Test
+  public void aStoredRateLimitPeriodOfZeroAllowsTheMaxPerPoll() throws Exception {
+    // No write stores one, but a row can hold it. A window of no length counts no earlier starts,
+    // so each poll may start up to the max: the queue drains, a poll at a time, without failing.
+    // SystemDatabaseTest pins how much one claim takes.
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.setSpeedupForTest();
+
+    insertQueueRow(
+        "q-rl-zero",
+        Map.of(
+            "rate_limit_max",
+            2,
+            "rate_limit_period_sec",
+            0.0,
+            "partition_rate_limit_max",
+            2,
+            "partition_rate_limit_period_sec",
+            0.0,
+            "partition_queue",
+            true));
+    var queue = dbos.findQueue("q-rl-zero").orElseThrow();
+    assertEquals(Duration.ZERO, queue.partitionRateLimit().period());
+    awaitCondition(() -> qs.findDynamicQueue("q-rl-zero").isPresent());
+
+    try (var logs = new LogCapture(QueueService.class, QueuesDAO.class)) {
+      var handles = new ArrayList<WorkflowHandle<String, RuntimeException>>();
+      for (var input : List.of("a", "b", "c")) {
+        handles.add(
+            dbos.startWorkflow(
+                () -> serviceQ.simpleQWorkflow(input),
+                new StartWorkflowOptions().withQueue("q-rl-zero").withQueuePartitionKey("p")));
+      }
+      for (var handle : handles) {
+        handle.getResult();
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+      }
+      assertQuiet(logs, "q-rl-zero");
+    }
+  }
+
+  /**
+   * Runs a workflow on {@code runningQueue} to completion, then gives the held queues' listeners
+   * the same time again, and asserts the held workflows are still enqueued. Completing the sibling
+   * shows the listeners are polling, so the held workflows stayed put because there was no room.
+   */
+  private void assertHeldWhileOthersRun(
+      ServiceQ serviceQ,
+      String runningQueue,
+      List<? extends WorkflowHandle<String, RuntimeException>> held)
+      throws Exception {
+    var sibling =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("s"),
+            new StartWorkflowOptions().withQueue(runningQueue));
+    assertEquals("ss", sibling.getResult());
+    Thread.sleep(500);
+    for (var handle : held) {
+      assertEquals(WorkflowState.ENQUEUED, handle.getStatus().status(), handle.workflowId());
+    }
+  }
+
+  /** Asserts that no poll of {@code queueName} failed or warned about running over a limit. */
+  private static void assertQuiet(LogCapture logs, String queueName) {
+    assertEquals(List.of(), logs.messages(Level.WARN, queueName));
+  }
+
+  /** Writes a queue row directly, bypassing this library's validation. */
+  private void insertQueueRow(String name, Map<String, Object> columns) throws Exception {
+    var names = new ArrayList<>(List.of("name"));
+    var values = new ArrayList<Object>(List.of(name));
+    columns.forEach(
+        (column, value) -> {
+          names.add(column);
+          values.add(value);
+        });
+    var sql =
+        "INSERT INTO dbos.queues (%s) VALUES (%s)"
+            .formatted(
+                String.join(", ", names),
+                String.join(", ", Collections.nCopies(names.size(), "?")));
+    try (Connection connection = DBUtils.getConnection(dbosConfig);
+        PreparedStatement ps = connection.prepareStatement(sql)) {
+      for (int k = 0; k < values.size(); k++) {
+        ps.setObject(k + 1, values.get(k));
+      }
+      assertEquals(1, ps.executeUpdate());
+    }
   }
 
   @Test

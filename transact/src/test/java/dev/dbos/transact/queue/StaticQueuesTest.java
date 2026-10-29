@@ -150,6 +150,35 @@ public class StaticQueuesTest {
   }
 
   @Test
+  public void aZeroConcurrencyPausesAnInMemoryQueue() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue(new Queue("static-negative").withConcurrency(-1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.registerQueue(new Queue("static-negative").withWorkerConcurrency(-1)));
+
+    var paused = new Queue("static-paused").withConcurrency(0);
+    var running = new Queue("static-running");
+    dbos.registerQueues(paused, running);
+
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+    DBOSTestAccess.getQueueService(dbos).setSpeedupForTest();
+
+    var held =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("p"), new StartWorkflowOptions().withQueue(paused));
+    // A queue polled alongside it runs, so the paused one is held for want of room.
+    var sibling =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("r"), new StartWorkflowOptions().withQueue(running));
+    assertEquals("rr", sibling.getResult());
+    Thread.sleep(500);
+    assertEquals(WorkflowState.ENQUEUED, held.getStatus().status());
+  }
+
+  @Test
   public void testQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);

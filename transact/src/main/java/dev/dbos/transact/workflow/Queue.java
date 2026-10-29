@@ -16,6 +16,10 @@ import org.jspecify.annotations.Nullable;
  * per-partition limits ({@code partitionConcurrency}, {@code partitionWorkerConcurrency}, {@code
  * partitionRateLimit}) bound each partition key independently. Setting any per-partition limit
  * partitions the queue; there is no separate switch for it.
+ *
+ * <p>A {@code concurrency} or {@code workerConcurrency} of 0 pauses the queue: nothing is dequeued
+ * from it until the limit is raised. A queue with a per-partition concurrency limit cannot be
+ * paused this way, since that limit must be at least 1 and may not exceed the queue-wide ones.
  */
 public record Queue(
     @NonNull String name,
@@ -62,49 +66,11 @@ public record Queue(
     // here also covers rows written as false by earlier versions.
     priorityEnabled = true;
     Objects.requireNonNull(pollingInterval, "Queue pollingInterval must not be null");
-    if (concurrency != null && concurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue concurrency must be greater than zero");
-    if (workerConcurrency != null && workerConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue workerConcurrency must be greater than zero");
-    if (partitionConcurrency != null && partitionConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue partitionConcurrency must be greater than zero");
-    if (partitionWorkerConcurrency != null && partitionWorkerConcurrency <= 0)
-      throw new IllegalArgumentException(
-          "If specified, queue partitionWorkerConcurrency must be greater than zero");
-    // A limit enforced at a narrower scope can never usefully exceed one enforced at a wider
-    // scope: the wider limit would bind first and the narrower one would never be reached.
-    if (partitionWorkerConcurrency != null
-        && partitionConcurrency != null
-        && partitionWorkerConcurrency > partitionConcurrency)
-      throw new IllegalArgumentException(
-          "Queue partitionConcurrency must be greater than or equal to partitionWorkerConcurrency");
-    if (partitionWorkerConcurrency != null
-        && workerConcurrency != null
-        && partitionWorkerConcurrency > workerConcurrency)
-      throw new IllegalArgumentException(
-          "Queue workerConcurrency must be greater than or equal to partitionWorkerConcurrency");
-    if (partitionConcurrency != null && concurrency != null && partitionConcurrency > concurrency)
-      throw new IllegalArgumentException(
-          "Queue concurrency must be greater than or equal to partitionConcurrency");
-    if (partitionWorkerConcurrency != null
-        && concurrency != null
-        && partitionWorkerConcurrency > concurrency)
-      throw new IllegalArgumentException(
-          "Queue concurrency must be greater than or equal to partitionWorkerConcurrency");
-    // Only the per-partition rate limit is validated here. The queue-wide one is not, and
-    // neither is concurrency >= workerConcurrency, though Go, Python and TypeScript check both:
-    // this constructor is also the read path (QueuesDAO.queueFromResultSet builds through it),
-    // so a rule added here rejects rows already in the database, and one unreadable row takes
-    // listQueues -- and with it dynamic queue discovery -- down with it. Those two rules are
-    // enforced on write instead, by validateForRegistration. The per-partition rate limit can stay
-    // here: its columns are new, and every SDK that writes them validates them, so no stored row
-    // should fail this check.
-    validateRateLimit("partitionRateLimit", partitionRateLimit);
-    if (pollingInterval.isNegative() || pollingInterval.isZero())
-      throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
+    // No limit is validated here: this constructor is also the read path
+    // (QueuesDAO.queueFromResultSet builds every row it loads through it), so a rule enforced here
+    // makes any stored row that breaks it unreadable, and one unreadable row takes listQueues --
+    // and with it dynamic queue discovery -- down with it. The rules are enforced where a row is
+    // written instead, by validateForRegistration.
   }
 
   private static void validateRateLimit(String name, @Nullable RateLimit rateLimit) {
@@ -117,6 +83,18 @@ public record Queue(
         || rateLimit.period().isZero())
       throw new IllegalArgumentException(
           "Queue %s period must be greater than zero".formatted(name));
+    requireAtLeastOneMilli(name + " period", rateLimit.period());
+  }
+
+  /**
+   * Refuses a positive duration shorter than a millisecond, the precision it is stored at: it would
+   * be stored as zero, which turns a rate limit into one counted per poll and reads back as the
+   * default polling interval.
+   */
+  private static void requireAtLeastOneMilli(String name, Duration duration) {
+    if (duration.compareTo(Duration.ofMillis(1)) < 0)
+      throw new IllegalArgumentException(
+          "Queue %s must be at least one millisecond".formatted(name));
   }
 
   /**
@@ -259,8 +237,10 @@ public record Queue(
    * time: the queue is partitioned, each partition runs one workflow at a time, and nothing is
    * limited queue-wide or by rate.
    *
-   * <p>A per-partition worker limit does not disqualify it: that limit cannot exceed a partition
-   * concurrency of 1, which the dequeue already enforces across every worker.
+   * <p>A positive per-partition worker limit does not disqualify it: that limit cannot exceed a
+   * partition concurrency of 1, which the dequeue already enforces across every worker. One of 0 or
+   * less, which no write accepts but a stored row can hold, does: the batched claim reads no worker
+   * limit, so it is left to the per-partition dequeue, which enforces it as no room.
    *
    * @return true if the queue can be dequeued in one batched sweep across its partitions
    */
@@ -268,27 +248,74 @@ public record Queue(
     var limits = resolveLimits();
     return isPartitioned()
         && Integer.valueOf(1).equals(limits.partitionConcurrency())
+        && (limits.partitionWorkerConcurrency() == null || limits.partitionWorkerConcurrency() > 0)
         && limits.concurrency() == null
         && limits.rateLimit() == null
         && limits.partitionRateLimit() == null;
   }
 
   /**
-   * Checks the rules that can only be applied to a queue being written, not to one being read.
+   * Checks the rules a queue must satisfy to be written: no limit is negative, the per-partition
+   * concurrency limits are positive, no limit enforced at a narrower scope exceeds one enforced at
+   * a wider scope, and the polling interval and rate-limit periods are at least a millisecond.
    *
-   * <p>Go, Python and TypeScript enforce these in the constructor. Java cannot, because its
-   * constructor is also the read path -- {@code QueuesDAO.queueFromResultSet} builds a {@code
-   * Queue} out of every row it loads -- and Java accepted {@code workerConcurrency > concurrency}
-   * for long enough that such rows exist. Enforcing them on read would make those rows unloadable,
-   * and one unloadable row stops queue discovery for the whole process, silently.
+   * <p>A {@code concurrency} or {@code workerConcurrency} of 0 is allowed and pauses the queue:
+   * nothing is dequeued from it until the limit is raised. Because a narrower limit may not exceed
+   * a wider one, pausing with {@code concurrency} needs {@code workerConcurrency} to be 0 or unset
+   * too, and a queue with a per-partition concurrency limit, which must be at least 1, cannot be
+   * paused this way at all.
    *
-   * <p>So they are enforced where a row is created or changed instead, which is where the other
-   * three SDKs enforce them too. A row already stored in violation keeps loading, and is only
-   * rejected if something tries to write it again.
+   * <p>None of these is checked by the constructor, because the constructor is also the read path
+   * -- {@code QueuesDAO.queueFromResultSet} builds a {@code Queue} out of every row it loads -- and
+   * the system database can hold rows that break them: earlier versions of this library accepted
+   * {@code workerConcurrency > concurrency}, and the database is shared with writers that apply not
+   * all of these rules. Enforcing them on read would make those rows unloadable, and one unloadable
+   * row stops queue discovery for the whole process.
+   *
+   * <p>So they are enforced where a row is created or changed instead. A row already stored in
+   * violation keeps loading, and is only rejected if something tries to write it again. A stored
+   * concurrency limit of 0 or less, at any scope, and a rate-limit max of 0 or less, are honoured
+   * as no room. A stored rate-limit period of 0 or less counts no earlier starts, so each poll may
+   * start up to the max.
    *
    * @throws IllegalArgumentException if this queue may not be written
    */
   public void validateForRegistration() {
+    if (concurrency != null && concurrency < 0)
+      throw new IllegalArgumentException("If specified, queue concurrency must not be negative");
+    if (workerConcurrency != null && workerConcurrency < 0)
+      throw new IllegalArgumentException(
+          "If specified, queue workerConcurrency must not be negative");
+    if (partitionConcurrency != null && partitionConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionConcurrency must be greater than zero");
+    if (partitionWorkerConcurrency != null && partitionWorkerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue partitionWorkerConcurrency must be greater than zero");
+    // A limit enforced at a narrower scope can never usefully exceed one enforced at a wider
+    // scope: the wider limit would bind first and the narrower one would never be reached.
+    if (partitionWorkerConcurrency != null
+        && partitionConcurrency != null
+        && partitionWorkerConcurrency > partitionConcurrency)
+      throw new IllegalArgumentException(
+          "Queue partitionConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionWorkerConcurrency != null
+        && workerConcurrency != null
+        && partitionWorkerConcurrency > workerConcurrency)
+      throw new IllegalArgumentException(
+          "Queue workerConcurrency must be greater than or equal to partitionWorkerConcurrency");
+    if (partitionConcurrency != null && concurrency != null && partitionConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionConcurrency");
+    if (partitionWorkerConcurrency != null
+        && concurrency != null
+        && partitionWorkerConcurrency > concurrency)
+      throw new IllegalArgumentException(
+          "Queue concurrency must be greater than or equal to partitionWorkerConcurrency");
+    validateRateLimit("partitionRateLimit", partitionRateLimit);
+    if (pollingInterval.isNegative() || pollingInterval.isZero())
+      throw new IllegalArgumentException("Queue pollingInterval must be greater than zero");
+    requireAtLeastOneMilli("pollingInterval", pollingInterval);
     if (workerConcurrency != null && concurrency != null && workerConcurrency > concurrency)
       throw new IllegalArgumentException(
           "Queue concurrency must be greater than or equal to workerConcurrency");
@@ -328,7 +355,7 @@ public record Queue(
 
   /**
    * Produces a new Queue with the assigned global concurrency. `null` may be specified to remove
-   * the concurrency limit.
+   * the concurrency limit; 0 pauses the queue.
    *
    * @deprecated Configure a queue with {@link QueueOptions} at registration.
    */
@@ -346,7 +373,7 @@ public record Queue(
 
   /**
    * Produces a new Queue with the assigned per-worker concurrency. `null` may be specified to
-   * remove the concurrency limit.
+   * remove the concurrency limit; 0 pauses the queue.
    *
    * @deprecated Configure a queue with {@link QueueOptions} at registration.
    */
