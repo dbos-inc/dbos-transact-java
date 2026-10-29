@@ -108,12 +108,16 @@ public class ClientQueueTest {
       assertTrue(client.findQueue("cq-flag-and-limit").isEmpty());
 
       client.registerQueue("cq-flag-update", new QueueOptions().withConcurrency(4));
-      assertThrows(
-          IllegalArgumentException.class,
-          () ->
-              client.updateQueue(
-                  "cq-flag-update",
-                  new QueueOptions().andPartitionQueue(true).withPartitionWorkerConcurrency(1)));
+      var updateEx =
+          assertThrows(
+              IllegalArgumentException.class,
+              () ->
+                  client.updateQueue(
+                      "cq-flag-update",
+                      new QueueOptions()
+                          .andPartitionQueue(true)
+                          .withPartitionWorkerConcurrency(1)));
+      assertTrue(updateEx.getMessage().contains("set only one of them"), updateEx.getMessage());
       assertFalse(client.findQueue("cq-flag-update").orElseThrow().isPartitioned());
     }
   }

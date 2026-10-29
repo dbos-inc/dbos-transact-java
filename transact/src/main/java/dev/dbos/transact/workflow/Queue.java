@@ -282,9 +282,10 @@ public record Queue(
    * @throws IllegalArgumentException if this queue may not be written
    */
   public void validateForRegistration() {
-    // A per-partition limit already partitions the queue, so the flag could add nothing to it. A
-    // queue read back from the system database carries both, its flag derived from those limits,
-    // but no write path passes the stored flag on.
+    // The flag and the per-partition limits disagree about the scope of the queue-wide limits --
+    // under the flag alone they apply per partition -- so only one may be set. A queue read back
+    // from the system database carries both, its flag derived from those limits, but no write path
+    // passes the stored flag on: an update carries isLegacyPartitioned() instead.
     if (partitioningEnabled && hasPartitionLimits())
       throw new IllegalArgumentException(
           ("Queue %s: partitionQueue is deprecated in favor of the partition limits; set only one"

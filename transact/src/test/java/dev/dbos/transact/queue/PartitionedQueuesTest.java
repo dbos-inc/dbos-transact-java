@@ -521,6 +521,12 @@ public class PartitionedQueuesTest {
     var limitsOnly = dbos.findQueue("limits-only-queue").orElseThrow();
     assertTrue(limitsOnly.isPartitioned());
     assertFalse(limitsOnly.isLegacyPartitioned());
+
+    // The flag set to false asks for nothing, so it may accompany a per-partition limit.
+    dbos.registerQueue(
+        "flag-false-queue",
+        new QueueOptions().andPartitionQueue(false).withPartitionConcurrency(2));
+    assertEquals(2, dbos.findQueue("flag-false-queue").orElseThrow().partitionConcurrency());
   }
 
   /**

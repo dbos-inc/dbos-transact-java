@@ -22,9 +22,10 @@ import org.jspecify.annotations.Nullable;
  * <p>A queue can carry flow control at two scopes at once: the queue-wide limits bound the queue as
  * a whole, and the per-partition limits bound each partition key independently. Setting any
  * per-partition limit is what partitions the queue, so the deprecated {@code partitionQueue} may
- * not be set alongside one: registration and update both refuse the two together. A queue
- * registered with {@code partitionQueue} alone keeps its limits frozen; re-register it with
- * per-partition limits to move it across.
+ * not be set alongside one: registration and update both refuse the two together, and an update
+ * refuses {@code partitionQueue}, {@code true} or {@code false}, on a queue already partitioned by
+ * its per-partition limits; clear those instead. A queue registered with {@code partitionQueue}
+ * alone keeps its limits frozen; re-register it with per-partition limits to move it across.
  *
  * <p>A rate limit's max and period are set and cleared together, at registration and on update
  * alike; supplying only one of them is refused.

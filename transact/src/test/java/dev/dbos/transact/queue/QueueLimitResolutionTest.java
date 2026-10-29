@@ -106,8 +106,9 @@ public class QueueLimitResolutionTest {
 
     @Test
     void theFlagIsNotLegacyOncePartitionLimitsAreSet() {
-      // Both set: the per-partition limits win and the flag adds nothing, so the queue-wide
-      // limits keep their own scope rather than being reinterpreted.
+      // Both set, as a queue read back from the database is, its stored flag derived from the
+      // limits: the per-partition limits win, so the queue-wide limits keep their own scope rather
+      // than being reinterpreted. No write accepts this combination.
       var q = queue(10, 5, true, LIMIT, 2, null, null);
       assertTrue(q.isPartitioned());
       assertFalse(q.isLegacyPartitioned());
