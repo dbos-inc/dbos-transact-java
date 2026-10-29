@@ -131,7 +131,8 @@ public class QueuesDAO {
                 queue.name(),
                 limits.concurrency());
           }
-          maxTasks = Math.min(maxTasks, Math.max(0, limits.concurrency() - pending));
+          // In long: a stored limit near Integer.MIN_VALUE less the pending count would wrap.
+          maxTasks = Math.min(maxTasks, Math.max(0, (long) limits.concurrency() - pending));
         }
         if (limits.partitionConcurrency() != null) {
           int pending = pendingCount(ctx, connection, queue.name(), partition);
@@ -144,7 +145,8 @@ public class QueuesDAO {
                 queue.name(),
                 limits.partitionConcurrency());
           }
-          maxTasks = Math.min(maxTasks, Math.max(0, limits.partitionConcurrency() - pending));
+          maxTasks =
+              Math.min(maxTasks, Math.max(0, (long) limits.partitionConcurrency() - pending));
         }
         if (maxTasks == 0) {
           connection.rollback();

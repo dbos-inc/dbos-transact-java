@@ -596,6 +596,58 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void aStoredMinimumConcurrencyLeavesNoRoom() throws Exception {
+    // A concurrency limit of Integer.MIN_VALUE, stored by no write but loaded as it stands, less
+    // the pending count must leave no room rather than wrap around to a large one.
+    var appVersion = "v-min-concurrency";
+    for (boolean perPartition : List.of(false, true)) {
+      var name = perPartition ? "min-partition-concurrency-q" : "min-concurrency-q";
+      var partition = perPartition ? "p" : null;
+      for (int i = 0; i < 2; i++) {
+        var status =
+            WorkflowStatusInternalBuilder.create(name + "-" + i)
+                .workflowName("wf-name")
+                .inputs("wf-inputs")
+                .queueName(name)
+                .queuePartitionKey(partition)
+                .appVersion(appVersion)
+                .build();
+        assertEquals(WorkflowState.ENQUEUED, sysdb.initWorkflowStatus(status, 5, null).status());
+      }
+
+      // One is claimed under a limit of 1, so one is PENDING when the stored limit is applied.
+      var limitOne = concurrencyLimited(name, perPartition, 1);
+      assertEquals(
+          1,
+          sysdb
+              .startQueuedWorkflows(
+                  limitOne, Constants.DEFAULT_EXECUTORID, appVersion, partition, 0, 0, "test-claim")
+              .size());
+      var stored = concurrencyLimited(name, perPartition, Integer.MIN_VALUE);
+      assertEquals(
+          List.of(),
+          sysdb.startQueuedWorkflows(
+              stored, Constants.DEFAULT_EXECUTORID, appVersion, partition, 0, 0, "test-claim"),
+          name);
+    }
+  }
+
+  private static Queue concurrencyLimited(String name, boolean perPartition, int limit) {
+    return new Queue(
+        name,
+        perPartition ? null : limit,
+        null,
+        false,
+        false,
+        null,
+        perPartition ? limit : null,
+        null,
+        null,
+        Queue.DEFAULT_POLLING_INTERVAL,
+        null);
+  }
+
+  @Test
   public void claimSaturatesAnOverflowingDeadline() throws Exception {
     // The claim adds the timeout to the database's clock. For a timeout within the current epoch
     // milliseconds of the bigint maximum the sum overflows, and since the claim is one UPDATE for
