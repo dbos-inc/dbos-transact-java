@@ -324,7 +324,8 @@ public class DBOSClient implements AutoCloseable {
    * @param appVersion The application version to target for execution. Optional.
    * @param timeout The maximum duration the workflow may run before being canceled. Optional.
    * @param deadline The absolute time by which the workflow must start or complete. Optional.
-   * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
+   * @param deduplicationId An optional ID to prevent duplicate enqueued workflows, across every
+   *     partition of the queue. Optional.
    * @param priority The priority to assign; lower values are dequeued first. Optional.
    * @param queuePartitionKey The partition key for distributing workflows across queue partitions.
    *     Optional.
@@ -715,11 +716,12 @@ public class DBOSClient implements AutoCloseable {
      * Specify a queue deduplication ID for the workflow to be enqueued. Queue requests with the
      * same deduplication ID will be rejected.
      *
-     * <p>Deduplication spans the whole queue, across its partitions: until a workflow enqueued with
-     * this ID finishes, another enqueue with the same ID is refused with {@link
-     * dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key. To
-     * deduplicate within one partition, include the partition key in the ID, such as {@code
-     * "<partition>:<key>"}.
+     * <p>Deduplication spans the whole queue, across its partitions: while a workflow enqueued with
+     * this ID is delayed, enqueued or running, another enqueue with the same ID is refused with
+     * {@link dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition
+     * key. The ID is released when that workflow completes, fails or is cancelled, or is resumed or
+     * rewound. To deduplicate within one partition, include the partition key in the ID, such as
+     * {@code "<partition>:<key>"}.
      *
      * @param deduplicationId Queue deduplication ID
      * @return New `EnqueueOptions` with the deduplication ID set

@@ -351,11 +351,12 @@ public record StartWorkflowOptions(
    * Returns a new StartWorkflowOptions with the specified queue deduplication ID. Note: The queue
    * must also be specified for deduplication to take effect.
    *
-   * <p>Deduplication spans the whole queue, across its partitions: until a workflow enqueued with
-   * this ID finishes, another enqueue with the same ID is refused with {@link
-   * dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key. To
-   * deduplicate within one partition, include the partition key in the ID, such as {@code
-   * "<partition>:<key>"}.
+   * <p>Deduplication spans the whole queue, across its partitions: while a workflow enqueued with
+   * this ID is delayed, enqueued or running, another enqueue with the same ID is refused with
+   * {@link dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key.
+   * The ID is released when that workflow completes, fails or is cancelled, or is resumed or
+   * rewound. To deduplicate within one partition, include the partition key in the ID, such as
+   * {@code "<partition>:<key>"}.
    *
    * @param deduplicationId the deduplication ID to assign
    * @return a new StartWorkflowOptions with the updated deduplication ID

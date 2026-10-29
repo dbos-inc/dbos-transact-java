@@ -371,8 +371,8 @@ public class PartitionedQueuesTest {
 
   /**
    * A deduplication ID spans every partition of its queue: while one workflow holds it, the same ID
-   * is refused on any partition, through the runtime and the client alike, until that workflow
-   * finishes. Putting the partition key into the ID scopes it to one partition.
+   * is refused on any partition, through the runtime, by name and by proxy, and the client alike,
+   * until that workflow finishes. Putting the partition key into the ID scopes it to one partition.
    */
   @Test
   public void testDeduplicationSpansPartitions() throws Exception {
@@ -390,6 +390,17 @@ public class PartitionedQueuesTest {
             .withDeduplicationId(dedupId);
     var holder = dbos.startWorkflow(() -> proxy.blockedWorkflow(), onA);
     assertTrue(impl.waitingLatch.await(10, TimeUnit.SECONDS), "the holder never started");
+    var held = holder.getStatus();
+    assertEquals("a", held.queuePartitionKey());
+    assertEquals(dedupId, held.deduplicationId());
+
+    var onB =
+        new EnqueueOptions(
+                "normalWorkflow",
+                "dev.dbos.transact.queue.PartitionsTestServiceImpl",
+                QueueName.of(queue))
+            .withQueuePartitionKey("b")
+            .withDeduplicationId(dedupId);
 
     // Held while it runs, on its own partition and on any other.
     assertThrows(
@@ -398,15 +409,9 @@ public class PartitionedQueuesTest {
     assertThrows(
         DBOSQueueDuplicatedException.class,
         () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), onA.withQueuePartitionKey("b")));
+    assertThrows(DBOSQueueDuplicatedException.class, () -> dbos.enqueueWorkflow(onB, null));
 
     try (var client = pgContainer.dbosClient()) {
-      var onB =
-          new EnqueueOptions(
-                  "normalWorkflow",
-                  "dev.dbos.transact.queue.PartitionsTestServiceImpl",
-                  QueueName.of(queue))
-              .withQueuePartitionKey("b")
-              .withDeduplicationId(dedupId);
       assertThrows(DBOSQueueDuplicatedException.class, () -> client.enqueueWorkflow(onB, null));
 
       // Scoped to partition b by the caller, the ID no longer collides with a's.
@@ -419,6 +424,9 @@ public class PartitionedQueuesTest {
     assertEquals(holder.workflowId(), holder.getResult());
     var afterOnB = dbos.startWorkflow(() -> proxy.normalWorkflow(), onA.withQueuePartitionKey("b"));
     assertEquals(afterOnB.workflowId(), afterOnB.getResult());
+    var finished = afterOnB.getStatus();
+    assertEquals("b", finished.queuePartitionKey());
+    assertNull(finished.deduplicationId(), "a finished workflow releases its ID");
     assertTrue(DBUtils.queueEntriesCleanedUp(dataSource));
   }
 
