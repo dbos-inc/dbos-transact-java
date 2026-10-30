@@ -5,7 +5,6 @@ import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
-import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
@@ -938,59 +937,18 @@ public class WorkflowDAO {
    * it, before it went silent or, on a node that was only slow, while this call waited -- or {@code
    * promised} is null because its inputs named none.
    *
-   * <p>Returns the promised workflow's id if this call created it, otherwise null. With a {@code
-   * caller}, it is that caller's step: if the step already ran, what it recorded is returned and
-   * nothing is touched; otherwise the takeover and its checkpoint commit together. The return is
-   * {@code Object}, as a replay hands back whatever the serializer preserved.
+   * <p>Returns the promised workflow's id if this call created it, otherwise null. Runs on the
+   * caller's transaction, which commits the takeover with the caller's step, if any.
    */
-  public static Object takeOverDebouncerWorkflow(
+  public static @Nullable String takeOverDebouncerWorkflow(
       DbContext ctx,
+      Connection conn,
       String debouncerWorkflowId,
       @Nullable WorkflowStatusInternal promised,
       @Nullable Long delayUntilEpochMs,
-      String creatorXid,
-      @Nullable DebounceCaller caller)
+      String creatorXid)
       throws SQLException {
-    long startTime = System.currentTimeMillis();
-    try (var conn = ctx.getConnection()) {
-      return SqlTransaction.call(
-          conn,
-          c -> {
-            if (caller != null) {
-              var prev =
-                  StepsDAO.checkStepResult(
-                      c,
-                      ctx.schema(),
-                      caller.workflowId(),
-                      caller.stepId(),
-                      caller.stepName(),
-                      caller.ownerXid());
-              if (prev != null) {
-                return prev.toResult(ctx.serializer());
-              }
-            }
-            String created =
-                takeOver(ctx, c, debouncerWorkflowId, promised, delayUntilEpochMs, creatorXid);
-            if (caller != null) {
-              var serialized = SerializationUtil.serializeValue(created, null, ctx.serializer());
-              StepsDAO.recordStepResult(
-                  ctx,
-                  c,
-                  new StepResult(
-                      caller.workflowId(),
-                      caller.stepId(),
-                      caller.stepName(),
-                      serialized.serializedValue(),
-                      null,
-                      created,
-                      serialized.serialization()),
-                  startTime,
-                  System.currentTimeMillis(),
-                  caller.ownerXid());
-            }
-            return created;
-          });
-    }
+    return takeOver(ctx, conn, debouncerWorkflowId, promised, delayUntilEpochMs, creatorXid);
   }
 
   private static @Nullable String takeOver(
@@ -1096,11 +1054,12 @@ public class WorkflowDAO {
    * internal queue -- what a debouncer from before debounced workflows leaves there -- so the
    * caller can forward to it rather than create a second workflow beside it.
    *
-   * <p>The return is what the step records -- the {@link DebounceResult}, or the ids completed with
-   * it -- as {@code Object}, since a replay hands back whatever the serializer preserved.
+   * <p>The return is what the caller's step records -- the {@link DebounceResult}, or the ids
+   * completed with it. Runs on the caller's transaction, which commits the bounce with that step.
    */
   public static Object debounceDelayedWorkflow(
       DbContext ctx,
+      Connection conn,
       String workflowName,
       String className,
       @Nullable String instanceName,
@@ -1109,69 +1068,30 @@ public class WorkflowDAO {
       long delayUntilEpochMs,
       Object[] args,
       @Nullable String serializationFormat,
-      @Nullable DebounceIds ids,
-      @Nullable DebounceCaller caller)
+      @Nullable DebounceIds ids)
       throws SQLException {
-    long startTime = System.currentTimeMillis();
-    try (var conn = ctx.getConnection()) {
-      return SqlTransaction.call(
-          conn,
-          c -> {
-            if (caller != null) {
-              var prev =
-                  StepsDAO.checkStepResult(
-                      c,
-                      ctx.schema(),
-                      caller.workflowId(),
-                      caller.stepId(),
-                      caller.stepName(),
-                      caller.ownerXid());
-              if (prev != null) {
-                return prev.toResult(ctx.serializer());
-              }
-            }
-            // Serialize after the replay check, so a step that already ran never serializes
-            // arguments it will not use.
-            var serializedArgs =
-                SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
-            var result =
-                bounce(
-                    ctx,
-                    c,
-                    workflowName,
-                    className,
-                    instanceName,
-                    queueName,
-                    deduplicationId,
-                    delayUntilEpochMs,
-                    serializedArgs.serializedValue(),
-                    serializedArgs.serialization());
-            Object recorded =
-                ids == null
-                    ? result
-                    : ids.withBounced(
-                        result, findDebouncerWorkflow(ctx, c, queueName, deduplicationId, result));
-            if (caller == null) {
-              return recorded;
-            }
-            var serialized = SerializationUtil.serializeValue(recorded, null, ctx.serializer());
-            StepsDAO.recordStepResult(
-                ctx,
-                c,
-                new StepResult(
-                    caller.workflowId(),
-                    caller.stepId(),
-                    caller.stepName(),
-                    serialized.serializedValue(),
-                    null,
-                    null,
-                    serialized.serialization()),
-                startTime,
-                System.currentTimeMillis(),
-                caller.ownerXid());
-            return recorded;
-          });
-    }
+    // Serialize after the replay check, so a step that already ran never serializes
+    // arguments it will not use.
+    var serializedArgs =
+        SerializationUtil.serializeArgs(args, null, serializationFormat, ctx.serializer());
+    var result =
+        bounce(
+            ctx,
+            conn,
+            workflowName,
+            className,
+            instanceName,
+            queueName,
+            deduplicationId,
+            delayUntilEpochMs,
+            serializedArgs.serializedValue(),
+            serializedArgs.serialization());
+    Object recorded =
+        ids == null
+            ? result
+            : ids.withBounced(
+                result, findDebouncerWorkflow(ctx, conn, queueName, deduplicationId, result));
+    return recorded;
   }
 
   /**

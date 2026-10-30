@@ -5,7 +5,6 @@ import static java.util.stream.Collectors.joining;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
-import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
@@ -186,7 +185,23 @@ public class NotificationsDAO {
     }
   }
 
-  public static Object recv(
+  /** How a wait for a message ended. */
+  public sealed interface RecvWait {
+    /** The step already ran: what it received, or null if it received nothing. */
+    record Replayed(@Nullable Object message) implements RecvWait {}
+
+    /** The timeout passed with no message. */
+    record TimedOut() implements RecvWait {}
+
+    /** A message is waiting to be claimed. */
+    record Ready() implements RecvWait {}
+  }
+
+  /**
+   * Waits for a message on {@code topic} for the recv that is step {@code stepId}, until one
+   * arrives or the timeout passes. A step already recorded is replayed instead, without waiting.
+   */
+  public static RecvWait awaitMessage(
       DbContext ctx,
       String workflowId,
       int stepId,
@@ -203,23 +218,24 @@ public class NotificationsDAO {
     }
     Objects.requireNonNull(dbPollingInterval);
 
-    var stepName = "DBOS.recv";
     final var recvTopic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
 
-    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, stepName, ownerXid);
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, "DBOS.recv", ownerXid);
     if (result != null) {
       logger.debug(
           "Replaying recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
       // A NULL output is a recv that claimed no message (a peer took it) and returned null.
       // Replay that rather than receiving again: a second run would record a different result
       // for this step.
-      return result.output() != null ? result.toResult(ctx.serializer()) : null;
+      return new RecvWait.Replayed(
+          result.output() != null || result.error() != null
+              ? result.toResult(ctx.serializer())
+              : null);
     }
 
     logger.debug(
         "Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
 
-    var startTime = System.currentTimeMillis();
     var messageKey = new SignalKey.Message(workflowId, recvTopic);
     var selectSql =
         """
@@ -239,8 +255,7 @@ public class NotificationsDAO {
           stmt.setString(2, recvTopic);
           try (var rs = stmt.executeQuery()) {
             if (rs.next()) {
-              // query for results
-              break;
+              return new RecvWait.Ready();
             }
           }
           WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
@@ -248,11 +263,7 @@ public class NotificationsDAO {
 
         var duration = Duration.between(Instant.now(), timeoutAt);
         if (duration.isNegative() || duration.isZero()) {
-          var output = SerializationUtil.serializeValue(null, null, ctx.serializer());
-          var stepResult = StepResult.ofOutput(workflowId, stepId, stepName, output);
-          StepsDAO.recordStepResult(
-              ctx, stepResult, startTime, System.currentTimeMillis(), ownerXid);
-          return null;
+          return new RecvWait.TimedOut();
         }
 
         var loopDuration =
@@ -261,10 +272,17 @@ public class NotificationsDAO {
         SignalMap.awaitAny(loopDuration, messageSignal);
       }
     }
+  }
 
-    ctx.checkClosed();
-    WorkflowDAO.checkWorkflow(ctx, workflowId, ownerXid);
-
+  /**
+   * Claims the oldest unconsumed message on {@code topic} for the recv that is step {@code stepId},
+   * on the caller's transaction, and returns it with its checkpoint: the message as it was stored.
+   * A peer that claimed it first leaves none, and the step records null.
+   */
+  public static SystemDatabase.Recorded<Object> claimMessage(
+      DbContext ctx, Connection conn, String workflowId, int stepId, @Nullable String topic)
+      throws SQLException {
+    final var recvTopic = Objects.requireNonNullElse(topic, Constants.DBOS_NULL_TOPIC);
     var updateSql =
         """
           UPDATE "%1$s".notifications
@@ -284,58 +302,27 @@ public class NotificationsDAO {
         """
             .formatted(ctx.schema());
 
-    try (var txConn = ctx.getConnection()) {
-      // Only the claim is replayed, never the wait above it: re-running the whole method would
-      // register a fresh subscription and restart the caller's timeout from zero. A peer that won
-      // the message between attempts lands this on the null-message branch below, which is a case
-      // it already handles.
-      return SystemDatabase.retryOnSerializationError(
-          "recv claim",
-          () ->
-              SqlTransaction.call(
-                  txConn,
-                  conn -> {
-                    String serializedMessage = null;
-                    String serialization = null;
-                    try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
-                      // The consuming step is recorded so a rewind can delete exactly the
-                      // messages consumed by the steps it discards.
-                      stmt.setInt(1, stepId);
-                      stmt.setString(2, workflowId);
-                      stmt.setString(3, recvTopic);
-                      stmt.setString(4, workflowId);
-                      stmt.setString(5, recvTopic);
-
-                      // Recording the step checks that this execution still owns the workflow, so
-                      // a stale execution's claim rolls back and leaves the message for the
-                      // owner.
-                      try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next()) {
-                          serializedMessage = rs.getString("message");
-                          serialization = rs.getString("serialization");
-                        }
-                      }
-                    }
-
-                    var deserializedMessage =
-                        SerializationUtil.deserializeValue(
-                            serializedMessage, serialization, ctx.serializer());
-
-                    var output =
-                        new StepResult(
-                            workflowId,
-                            stepId,
-                            stepName,
-                            serializedMessage,
-                            null,
-                            null,
-                            serialization);
-                    StepsDAO.recordStepResult(
-                        ctx, conn, output, startTime, System.currentTimeMillis(), ownerXid);
-
-                    return deserializedMessage;
-                  }));
+    String serializedMessage = null;
+    String serialization = null;
+    try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+      // The consuming step is recorded so a rewind can delete exactly the messages consumed by
+      // the steps it discards.
+      stmt.setInt(1, stepId);
+      stmt.setString(2, workflowId);
+      stmt.setString(3, recvTopic);
+      stmt.setString(4, workflowId);
+      stmt.setString(5, recvTopic);
+      try (ResultSet rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          serializedMessage = rs.getString("message");
+          serialization = rs.getString("serialization");
+        }
+      }
     }
+
+    var message =
+        SerializationUtil.deserializeValue(serializedMessage, serialization, ctx.serializer());
+    return new SystemDatabase.Recorded<>(message, serializedMessage, serialization, null);
   }
 
   /**

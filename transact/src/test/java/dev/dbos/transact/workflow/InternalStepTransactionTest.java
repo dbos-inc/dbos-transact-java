@@ -17,6 +17,7 @@ import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.SQLException;
 import java.sql.SQLTransientException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -198,6 +199,25 @@ public class InternalStepTransactionTest {
     // With the destination there, a send would now succeed; the fork replays the refusal.
     dbos.startWorkflow(proxy::quick, new StartWorkflowOptions(destinationId)).getResult();
     assertEquals("refused", dbos.<String, RuntimeException>forkWorkflow(callerId, 1).getResult());
+  }
+
+  @Test
+  public void aLostCommitAcknowledgementReplaysTheClaimedMessage() throws Exception {
+    var receiverId = "receiver-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED,
+            receiverId,
+            new SQLTransientException());
+
+    var receiver = dbos.startWorkflow(proxy::receives, new StartWorkflowOptions(receiverId));
+    dbos.send(receiverId, "first", "topic");
+    dbos.send(receiverId, "second", "topic");
+
+    // The claim commits and its acknowledgement is lost. Claiming again would take the second.
+    assertEquals("first", receiver.getResult(), "the retry replayed the claim it committed");
+    assertTrue(fired.get());
+    assertEquals(1, stepsNamed(receiverId, "DBOS.recv").size());
   }
 
   @Test
@@ -410,6 +430,8 @@ interface InternalStepService {
 
   String forks(String sourceId);
 
+  String receives();
+
   String sends(String destinationId);
 
   String rewinds(String targetId);
@@ -505,6 +527,12 @@ class InternalStepServiceImpl implements InternalStepService {
     } catch (DBOSNonExistentWorkflowException e) {
       return "refused";
     }
+  }
+
+  @Override
+  @Workflow
+  public String receives() {
+    return dbos.<String>recv("topic", Duration.ofSeconds(30)).orElse("nothing");
   }
 
   @Override

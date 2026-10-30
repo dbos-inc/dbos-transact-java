@@ -1372,17 +1372,34 @@ public class SystemDatabase implements AutoCloseable {
       @Nullable WorkflowStatusInternal promised,
       @Nullable DebounceCaller caller) {
     // The delay is resolved outside the retry, as in initWorkflowStatus, so a retry cannot push it
-    // later. An attempt that committed but lost its ack finds the holder cancelled on the retry and
-    // returns null; the caller then goes on to extend the promised workflow like any other call.
-    // Safe to replay after a peer committed, as a serialization error means one did: the holder is
-    // re-checked under its lock, the step is re-checked, and the insert keeps a row already there.
+    // later. An attempt that committed but lost its ack replays its checkpoint on the retry; with
+    // no caller, it finds the holder cancelled and returns null, and the caller then goes on to
+    // extend the promised workflow like any other call. Safe to replay after a peer committed, as
+    // a serialization error means one did: the holder is re-checked under its lock, the step is
+    // re-checked, and the insert keeps a row already there.
     String ownerXid = UUID.randomUUID().toString();
     Long delayUntilEpochMs = promised == null ? null : resolveDelayUntil(promised);
-    return dbRetryIncludingSerializationError(
-        "takeOverDebouncerWorkflow",
-        () ->
-            WorkflowDAO.takeOverDebouncerWorkflow(
-                ctx, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid, caller));
+    return runRecordedStep(
+        stepOf(caller),
+        caller != null ? caller.stepName() : "takeOverDebouncerWorkflow",
+        conn -> {
+          String created =
+              WorkflowDAO.takeOverDebouncerWorkflow(
+                  ctx, conn, debouncerWorkflowId, promised, delayUntilEpochMs, ownerXid);
+          if (caller == null) {
+            return new Recorded<Object>(created, null, null, null);
+          }
+          // The step names the workflow it created as its child.
+          var serialized = SerializationUtil.serializeValue(created, null, ctx.serializer());
+          return new Recorded<Object>(
+              created, serialized.serializedValue(), serialized.serialization(), created);
+        });
+  }
+
+  private static @Nullable StepCaller stepOf(@Nullable DebounceCaller caller) {
+    return caller == null
+        ? null
+        : new StepCaller.FromWorkflow(caller.workflowId(), caller.stepId(), caller.ownerXid());
   }
 
   /**
@@ -1405,11 +1422,13 @@ public class SystemDatabase implements AutoCloseable {
     // caller's, so it can deadlock with a bulk cancel, resume or recovery taking both the other
     // way. Safe to replay: the step is re-checked first, and the delay and inputs it writes are
     // fixed before the first attempt.
-    return dbRetryIncludingSerializationError(
-        "debounceDelayedWorkflow",
-        () ->
+    return runTransactionalStep(
+        stepOf(caller),
+        caller != null ? caller.stepName() : "debounceDelayedWorkflow",
+        conn ->
             WorkflowDAO.debounceDelayedWorkflow(
                 ctx,
+                conn,
                 workflowName,
                 className,
                 instanceName,
@@ -1418,8 +1437,7 @@ public class SystemDatabase implements AutoCloseable {
                 delayUntilEpochMs,
                 args,
                 serializationFormat,
-                ids,
-                caller));
+                ids));
   }
 
   /** Returns the given executors' PENDING workflows to their queues; reports which rows moved. */
@@ -1594,6 +1612,14 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  /**
+   * Receives a message on {@code topic} as step {@code stepId}, waiting up to {@code timeout}.
+   *
+   * <p>Only the claim is the step's transaction, and only the claim is retried, never the wait
+   * before it: re-running the wait would register a fresh subscription and restart the caller's
+   * timeout from zero. A peer that took the message between the wait and the claim leaves the claim
+   * nothing, and the step records null.
+   */
   public Object recv(
       String workflowId,
       int stepId,
@@ -1601,18 +1627,30 @@ public class SystemDatabase implements AutoCloseable {
       String topic,
       Duration timeout,
       String ownerXid) {
-    return dbRetry(
-        () ->
-            NotificationsDAO.recv(
-                ctx,
-                workflowId,
-                stepId,
-                timeout,
-                timeoutStepId,
-                topic,
-                notificationRecheckInterval(),
-                createSubscription,
-                ownerXid));
+    var waited =
+        dbRetry(
+            () ->
+                NotificationsDAO.awaitMessage(
+                    ctx,
+                    workflowId,
+                    stepId,
+                    timeout,
+                    timeoutStepId,
+                    topic,
+                    notificationRecheckInterval(),
+                    createSubscription,
+                    ownerXid));
+    if (waited instanceof NotificationsDAO.RecvWait.Replayed replayed) {
+      return replayed.message();
+    }
+    var step = new StepCaller.FromWorkflow(workflowId, stepId, ownerXid);
+    if (waited instanceof NotificationsDAO.RecvWait.TimedOut) {
+      return runTransactionalStep(step, "DBOS.recv", conn -> null);
+    }
+    return runRecordedStep(
+        step,
+        "DBOS.recv",
+        conn -> NotificationsDAO.claimMessage(ctx, conn, workflowId, stepId, topic));
   }
 
   public void setEvent(
@@ -1780,6 +1818,37 @@ public class SystemDatabase implements AutoCloseable {
    */
   <T> @Nullable T runTransactionalStep(
       @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
+    boolean recorded = caller instanceof StepCaller.FromWorkflow;
+    return runRecordedStep(
+        caller,
+        stepName,
+        conn -> {
+          T result = work.run(conn);
+          if (!recorded) {
+            return new Recorded<>(result, null, null, null);
+          }
+          var serialized = SerializationUtil.serializeValue(result, null, ctx.serializer());
+          return new Recorded<>(
+              result, serialized.serializedValue(), serialized.serialization(), null);
+        });
+  }
+
+  /**
+   * What a step's work hands back, with what its checkpoint records: the output as serialized, and
+   * the child workflow the step names, if any. Recorded only from the workflow body.
+   */
+  public record Recorded<T>(
+      @Nullable T value,
+      @Nullable String output,
+      @Nullable String serialization,
+      @Nullable String childWorkflowId) {}
+
+  /**
+   * As {@link #runTransactionalStep}, for work that says what its checkpoint records: a message
+   * kept in the serialization it arrived in, or a step naming the child workflow it created.
+   */
+  <T> @Nullable T runRecordedStep(
+      @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<Recorded<T>> work) {
     var step = caller instanceof StepCaller.FromWorkflow fromWorkflow ? fromWorkflow : null;
     long startTime = System.currentTimeMillis();
     // What work itself threw on the attempt that ended the retries, as against a failure of the
@@ -1817,7 +1886,7 @@ public class SystemDatabase implements AutoCloseable {
                                 return new Outcome<T>(recorded, null);
                               }
                             }
-                            T result;
+                            Recorded<T> result;
                             try {
                               result = work.run(c);
                             } catch (SQLException | RuntimeException e) {
@@ -1827,8 +1896,6 @@ public class SystemDatabase implements AutoCloseable {
                             // The owner is checked last, as every fenced write locks the status
                             // row.
                             if (step != null) {
-                              var serialized =
-                                  SerializationUtil.serializeValue(result, null, ctx.serializer());
                               StepsDAO.recordStepResult(
                                   ctx,
                                   c,
@@ -1836,10 +1903,10 @@ public class SystemDatabase implements AutoCloseable {
                                       step.workflowId(),
                                       step.stepId(),
                                       stepName,
-                                      serialized.serializedValue(),
+                                      result.output(),
                                       null,
-                                      null,
-                                      serialized.serialization()),
+                                      result.childWorkflowId(),
+                                      result.serialization()),
                                   startTime,
                                   System.currentTimeMillis(),
                                   step.ownerXid());
@@ -1849,7 +1916,7 @@ public class SystemDatabase implements AutoCloseable {
                             }
                             DebugTriggers.debugTriggerPoint(
                                 DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT);
-                            return new Outcome<T>(null, result);
+                            return new Outcome<T>(null, result.value());
                           });
                 }
                 DebugTriggers.debugTriggerPoint(
