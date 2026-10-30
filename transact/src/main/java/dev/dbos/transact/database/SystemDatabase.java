@@ -2074,8 +2074,15 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.transitionDelayedWorkflows(ctx));
   }
 
-  public void createSchedule(WorkflowSchedule schedule) {
-    dbRetry(() -> SchedulesDAO.createSchedule(ctx, schedule));
+  /** Creates a schedule as the step {@code caller} makes; see {@link #runTransactionalStep}. */
+  public void createSchedule(WorkflowSchedule schedule, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.createSchedule",
+        conn -> {
+          SchedulesDAO.createSchedule(ctx, conn, schedule);
+          return null;
+        });
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
@@ -2113,20 +2120,41 @@ public class SystemDatabase implements AutoCloseable {
     return ctx.serializer();
   }
 
-  public void pauseSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.pauseSchedule(ctx, name));
+  /** Pauses a schedule as the step {@code caller} makes; see {@link #runTransactionalStep}. */
+  public void pauseSchedule(String name, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.pauseSchedule",
+        conn -> {
+          SchedulesDAO.pauseSchedule(conn, ctx.schema(), name);
+          return null;
+        });
   }
 
-  public void resumeSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.resumeSchedule(ctx, name));
+  /** Resumes a schedule as the step {@code caller} makes; see {@link #runTransactionalStep}. */
+  public void resumeSchedule(String name, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.resumeSchedule",
+        conn -> {
+          SchedulesDAO.resumeSchedule(conn, ctx.schema(), name);
+          return null;
+        });
   }
 
   public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
     dbRetry(() -> SchedulesDAO.updateScheduleLastFiredAt(ctx, name, lastFiredAt));
   }
 
-  public void deleteSchedule(String name) {
-    dbRetry(() -> SchedulesDAO.deleteSchedule(ctx, name));
+  /** Deletes a schedule as the step {@code caller} makes; see {@link #runTransactionalStep}. */
+  public void deleteSchedule(String name, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.deleteSchedule",
+        conn -> {
+          SchedulesDAO.deleteSchedule(conn, ctx.schema(), name);
+          return null;
+        });
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {

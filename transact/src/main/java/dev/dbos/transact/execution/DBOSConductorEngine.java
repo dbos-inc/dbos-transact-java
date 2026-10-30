@@ -141,12 +141,12 @@ final class DBOSConductorEngine implements ConductorEngine {
 
   @Override
   public void pauseSchedule(String name) {
-    systemDatabase.pauseSchedule(name);
+    systemDatabase.pauseSchedule(name, null);
   }
 
   @Override
   public void resumeSchedule(String name) {
-    systemDatabase.resumeSchedule(name);
+    systemDatabase.resumeSchedule(name, null);
   }
 
   @Override
