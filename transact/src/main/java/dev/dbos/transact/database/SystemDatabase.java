@@ -1687,9 +1687,21 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
-    var validated = Validation.validateAttributes(attributes);
-    dbRetry(() -> WorkflowDAO.updateWorkflowAttributes(ctx, workflowId, validated));
+  /**
+   * Replaces a workflow's attributes as the step {@code caller} makes; see {@link
+   * #runTransactionalStep}.
+   */
+  public void updateWorkflowAttributes(
+      String workflowId, Map<String, Object> attributes, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.updateWorkflowAttributes",
+        conn -> {
+          var validated = Validation.validateAttributes(attributes);
+          WorkflowDAO.updateWorkflowAttributes(conn, ctx.schema(), workflowId, validated);
+          logger.info("Updating attributes of workflow {}", workflowId);
+          return null;
+        });
   }
 
   /**
@@ -1885,10 +1897,47 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetryIncludingSerializationError(
-        "forkWorkflow",
-        () -> WorkflowDAO.forkWorkflow(ctx, originalWorkflowId, startStep, options));
+  /**
+   * Forks a workflow as the step {@code caller} makes, and returns the fork's ID; see {@link
+   * #runTransactionalStep}. {@code validate}, if given, runs first inside the step, so a replay
+   * returns the recorded fork without repeating it.
+   *
+   * <p>The ID is chosen before the transaction, so a retry that re-runs the work, after a commit
+   * whose acknowledgement was lost, fails on the fork it already wrote rather than forking again
+   * under a second ID.
+   */
+  public String forkWorkflow(
+      String originalWorkflowId,
+      int startStep,
+      @Nullable ForkOptions options,
+      @Nullable Runnable validate,
+      @Nullable StepCaller caller) {
+    var resolved = Objects.requireNonNullElseGet(options, ForkOptions::new);
+    var forkedWorkflowId =
+        Objects.requireNonNullElseGet(
+            resolved.forkedWorkflowId(), () -> UUID.randomUUID().toString());
+    return runTransactionalStep(
+        caller,
+        "DBOS.forkWorkflow",
+        conn -> {
+          if (validate != null) {
+            validate.run();
+          }
+          WorkflowDAO.forkWorkflows(
+              ctx,
+              conn,
+              List.of(new WorkflowFork(originalWorkflowId, forkedWorkflowId, startStep)),
+              resolved.applicationVersion(),
+              resolved.queueName(),
+              resolved.queuePartitionKey(),
+              resolved.timeout());
+          logger.info(
+              "Forking workflow {} from step {} as {}",
+              originalWorkflowId,
+              startStep,
+              forkedWorkflowId);
+          return forkedWorkflowId;
+        });
   }
 
   public void forkWorkflows(
@@ -1896,22 +1945,45 @@ public class SystemDatabase implements AutoCloseable {
       @Nullable String applicationVersion,
       @Nullable String queueName,
       @Nullable String queuePartitionKey) {
-    dbRetryIncludingSerializationError(
+    runTransactionalStep(
+        null,
         "forkWorkflows",
-        () -> {
+        conn -> {
           WorkflowDAO.forkWorkflows(
-              ctx, forks, applicationVersion, queueName, queuePartitionKey, null);
+              ctx, conn, forks, applicationVersion, queueName, queuePartitionKey, null);
           return null;
         });
   }
 
-  public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
-    dbRetryIncludingSerializationError(
-        "rewindWorkflow", () -> WorkflowDAO.rewindWorkflow(ctx, workflowId, startStep, options));
-  }
-
-  public void checkRewindable(String workflowId, int startStep) {
-    dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
+  /**
+   * Rewinds a terminal workflow to {@code startStep} as the step {@code caller} makes; see {@link
+   * #runTransactionalStep}.
+   *
+   * <p>{@code beforeRewind}, if given, runs inside the step once the workflow is known to be
+   * rewindable, and before its system database history is touched. The executor validates the queue
+   * there and clears the transactional step factories' checkpoints, which live in other databases
+   * and so commit on their own: a rewind that then rolls back leaves them cleared, and the workflow
+   * terminal and not re-enqueued, so nothing runs against the partial history, and since the
+   * deletes are idempotent the rewind can be retried.
+   */
+  public void rewindWorkflow(
+      String workflowId,
+      int startStep,
+      RewindOptions options,
+      @Nullable Runnable beforeRewind,
+      @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.rewindWorkflow",
+        conn -> {
+          if (beforeRewind != null) {
+            WorkflowDAO.checkRewindable(conn, ctx.schema(), workflowId, startStep);
+            beforeRewind.run();
+          }
+          WorkflowDAO.rewindWorkflow(conn, ctx.schema(), workflowId, startStep, options);
+          logger.info("Rewinding workflow {} to step {}", workflowId, startStep);
+          return null;
+        });
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {
@@ -1965,18 +2037,31 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.runRetentionRound(ctx, cutoff, rowsThreshold, batchSize));
   }
 
-  public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
-    Objects.requireNonNull(delay, "delay must not be null");
-    long delayUntilEpochMs;
-    if (delay instanceof WorkflowDelay.Delay d) {
-      delayUntilEpochMs = resolveDelayUntil(d.delay());
-    } else if (delay instanceof WorkflowDelay.DelayUntil du) {
-      // An absolute delay is the caller's instant, taken as given.
-      delayUntilEpochMs = du.delayUntil().toEpochMilli();
-    } else {
-      throw new IllegalArgumentException("Unexpected WorkflowDelay value");
-    }
-    dbRetry(() -> WorkflowDAO.setWorkflowDelay(ctx, workflowId, delayUntilEpochMs));
+  /**
+   * Moves a DELAYED workflow's start as the step {@code caller} makes; see {@link
+   * #runTransactionalStep}. A relative delay is resolved in the work, so it runs from the attempt
+   * that commits, as a started workflow's deadline does.
+   */
+  public void setWorkflowDelay(
+      String workflowId, WorkflowDelay delay, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.setWorkflowDelay",
+        conn -> {
+          Objects.requireNonNull(delay, "delay must not be null");
+          long delayUntilEpochMs;
+          if (delay instanceof WorkflowDelay.Delay d) {
+            delayUntilEpochMs = resolveDelayUntil(d.delay());
+          } else if (delay instanceof WorkflowDelay.DelayUntil du) {
+            // An absolute delay is the caller's instant, taken as given.
+            delayUntilEpochMs = du.delayUntil().toEpochMilli();
+          } else {
+            throw new IllegalArgumentException("Unexpected WorkflowDelay value");
+          }
+          WorkflowDAO.setWorkflowDelay(conn, ctx.schema(), workflowId, delayUntilEpochMs);
+          logger.info("Delaying workflow {} until {}", workflowId, delayUntilEpochMs);
+          return null;
+        });
   }
 
   /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */

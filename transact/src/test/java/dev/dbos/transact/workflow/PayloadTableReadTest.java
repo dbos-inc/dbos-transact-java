@@ -189,7 +189,7 @@ class PayloadTableReadTest {
 
     // The fork reads the original's inputs and copies them to the new workflow: reading the child
     // back shows what the fork saw.
-    var forkedId = systemDatabase.forkWorkflow(workflowId, 0, new ForkOptions());
+    var forkedId = systemDatabase.forkWorkflow(workflowId, 0, new ForkOptions(), null, null);
     assertEquals(
         expected,
         (int) (Integer) systemDatabase.getWorkflowStatus(forkedId).input()[0],
