@@ -233,6 +233,64 @@ public class InternalStepTransactionTest {
     assertTrue(dbos.getWorkflowStatus(childId).isEmpty(), "the child's insert rolled back");
   }
 
+  /**
+   * A child whose insert holds its parent's row lock when a delete of the parent's tree arrives:
+   * the delete waits for the insert to commit, then reads the parent's children and finds it.
+   */
+  @Test
+  public void aChildWhoseInsertHoldsItsParentIsDeletedWithTheTree() throws Exception {
+    var parentId = "delete-insert-first-%d".formatted(System.nanoTime());
+    var childId = parentId + "-child";
+    var holding = new CountDownLatch(1);
+    var releaseInsert = new CountDownLatch(1);
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_CHILD_RECORDED,
+        new DebugTriggers.DebugAction()
+            .setCallback(
+                () -> {
+                  if (parentId.equals(DBOSContextHolder.get().getWorkflowId())) {
+                    holding.countDown();
+                    try {
+                      releaseInsert.await(30, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                    }
+                  }
+                }));
+
+    dbos.startWorkflow(() -> proxy.startsChild(childId), new StartWorkflowOptions(parentId));
+    assertTrue(holding.await(10, TimeUnit.SECONDS), "the child's insert holds the parent");
+
+    var delete = CompletableFuture.runAsync(() -> dbos.deleteWorkflow(parentId, true));
+    Thread.sleep(500);
+    assertFalse(delete.isDone(), "the delete waits on the parent's row");
+    releaseInsert.countDown();
+    delete.get(30, TimeUnit.SECONDS);
+
+    assertTrue(dbos.getWorkflowStatus(parentId).isEmpty(), "the parent is deleted");
+    assertTrue(dbos.getWorkflowStatus(childId).isEmpty(), "the new child did not escape");
+  }
+
+  /**
+   * A child inserted after a delete of its parent's tree has committed finds its parent gone, and
+   * its insert rolls back: no orphan is left running.
+   */
+  @Test
+  public void aChildInsertedAfterItsParentIsDeletedIsNeverCreated() throws Exception {
+    var parentId = "delete-first-%d".formatted(System.nanoTime());
+    var childId = parentId + "-child";
+    dbos.startWorkflow(
+        () -> proxy.startsChildWhenReleased(childId), new StartWorkflowOptions(parentId));
+    assertTrue(impl.parentWaiting.await(10, TimeUnit.SECONDS));
+
+    dbos.deleteWorkflow(parentId, true);
+    impl.startChild.countDown();
+    assertTrue(impl.childAttempted.await(30, TimeUnit.SECONDS));
+
+    assertTrue(dbos.getWorkflowStatus(parentId).isEmpty(), "the parent is deleted");
+    assertTrue(dbos.getWorkflowStatus(childId).isEmpty(), "the child's insert rolled back");
+  }
+
   @Test
   public void aCallFromInsideAStepRecordsNoCheckpointOfItsOwn() throws Exception {
     var targetId = startBlocked("target");

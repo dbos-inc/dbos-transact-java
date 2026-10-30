@@ -799,8 +799,10 @@ public class WorkflowDAO {
    * ends, so no hand-off can land between this check and the write it guards: a cancel, resume or
    * claim waits for that write to commit. The caller must be inside a transaction, or the lock
    * would end with this statement. A write that changes other rows in the same transaction makes
-   * them first and checks last, so every fenced write takes the status row last and none can
-   * deadlock with another.
+   * them first and checks last. That does not rule out a deadlock: a cancel or delete of a tree
+   * holds each target's row as it walks, so two workflows cancelling each other, or a delete racing
+   * a fenced write from one of the tree's descendants, can each wait on a row the other holds. The
+   * database aborts one with 40P01, and its retry runs as if the other had committed first.
    */
   public static void checkOwner(Connection conn, String schema, String workflowId, String ownerXid)
       throws SQLException {

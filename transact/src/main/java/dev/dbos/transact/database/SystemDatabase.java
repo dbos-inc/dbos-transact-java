@@ -1653,13 +1653,13 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.cancelWorkflow",
         conn -> {
-          // In the work, so it is logged when it runs, not when a replay returns its checkpoint.
+          WorkflowDAO.cancelWorkflows(
+              conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
+          // After the DAO, which refuses a self-target, and in the work, which a replay skips.
           logger.info(
               "Cancelling workflow(s) {}{}",
               workflowIds,
               cancelChildren ? " and their children" : "");
-          WorkflowDAO.cancelWorkflows(
-              conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
           return null;
         });
   }
@@ -1680,9 +1680,9 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.resumeWorkflow",
         conn -> {
-          logger.info("Resuming workflow(s) {}", workflowIds);
           WorkflowDAO.resumeWorkflows(
               conn, ctx.schema(), workflowIds, queueName, callerWorkflowId(caller));
+          logger.info("Resuming workflow(s) {}", workflowIds);
           return null;
         });
   }
@@ -1702,12 +1702,12 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.deleteWorkflow",
         conn -> {
+          WorkflowDAO.deleteWorkflows(
+              conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
           logger.info(
               "Deleting workflow(s) {}{}",
               workflowIds,
               deleteChildren ? " and their children" : "");
-          WorkflowDAO.deleteWorkflows(
-              conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
           return null;
         });
   }
@@ -1732,10 +1732,17 @@ public class SystemDatabase implements AutoCloseable {
    *   <li>Outside a workflow ({@code null}), {@code work} runs in a plain transaction.
    * </ul>
    *
-   * <p>The whole transaction is retried as {@link #dbRetryIncludingSerializationError} does. A
-   * retry after a commit whose acknowledgement was lost finds its own checkpoint and replays it. A
-   * failure worth retrying, a lost ownership, or a checkpoint that disagrees with this call is not
-   * recorded: only what {@code work} itself decided is.
+   * <p>The whole transaction is retried as {@link #dbRetryIncludingSerializationError} does. From
+   * the workflow body, a retry after a commit whose acknowledgement was lost finds its own
+   * checkpoint and replays it; from a step or outside a workflow there is none, so {@code work}
+   * runs again.
+   *
+   * <p>Whatever {@code work} throws once the retries end is recorded, a conflict that outlasted
+   * them included, so a workflow that catches it takes the same branch on replay. Not recorded: a
+   * lost ownership or a checkpoint that disagrees with this call, which are thrown outside {@code
+   * work}; a failed commit, whose outcome is unknown and which a replay settles by finding the
+   * checkpoint or not; and a failure an interrupt cut short, which stops the execution rather than
+   * answering the step.
    */
   <T> @Nullable T runTransactionalStep(
       @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
@@ -1824,7 +1831,7 @@ public class SystemDatabase implements AutoCloseable {
       if (step != null
           && failure != null
           && (e == failure || e.getCause() == failure)
-          && !isRetryableFailure(e)) {
+          && !Thread.currentThread().isInterrupted()) {
         recordStepError(step, stepName, e, startTime);
       }
       throw e;
@@ -1876,24 +1883,6 @@ public class SystemDatabase implements AutoCloseable {
       recordFailure.addSuppressed(error);
       throw recordFailure;
     }
-  }
-
-  /**
-   * Whether {@code t} is a database failure the retries would have kept trying, had something not
-   * stopped them: a serialization failure or deadlock that outlasted its retries, or a connection
-   * or transient failure cut short by an interrupt. Such a failure says nothing about the
-   * operation, so it is never recorded as its answer.
-   */
-  static boolean isRetryableFailure(Throwable t) {
-    if (isSerializationError(t)) {
-      return true;
-    }
-    for (var cause = t; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sql && classify(sql) != Failure.CALLERS) {
-        return true;
-      }
-    }
-    return false;
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
