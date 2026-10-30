@@ -27,7 +27,6 @@ import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.ErrorResult;
-import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.RewindOptions;
 import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
@@ -1286,7 +1285,8 @@ public class WorkflowDAO {
         findDeduplicationHolder(conn, ctx.schema(), queueName, deduplicationId));
   }
 
-  public static void setWorkflowDelay(DbContext ctx, String workflowId, long delayUntilEpochMs)
+  public static void setWorkflowDelay(
+      Connection conn, String schema, String workflowId, long delayUntilEpochMs)
       throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
 
@@ -1298,9 +1298,8 @@ public class WorkflowDAO {
            WHERE workflow_uuid = ?
              AND status = ?
         """
-            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
+    try (var stmt = conn.prepareStatement(sql)) {
       stmt.setLong(1, delayUntilEpochMs);
       stmt.setString(2, workflowId);
       stmt.setString(3, WorkflowState.DELAYED.name());
@@ -1316,7 +1315,8 @@ public class WorkflowDAO {
   }
 
   public static void updateWorkflowAttributes(
-      DbContext ctx, String workflowId, Map<String, Object> attributes) throws SQLException {
+      Connection conn, String schema, String workflowId, Map<String, Object> attributes)
+      throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
 
     var attributesJson = attributesToJson(attributes);
@@ -1327,9 +1327,8 @@ public class WorkflowDAO {
                  updated_at = %2$s
            WHERE workflow_uuid = ?
         """
-            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
+    try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, attributesJson);
       stmt.setString(2, workflowId);
       stmt.executeUpdate();
@@ -2148,33 +2147,12 @@ public class WorkflowDAO {
     return descendants;
   }
 
-  public static String forkWorkflow(
-      DbContext ctx, String workflowId, int startStep, ForkOptions options) throws SQLException {
-
-    options = Objects.requireNonNullElseGet(options, ForkOptions::new);
-
-    String forkedWorkflowId =
-        Objects.requireNonNullElseGet(
-            options.forkedWorkflowId(), () -> UUID.randomUUID().toString());
-
-    logger.debug("forkWorkflow Original id {} forked id {}", workflowId, forkedWorkflowId);
-
-    forkWorkflows(
-        ctx,
-        List.of(new WorkflowFork(workflowId, forkedWorkflowId, startStep)),
-        options.applicationVersion(),
-        options.queueName(),
-        options.queuePartitionKey(),
-        options.timeout());
-    return forkedWorkflowId;
-  }
-
   /**
    * Drops a terminal workflow's history from {@code startStep} on and re-enqueues it under the same
    * ID, so a replay re-executes everything from that step. Unlike a fork, this writes no new
    * workflow: peers keep addressing the same ID.
    *
-   * <p>In one transaction, from {@code startStep} on, it:
+   * <p>On the caller's transaction, from {@code startStep} on, it:
    *
    * <ul>
    *   <li>rolls each event published past the cut back to its last value from before the cut, or
@@ -2192,162 +2170,152 @@ public class WorkflowDAO {
    *     while being rewound
    */
   public static void rewindWorkflow(
-      DbContext ctx, String workflowId, int startStep, RewindOptions options) throws SQLException {
+      Connection conn, String schema, String workflowId, int startStep, RewindOptions options)
+      throws SQLException {
     // Function IDs start at 0, so 0 is the whole history.
     if (startStep < 0) {
       throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
     }
     Objects.requireNonNull(options, "RewindOptions must not be null");
-    var schema = ctx.schema();
 
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            var state = readRewindableState(conn, schema, workflowId);
+    var state = readRewindableState(conn, schema, workflowId);
 
-            // Whether a key was published at or past the cut. %2$s is the key column the
-            // correlated subquery compares against.
-            var publishedPastCut =
-                """
-                  EXISTS (
-                    SELECT 1 FROM "%1$s".workflow_events_history discarded
-                    WHERE discarded.workflow_uuid = ? AND discarded.key = %2$s
-                      AND discarded.function_id >= ?
-                  )
-                """;
+    // Whether a key was published at or past the cut. %2$s is the key column the
+    // correlated subquery compares against.
+    var publishedPastCut =
+        """
+          EXISTS (
+            SELECT 1 FROM "%1$s".workflow_events_history discarded
+            WHERE discarded.workflow_uuid = ? AND discarded.key = %2$s
+              AND discarded.function_id >= ?
+          )
+        """;
 
-            // workflow_events_history is the undo log for workflow_events, so the events are
-            // rolled back before the history past the cut is deleted. First unpublish every key
-            // the discarded steps published...
-            var unpublishSql =
-                ("""
-                  DELETE FROM "%1$s".workflow_events
-                  WHERE workflow_uuid = ? AND """
-                        + publishedPastCut)
-                    .formatted(schema, "\"%s\".workflow_events.key".formatted(schema));
-            try (var stmt = conn.prepareStatement(unpublishSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setString(2, workflowId);
-              stmt.setInt(3, startStep);
-              stmt.executeUpdate();
-            }
+    // workflow_events_history is the undo log for workflow_events, so the events are
+    // rolled back before the history past the cut is deleted. First unpublish every key
+    // the discarded steps published...
+    var unpublishSql =
+        ("""
+          DELETE FROM "%1$s".workflow_events
+          WHERE workflow_uuid = ? AND """
+                + publishedPastCut)
+            .formatted(schema, "\"%s\".workflow_events.key".formatted(schema));
+    try (var stmt = conn.prepareStatement(unpublishSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, workflowId);
+      stmt.setInt(3, startStep);
+      stmt.executeUpdate();
+    }
 
-            // ...then restore those keys to the last value published before the cut, if any.
-            var restoreSql =
-                ("""
-                  INSERT INTO "%1$s".workflow_events (workflow_uuid, key, value, serialization)
-                  SELECT surviving.workflow_uuid, surviving.key, surviving.value,
-                         surviving.serialization
-                  FROM (
-                    SELECT weh.workflow_uuid, weh.key, weh.value, weh.serialization,
-                           ROW_NUMBER() OVER (PARTITION BY weh.key ORDER BY weh.function_id DESC)
-                             AS rn
-                    FROM "%1$s".workflow_events_history weh
-                    WHERE weh.workflow_uuid = ? AND weh.function_id < ? AND """
-                        + publishedPastCut
-                        + """
-                  ) surviving
-                  WHERE surviving.rn = 1
-                """)
-                    .formatted(schema, "weh.key");
-            try (var stmt = conn.prepareStatement(restoreSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setInt(2, startStep);
-              stmt.setString(3, workflowId);
-              stmt.setInt(4, startStep);
-              stmt.executeUpdate();
-            }
+    // ...then restore those keys to the last value published before the cut, if any.
+    var restoreSql =
+        ("""
+          INSERT INTO "%1$s".workflow_events (workflow_uuid, key, value, serialization)
+          SELECT surviving.workflow_uuid, surviving.key, surviving.value,
+                 surviving.serialization
+          FROM (
+            SELECT weh.workflow_uuid, weh.key, weh.value, weh.serialization,
+                   ROW_NUMBER() OVER (PARTITION BY weh.key ORDER BY weh.function_id DESC)
+                     AS rn
+            FROM "%1$s".workflow_events_history weh
+            WHERE weh.workflow_uuid = ? AND weh.function_id < ? AND """
+                + publishedPastCut
+                + """
+          ) surviving
+          WHERE surviving.rn = 1
+        """)
+            .formatted(schema, "weh.key");
+    try (var stmt = conn.prepareStatement(restoreSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, startStep);
+      stmt.setString(3, workflowId);
+      stmt.setInt(4, startStep);
+      stmt.executeUpdate();
+    }
 
-            StreamsDAO.deleteCloseSentinels(conn, schema, workflowId, startStep);
+    StreamsDAO.deleteCloseSentinels(conn, schema, workflowId, startStep);
 
-            for (var table : List.of("operation_outputs", "workflow_events_history")) {
-              var deleteSql =
-                  """
-                    DELETE FROM "%s".%s WHERE workflow_uuid = ? AND function_id >= ?
-                  """
-                      .formatted(schema, table);
-              try (var stmt = conn.prepareStatement(deleteSql)) {
-                stmt.setString(1, workflowId);
-                stmt.setInt(2, startStep);
-                stmt.executeUpdate();
-              }
-            }
+    for (var table : List.of("operation_outputs", "workflow_events_history")) {
+      var deleteSql =
+          """
+            DELETE FROM "%s".%s WHERE workflow_uuid = ? AND function_id >= ?
+          """
+              .formatted(schema, table);
+      try (var stmt = conn.prepareStatement(deleteSql)) {
+        stmt.setString(1, workflowId);
+        stmt.setInt(2, startStep);
+        stmt.executeUpdate();
+      }
+    }
 
-            var notificationsSql =
-                """
-                  DELETE FROM "%s".notifications
-                  WHERE destination_uuid = ?
-                    AND (consumed_by_function_id >= ? OR consumed = FALSE)
-                """
-                    .formatted(schema);
-            try (var stmt = conn.prepareStatement(notificationsSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setInt(2, startStep);
-              stmt.executeUpdate();
-            }
+    var notificationsSql =
+        """
+          DELETE FROM "%s".notifications
+          WHERE destination_uuid = ?
+            AND (consumed_by_function_id >= ? OR consumed = FALSE)
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(notificationsSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, startStep);
+      stmt.executeUpdate();
+    }
 
-            var outputSql =
-                """
-                  DELETE FROM "%s".workflow_output WHERE workflow_uuid = ?
-                """
-                    .formatted(schema);
-            try (var stmt = conn.prepareStatement(outputSql)) {
-              stmt.setString(1, workflowId);
-              stmt.executeUpdate();
-            }
+    var outputSql =
+        """
+          DELETE FROM "%s".workflow_output WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(outputSql)) {
+      stmt.setString(1, workflowId);
+      stmt.executeUpdate();
+    }
 
-            // Re-enqueue. The legacy output and error columns are cleared too: reads fall back to
-            // them when there is no workflow_output row, so a value left there would be returned
-            // as the rewound workflow's result. Re-asserting the status read above keeps a
-            // workflow that moved on underneath this transaction from being resurrected.
-            var setVersion =
-                options.applicationVersion() != null ? ", application_version = ?" : "";
-            var enqueueSql =
-                """
-                  UPDATE "%1$s".workflow_status
-                  SET status = ?, owner_xid = NULL, queue_name = ?, queue_partition_key = ?,
-                      recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
-                      deduplication_id = NULL, started_at_epoch_ms = NULL, completed_at = NULL,
-                      output = NULL, error = NULL, updated_at = %2$s%3$s
-                  WHERE workflow_uuid = ? AND status = ?
-                """
-                    .formatted(schema, SystemDatabase.NOW_EPOCH_MS, setVersion);
-            try (var stmt = conn.prepareStatement(enqueueSql)) {
-              int i = 1;
-              stmt.setString(i++, WorkflowState.ENQUEUED.name());
-              stmt.setString(
-                  i++,
-                  Objects.requireNonNullElse(options.queueName(), Constants.DBOS_INTERNAL_QUEUE));
-              stmt.setString(i++, options.queuePartitionKey());
-              if (options.applicationVersion() != null) {
-                stmt.setString(i++, options.applicationVersion());
-              }
-              stmt.setString(i++, workflowId);
-              stmt.setString(i++, state.name());
-              if (stmt.executeUpdate() != 1) {
-                throw new IllegalStateException(
-                    "Workflow %s changed status while being rewound; retry the rewind"
-                        .formatted(workflowId));
-              }
-            }
-          });
+    // Re-enqueue. The legacy output and error columns are cleared too: reads fall back to
+    // them when there is no workflow_output row, so a value left there would be returned
+    // as the rewound workflow's result. Re-asserting the status read above keeps a
+    // workflow that moved on underneath this transaction from being resurrected.
+    var setVersion = options.applicationVersion() != null ? ", application_version = ?" : "";
+    var enqueueSql =
+        """
+          UPDATE "%1$s".workflow_status
+          SET status = ?, owner_xid = NULL, queue_name = ?, queue_partition_key = ?,
+              recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
+              deduplication_id = NULL, started_at_epoch_ms = NULL, completed_at = NULL,
+              output = NULL, error = NULL, updated_at = %2$s%3$s
+          WHERE workflow_uuid = ? AND status = ?
+        """
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS, setVersion);
+    try (var stmt = conn.prepareStatement(enqueueSql)) {
+      int i = 1;
+      stmt.setString(i++, WorkflowState.ENQUEUED.name());
+      stmt.setString(
+          i++, Objects.requireNonNullElse(options.queueName(), Constants.DBOS_INTERNAL_QUEUE));
+      stmt.setString(i++, options.queuePartitionKey());
+      if (options.applicationVersion() != null) {
+        stmt.setString(i++, options.applicationVersion());
+      }
+      stmt.setString(i++, workflowId);
+      stmt.setString(i++, state.name());
+      if (stmt.executeUpdate() != 1) {
+        throw new IllegalStateException(
+            "Workflow %s changed status while being rewound; retry the rewind"
+                .formatted(workflowId));
+      }
     }
   }
 
   /**
    * Checks that a workflow can be rewound, without changing anything: it must exist and be in a
-   * terminal state. A rewind repeats this check in its own transaction; this one lets a caller
-   * refuse before touching anything outside the system database.
+   * terminal state. A rewind repeats this check; this one lets a caller refuse before touching
+   * anything outside the system database.
    */
-  public static void checkRewindable(DbContext ctx, String workflowId, int startStep)
-      throws SQLException {
+  public static void checkRewindable(
+      Connection conn, String schema, String workflowId, int startStep) throws SQLException {
     if (startStep < 0) {
       throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
     }
-    try (var conn = ctx.getConnection()) {
-      readRewindableState(conn, ctx.schema(), workflowId);
-    }
+    readRewindableState(conn, schema, workflowId);
   }
 
   private static WorkflowState readRewindableState(
@@ -2366,11 +2334,12 @@ public class WorkflowDAO {
   }
 
   /**
-   * Forks workflows in one transaction, each under its fork's ID and from its fork's start step.
-   * Fails, writing nothing, if any of them does not exist.
+   * Forks workflows on the caller's transaction, each under its fork's ID and from its fork's start
+   * step. Fails if any of them does not exist.
    */
   public static void forkWorkflows(
       DbContext ctx,
+      Connection conn,
       List<WorkflowFork> forks,
       @Nullable String applicationVersion,
       @Nullable String queueName,
@@ -2386,48 +2355,36 @@ public class WorkflowDAO {
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
     final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
 
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
-            for (String id : workflowIds) {
-              if (!wfDataMap.containsKey(id)) {
-                throw new DBOSNonExistentWorkflowException(id);
-              }
-            }
-            var rows =
-                forks.stream()
-                    .map(
-                        fork -> {
-                          var original = wfDataMap.get(fork.workflowId());
-                          // One app name per fork, shared by its status row and its copied steps:
-                          // the source's, or this application claiming an unclaimed one.
-                          var appName =
-                              original.applicationName() != null
-                                  ? original.applicationName()
-                                  : ctx.appName();
-                          return new ForkRow(fork, original, appName);
-                        })
-                    .toList();
+    var wfDataMap = fetchForkWorkflowData(conn, ctx.schema(), workflowIds);
+    for (String id : workflowIds) {
+      if (!wfDataMap.containsKey(id)) {
+        throw new DBOSNonExistentWorkflowException(id);
+      }
+    }
+    var rows =
+        forks.stream()
+            .map(
+                fork -> {
+                  var original = wfDataMap.get(fork.workflowId());
+                  // One app name per fork, shared by its status row and its copied steps:
+                  // the source's, or this application claiming an unclaimed one.
+                  var appName =
+                      original.applicationName() != null
+                          ? original.applicationName()
+                          : ctx.appName();
+                  return new ForkRow(fork, original, appName);
+                })
+            .toList();
 
-            batchInsertForkedStatuses(
-                conn,
-                ctx.schema(),
-                rows,
-                applicationVersion,
-                forkQueueName,
-                queuePartitionKey,
-                timeoutMs);
+    batchInsertForkedStatuses(
+        conn, ctx.schema(), rows, applicationVersion, forkQueueName, queuePartitionKey, timeoutMs);
 
-            markWasForkedFrom(conn, ctx.schema(), workflowIds);
+    markWasForkedFrom(conn, ctx.schema(), workflowIds);
 
-            // A fork from step 0 has nothing before its start step to copy.
-            var rowsToCopy = rows.stream().filter(row -> row.fork().startStep() > 0).toList();
-            if (!rowsToCopy.isEmpty()) {
-              batchCopyWorkflowData(conn, ctx.schema(), rowsToCopy);
-            }
-          });
+    // A fork from step 0 has nothing before its start step to copy.
+    var rowsToCopy = rows.stream().filter(row -> row.fork().startStep() > 0).toList();
+    if (!rowsToCopy.isEmpty()) {
+      batchCopyWorkflowData(conn, ctx.schema(), rowsToCopy);
     }
   }
 
