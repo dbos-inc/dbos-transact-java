@@ -1864,22 +1864,17 @@ public class WorkflowDAO {
     refuseSelfTarget(callerWorkflowId, roots, "cancel");
 
     if (!cancelChildren) {
-      cancelBatch(conn, schema, roots);
+      applyLevel(conn, cancelStatements(schema), roots, null);
       return;
     }
 
-    walkTree(conn, schema, roots, callerWorkflowId, "cancel", WorkflowDAO::cancelBatch);
-  }
-
-  /** What a tree walk does to each level of the tree, on the walk's transaction. */
-  @FunctionalInterface
-  private interface LevelAction {
-    void apply(Connection conn, String schema, Collection<String> level) throws SQLException;
+    walkTree(conn, schema, roots, callerWorkflowId, "cancel", cancelStatements(schema));
   }
 
   /**
-   * Applies {@code onLevel} to the roots and then to each level of their descendants in turn, each
-   * level before its children are read, on the caller's transaction.
+   * Runs {@code levelStatements} on the roots and then on each level of their descendants in turn,
+   * each level before its children are read, on the caller's transaction. A level's statements and
+   * the read of its children go to the database in one round trip; see {@link #applyLevel}.
    *
    * <p>A walk that reaches the calling workflow is an {@code action} on a tree the caller is
    * inside, and is refused there: the levels above have been acted on by now, and the refusal rolls
@@ -1892,7 +1887,7 @@ public class WorkflowDAO {
       Collection<String> roots,
       @Nullable String callerWorkflowId,
       String action,
-      LevelAction onLevel)
+      List<String> levelStatements)
       throws SQLException {
     var rootOf = new HashMap<String, String>();
     roots.forEach(root -> rootOf.put(root, root));
@@ -1903,9 +1898,9 @@ public class WorkflowDAO {
             "workflow %s cannot %s the tree of %s, which contains it"
                 .formatted(callerWorkflowId, action, rootOf.get(callerWorkflowId)));
       }
-      onLevel.apply(conn, schema, frontier);
+      var children = applyLevel(conn, levelStatements, frontier, childrenSql(schema));
       var next = new ArrayList<String>();
-      for (var child : getDirectChildren(conn, schema, frontier).entrySet()) {
+      for (var child : children.entrySet()) {
         if (rootOf.putIfAbsent(child.getKey(), rootOf.get(child.getValue())) == null) {
           next.add(child.getKey());
         }
@@ -1947,13 +1942,12 @@ public class WorkflowDAO {
     }
   }
 
-  /** Cancels the given workflows in one statement, on the caller's transaction. */
-  private static void cancelBatch(Connection conn, String schema, Collection<String> workflowIds)
-      throws SQLException {
-    String sql =
+  /** What a cancel does to a level of workflows, given as {@code ANY(?)}. */
+  private static List<String> cancelStatements(String schema) {
+    return List.of(
         """
           UPDATE "%1$s".workflow_status
-          SET status = ?,
+          SET status = '%3$s',
               queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
@@ -1961,22 +1955,84 @@ public class WorkflowDAO {
               updated_at = %2$s,
               completed_at = %2$s
           WHERE workflow_uuid = ANY(?)
-            AND status NOT IN (?, ?)
+            AND status NOT IN ('%4$s', '%5$s')
         """
-            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
+            .formatted(
+                schema,
+                SystemDatabase.NOW_EPOCH_MS,
+                WorkflowState.CANCELLED.name(),
+                WorkflowState.SUCCESS.name(),
+                WorkflowState.ERROR.name()));
+  }
 
-    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+  /**
+   * What a delete does to a level of workflows, given as {@code ANY(?)}: every row they have.
+   *
+   * <p>workflow_input and workflow_output (migration 109) have no foreign key, so a status delete
+   * was never going to take them. Migration 112 then drops the operation_outputs cascade, leaving
+   * all three the same: nothing follows a status row out on its own, so each is cleared by ID.
+   */
+  private static List<String> deleteStatements(String schema) {
+    return List.of("workflow_status", "operation_outputs", "workflow_input", "workflow_output")
+        .stream()
+        .map(table -> "DELETE FROM \"%s\".%s WHERE workflow_uuid = ANY(?)".formatted(schema, table))
+        .toList();
+  }
+
+  /** Reads a level's direct children, given as {@code ANY(?)}, each with its parent. */
+  private static String childrenSql(String schema) {
+    return """
+          SELECT workflow_uuid, parent_workflow_id
+          FROM "%s".workflow_status
+          WHERE parent_workflow_id = ANY(?)
+        """
+        .formatted(schema);
+  }
+
+  /**
+   * Runs {@code statements}, each taking {@code level} as its only parameter, and then {@code
+   * readChildren} if given, in one round trip on the caller's transaction, and returns the children
+   * it read, each mapped to its parent.
+   *
+   * <p>One prepared statement carries them all, and the driver sends them as separate statements in
+   * a single flush. The server still runs them one after another, each on a snapshot of its own
+   * under READ COMMITTED, so the read sees a child whose insert held a parent's lock until the
+   * writes before it could proceed. One statement would not: a single snapshot, taken before any
+   * wait, would hide that child.
+   */
+  private static Map<String, String> applyLevel(
+      Connection conn,
+      List<String> statements,
+      Collection<String> level,
+      @Nullable String readChildren)
+      throws SQLException {
+    var sql = new ArrayList<>(statements);
+    if (readChildren != null) {
+      sql.add(readChildren);
+    }
+    var children = new HashMap<String, String>();
+    try (var stmt = conn.prepareStatement(String.join(";\n", sql))) {
+      var array = conn.createArrayOf("text", level.toArray(String[]::new));
       try {
-        stmt.setString(1, WorkflowState.CANCELLED.name());
-        stmt.setArray(2, array);
-        stmt.setString(3, WorkflowState.SUCCESS.name());
-        stmt.setString(4, WorkflowState.ERROR.name());
-        stmt.executeUpdate();
+        for (int i = 1; i <= sql.size(); i++) {
+          stmt.setArray(i, array);
+        }
+        boolean isResultSet = stmt.execute();
+        while (isResultSet || stmt.getUpdateCount() != -1) {
+          if (isResultSet) {
+            try (var rs = stmt.getResultSet()) {
+              while (rs.next()) {
+                children.put(rs.getString(1), rs.getString(2));
+              }
+            }
+          }
+          isResultSet = stmt.getMoreResults();
+        }
       } finally {
         array.free();
       }
     }
+    return children;
   }
 
   /**
@@ -2056,38 +2112,13 @@ public class WorkflowDAO {
     refuseSelfTarget(callerWorkflowId, filtered, "delete");
 
     if (!deleteChildren) {
-      deleteBatch(conn, schema, filtered);
+      applyLevel(conn, deleteStatements(schema), filtered, null);
       return;
     }
     // Each level is deleted before its children are read, as a cancel's is, so a child whose
     // insert holds its parent's lock is read once it commits, and one inserted later finds its
     // parent gone. The children are still found by their own parent_workflow_id.
-    walkTree(conn, schema, filtered, callerWorkflowId, "delete", WorkflowDAO::deleteBatch);
-  }
-
-  /**
-   * Deletes the given workflows and their rows in every other table, on the caller's transaction.
-   */
-  private static void deleteBatch(Connection conn, String schema, Collection<String> workflowIds)
-      throws SQLException {
-    var sql =
-        """
-          DELETE FROM "%s".workflow_status
-          WHERE workflow_uuid = ANY(?);
-        """
-            .formatted(schema);
-
-    var ids = workflowIds.toArray(String[]::new);
-    try (var stmt = conn.prepareStatement(sql)) {
-      var array = conn.createArrayOf("text", ids);
-      try {
-        stmt.setArray(1, array);
-        stmt.executeUpdate();
-      } finally {
-        array.free();
-      }
-    }
-    deleteWorkflowChildRows(conn, schema, ids);
+    walkTree(conn, schema, filtered, callerWorkflowId, "delete", deleteStatements(schema));
   }
 
   /** The direct children of the given workflows, each mapped to its parent. */
@@ -2636,29 +2667,6 @@ public class WorkflowDAO {
           stmt.setString(p++, row.appName());
         }
         stmt.executeUpdate();
-      }
-    }
-  }
-
-  // workflow_input and workflow_output (migration 109) have no foreign key, so a status delete
-  // was never going to take them. Migration 112 then drops the operation_outputs cascade, leaving
-  // all three the same: nothing follows a status row out on its own. Every delete path clears all
-  // three by ID.
-  private static void deleteWorkflowChildRows(Connection conn, String schema, String[] workflowIds)
-      throws SQLException {
-    if (workflowIds.length == 0) {
-      return;
-    }
-    for (var table : List.of("operation_outputs", "workflow_input", "workflow_output")) {
-      var sql = "DELETE FROM \"%s\".%s WHERE workflow_uuid = ANY(?)".formatted(schema, table);
-      try (var stmt = conn.prepareStatement(sql)) {
-        var array = conn.createArrayOf("text", workflowIds);
-        try {
-          stmt.setArray(1, array);
-          stmt.executeUpdate();
-        } finally {
-          array.free();
-        }
       }
     }
   }
