@@ -1043,10 +1043,9 @@ public class WorkflowDAO {
    * <p>The new inputs are {@code args} serialized in {@code serializationFormat}, the workflow's
    * registered format (null for the default), with this database's serializer.
    *
-   * <p>With a {@code caller}, the bounce is that caller's step: if the step already ran, what it
-   * recorded is returned and nothing is touched; otherwise the bounce and its checkpoint commit
-   * together, so a crash can never leave the row extended but the step unrecorded, which on replay
-   * would bounce again.
+   * <p>Runs on the caller's transaction, which commits the bounce with the caller's step, if any,
+   * so a crash can never leave the row extended but the step unrecorded, which on replay would
+   * bounce again.
    *
    * <p>With {@code ids}, the bounce is the debouncer's first step, which records the ids it assigns
    * with the outcome, as that step has always recorded them. When nothing was extended, the same

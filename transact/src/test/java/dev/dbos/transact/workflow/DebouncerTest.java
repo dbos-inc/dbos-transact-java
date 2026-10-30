@@ -1150,6 +1150,44 @@ public class DebouncerTest {
   }
 
   /**
+   * The same collision inside a workflow: the takeover rolls back, and its step records that it
+   * took nothing over, so a replay returns null again without depending on how the serializer
+   * restores exceptions.
+   */
+  @Test
+  @ResourceLock(
+      value = DebugTriggers.DEBUG_TRIGGER_DEBOUNCE_TAKEOVER,
+      mode = ResourceAccessMode.READ)
+  public void aCollidingTakeoverInsideAWorkflowRecordsNothingTakenOver() throws Exception {
+    dbos.registerProxy(DebouncedService.class, serviceImpl);
+    var runnerImpl = new TakeoverRunnerImpl();
+    TakeoverRunner runner = dbos.registerProxy(TakeoverRunner.class, runnerImpl);
+    dbos.launch();
+    var queue = "takeover-collision-in-workflow";
+    dbos.registerQueue(queue, new QueueOptions());
+    var stranded = plantDebouncerWorkflow("mixed", "promised-18", queue, "no-such-version");
+    DebouncedRows.insert(
+        pgContainer.dataSource(),
+        debouncedRow(queue, "process", System.currentTimeMillis() + 60_000));
+    runnerImpl.body = () -> takeOver(stranded, "mixed", "fresh", queue);
+
+    var runnerId = "wf-colliding-takeover";
+    try (var o = new WorkflowOptions(runnerId).setContext()) {
+      assertNull(runner.run());
+    }
+    var steps =
+        dbos.listWorkflowSteps(runnerId).stream()
+            .filter(step -> step.functionName().equals("DBOS.takeOverStrandedDebouncer"))
+            .toList();
+    assertEquals(1, steps.size());
+    assertNull(steps.get(0).error(), "the collision is not an error");
+
+    assertNull(replay(runnerId));
+    assertEquals(WorkflowState.ENQUEUED, dbos.retrieveWorkflow(stranded).getStatus().status());
+    assertTrue(dbos.getWorkflowStatus("promised-18").isEmpty());
+  }
+
+  /**
    * Inside a workflow the takeover is a step, checkpointed in the transaction that cancels the
    * debouncer workflow and creates the promised one, and a replay returns it rather than cancelling
    * or creating again.
@@ -1844,5 +1882,19 @@ public class DebouncerTest {
       stmt.setString(3, workflowId);
       assertEquals(1, stmt.executeUpdate());
     }
+  }
+}
+
+interface TakeoverRunner {
+  String run();
+}
+
+class TakeoverRunnerImpl implements TakeoverRunner {
+  java.util.function.Supplier<String> body;
+
+  @Override
+  @Workflow
+  public String run() {
+    return body.get();
   }
 }

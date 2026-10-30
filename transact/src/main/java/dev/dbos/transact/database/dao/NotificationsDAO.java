@@ -190,11 +190,11 @@ public class NotificationsDAO {
     /** The step already ran: what it received, or null if it received nothing. */
     record Replayed(@Nullable Object message) implements RecvWait {}
 
-    /** The timeout passed with no message. */
-    record TimedOut() implements RecvWait {}
+    /** The timeout passed with no message; the wait began at {@code startedAtEpochMs}. */
+    record TimedOut(long startedAtEpochMs) implements RecvWait {}
 
-    /** A message is waiting to be claimed. */
-    record Ready() implements RecvWait {}
+    /** A message is waiting to be claimed; the wait began at {@code startedAtEpochMs}. */
+    record Ready(long startedAtEpochMs) implements RecvWait {}
   }
 
   /**
@@ -236,6 +236,7 @@ public class NotificationsDAO {
     logger.debug(
         "Running recv, workflowId: {}, stepId: {}, topic: {}", workflowId, stepId, recvTopic);
 
+    var startTime = System.currentTimeMillis();
     var messageKey = new SignalKey.Message(workflowId, recvTopic);
     var selectSql =
         """
@@ -255,7 +256,7 @@ public class NotificationsDAO {
           stmt.setString(2, recvTopic);
           try (var rs = stmt.executeQuery()) {
             if (rs.next()) {
-              return new RecvWait.Ready();
+              return new RecvWait.Ready(startTime);
             }
           }
           WorkflowDAO.checkWorkflow(conn, ctx.schema(), workflowId, ownerXid);
@@ -263,7 +264,7 @@ public class NotificationsDAO {
 
         var duration = Duration.between(Instant.now(), timeoutAt);
         if (duration.isNegative() || duration.isZero()) {
-          return new RecvWait.TimedOut();
+          return new RecvWait.TimedOut(startTime);
         }
 
         var loopDuration =

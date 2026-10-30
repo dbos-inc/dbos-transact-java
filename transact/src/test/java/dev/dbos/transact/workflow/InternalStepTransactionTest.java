@@ -226,6 +226,44 @@ public class InternalStepTransactionTest {
     assertEquals(1, stepsNamed(receiverId, "DBOS.recv").size());
   }
 
+  /**
+   * A send records neither output nor serialization, as earlier releases did, and a replay of that
+   * row returns rather than sending again or refusing the row.
+   */
+  @Test
+  public void aSendRecordsNoOutputAndReplays() throws Exception {
+    var destinationId = "destination-%d".formatted(System.nanoTime());
+    dbos.startWorkflow(proxy::quick, new StartWorkflowOptions(destinationId)).getResult();
+    var callerId = "caller-%d".formatted(System.nanoTime());
+
+    assertEquals(
+        "sent",
+        dbos.startWorkflow(() -> proxy.sends(destinationId), new StartWorkflowOptions(callerId))
+            .getResult());
+    var recorded = stepsNamed(callerId, "DBOS.send");
+    assertEquals(1, recorded.size());
+    assertNull(recorded.get(0).output());
+    assertNull(recorded.get(0).error());
+
+    assertEquals("sent", dbos.<String, RuntimeException>forkWorkflow(callerId, 1).getResult());
+  }
+
+  @Test
+  public void aTimedOutRecvIsRecordedFromTheStartOfItsWait() throws Exception {
+    var receiverId = "receiver-%d".formatted(System.nanoTime());
+
+    assertEquals(
+        "nothing",
+        dbos.startWorkflow(() -> proxy.receivesFor(1000), new StartWorkflowOptions(receiverId))
+            .getResult());
+    var recorded = stepsNamed(receiverId, "DBOS.recv");
+    assertEquals(1, recorded.size());
+    var step = recorded.get(0);
+    assertTrue(
+        step.completedAtEpochMs() - step.startedAtEpochMs() >= 900,
+        "recorded %d ms".formatted(step.completedAtEpochMs() - step.startedAtEpochMs()));
+  }
+
   @Test
   public void aForkThatFailsBeforeCommitLeavesNoFork() throws Exception {
     var sourceId = "source-%d".formatted(System.nanoTime());
@@ -485,6 +523,8 @@ interface InternalStepService {
 
   String receives();
 
+  String receivesFor(long millis);
+
   String sends(String destinationId);
 
   String rewinds(String targetId);
@@ -587,6 +627,12 @@ class InternalStepServiceImpl implements InternalStepService {
     } catch (DBOSNonExistentWorkflowException e) {
       return "refused";
     }
+  }
+
+  @Override
+  @Workflow
+  public String receivesFor(long millis) {
+    return dbos.<String>recv("topic", Duration.ofMillis(millis)).orElse("nothing");
   }
 
   @Override

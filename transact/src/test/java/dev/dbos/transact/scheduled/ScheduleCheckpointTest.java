@@ -6,13 +6,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 /**
  * A schedule written from a workflow commits with its checkpoint, and a refusal is recorded as the
@@ -57,6 +62,38 @@ class ScheduleCheckpointTest {
     dbos.deleteSchedule(name);
     assertEquals("refused", dbos.<String, RuntimeException>forkWorkflow(workflowId, 1).getResult());
     assertTrue(dbos.getSchedule(name).isEmpty(), "the replay created nothing");
+  }
+
+  @Test
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT)
+  public void aCreateThatFailsBeforeCommitLeavesNoSchedule() throws Exception {
+    var name = "crashed-%d".formatted(System.nanoTime());
+    var workflowId = "creator-%d".formatted(System.nanoTime());
+    var fired = new AtomicBoolean();
+    // Armed for this workflow only: the trigger is global, and other classes' steps pass it.
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+        new DebugTriggers.DebugAction()
+            .setCallback(
+                () -> {
+                  if (workflowId.equals(DBOSContextHolder.get().getWorkflowId())
+                      && fired.compareAndSet(false, true)) {
+                    throw new RuntimeException("crash");
+                  }
+                }));
+    String result;
+    try {
+      result =
+          dbos.startWorkflow(() -> proxy.creates(name), new StartWorkflowOptions(workflowId))
+              .getResult();
+    } finally {
+      DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT);
+    }
+
+    assertEquals("refused", result);
+    assertTrue(fired.get());
+    assertTrue(dbos.getSchedule(name).isEmpty(), "the schedule rolled back with the step");
+    assertTrue(dbos.listWorkflowSteps(workflowId).isEmpty(), "and so did its checkpoint");
   }
 }
 
