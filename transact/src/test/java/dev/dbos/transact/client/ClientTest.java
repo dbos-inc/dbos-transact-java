@@ -233,14 +233,6 @@ public class ClientTest {
                       .withTimeout(Duration.ofSeconds(1))
                       .withDeadline(Instant.now()),
                   new Object[] {42, "spam"}));
-      assertThrows(
-          IllegalArgumentException.class,
-          () ->
-              client.enqueueWorkflow(
-                  new EnqueueOptions("wf", QueueName.of("q"))
-                      .withDeduplicationId("dedupe")
-                      .withQueuePartitionKey("qpk"),
-                  new Object[] {42, "spam"}));
     }
   }
 

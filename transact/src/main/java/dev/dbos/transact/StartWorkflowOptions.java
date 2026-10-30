@@ -47,7 +47,7 @@ import org.jspecify.annotations.Nullable;
  * @param queueName Optional name of the queue to which the workflow should be enqueued for
  *     execution. May be null.
  * @param deduplicationId If {@code queueName} is specified, an optional ID used to prevent
- *     duplicate enqueued workflows. May be null.
+ *     duplicate enqueued workflows, across every partition of the queue. May be null.
  * @param priority If {@code queueName} is specified, the priority to assign; lower values are
  *     dequeued first, and the default is 0. Must not be negative. May be null.
  * @param queuePartitionKey If {@code queueName} is specified, an optional partition key used to
@@ -351,6 +351,13 @@ public record StartWorkflowOptions(
    * Returns a new StartWorkflowOptions with the specified queue deduplication ID. Note: The queue
    * must also be specified for deduplication to take effect.
    *
+   * <p>Deduplication spans the whole queue, across its partitions: while a workflow enqueued with
+   * this ID is delayed, enqueued or running, another enqueue with the same ID is refused with
+   * {@link dev.dbos.transact.exceptions.DBOSQueueDuplicatedException}, whatever its partition key.
+   * The ID is released when that workflow completes, fails or is cancelled, or is resumed or
+   * rewound. To deduplicate within one partition, include the partition key in the ID, such as
+   * {@code "<partition>:<key>"}.
+   *
    * @param deduplicationId the deduplication ID to assign
    * @return a new StartWorkflowOptions with the updated deduplication ID
    */
@@ -399,7 +406,8 @@ public record StartWorkflowOptions(
   }
 
   /**
-   * Returns a new StartWorkflowOptions with the specified queue partition key.
+   * Returns a new StartWorkflowOptions with the specified queue partition key. A deduplication ID
+   * still applies across every partition of the queue; see {@link #withDeduplicationId(String)}.
    *
    * @param queuePartitionKey the partition key to assign
    * @return a new StartWorkflowOptions with the updated partition key
