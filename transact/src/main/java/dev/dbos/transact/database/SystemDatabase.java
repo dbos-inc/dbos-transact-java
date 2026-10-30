@@ -1709,19 +1709,21 @@ public class SystemDatabase implements AutoCloseable {
    */
   public void cancelWorkflows(
       List<String> workflowIds, boolean cancelChildren, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.cancelWorkflow",
         conn -> {
           WorkflowDAO.cancelWorkflows(
               conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
-          // After the DAO, which refuses a self-target, and in the work, which a replay skips.
-          logger.info(
-              "Cancelling workflow(s) {}{}",
-              workflowIds,
-              cancelChildren ? " and their children" : "");
+          ran.set(true);
           return null;
         });
+    // Once, after the commit, and only when the work ran rather than a replay of its checkpoint.
+    if (ran.get()) {
+      logger.info(
+          "Cancelled workflow(s) {}{}", workflowIds, cancelChildren ? " and their children" : "");
+    }
   }
 
   /**
@@ -1736,15 +1738,19 @@ public class SystemDatabase implements AutoCloseable {
   /** Resumes the workflows as the step {@code caller} makes; see {@link #runTransactionalStep}. */
   public void resumeWorkflows(
       List<String> workflowIds, String queueName, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.resumeWorkflow",
         conn -> {
           WorkflowDAO.resumeWorkflows(
               conn, ctx.schema(), workflowIds, queueName, callerWorkflowId(caller));
-          logger.info("Resuming workflow(s) {}", workflowIds);
+          ran.set(true);
           return null;
         });
+    if (ran.get()) {
+      logger.info("Resumed workflow(s) {}", workflowIds);
+    }
   }
 
   /**
@@ -1770,18 +1776,20 @@ public class SystemDatabase implements AutoCloseable {
    */
   public void deleteWorkflows(
       List<String> workflowIds, boolean deleteChildren, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.deleteWorkflow",
         conn -> {
           WorkflowDAO.deleteWorkflows(
               conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
-          logger.info(
-              "Deleting workflow(s) {}{}",
-              workflowIds,
-              deleteChildren ? " and their children" : "");
+          ran.set(true);
           return null;
         });
+    if (ran.get()) {
+      logger.info(
+          "Deleted workflow(s) {}{}", workflowIds, deleteChildren ? " and their children" : "");
+    }
   }
 
   /** The workflow a call is made from, from its body or a step, or null outside any workflow. */
@@ -1810,11 +1818,12 @@ public class SystemDatabase implements AutoCloseable {
    * runs again.
    *
    * <p>Whatever {@code work} throws once the retries end is recorded, a conflict that outlasted
-   * them included, so a workflow that catches it takes the same branch on replay. Not recorded: a
-   * lost ownership or a checkpoint that disagrees with this call, which are thrown outside {@code
-   * work}; a failed commit, whose outcome is unknown and which a replay settles by finding the
-   * checkpoint or not; and a failure an interrupt cut short, which stops the execution rather than
-   * answering the step.
+   * them included, so a workflow that catches it takes the same branch on replay. Only what {@code
+   * work} throws is: a failure of the step check or of the record around it is not, so neither is a
+   * conflict the database happened to raise there rather than in {@code work}, nor a lost ownership
+   * or a checkpoint that disagrees with this call. Nor are a failed commit, whose outcome is
+   * unknown and which a replay settles by finding the checkpoint or not, and a failure an interrupt
+   * cut short, which stops the execution rather than answering the step.
    */
   <T> @Nullable T runTransactionalStep(
       @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
@@ -2049,9 +2058,9 @@ public class SystemDatabase implements AutoCloseable {
    * rewindable, and before its system database history is touched. The executor validates the queue
    * there and clears the transactional step factories' checkpoints. Those deletes go through the
    * factories' own connections, a second one from this pool if a factory shares it, and so commit
-   * on their own: a rewind that then rolls back leaves them cleared, and the workflow terminal and
-   * not re-enqueued, so nothing runs against the partial history, and since the deletes are
-   * idempotent the rewind can be retried.
+   * on their own: a rewind that then rolls back leaves them cleared and the workflow terminal and
+   * not re-enqueued. Retrying the rewind is safe, as the deletes are idempotent; resuming the
+   * workflow instead would run it without those checkpoints.
    */
   public void rewindWorkflow(
       String workflowId,
@@ -2126,29 +2135,49 @@ public class SystemDatabase implements AutoCloseable {
 
   /**
    * Moves a DELAYED workflow's start as the step {@code caller} makes; see {@link
-   * #runTransactionalStep}. A relative delay is resolved in the work, so it runs from the attempt
-   * that commits, as a started workflow's deadline does.
+   * #runTransactionalStep}. A relative delay is resolved once, before the transaction and its
+   * retries, as {@link #resolveDelayUntil(Duration)} requires. A delay that cannot be resolved is
+   * refused inside the step, so the refusal is recorded as the step's error.
    */
   public void setWorkflowDelay(
       String workflowId, WorkflowDelay delay, @Nullable StepCaller caller) {
+    Long resolved;
+    RuntimeException refused;
+    try {
+      resolved = resolveDelayUntil(delay);
+      refused = null;
+    } catch (RuntimeException e) {
+      resolved = null;
+      refused = e;
+    }
+    final Long delayUntilEpochMs = resolved;
+    final RuntimeException refusal = refused;
     runTransactionalStep(
         caller,
         "DBOS.setWorkflowDelay",
         conn -> {
-          Objects.requireNonNull(delay, "delay must not be null");
-          long delayUntilEpochMs;
-          if (delay instanceof WorkflowDelay.Delay d) {
-            delayUntilEpochMs = resolveDelayUntil(d.delay());
-          } else if (delay instanceof WorkflowDelay.DelayUntil du) {
-            // An absolute delay is the caller's instant, taken as given.
-            delayUntilEpochMs = du.delayUntil().toEpochMilli();
-          } else {
-            throw new IllegalArgumentException("Unexpected WorkflowDelay value");
+          if (refusal != null) {
+            throw refusal;
           }
           WorkflowDAO.setWorkflowDelay(conn, ctx.schema(), workflowId, delayUntilEpochMs);
           logger.info("Delaying workflow {} until {}", workflowId, delayUntilEpochMs);
           return null;
         });
+  }
+
+  /**
+   * The absolute end of {@code delay}: a relative one from this JVM's clock, an absolute as given.
+   */
+  private static long resolveDelayUntil(WorkflowDelay delay) {
+    Objects.requireNonNull(delay, "delay must not be null");
+    if (delay instanceof WorkflowDelay.Delay d) {
+      return resolveDelayUntil(d.delay());
+    }
+    if (delay instanceof WorkflowDelay.DelayUntil du) {
+      // An absolute delay is the caller's instant, taken as given.
+      return du.delayUntil().toEpochMilli();
+    }
+    throw new IllegalArgumentException("Unexpected WorkflowDelay value");
   }
 
   /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */

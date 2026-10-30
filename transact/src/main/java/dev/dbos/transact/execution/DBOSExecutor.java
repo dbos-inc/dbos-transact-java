@@ -1179,9 +1179,9 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(options);
 
     // The step factories' checkpoints go first and the system database last. If a delete fails,
-    // the workflow keeps its terminal status and is not re-enqueued, so nothing runs against a
-    // partly cleared history, and since a delete is idempotent the rewind can simply be retried.
-    // The rewindable check runs first so a running workflow keeps its checkpoints.
+    // the workflow keeps its terminal status and is not re-enqueued, and since a delete is
+    // idempotent the rewind can simply be retried. The rewindable check runs first so a running
+    // workflow keeps its checkpoints.
     systemDatabase.rewindWorkflow(
         workflowId,
         startStep,

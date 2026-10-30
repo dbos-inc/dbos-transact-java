@@ -19,10 +19,13 @@ import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AutoClose;
@@ -54,7 +57,10 @@ public class InternalStepTransactionTest {
     proxy = dbos.registerProxy(InternalStepService.class, impl);
     impl.self = proxy;
     dbos.launch();
+    dbos.registerQueue(DELAYED_QUEUE, new QueueOptions());
   }
+
+  private static final String DELAYED_QUEUE = "internal-step-delayed";
 
   @AfterEach
   void afterEach() {
@@ -265,7 +271,7 @@ public class InternalStepTransactionTest {
   @Test
   public void aLostCommitAcknowledgementDoesNotRewindAgain() throws Exception {
     var targetId = "target-%d".formatted(System.nanoTime());
-    dbos.startWorkflow(proxy::quick, new StartWorkflowOptions(targetId)).getResult();
+    dbos.startWorkflow(proxy::counted, new StartWorkflowOptions(targetId)).getResult();
     var callerId = "caller-%d".formatted(System.nanoTime());
     var fired =
         failOnce(
@@ -273,7 +279,7 @@ public class InternalStepTransactionTest {
             callerId,
             new SQLTransientException());
 
-    // A second rewind would be refused: the first left the target ENQUEUED.
+    // A second rewind would run the target a third time, or be refused if it were still ENQUEUED.
     var caller =
         dbos.startWorkflow(() -> proxy.rewinds(targetId), new StartWorkflowOptions(callerId));
 
@@ -281,7 +287,54 @@ public class InternalStepTransactionTest {
     assertTrue(fired.get());
     assertEquals(1, stepsNamed(callerId, "DBOS.rewindWorkflow").size());
     assertNull(stepsNamed(callerId, "DBOS.rewindWorkflow").get(0).error());
-    assertEquals("quick", dbos.retrieveWorkflow(targetId).getResult(), "the target ran again");
+    assertEquals("counted", dbos.retrieveWorkflow(targetId).getResult());
+    assertEquals(2, impl.runsOf(targetId), "the target ran once, then once more for one rewind");
+  }
+
+  @Test
+  public void attributesThatFailBeforeCommitAreNotSet() throws Exception {
+    var targetId = startBlocked("target");
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            new SQLException("crash", "XX000"));
+
+    var caller =
+        dbos.startWorkflow(() -> proxy.labels(targetId), new StartWorkflowOptions(callerId));
+
+    assertEquals("failed", caller.getResult());
+    assertTrue(fired.get());
+    assertNull(dbos.retrieveWorkflow(targetId).getStatus().attributes(), "the update rolled back");
+    assertTrue(stepsNamed(callerId, "DBOS.updateWorkflowAttributes").isEmpty());
+  }
+
+  @Test
+  public void aDelayThatFailsBeforeCommitIsNotSet() throws Exception {
+    var targetId = "delayed-%d".formatted(System.nanoTime());
+    dbos.startWorkflow(
+        proxy::quick,
+        new StartWorkflowOptions(targetId).withQueue(DELAYED_QUEUE).withDelay(Duration.ofDays(1)));
+    var before = dbos.retrieveWorkflow(targetId).getStatus();
+    assertEquals(WorkflowState.DELAYED, before.status());
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            new SQLException("crash", "XX000"));
+
+    var caller =
+        dbos.startWorkflow(() -> proxy.delays(targetId), new StartWorkflowOptions(callerId));
+
+    assertEquals("failed", caller.getResult());
+    assertTrue(fired.get());
+    assertEquals(
+        before.delayUntil(),
+        dbos.retrieveWorkflow(targetId).getStatus().delayUntil(),
+        "the delay rolled back");
+    assertTrue(stepsNamed(callerId, "DBOS.setWorkflowDelay").isEmpty());
   }
 
   /**
@@ -436,6 +489,12 @@ interface InternalStepService {
 
   String rewinds(String targetId);
 
+  String counted();
+
+  String labels(String targetId);
+
+  String delays(String targetId);
+
   String startsChild(String childId) throws Exception;
 
   String startsChildWhenReleased(String childId) throws Exception;
@@ -449,6 +508,7 @@ class InternalStepServiceImpl implements InternalStepService {
   final CountDownLatch parentWaiting = new CountDownLatch(1);
   final CountDownLatch startChild = new CountDownLatch(1);
   final CountDownLatch childAttempted = new CountDownLatch(1);
+  private final Map<String, AtomicInteger> runs = new ConcurrentHashMap<>();
 
   InternalStepServiceImpl(DBOS dbos) {
     this.dbos = dbos;
@@ -539,6 +599,40 @@ class InternalStepServiceImpl implements InternalStepService {
   @Workflow
   public String forks(String sourceId) {
     return dbos.forkWorkflow(sourceId, 0).workflowId();
+  }
+
+  @Override
+  @Workflow
+  public String counted() {
+    runs.computeIfAbsent(DBOSContext.workflowId(), id -> new AtomicInteger()).incrementAndGet();
+    return "counted";
+  }
+
+  int runsOf(String workflowId) {
+    var count = runs.get(workflowId);
+    return count == null ? 0 : count.get();
+  }
+
+  @Override
+  @Workflow
+  public String labels(String targetId) {
+    try {
+      dbos.updateWorkflowAttributes(targetId, Map.of("label", "set"));
+      return "set";
+    } catch (RuntimeException e) {
+      return "failed";
+    }
+  }
+
+  @Override
+  @Workflow
+  public String delays(String targetId) {
+    try {
+      dbos.setWorkflowDelay(targetId, Duration.ofDays(2));
+      return "set";
+    } catch (RuntimeException e) {
+      return "failed";
+    }
   }
 
   @Override
