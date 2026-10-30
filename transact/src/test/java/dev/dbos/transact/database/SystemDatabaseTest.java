@@ -792,7 +792,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateAndGetSchedule() {
-    sysdb.createSchedule(makeSchedule("sched-1"));
+    sysdb.createSchedule(makeSchedule("sched-1"), null);
 
     var result = sysdb.getSchedule("sched-1");
     assertTrue(result.isPresent());
@@ -818,10 +818,11 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateScheduleDuplicate() {
-    sysdb.createSchedule(makeSchedule("sched-dup"));
+    sysdb.createSchedule(makeSchedule("sched-dup"), null);
     // SchedulesDAO catches 23505 and raises its own message, so this never reaches dbRetry's
     // terminal path. What dbRetry throws is pinned by dbRetryThrowsTypedOnANonRetryableFailure.
-    assertThrows(RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup")));
+    assertThrows(
+        RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup"), null));
   }
 
   @Test
@@ -918,8 +919,8 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListSchedules() {
-    sysdb.createSchedule(makeSchedule("alpha-1"));
-    sysdb.createSchedule(makeSchedule("alpha-2"));
+    sysdb.createSchedule(makeSchedule("alpha-1"), null);
+    sysdb.createSchedule(makeSchedule("alpha-2"), null);
     sysdb.createSchedule(
         new WorkflowSchedule(
             null,
@@ -933,8 +934,9 @@ public class SystemDatabaseTest {
             false,
             null,
             null,
-            null));
-    sysdb.pauseSchedule("beta-1");
+            null),
+        null);
+    sysdb.pauseSchedule("beta-1", null);
 
     // list all
     var all = sysdb.listSchedules(null, null, null);
@@ -987,11 +989,11 @@ public class SystemDatabaseTest {
   @Test
   public void testListSchedulesWithSqlLikeWildcards() {
     // Test that SQL LIKE wildcards in prefixes are escaped correctly
-    sysdb.createSchedule(makeSchedule("test%s Sched"));
-    sysdb.createSchedule(makeSchedule("test%sother"));
-    sysdb.createSchedule(makeSchedule("test_schedule"));
-    sysdb.createSchedule(makeSchedule("test_sched"));
-    sysdb.createSchedule(makeSchedule("testA_schedB"));
+    sysdb.createSchedule(makeSchedule("test%s Sched"), null);
+    sysdb.createSchedule(makeSchedule("test%sother"), null);
+    sysdb.createSchedule(makeSchedule("test_schedule"), null);
+    sysdb.createSchedule(makeSchedule("test_sched"), null);
+    sysdb.createSchedule(makeSchedule("testA_schedB"), null);
 
     // "test%s" should only match "test%s Sched" and "test%sother" (literal %)
     var byPercent = sysdb.listSchedules(null, null, List.of("test%s"));
@@ -1010,18 +1012,18 @@ public class SystemDatabaseTest {
 
   @Test
   public void testPauseAndResumeSchedule() {
-    sysdb.createSchedule(makeSchedule("sched-pause"));
+    sysdb.createSchedule(makeSchedule("sched-pause"), null);
 
-    sysdb.pauseSchedule("sched-pause");
+    sysdb.pauseSchedule("sched-pause", null);
     assertEquals(ScheduleStatus.PAUSED, sysdb.getSchedule("sched-pause").get().status());
 
-    sysdb.resumeSchedule("sched-pause");
+    sysdb.resumeSchedule("sched-pause", null);
     assertEquals(ScheduleStatus.ACTIVE, sysdb.getSchedule("sched-pause").get().status());
   }
 
   @Test
   public void testUpdateLastFiredAt() {
-    sysdb.createSchedule(makeSchedule("sched-fired"));
+    sysdb.createSchedule(makeSchedule("sched-fired"), null);
     assertNull(sysdb.getSchedule("sched-fired").get().lastFiredAt());
 
     sysdb.updateScheduleLastFiredAt("sched-fired", Instant.parse("2026-03-26T10:00:00Z"));
@@ -1032,15 +1034,15 @@ public class SystemDatabaseTest {
 
   @Test
   public void testDeleteSchedule() {
-    sysdb.createSchedule(makeSchedule("sched-del-1"));
-    sysdb.createSchedule(makeSchedule("sched-del-2"));
+    sysdb.createSchedule(makeSchedule("sched-del-1"), null);
+    sysdb.createSchedule(makeSchedule("sched-del-2"), null);
     assertEquals(2, sysdb.listSchedules(null, null, null).size());
 
-    sysdb.deleteSchedule("sched-del-1");
+    sysdb.deleteSchedule("sched-del-1", null);
     assertFalse(sysdb.getSchedule("sched-del-1").isPresent());
     assertEquals(1, sysdb.listSchedules(null, null, null).size());
 
-    sysdb.deleteSchedule("sched-del-2");
+    sysdb.deleteSchedule("sched-del-2", null);
     assertFalse(sysdb.getSchedule("sched-del-2").isPresent());
     assertEquals(0, sysdb.listSchedules(null, null, null).size());
   }
@@ -1061,7 +1063,7 @@ public class SystemDatabaseTest {
             ZoneId.of("America/New_York"),
             "my-queue",
             null);
-    sysdb.createSchedule(schedule);
+    sysdb.createSchedule(schedule, null);
 
     var s = sysdb.getSchedule("sched-full").get();
     assertEquals("my-id-123", s.id());

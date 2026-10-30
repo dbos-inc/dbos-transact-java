@@ -37,10 +37,11 @@ public class SchedulesDAO {
     return schedule.applicationName() != null ? schedule.applicationName() : ctx.appName();
   }
 
-  public static void createSchedule(DbContext ctx, WorkflowSchedule schedule) throws SQLException {
-    try (Connection conn = ctx.getConnection()) {
-      createSchedule(conn, ctx.schema(), ctx.serializer(), schedule, scheduleOwner(ctx, schedule));
-    }
+  /** Creates a schedule on the caller's transaction. */
+  public static void createSchedule(DbContext ctx, Connection conn, WorkflowSchedule schedule)
+      throws SQLException {
+    Objects.requireNonNull(schedule, "schedule must not be null");
+    createSchedule(conn, ctx.schema(), ctx.serializer(), schedule, scheduleOwner(ctx, schedule));
   }
 
   static void createSchedule(
@@ -250,24 +251,25 @@ public class SchedulesDAO {
     }
   }
 
-  public static void pauseSchedule(DbContext ctx, String name) throws SQLException {
-    setScheduleStatus(ctx, name, ScheduleStatus.PAUSED);
-  }
-
-  public static void resumeSchedule(DbContext ctx, String name) throws SQLException {
-    setScheduleStatus(ctx, name, ScheduleStatus.ACTIVE);
-  }
-
-  private static void setScheduleStatus(DbContext ctx, String name, ScheduleStatus status)
+  public static void pauseSchedule(Connection conn, String schema, String name)
       throws SQLException {
+    setScheduleStatus(conn, schema, name, ScheduleStatus.PAUSED);
+  }
+
+  public static void resumeSchedule(Connection conn, String schema, String name)
+      throws SQLException {
+    setScheduleStatus(conn, schema, name, ScheduleStatus.ACTIVE);
+  }
+
+  private static void setScheduleStatus(
+      Connection conn, String schema, String name, ScheduleStatus status) throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
         """
-            .formatted(ctx.schema());
+            .formatted(schema);
 
-    try (Connection conn = ctx.getConnection();
-        PreparedStatement ps = conn.prepareStatement(sql)) {
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, status.name());
       ps.setString(2, name);
       ps.executeUpdate();
@@ -290,13 +292,8 @@ public class SchedulesDAO {
     }
   }
 
-  public static void deleteSchedule(DbContext ctx, String name) throws SQLException {
-    try (var conn = ctx.getConnection()) {
-      deleteSchedule(conn, ctx.schema(), name);
-    }
-  }
-
-  static void deleteSchedule(Connection conn, String schema, String name) throws SQLException {
+  public static void deleteSchedule(Connection conn, String schema, String name)
+      throws SQLException {
     String sql =
         """
         DELETE FROM "%s".workflow_schedules WHERE schedule_name = ?
