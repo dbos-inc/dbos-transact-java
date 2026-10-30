@@ -2100,31 +2100,40 @@ public class SystemDatabase implements AutoCloseable {
    * Rewinds a terminal workflow to {@code startStep} as the step {@code caller} makes; see {@link
    * #runTransactionalStep}.
    *
-   * <p>{@code beforeRewind}, if given, runs inside the step once the workflow is known to be
-   * rewindable, and before its system database history is touched. The executor validates the queue
-   * there and clears the transactional step factories' checkpoints. Those deletes go through the
-   * factories' own connections, a second one from this pool if a factory shares it, and so commit
-   * on their own: a rewind that then rolls back leaves them cleared and the workflow terminal and
-   * not re-enqueued. Retrying the rewind is safe, as the deletes are idempotent; resuming the
-   * workflow instead would run it without those checkpoints.
+   * <p>{@code refusal}, if given, is a refusal the caller reached before the transaction, while
+   * checking the call or clearing what lives outside the system database. It is thrown from inside
+   * the step, so it is recorded as the step's error, unless the step is already recorded, which
+   * then replays.
    */
   public void rewindWorkflow(
       String workflowId,
       int startStep,
       RewindOptions options,
-      @Nullable Runnable beforeRewind,
+      @Nullable RuntimeException refusal,
       @Nullable StepCaller caller) {
     runTransactionalStep(
         caller,
         "DBOS.rewindWorkflow",
         conn -> {
-          if (beforeRewind != null) {
-            WorkflowDAO.checkRewindable(conn, ctx.schema(), workflowId, startStep);
-            beforeRewind.run();
+          if (refusal != null) {
+            throw refusal;
           }
           WorkflowDAO.rewindWorkflow(conn, ctx.schema(), workflowId, startStep, options);
           logger.info("Rewinding workflow {} to step {}", workflowId, startStep);
           return null;
+        });
+  }
+
+  /**
+   * Checks that a workflow can be rewound, without changing anything; see {@link
+   * WorkflowDAO#checkRewindable}.
+   */
+  public void checkRewindable(String workflowId, int startStep) {
+    dbRetry(
+        () -> {
+          try (var conn = ctx.getConnection()) {
+            WorkflowDAO.checkRewindable(conn, ctx.schema(), workflowId, startStep);
+          }
         });
   }
 

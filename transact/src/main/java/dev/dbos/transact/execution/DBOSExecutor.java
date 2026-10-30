@@ -1178,21 +1178,32 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(workflowId);
     Objects.requireNonNull(options);
 
-    // The step factories' checkpoints go first and the system database last. If a delete fails,
-    // the workflow keeps its terminal status and is not re-enqueued, and since a delete is
-    // idempotent the rewind can simply be retried. The rewindable check runs first so a running
-    // workflow keeps its checkpoints.
-    systemDatabase.rewindWorkflow(
-        workflowId,
-        startStep,
-        options,
-        () -> {
-          validateQueue(options.queueName(), options.queuePartitionKey());
-          if (hasStepCheckpointStores()) {
-            deleteStepCheckpoints(workflowId, startStep);
-          }
-        },
-        stepCaller());
+    var caller = stepCaller();
+    // The step factories' checkpoints go first, before the step's transaction opens, and the
+    // system database last, in that transaction. Deleting them inside it would hold one pooled
+    // connection while a factory sharing the pool asked for another. A step already recorded is
+    // replayed, so its deletes are not repeated against a workflow the rewind has since restarted;
+    // one recorded by a rival meanwhile is found by the step itself, which replays it instead of
+    // throwing the refusal below. If a delete fails, the workflow keeps its terminal status and is
+    // not re-enqueued, and since a delete is idempotent the rewind can simply be retried. The
+    // rewindable check runs first so a running workflow keeps its checkpoints.
+    RuntimeException refusal = null;
+    if (!(caller instanceof StepCaller.FromWorkflow step
+        && systemDatabase.checkStepResult(
+                step.workflowId(), step.stepId(), "DBOS.rewindWorkflow", step.ownerXid())
+            != null)) {
+      try {
+        validateQueue(options.queueName(), options.queuePartitionKey());
+        if (hasStepCheckpointStores()) {
+          systemDatabase.checkRewindable(workflowId, startStep);
+          deleteStepCheckpoints(workflowId, startStep);
+        }
+      } catch (RuntimeException e) {
+        // Thrown from inside the step, so it is recorded as the step's error.
+        refusal = e;
+      }
+    }
+    systemDatabase.rewindWorkflow(workflowId, startStep, options, refusal, caller);
     return retrieveWorkflow(workflowId);
   }
 
