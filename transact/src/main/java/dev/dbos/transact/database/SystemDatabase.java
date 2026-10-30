@@ -18,6 +18,7 @@ import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -47,6 +48,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -1575,7 +1577,7 @@ public class SystemDatabase implements AutoCloseable {
    */
   public void sendBulk(
       List<SendMessage> messages,
-      @Nullable SendCaller caller,
+      @Nullable StepCaller caller,
       String functionName,
       boolean sendToForks,
       String serialization) {
@@ -1641,8 +1643,20 @@ public class SystemDatabase implements AutoCloseable {
         "sleep", () -> StepsDAO.sleep(ctx, workflowId, functionId, duration, ownerXid));
   }
 
-  public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
-    dbRetry(() -> WorkflowDAO.cancelWorkflows(ctx, workflowIds, cancelChildren));
+  /**
+   * Cancels the workflows, and their descendants when {@code cancelChildren}, as the step {@code
+   * caller} makes; see {@link #runTransactionalStep}.
+   */
+  public void cancelWorkflows(
+      List<String> workflowIds, boolean cancelChildren, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.cancelWorkflow",
+        conn -> {
+          WorkflowDAO.cancelWorkflows(
+              conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
+          return null;
+        });
   }
 
   /**
@@ -1654,8 +1668,17 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
   }
 
-  public void resumeWorkflows(List<String> workflowIds, String queueName) {
-    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName));
+  /** Resumes the workflows as the step {@code caller} makes; see {@link #runTransactionalStep}. */
+  public void resumeWorkflows(
+      List<String> workflowIds, String queueName, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.resumeWorkflow",
+        conn -> {
+          WorkflowDAO.resumeWorkflows(
+              conn, ctx.schema(), workflowIds, queueName, callerWorkflowId(caller));
+          return null;
+        });
   }
 
   public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
@@ -1663,9 +1686,189 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.updateWorkflowAttributes(ctx, workflowId, validated));
   }
 
-  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetryIncludingSerializationError(
-        "deleteWorkflows", () -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
+  /**
+   * Deletes the workflows, and their descendants when {@code deleteChildren}, as the step {@code
+   * caller} makes; see {@link #runTransactionalStep}.
+   */
+  public void deleteWorkflows(
+      List<String> workflowIds, boolean deleteChildren, @Nullable StepCaller caller) {
+    runTransactionalStep(
+        caller,
+        "DBOS.deleteWorkflow",
+        conn -> {
+          WorkflowDAO.deleteWorkflows(
+              conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
+          return null;
+        });
+  }
+
+  /** The workflow a call is made from, from its body or a step, or null outside any workflow. */
+  private static @Nullable String callerWorkflowId(@Nullable StepCaller caller) {
+    return caller == null ? null : caller.workflowId();
+  }
+
+  /**
+   * Runs {@code work} as a DBOS operation made by {@code caller}, committing its effect and its
+   * checkpoint together, so a crash between the two can never make a replay run it a second time.
+   *
+   * <ul>
+   *   <li>From the workflow body ({@link StepCaller.FromWorkflow}), one transaction checks whether
+   *       the step is already recorded (and that the caller still owns the workflow), replays the
+   *       recorded output or error if it is, and otherwise runs {@code work} and records its output
+   *       as the step. If {@code work} fails, the transaction rolls back and the failure is
+   *       recorded as the step's error in a fresh one, so a replay is refused the same way.
+   *   <li>From inside a step ({@link StepCaller.FromStep}), nothing is recorded, but {@code work}
+   *       commits only while the caller still owns the workflow.
+   *   <li>Outside a workflow ({@code null}), {@code work} runs in a plain transaction.
+   * </ul>
+   *
+   * <p>The whole transaction is retried as {@link #dbRetryIncludingSerializationError} does. A
+   * retry after a commit whose acknowledgement was lost finds its own checkpoint and replays it. A
+   * failure worth retrying, a lost ownership, or a checkpoint that disagrees with this call is not
+   * recorded: only what {@code work} itself decided is.
+   */
+  <T> @Nullable T runTransactionalStep(
+      @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
+    var step = caller instanceof StepCaller.FromWorkflow fromWorkflow ? fromWorkflow : null;
+    long startTime = System.currentTimeMillis();
+    // What work itself threw on the attempt that ended the retries, as against a failure of the
+    // check or the record around it, which is not the step's answer.
+    var workFailure = new AtomicReference<Throwable>();
+    StepResult replayed;
+    T output;
+    try {
+      record Outcome<T>(@Nullable StepResult replayed, @Nullable T output) {}
+      var outcome =
+          dbRetryIncludingSerializationError(
+              stepName,
+              () -> {
+                workFailure.set(null);
+                Outcome<T> attempt;
+                try (var conn = ctx.getConnection()) {
+                  attempt =
+                      SqlTransaction.call(
+                          conn,
+                          c -> {
+                            if (step != null) {
+                              var recorded =
+                                  StepsDAO.checkStepResult(
+                                      c,
+                                      ctx.schema(),
+                                      step.workflowId(),
+                                      step.stepId(),
+                                      stepName,
+                                      step.ownerXid());
+                              if (recorded != null) {
+                                return new Outcome<T>(recorded, null);
+                              }
+                            }
+                            T result;
+                            try {
+                              result = work.run(c);
+                            } catch (SQLException | RuntimeException e) {
+                              workFailure.set(e);
+                              throw e;
+                            }
+                            // The owner is checked last, as every fenced write locks the status
+                            // row.
+                            if (step != null) {
+                              var serialized =
+                                  SerializationUtil.serializeValue(result, null, ctx.serializer());
+                              StepsDAO.recordStepResult(
+                                  ctx,
+                                  c,
+                                  new StepResult(
+                                      step.workflowId(),
+                                      step.stepId(),
+                                      stepName,
+                                      serialized.serializedValue(),
+                                      null,
+                                      null,
+                                      serialized.serialization()),
+                                  startTime,
+                                  System.currentTimeMillis(),
+                                  step.ownerXid());
+                            } else if (caller != null) {
+                              WorkflowDAO.checkOwner(
+                                  c, ctx.schema(), caller.workflowId(), caller.ownerXid());
+                            }
+                            DebugTriggers.debugTriggerPoint(
+                                DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT);
+                            return new Outcome<T>(null, result);
+                          });
+                }
+                DebugTriggers.debugTriggerPoint(
+                    DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED);
+                return attempt;
+              });
+      replayed = outcome.replayed();
+      output = outcome.output();
+    } catch (RuntimeException e) {
+      if (step != null && workFailure.get() != null && !isRetryableFailure(e)) {
+        recordStepError(step, stepName, e, startTime);
+      }
+      throw e;
+    }
+
+    if (replayed == null) {
+      return output;
+    }
+    if (replayed.error() != null) {
+      var t =
+          SerializationUtil.deserializeError(
+              replayed.error(), replayed.serialization(), ctx.serializer());
+      throw t instanceof RuntimeException re ? re : new RuntimeException(t.getMessage(), t);
+    }
+    @SuppressWarnings("unchecked")
+    var value =
+        (T)
+            SerializationUtil.deserializeValue(
+                replayed.output(), replayed.serialization(), ctx.serializer());
+    return value;
+  }
+
+  /**
+   * Records {@code error} as the step {@code step} after its work's transaction rolled back. A
+   * failure to record it, such as the workflow having changed hands, is thrown in its place, with
+   * {@code error} attached.
+   */
+  private void recordStepError(
+      StepCaller.FromWorkflow step, String stepName, RuntimeException error, long startTime) {
+    var serialized = SerializationUtil.serializeError(error, null, ctx.serializer());
+    try {
+      recordStepResult(
+          new StepResult(
+              step.workflowId(),
+              step.stepId(),
+              stepName,
+              null,
+              serialized.serializedValue(),
+              null,
+              serialized.serialization()),
+          startTime,
+          step.ownerXid());
+    } catch (RuntimeException recordFailure) {
+      recordFailure.addSuppressed(error);
+      throw recordFailure;
+    }
+  }
+
+  /**
+   * Whether {@code t} is a database failure the retries would have kept trying, had something not
+   * stopped them: a serialization failure or deadlock that outlasted its retries, or a connection
+   * or transient failure cut short by an interrupt. Such a failure says nothing about the
+   * operation, so it is never recorded as its answer.
+   */
+  private static boolean isRetryableFailure(Throwable t) {
+    if (isSerializationError(t)) {
+      return true;
+    }
+    for (var cause = t; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sql && classify(sql) != Failure.CALLERS) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
@@ -1851,7 +2054,12 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Set<String> getWorkflowChildren(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.getWorkflowChildren(ctx, workflowId));
+    return dbRetry(
+        () -> {
+          try (var conn = ctx.getConnection()) {
+            return WorkflowDAO.getWorkflowChildren(conn, ctx.schema(), workflowId);
+          }
+        });
   }
 
   /**
@@ -1872,7 +2080,9 @@ public class SystemDatabase implements AutoCloseable {
 
       @Override
       public Set<String> workflowChildren(String workflowId) throws SQLException {
-        return WorkflowDAO.getWorkflowChildren(ctx, workflowId);
+        try (var conn = ctx.getConnection()) {
+          return WorkflowDAO.getWorkflowChildren(conn, ctx.schema(), workflowId);
+        }
       }
 
       @Override

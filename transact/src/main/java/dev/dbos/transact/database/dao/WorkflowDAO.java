@@ -1832,24 +1832,48 @@ public class WorkflowDAO {
     return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
   }
 
+  /**
+   * Cancels the workflows and, when {@code cancelChildren}, their descendants, on the caller's
+   * transaction.
+   *
+   * <p>Each level is cancelled before its children are read. A child whose insert holds its
+   * parent's row lock commits before that level's update goes ahead, and is then read with the next
+   * level; one inserted after it finds its parent no longer owned and is rolled back. Reading the
+   * tree first would miss a child committed in between. Each read sees what committed before it
+   * only under READ COMMITTED, so the transaction must run at that level.
+   *
+   * @param callerWorkflowId the workflow making the call, when it is made from inside one, which
+   *     may not cancel itself or a tree it belongs to
+   * @throws IllegalArgumentException if the caller is a target, before anything is cancelled, or is
+   *     reached among a target's descendants, after which the caller's transaction must roll back
+   *     the levels already cancelled
+   */
   public static void cancelWorkflows(
-      DbContext ctx, List<String> workflowIds, boolean cancelChildren) throws SQLException {
+      Connection conn,
+      String schema,
+      List<String> workflowIds,
+      boolean cancelChildren,
+      @Nullable String callerWorkflowId)
+      throws SQLException {
     var roots = filterNullsAndBlanks(workflowIds);
     if (roots.isEmpty()) {
       return;
     }
+    refuseSelfTarget(callerWorkflowId, roots, "cancel");
 
     if (!cancelChildren) {
-      cancelBatch(ctx, roots);
+      cancelBatch(conn, schema, roots);
       return;
     }
 
-    // Cancel level-by-level so newly-spawned children are also caught
     var visited = new HashSet<>(roots);
     List<String> frontier = new ArrayList<>(roots);
     while (!frontier.isEmpty()) {
-      cancelBatch(ctx, frontier);
-      var children = getDirectChildren(ctx, frontier);
+      // A cascade that reaches the caller is a cancel of the tree it is inside, found by the walk
+      // itself: the levels above are cancelled by now, and the refusal rolls them back.
+      refuseTreeContaining(conn, schema, callerWorkflowId, frontier, roots, "cancel");
+      cancelBatch(conn, schema, frontier);
+      var children = getDirectChildren(conn, schema, frontier);
       frontier = children.stream().filter(c -> !visited.contains(c)).toList();
       visited.addAll(frontier);
     }
@@ -1888,7 +1912,7 @@ public class WorkflowDAO {
     }
   }
 
-  private static void cancelBatch(DbContext ctx, Collection<String> workflowIds)
+  private static void cancelBatch(Connection conn, String schema, Collection<String> workflowIds)
       throws SQLException {
     String sql =
         """
@@ -1903,10 +1927,9 @@ public class WorkflowDAO {
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
 
-    try (Connection conn = ctx.getConnection();
-        PreparedStatement stmt = conn.prepareStatement(sql)) {
+    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
@@ -1920,12 +1943,26 @@ public class WorkflowDAO {
     }
   }
 
-  public static void resumeWorkflows(DbContext ctx, List<String> workflowIds, String queueName)
+  /**
+   * Resumes the workflows onto {@code queueName}, or the internal queue, on the caller's
+   * transaction.
+   *
+   * @param callerWorkflowId the workflow making the call, when it is made from inside one, which
+   *     may not resume itself
+   * @throws IllegalArgumentException if the caller is a target, before anything is resumed
+   */
+  public static void resumeWorkflows(
+      Connection conn,
+      String schema,
+      List<String> workflowIds,
+      String queueName,
+      @Nullable String callerWorkflowId)
       throws SQLException {
     var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
+    refuseSelfTarget(callerWorkflowId, filtered, "resume");
 
     String sql =
         """
@@ -1942,10 +1979,9 @@ public class WorkflowDAO {
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(ctx.schema(), SystemDatabase.NOW_EPOCH_MS);
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS);
 
-    try (Connection conn = ctx.getConnection();
-        PreparedStatement stmt = conn.prepareStatement(sql)) {
+    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
       Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
@@ -1960,19 +1996,35 @@ public class WorkflowDAO {
     }
   }
 
+  /**
+   * Deletes the workflows and, when {@code deleteChildren}, their descendants, on the caller's
+   * transaction.
+   *
+   * @param callerWorkflowId the workflow making the call, when it is made from inside one, which
+   *     may not delete itself or a tree it belongs to
+   * @throws IllegalArgumentException if the caller is among the workflows to delete, before
+   *     anything is deleted
+   */
   public static void deleteWorkflows(
-      DbContext ctx, List<String> workflowIds, boolean deleteChildren) throws SQLException {
+      Connection conn,
+      String schema,
+      List<String> workflowIds,
+      boolean deleteChildren,
+      @Nullable String callerWorkflowId)
+      throws SQLException {
     var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
+    refuseSelfTarget(callerWorkflowId, filtered, "delete");
 
     var wfIdSet = new HashSet<String>(filtered);
     if (deleteChildren) {
       for (var wfid : filtered) {
-        var children = getWorkflowChildren(ctx, wfid);
+        var children = getWorkflowChildren(conn, schema, wfid);
         wfIdSet.addAll(children);
       }
+      refuseTreeContaining(conn, schema, callerWorkflowId, wfIdSet, filtered, "delete");
     }
 
     var sql =
@@ -1980,29 +2032,23 @@ public class WorkflowDAO {
           DELETE FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?);
         """
-            .formatted(ctx.schema());
+            .formatted(schema);
 
     var ids = wfIdSet.toArray(String[]::new);
-    try (var conn = ctx.getConnection()) {
-      SqlTransaction.run(
-          conn,
-          c -> {
-            try (var stmt = c.prepareStatement(sql)) {
-              var array = c.createArrayOf("text", ids);
-              try {
-                stmt.setArray(1, array);
-                stmt.executeUpdate();
-              } finally {
-                array.free();
-              }
-            }
-            deleteWorkflowChildRows(c, ctx.schema(), ids);
-          });
+    try (var stmt = conn.prepareStatement(sql)) {
+      var array = conn.createArrayOf("text", ids);
+      try {
+        stmt.setArray(1, array);
+        stmt.executeUpdate();
+      } finally {
+        array.free();
+      }
     }
+    deleteWorkflowChildRows(conn, schema, ids);
   }
 
-  private static List<String> getDirectChildren(DbContext ctx, Collection<String> workflowIds)
-      throws SQLException {
+  private static List<String> getDirectChildren(
+      Connection conn, String schema, Collection<String> workflowIds) throws SQLException {
     if (workflowIds.isEmpty()) {
       return List.of();
     }
@@ -2012,10 +2058,9 @@ public class WorkflowDAO {
           FROM "%s".workflow_status
           WHERE parent_workflow_id = ANY(?)
         """
-            .formatted(ctx.schema());
+            .formatted(schema);
 
-    try (var conn = ctx.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(sql)) {
       var array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
       try {
         stmt.setArray(1, array);
@@ -2032,12 +2077,79 @@ public class WorkflowDAO {
     }
   }
 
-  public static Set<String> getWorkflowChildren(DbContext ctx, String workflowId)
+  /**
+   * Refuses a cancel, resume or delete, made from inside a workflow, that targets that workflow.
+   * Each clears or removes the workflow's row, so the call's own checkpoint, or the enclosing
+   * step's, would then fail the ownership check, rolling the call back and leaving the workflow
+   * waiting on an outcome nothing writes.
+   */
+  private static void refuseSelfTarget(
+      @Nullable String callerWorkflowId, Collection<String> targets, String action) {
+    if (callerWorkflowId != null && targets.contains(callerWorkflowId)) {
+      throw new IllegalArgumentException(
+          "workflow %s cannot %s itself".formatted(callerWorkflowId, action));
+    }
+  }
+
+  /**
+   * Refuses a cancel or delete, made from inside a workflow, whose expansion over the targets'
+   * descendants has reached that workflow: it would take down a tree the caller is inside.
+   */
+  private static void refuseTreeContaining(
+      Connection conn,
+      String schema,
+      @Nullable String callerWorkflowId,
+      Collection<String> reached,
+      Collection<String> roots,
+      String action)
+      throws SQLException {
+    if (callerWorkflowId != null && reached.contains(callerWorkflowId)) {
+      var root = rootContaining(conn, schema, callerWorkflowId, roots);
+      throw new IllegalArgumentException(
+          "workflow %s cannot %s the tree of %s, which contains it"
+              .formatted(callerWorkflowId, action, root));
+    }
+  }
+
+  /**
+   * Which of {@code roots} has {@code workflowId} in its tree, read up its ancestry only to name
+   * the tree in a refusal. Falls back to every root should the walk not arrive at one, which {@code
+   * parent_workflow_id}, set once at insert, does not allow.
+   */
+  private static String rootContaining(
+      Connection conn, String schema, String workflowId, Collection<String> roots)
+      throws SQLException {
+    var sql =
+        """
+          SELECT parent_workflow_id FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+    var seen = new HashSet<String>(List.of(workflowId));
+    var current = workflowId;
+    try (var stmt = conn.prepareStatement(sql)) {
+      while (true) {
+        stmt.setString(1, current);
+        String parent;
+        try (var rs = stmt.executeQuery()) {
+          parent = rs.next() ? rs.getString(1) : null;
+        }
+        if (parent == null || !seen.add(parent)) {
+          return String.join(", ", roots);
+        }
+        if (roots.contains(parent)) {
+          return parent;
+        }
+        current = parent;
+      }
+    }
+  }
+
+  public static Set<String> getWorkflowChildren(Connection conn, String schema, String workflowId)
       throws SQLException {
     var descendants = new HashSet<String>();
     List<String> frontier = List.of(workflowId);
     while (!frontier.isEmpty()) {
-      var children = getDirectChildren(ctx, frontier);
+      var children = getDirectChildren(conn, schema, frontier);
       frontier = children.stream().filter(c -> !descendants.contains(c)).toList();
       descendants.addAll(frontier);
     }
