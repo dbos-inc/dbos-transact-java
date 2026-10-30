@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -178,6 +180,24 @@ public class InternalStepTransactionTest {
 
   private List<WorkflowStatus> forksOf(String workflowId) {
     return dbos.listWorkflows(new ListWorkflowsInput().withForkedFrom(workflowId));
+  }
+
+  @Test
+  public void aSendToAMissingWorkflowReplaysItsRefusalOnceTheWorkflowExists() throws Exception {
+    var destinationId = "missing-%d".formatted(System.nanoTime());
+    var callerId = "caller-%d".formatted(System.nanoTime());
+
+    var result =
+        dbos.startWorkflow(() -> proxy.sends(destinationId), new StartWorkflowOptions(callerId))
+            .getResult();
+    assertEquals("refused", result);
+    var recorded = stepsNamed(callerId, "DBOS.send");
+    assertEquals(1, recorded.size());
+    assertNotNull(recorded.get(0).error(), "the refusal is the step's answer");
+
+    // With the destination there, a send would now succeed; the fork replays the refusal.
+    dbos.startWorkflow(proxy::quick, new StartWorkflowOptions(destinationId)).getResult();
+    assertEquals("refused", dbos.<String, RuntimeException>forkWorkflow(callerId, 1).getResult());
   }
 
   @Test
@@ -390,6 +410,8 @@ interface InternalStepService {
 
   String forks(String sourceId);
 
+  String sends(String destinationId);
+
   String rewinds(String targetId);
 
   String startsChild(String childId) throws Exception;
@@ -472,6 +494,17 @@ class InternalStepServiceImpl implements InternalStepService {
       childAttempted.countDown();
     }
     return "started";
+  }
+
+  @Override
+  @Workflow
+  public String sends(String destinationId) {
+    try {
+      dbos.send(destinationId, "hello", "topic");
+      return "sent";
+    } catch (DBOSNonExistentWorkflowException e) {
+      return "refused";
+    }
   }
 
   @Override

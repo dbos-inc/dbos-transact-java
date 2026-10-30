@@ -1581,11 +1581,17 @@ public class SystemDatabase implements AutoCloseable {
       String functionName,
       boolean sendToForks,
       String serialization) {
-    dbRetryIncludingSerializationError(
-        "sendBulk",
-        () ->
-            NotificationsDAO.sendBulk(
-                ctx, messages, caller, functionName, sendToForks, serialization));
+    // Nothing to send is nothing to record: every run, replays included, does the same nothing.
+    if (messages.isEmpty()) {
+      return;
+    }
+    runTransactionalStep(
+        caller,
+        functionName,
+        conn -> {
+          NotificationsDAO.sendBulk(ctx, conn, messages, sendToForks, serialization);
+          return null;
+        });
   }
 
   public Object recv(
@@ -1617,11 +1623,27 @@ public class SystemDatabase implements AutoCloseable {
       boolean asStep,
       String serialization,
       String ownerXid) {
-    dbRetryIncludingSerializationError(
-        "setEvent",
-        () ->
-            NotificationsDAO.setEvent(
-                ctx, workflowId, functionId, key, message, asStep, serialization, ownerXid));
+    // Even from inside a step the history row names a step, the one setting the event.
+    StepCaller caller =
+        asStep
+            ? new StepCaller.FromWorkflow(workflowId, functionId, ownerXid)
+            : new StepCaller.FromStep(workflowId, ownerXid);
+    runTransactionalStep(
+        caller,
+        "DBOS.setEvent",
+        conn -> {
+          var serialized =
+              SerializationUtil.serializeValue(message, serialization, ctx.serializer());
+          NotificationsDAO.setEvent(
+              conn,
+              ctx.schema(),
+              workflowId,
+              functionId,
+              key,
+              serialized.serializedValue(),
+              serialized.serialization());
+          return null;
+        });
     signal(new SignalKey.Event(workflowId, key));
   }
 
@@ -1852,11 +1874,8 @@ public class SystemDatabase implements AutoCloseable {
     if (replayed == null) {
       return output;
     }
-    if (replayed.error() == null && replayed.output() == null) {
-      throw new IllegalStateException(
-          "Recorded output and error are both null for workflow %s step %d (%s)"
-              .formatted(step.workflowId(), step.stepId(), stepName));
-    }
+    // A row with neither output nor error is a step that returned nothing, as send, setEvent and
+    // the stream writes recorded theirs before they ran through here: the row is the record.
     if (replayed.error() != null) {
       var t =
           SerializationUtil.deserializeError(
@@ -2241,11 +2260,15 @@ public class SystemDatabase implements AutoCloseable {
       Object value,
       String serializationFormat,
       String ownerXid) {
-    dbRetryIncludingSerializationError(
-        "writeStreamFromStep",
-        () ->
-            StreamsDAO.writeStreamFromStep(
-                ctx, workflowId, functionId, key, value, serializationFormat, ownerXid));
+    // Even from inside a step the entry names a step, the one writing it.
+    runTransactionalStep(
+        new StepCaller.FromStep(workflowId, ownerXid),
+        "DBOS.writeStream",
+        conn -> {
+          StreamsDAO.writeStream(
+              conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
     signal(new SignalKey.Stream(workflowId, key));
   }
 
@@ -2256,17 +2279,25 @@ public class SystemDatabase implements AutoCloseable {
       Object value,
       String serializationFormat,
       String ownerXid) {
-    dbRetryIncludingSerializationError(
-        "writeStreamFromWorkflow",
-        () ->
-            StreamsDAO.writeStreamFromWorkflow(
-                ctx, workflowId, functionId, key, value, serializationFormat, ownerXid));
+    runTransactionalStep(
+        new StepCaller.FromWorkflow(workflowId, functionId, ownerXid),
+        StreamsDAO.writeStepName(value),
+        conn -> {
+          StreamsDAO.writeStream(
+              conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
     signal(new SignalKey.Stream(workflowId, key));
   }
 
   public void closeStream(String workflowId, int functionId, String key, String ownerXid) {
-    dbRetryIncludingSerializationError(
-        "closeStream", () -> StreamsDAO.closeStream(ctx, workflowId, functionId, key, ownerXid));
+    runTransactionalStep(
+        new StepCaller.FromWorkflow(workflowId, functionId, ownerXid),
+        "DBOS.closeStream",
+        conn -> {
+          StreamsDAO.closeStream(conn, ctx.schema(), workflowId, functionId, key);
+          return null;
+        });
     // Closing writes the sentinel entry, so readers need the same wake-up as any other write.
     signal(new SignalKey.Stream(workflowId, key));
   }
