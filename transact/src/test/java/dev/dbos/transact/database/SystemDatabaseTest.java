@@ -119,7 +119,7 @@ public class SystemDatabaseTest {
     var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(5, rows.size());
 
-    sysdb.deleteWorkflows(List.of("wfid-1", "wfid-3"), false);
+    sysdb.deleteWorkflows(List.of("wfid-1", "wfid-3"), false, null);
 
     rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(3, rows.size());
@@ -199,7 +199,7 @@ public class SystemDatabaseTest {
       sysdb.initWorkflowStatus(status, 5, null);
     }
 
-    sysdb.deleteWorkflows(List.of("wfid-0", "wfid-2", "wfid-4"), false);
+    sysdb.deleteWorkflows(List.of("wfid-0", "wfid-2", "wfid-4"), false, null);
 
     var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
@@ -223,7 +223,9 @@ public class SystemDatabaseTest {
 
     // Cancel all five IDs in one call
     sysdb.cancelWorkflows(
-        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"), false);
+        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"),
+        false,
+        null);
 
     // PENDING ones become CANCELLED, and updated_at is refreshed
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
@@ -276,7 +278,7 @@ public class SystemDatabaseTest {
     long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(workflowIds, null);
+    sysdb.resumeWorkflows(workflowIds, null, null);
 
     // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
@@ -302,7 +304,7 @@ public class SystemDatabaseTest {
     long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(workflowIds, "customQueue");
+    sysdb.resumeWorkflows(workflowIds, "customQueue", null);
 
     // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
@@ -326,7 +328,7 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create("wf-id").build(), 5, null);
 
     long beforeCancel = System.currentTimeMillis();
-    sysdb.cancelWorkflows(Arrays.asList("wf-id", null), false);
+    sysdb.cancelWorkflows(Arrays.asList("wf-id", null), false, null);
 
     var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
     assertEquals(WorkflowState.CANCELLED.name(), row.status());
@@ -355,7 +357,7 @@ public class SystemDatabaseTest {
     }
 
     // Without cancelChildren=true, only the parent is cancelled
-    sysdb.cancelWorkflows(List.of("parent"), false);
+    sysdb.cancelWorkflows(List.of("parent"), false, null);
     assertEquals(
         WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
     for (var i = 0; i < 3; i++) {
@@ -373,7 +375,7 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "parent", WorkflowState.PENDING.name());
 
     // With cancelChildren=true, parent + all descendants are cancelled
-    sysdb.cancelWorkflows(List.of("parent"), true);
+    sysdb.cancelWorkflows(List.of("parent"), true, null);
     assertEquals(
         WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "parent").status());
     for (var i = 0; i < 3; i++) {
@@ -394,7 +396,7 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
     long beforeResume = System.currentTimeMillis();
-    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null);
+    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null, null);
 
     var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
     assertEquals(WorkflowState.ENQUEUED.name(), row.status());
@@ -406,7 +408,7 @@ public class SystemDatabaseTest {
   public void testDeleteWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create("wf-id").build(), 5, null);
 
-    sysdb.deleteWorkflows(Arrays.asList("wf-id", null), false);
+    sysdb.deleteWorkflows(Arrays.asList("wf-id", null), false, null);
 
     assertNull(DBUtils.getWorkflowRow(dataSource, "wf-id"));
   }

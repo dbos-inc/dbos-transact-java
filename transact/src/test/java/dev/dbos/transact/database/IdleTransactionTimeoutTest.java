@@ -120,7 +120,8 @@ public class IdleTransactionTimeoutTest {
 
         // The stalled session holds the row; the cancel waits for the server to end it.
         var cancel =
-            CompletableFuture.runAsync(() -> sysdb.cancelWorkflows(List.of(workflowId), false));
+            CompletableFuture.runAsync(
+                () -> sysdb.cancelWorkflows(List.of(workflowId), false, null));
         cancel.get(30, TimeUnit.SECONDS);
 
         assertNull(WorkflowDAO.getWorkflowOwner(ctx, workflowId), "the cancel released it");

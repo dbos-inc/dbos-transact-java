@@ -20,7 +20,7 @@ import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetEventCaller;
 import dev.dbos.transact.database.Result;
-import dev.dbos.transact.database.SendCaller;
+import dev.dbos.transact.database.StepCaller;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.TimedWorkflowStatus;
@@ -941,18 +941,9 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String serializationFormat,
       String functionName) {
 
-    DBOSContext ctx = DBOSContextHolder.get();
     // A send from a workflow is its step; one from inside a step records nothing, but is still
     // made only while the step's execution owns the workflow.
-    SendCaller caller = null;
-    if (ctx.isInWorkflow()) {
-      caller =
-          ctx.isInStep()
-              ? new SendCaller.FromStep(ctx.getWorkflowId(), ctx.getOwnerXid())
-              : new SendCaller.FromWorkflow(
-                  ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), ctx.getOwnerXid());
-    }
-    systemDatabase.sendBulk(messages, caller, functionName, sendToForks, serializationFormat);
+    systemDatabase.sendBulk(messages, stepCaller(), functionName, sendToForks, serializationFormat);
   }
 
   /**
@@ -1084,47 +1075,19 @@ public class DBOSExecutor implements AutoCloseable {
   public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     Objects.requireNonNull(workflowIds);
 
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info(
-              "Cancelling workflow(s) {}{}",
-              workflowIds,
-              cancelChildren ? " and their children" : "");
-          systemDatabase.cancelWorkflows(workflowIds, cancelChildren);
-          return null; // void
-        },
-        "DBOS.cancelWorkflow",
-        null);
+    systemDatabase.cancelWorkflows(workflowIds, cancelChildren, stepCaller());
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
     Objects.requireNonNull(workflowIds);
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info(
-              "Deleting workflow(s) {}{}",
-              workflowIds,
-              deleteChildren ? " and their children" : "");
-          systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
-          return null;
-        },
-        "DBOS.deleteWorkflow",
-        null);
+    systemDatabase.deleteWorkflows(workflowIds, deleteChildren, stepCaller());
   }
 
   public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
 
-    // Execute the resume operation as a workflow step
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds, queueName);
-          return null; // void
-        },
-        "DBOS.resumeWorkflow",
-        null);
+    systemDatabase.resumeWorkflows(workflowIds, queueName, stepCaller());
 
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
@@ -1723,6 +1686,26 @@ public class DBOSExecutor implements AutoCloseable {
       return Objects.requireNonNull(step, "step must not be null").execute();
     }
     return runStepInternal(step, options, childWorkflowId);
+  }
+
+  /**
+   * Who a DBOS operation is being called by, for one that commits its effect and its checkpoint
+   * together: the workflow body, which takes the next step ID; a step, which records nothing of its
+   * own; or nothing outside a workflow. Mirrors the choice {@link #runDbosFunctionAsStep} makes.
+   */
+  private @Nullable StepCaller stepCaller() {
+    var ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      return null;
+    }
+    if (ctx.isInStep()) {
+      return new StepCaller.FromStep(ctx.getWorkflowId(), ctx.getOwnerXid());
+    }
+    if (HOOK_HOLDER.get() != null) {
+      throw new RuntimeException("@Step functions cannot be called from the startWorkflow lambda");
+    }
+    return new StepCaller.FromWorkflow(
+        ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), ctx.getOwnerXid());
   }
 
   public <T, E extends Exception> T runDbosFunctionAsStep(

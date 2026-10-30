@@ -5,8 +5,8 @@ import static java.util.stream.Collectors.joining;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.GetEventCaller;
-import dev.dbos.transact.database.SendCaller;
 import dev.dbos.transact.database.SqlTransaction;
+import dev.dbos.transact.database.StepCaller;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
@@ -98,7 +98,7 @@ public class NotificationsDAO {
   public static void sendBulk(
       DbContext ctx,
       List<SendMessage> messages,
-      @Nullable SendCaller caller,
+      @Nullable StepCaller caller,
       String functionName,
       boolean sendToForks,
       String serialization)
@@ -130,7 +130,7 @@ public class NotificationsDAO {
           txConn,
           conn -> {
             // A send from the workflow body replays as the step it was recorded as.
-            if (caller instanceof SendCaller.FromWorkflow step) {
+            if (caller instanceof StepCaller.FromWorkflow step) {
               StepResult recorded =
                   StepsDAO.checkStepResult(
                       conn,
@@ -216,7 +216,7 @@ public class NotificationsDAO {
             // The owner is checked after the messages, so the status row is locked last, as every
             // fenced write locks it. Recording the step checks it first; a send from inside a step
             // has no step to record, so it is checked on its own.
-            if (caller instanceof SendCaller.FromWorkflow step) {
+            if (caller instanceof StepCaller.FromWorkflow step) {
               var output =
                   new StepResult(
                       step.workflowId(), step.stepId(), functionName, null, null, null, null);

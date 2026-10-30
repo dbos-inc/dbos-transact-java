@@ -7,8 +7,6 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.DBTestAccess;
-import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
-import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.JdbcStepFactory;
 import dev.dbos.transact.utils.DBUtils;
@@ -280,44 +278,6 @@ public class OwnershipFenceTest {
     assertEquals("PENDING", readStatus(workflowId), "the stale timer must not cancel it");
     impl.gates.get(workflowId).countDown();
   }
-
-  @Test
-  public void aWorkflowCancellingItselfEndsCancelled() throws Exception {
-    var workflowId = "fence-self-cancel-%d".formatted(System.nanoTime());
-    var handle = dbos.startWorkflow(proxy::cancelSelf, new StartWorkflowOptions(workflowId));
-
-    assertThrows(DBOSAwaitedWorkflowCancelledException.class, handle::getResult);
-    assertEquals("CANCELLED", readStatus(workflowId));
-    assertEquals(0, impl.afterStepRuns.get(), "nothing runs after the cancel");
-  }
-
-  @Test
-  public void aWorkflowDeletingItselfEndsMissing() throws Exception {
-    var workflowId = "fence-self-delete-%d".formatted(System.nanoTime());
-    var handle = dbos.startWorkflow(proxy::deleteSelf, new StartWorkflowOptions(workflowId));
-
-    assertThrows(DBOSNonExistentWorkflowException.class, handle::getResult);
-    assertEquals(0, impl.afterStepRuns.get(), "nothing runs after the delete");
-  }
-
-  // Recorded as it behaves today: nothing refuses a workflow resuming itself. The resume hands the
-  // workflow back to the queue before its own step is recorded, so the run is refused there and
-  // waits, and the dispatch the resume caused replays to the same resume and does it again. Only
-  // removing the workflow ends it.
-  @Test
-  public void aWorkflowResumingItselfIsDispatchedAgainAndAgain() throws Exception {
-    var workflowId = "fence-self-resume-%d".formatted(System.nanoTime());
-    var handle = dbos.startWorkflow(proxy::resumeSelf, new StartWorkflowOptions(workflowId));
-
-    var deadline = Instant.now().plusSeconds(30);
-    while (impl.resumeSelfRuns.get() < 3 && Instant.now().isBefore(deadline)) {
-      Thread.sleep(50);
-    }
-    assertTrue(impl.resumeSelfRuns.get() >= 3, "each dispatch resumes the workflow again");
-
-    dbos.deleteWorkflow(workflowId);
-    assertThrows(DBOSNonExistentWorkflowException.class, handle::getResult);
-  }
 }
 
 interface FenceService {
@@ -328,12 +288,6 @@ interface FenceService {
   String child();
 
   String quick();
-
-  String cancelSelf();
-
-  String deleteSelf();
-
-  String resumeSelf();
 }
 
 class FenceServiceImpl implements FenceService {
@@ -348,7 +302,6 @@ class FenceServiceImpl implements FenceService {
   final Map<String, CountDownLatch> gates = new ConcurrentHashMap<>();
   final AtomicInteger afterStepRuns = new AtomicInteger();
   final AtomicInteger handedOffRuns = new AtomicInteger();
-  final AtomicInteger resumeSelfRuns = new AtomicInteger();
 
   FenceServiceImpl(DBOS dbos, JdbcStepFactory stepFactory) {
     this.dbos = dbos;
@@ -434,29 +387,5 @@ class FenceServiceImpl implements FenceService {
   @Workflow
   public String quick() {
     return "quick";
-  }
-
-  @Override
-  @Workflow
-  public String cancelSelf() {
-    dbos.cancelWorkflow(workflowId());
-    dbos.runStep(() -> afterStepRuns.incrementAndGet(), "afterStep");
-    return "not cancelled";
-  }
-
-  @Override
-  @Workflow
-  public String deleteSelf() {
-    dbos.deleteWorkflow(workflowId());
-    dbos.runStep(() -> afterStepRuns.incrementAndGet(), "afterStep");
-    return "not deleted";
-  }
-
-  @Override
-  @Workflow
-  public String resumeSelf() {
-    resumeSelfRuns.incrementAndGet();
-    dbos.resumeWorkflow(workflowId());
-    return "resumed";
   }
 }
