@@ -1961,10 +1961,11 @@ public class SystemDatabase implements AutoCloseable {
    *
    * <p>{@code beforeRewind}, if given, runs inside the step once the workflow is known to be
    * rewindable, and before its system database history is touched. The executor validates the queue
-   * there and clears the transactional step factories' checkpoints, which live in other databases
-   * and so commit on their own: a rewind that then rolls back leaves them cleared, and the workflow
-   * terminal and not re-enqueued, so nothing runs against the partial history, and since the
-   * deletes are idempotent the rewind can be retried.
+   * there and clears the transactional step factories' checkpoints. Those deletes go through the
+   * factories' own connections, a second one from this pool if a factory shares it, and so commit
+   * on their own: a rewind that then rolls back leaves them cleared, and the workflow terminal and
+   * not re-enqueued, so nothing runs against the partial history, and since the deletes are
+   * idempotent the rewind can be retried.
    */
   public void rewindWorkflow(
       String workflowId,
