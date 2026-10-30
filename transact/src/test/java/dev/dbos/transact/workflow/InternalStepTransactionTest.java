@@ -1,20 +1,24 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AutoClose;
@@ -29,6 +33,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
  */
 @ResourceLock(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT)
 @ResourceLock(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED)
+@ResourceLock(DebugTriggers.DEBUG_TRIGGER_CHILD_RECORDED)
 public class InternalStepTransactionTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -43,6 +48,7 @@ public class InternalStepTransactionTest {
     dbos = new DBOS(pgContainer.dbosConfig());
     impl = new InternalStepServiceImpl(dbos);
     proxy = dbos.registerProxy(InternalStepService.class, impl);
+    impl.self = proxy;
     dbos.launch();
   }
 
@@ -50,7 +56,34 @@ public class InternalStepTransactionTest {
   void afterEach() {
     DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT);
     DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED);
+    DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_CHILD_RECORDED);
     impl.release.countDown();
+    impl.startChild.countDown();
+  }
+
+  /**
+   * Arms {@code trigger} to throw {@code failure} once, on the calling workflow {@code callerId}'s
+   * own thread. Test classes run concurrently and the triggers are global, so one armed for any
+   * caller could be tripped, and spent, by another class's cancel.
+   */
+  private static AtomicBoolean failOnce(String trigger, String callerId, SQLException failure) {
+    var fired = new AtomicBoolean();
+    DebugTriggers.setDebugTrigger(
+        trigger,
+        new DebugTriggers.DebugAction()
+            .setCallback(
+                () -> {
+                  if (callerId.equals(DBOSContextHolder.get().getWorkflowId())
+                      && fired.compareAndSet(false, true)) {
+                    sneakyThrow(failure);
+                  }
+                }));
+    return fired;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <E extends Throwable> void sneakyThrow(Throwable t) throws E {
+    throw (E) t;
   }
 
   private String startBlocked(String prefix) throws Exception {
@@ -73,17 +106,20 @@ public class InternalStepTransactionTest {
   @Test
   public void aFailureBeforeCommitLeavesNeitherEffectNorCheckpoint() throws Exception {
     var targetId = startBlocked("target");
-    DebugTriggers.setDebugTrigger(
-        DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
-        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLException("crash", "XX000")));
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            new SQLException("crash", "XX000"));
 
     // The workflow catches the failed cancel, looks at the target, and cancels again.
-    var callerId = "caller-%d".formatted(System.nanoTime());
     var caller =
         dbos.startWorkflow(
             () -> proxy.cancelsAfterAFailure(targetId), new StartWorkflowOptions(callerId));
 
     assertEquals("first failed, target PENDING", caller.getResult(), "the cancel rolled back");
+    assertTrue(fired.get());
     assertEquals(WorkflowState.CANCELLED, statusOf(targetId));
     // Neither the failure, which the rollback undid, nor its checkpoint was recorded: only the
     // second cancel's.
@@ -95,15 +131,18 @@ public class InternalStepTransactionTest {
   @Test
   public void aTransientFailureBeforeCommitIsRetriedNotRecorded() throws Exception {
     var targetId = startBlocked("target");
-    DebugTriggers.setDebugTrigger(
-        DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
-        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
-
     var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            new SQLTransientException());
+
     var caller =
         dbos.startWorkflow(() -> proxy.cancels(targetId), new StartWorkflowOptions(callerId));
 
     assertEquals("done", caller.getResult());
+    assertTrue(fired.get());
     assertEquals(WorkflowState.CANCELLED, statusOf(targetId));
     var recorded = stepsNamed(callerId, "DBOS.cancelWorkflow");
     assertEquals(1, recorded.size());
@@ -115,22 +154,83 @@ public class InternalStepTransactionTest {
     var targetId = startBlocked("target");
     var deletedId = "deleted-%d".formatted(System.nanoTime());
     dbos.startWorkflow(proxy::quick, new StartWorkflowOptions(deletedId)).getResult();
-    DebugTriggers.setDebugTrigger(
-        DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED,
-        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED,
+            callerId,
+            new SQLTransientException());
 
     // The cancel commits, its acknowledgement is lost, and the retry finds the checkpoint it wrote.
-    var callerId = "caller-%d".formatted(System.nanoTime());
     var caller =
         dbos.startWorkflow(
             () -> proxy.cancelsThenDeletes(targetId, deletedId),
             new StartWorkflowOptions(callerId));
 
     assertEquals("done", caller.getResult());
+    assertTrue(fired.get());
     assertEquals(WorkflowState.CANCELLED, statusOf(targetId));
     assertEquals(1, stepsNamed(callerId, "DBOS.cancelWorkflow").size());
     assertEquals(1, stepsNamed(callerId, "DBOS.deleteWorkflow").size());
     assertTrue(dbos.getWorkflowStatus(deletedId).isEmpty(), "deleted");
+  }
+
+  /**
+   * A child whose insert holds its parent's row lock when a cancel of the parent's tree arrives:
+   * the cancel waits for the insert to commit, then reads the parent's children and finds it.
+   */
+  @Test
+  public void aChildWhoseInsertHoldsItsParentIsCancelledWithTheTree() throws Exception {
+    var parentId = "insert-first-%d".formatted(System.nanoTime());
+    var childId = parentId + "-child";
+    var holding = new CountDownLatch(1);
+    var releaseInsert = new CountDownLatch(1);
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_CHILD_RECORDED,
+        new DebugTriggers.DebugAction()
+            .setCallback(
+                () -> {
+                  if (parentId.equals(DBOSContextHolder.get().getWorkflowId())) {
+                    holding.countDown();
+                    try {
+                      releaseInsert.await(30, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                    }
+                  }
+                }));
+
+    dbos.startWorkflow(() -> proxy.startsChild(childId), new StartWorkflowOptions(parentId));
+    assertTrue(holding.await(10, TimeUnit.SECONDS), "the child's insert holds the parent");
+
+    var cancel = CompletableFuture.runAsync(() -> dbos.cancelWorkflow(parentId, true));
+    Thread.sleep(500);
+    assertFalse(cancel.isDone(), "the cancel waits on the parent's row");
+    releaseInsert.countDown();
+    cancel.get(30, TimeUnit.SECONDS);
+
+    assertEquals(WorkflowState.CANCELLED, statusOf(parentId));
+    assertEquals(WorkflowState.CANCELLED, statusOf(childId), "the new child did not escape");
+  }
+
+  /**
+   * A child inserted after a cancel of its parent's tree has committed finds its parent no longer
+   * owned, and its insert rolls back: no child is left running.
+   */
+  @Test
+  public void aChildInsertedAfterItsParentIsCancelledIsNeverCreated() throws Exception {
+    var parentId = "cancel-first-%d".formatted(System.nanoTime());
+    var childId = parentId + "-child";
+    dbos.startWorkflow(
+        () -> proxy.startsChildWhenReleased(childId), new StartWorkflowOptions(parentId));
+    assertTrue(impl.parentWaiting.await(10, TimeUnit.SECONDS));
+
+    dbos.cancelWorkflow(parentId, true);
+    impl.startChild.countDown();
+    assertTrue(impl.childAttempted.await(30, TimeUnit.SECONDS));
+
+    assertEquals(WorkflowState.CANCELLED, statusOf(parentId));
+    assertTrue(dbos.getWorkflowStatus(childId).isEmpty(), "the child's insert rolled back");
   }
 
   @Test
@@ -160,12 +260,20 @@ interface InternalStepService {
   String cancelsThenDeletes(String targetId, String deletedId);
 
   String cancelsFromStep(String targetId);
+
+  String startsChild(String childId) throws Exception;
+
+  String startsChildWhenReleased(String childId) throws Exception;
 }
 
 class InternalStepServiceImpl implements InternalStepService {
   private final DBOS dbos;
+  InternalStepService self;
   final CountDownLatch blockedStarted = new CountDownLatch(1);
   final CountDownLatch release = new CountDownLatch(1);
+  final CountDownLatch parentWaiting = new CountDownLatch(1);
+  final CountDownLatch startChild = new CountDownLatch(1);
+  final CountDownLatch childAttempted = new CountDownLatch(1);
 
   InternalStepServiceImpl(DBOS dbos) {
     this.dbos = dbos;
@@ -213,6 +321,26 @@ class InternalStepServiceImpl implements InternalStepService {
     dbos.cancelWorkflow(targetId);
     dbos.deleteWorkflow(deletedId);
     return "done";
+  }
+
+  @Override
+  @Workflow
+  public String startsChild(String childId) throws Exception {
+    dbos.startWorkflow(() -> self.blocked(), new StartWorkflowOptions(childId));
+    return "started";
+  }
+
+  @Override
+  @Workflow
+  public String startsChildWhenReleased(String childId) throws Exception {
+    parentWaiting.countDown();
+    startChild.await();
+    try {
+      dbos.startWorkflow(() -> self.blocked(), new StartWorkflowOptions(childId));
+    } finally {
+      childAttempted.countDown();
+    }
+    return "started";
   }
 
   @Override

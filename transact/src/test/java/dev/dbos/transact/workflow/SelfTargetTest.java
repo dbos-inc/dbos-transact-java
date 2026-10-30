@@ -65,6 +65,20 @@ public class SelfTargetTest {
   }
 
   @Test
+  public void aRecordedRefusalReplaysRatherThanBeingDecidedAgain() throws Exception {
+    var workflowId = "self-cancel-replay-%d".formatted(System.nanoTime());
+    var original = dbos.startWorkflow(proxy::cancelSelf, new StartWorkflowOptions(workflowId));
+    var refusal = original.getResult();
+
+    // A fork from the step after the cancel copies the cancel's recorded refusal and replays it.
+    // Decided again, the refusal would name the fork, not the original.
+    var cancelStep = stepNamed(workflowId, "DBOS.cancelWorkflow").functionId();
+    var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, cancelStep + 1);
+    assertEquals(refusal, fork.getResult());
+    assertTrue(refusal.contains(workflowId), refusal);
+  }
+
+  @Test
   public void aWorkflowCannotResumeItself() throws Exception {
     var workflowId = "self-resume-%d".formatted(System.nanoTime());
     var handle = dbos.startWorkflow(proxy::resumeSelf, new StartWorkflowOptions(workflowId));
@@ -133,7 +147,7 @@ public class SelfTargetTest {
     assertTrue(
         result.endsWith("cannot cancel the tree of %s, which contains it".formatted(parentId)),
         result);
-    // Refused before anything was cancelled, the parent included.
+    // The walk cancelled the parent before reaching the child, and the refusal rolled it back.
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 

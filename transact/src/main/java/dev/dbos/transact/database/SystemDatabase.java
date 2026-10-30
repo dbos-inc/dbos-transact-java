@@ -1653,6 +1653,11 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.cancelWorkflow",
         conn -> {
+          // In the work, so it is logged when it runs, not when a replay returns its checkpoint.
+          logger.info(
+              "Cancelling workflow(s) {}{}",
+              workflowIds,
+              cancelChildren ? " and their children" : "");
           WorkflowDAO.cancelWorkflows(
               conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
           return null;
@@ -1675,6 +1680,7 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.resumeWorkflow",
         conn -> {
+          logger.info("Resuming workflow(s) {}", workflowIds);
           WorkflowDAO.resumeWorkflows(
               conn, ctx.schema(), workflowIds, queueName, callerWorkflowId(caller));
           return null;
@@ -1696,6 +1702,10 @@ public class SystemDatabase implements AutoCloseable {
         caller,
         "DBOS.deleteWorkflow",
         conn -> {
+          logger.info(
+              "Deleting workflow(s) {}{}",
+              workflowIds,
+              deleteChildren ? " and their children" : "");
           WorkflowDAO.deleteWorkflows(
               conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
           return null;
@@ -1745,6 +1755,10 @@ public class SystemDatabase implements AutoCloseable {
                 workFailure.set(null);
                 Outcome<T> attempt;
                 try (var conn = ctx.getConnection()) {
+                  // Set rather than inherited, since a pool can hand out another level. A tree walk
+                  // relies on it: each level's children read must see a child committed while the
+                  // level's write waited, which a REPEATABLE READ snapshot would hide.
+                  conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                   attempt =
                       SqlTransaction.call(
                           conn,
@@ -1804,7 +1818,13 @@ public class SystemDatabase implements AutoCloseable {
       replayed = outcome.replayed();
       output = outcome.output();
     } catch (RuntimeException e) {
-      if (step != null && workFailure.get() != null && !isRetryableFailure(e)) {
+      // Only the work's own failure is its answer: the exception that escaped must be it, or the
+      // retries' wrapping of it, not something that ended the retries after it was caught.
+      var failure = workFailure.get();
+      if (step != null
+          && failure != null
+          && (e == failure || e.getCause() == failure)
+          && !isRetryableFailure(e)) {
         recordStepError(step, stepName, e, startTime);
       }
       throw e;
@@ -1812,6 +1832,11 @@ public class SystemDatabase implements AutoCloseable {
 
     if (replayed == null) {
       return output;
+    }
+    if (replayed.error() == null && replayed.output() == null) {
+      throw new IllegalStateException(
+          "Recorded output and error are both null for workflow %s step %d (%s)"
+              .formatted(step.workflowId(), step.stepId(), stepName));
     }
     if (replayed.error() != null) {
       var t =
@@ -1859,7 +1884,7 @@ public class SystemDatabase implements AutoCloseable {
    * or transient failure cut short by an interrupt. Such a failure says nothing about the
    * operation, so it is never recorded as its answer.
    */
-  private static boolean isRetryableFailure(Throwable t) {
+  static boolean isRetryableFailure(Throwable t) {
     if (isSerializationError(t)) {
       return true;
     }

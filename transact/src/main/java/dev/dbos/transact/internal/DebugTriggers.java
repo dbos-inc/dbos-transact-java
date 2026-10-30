@@ -76,6 +76,8 @@ public final class DebugTriggers {
   // "DEBUG_TRIGGER_WORKFLOW_ENQUEUE";
   public static final String DEBUG_TRIGGER_STEP_COMMIT = "DEBUG_TRIGGER_STEP_COMMIT";
   public static final String DEBUG_TRIGGER_INITWF_COMMIT = "DEBUG_TRIGGER_INITWF_COMMIT";
+  // Inside a child's insert transaction, once the parent's step is recorded and its row locked.
+  public static final String DEBUG_TRIGGER_CHILD_RECORDED = "DEBUG_TRIGGER_CHILD_RECORDED";
   // Inside an internal step's transaction, after its work and checkpoint, before the commit.
   public static final String DEBUG_TRIGGER_INTERNAL_STEP_COMMIT =
       "DEBUG_TRIGGER_INTERNAL_STEP_COMMIT";

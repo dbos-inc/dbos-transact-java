@@ -941,18 +941,9 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String serializationFormat,
       String functionName) {
 
-    DBOSContext ctx = DBOSContextHolder.get();
     // A send from a workflow is its step; one from inside a step records nothing, but is still
     // made only while the step's execution owns the workflow.
-    StepCaller caller = null;
-    if (ctx.isInWorkflow()) {
-      caller =
-          ctx.isInStep()
-              ? new StepCaller.FromStep(ctx.getWorkflowId(), ctx.getOwnerXid())
-              : new StepCaller.FromWorkflow(
-                  ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), ctx.getOwnerXid());
-    }
-    systemDatabase.sendBulk(messages, caller, functionName, sendToForks, serializationFormat);
+    systemDatabase.sendBulk(messages, stepCaller(), functionName, sendToForks, serializationFormat);
   }
 
   /**
@@ -1084,15 +1075,11 @@ public class DBOSExecutor implements AutoCloseable {
   public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     Objects.requireNonNull(workflowIds);
 
-    logger.info(
-        "Cancelling workflow(s) {}{}", workflowIds, cancelChildren ? " and their children" : "");
     systemDatabase.cancelWorkflows(workflowIds, cancelChildren, stepCaller());
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
     Objects.requireNonNull(workflowIds);
-    logger.info(
-        "Deleting workflow(s) {}{}", workflowIds, deleteChildren ? " and their children" : "");
     systemDatabase.deleteWorkflows(workflowIds, deleteChildren, stepCaller());
   }
 
@@ -1100,7 +1087,6 @@ public class DBOSExecutor implements AutoCloseable {
       List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
 
-    logger.info("Resuming workflow(s) {}", workflowIds);
     systemDatabase.resumeWorkflows(workflowIds, queueName, stepCaller());
 
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
