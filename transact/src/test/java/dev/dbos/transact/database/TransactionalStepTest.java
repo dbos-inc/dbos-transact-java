@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.dao.WorkflowDAO;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
@@ -134,6 +135,33 @@ public class TransactionalStepTest {
             sysdb.cancelWorkflows(
                 List.of(targetId), false, new StepCaller.FromWorkflow(callerId, 1000, staleOwner)));
     assertEquals(WorkflowState.PENDING, statusOf(targetId), "the body's cancel rolled back");
+    assertTrue(dbos.listWorkflowSteps(callerId).isEmpty(), "nothing recorded");
+  }
+
+  /**
+   * The step check passes, then the workflow changes hands while the work runs: the record at the
+   * end of the transaction is refused, and the work rolls back with it.
+   */
+  @Test
+  public void aWorkflowLostDuringTheWorkCommitsNothing() throws Exception {
+    var callerId = startBlocked("caller");
+    var targetId = startBlocked("target");
+    var step = new StepCaller.FromWorkflow(callerId, 1000, ownerOf(callerId));
+
+    assertThrows(
+        DBOSWorkflowExecutionConflictException.class,
+        () ->
+            sysdb.runTransactionalStep(
+                step,
+                "DBOS.cancelWorkflow",
+                conn -> {
+                  WorkflowDAO.cancelWorkflows(
+                      conn, sysdb.context().schema(), List.of(targetId), false, callerId);
+                  DBTestAccess.takeOwnership(sysdb, callerId);
+                  return null;
+                }));
+
+    assertEquals(WorkflowState.PENDING, statusOf(targetId), "the cancel rolled back");
     assertTrue(dbos.listWorkflowSteps(callerId).isEmpty(), "nothing recorded");
   }
 }

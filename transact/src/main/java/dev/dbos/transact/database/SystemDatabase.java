@@ -1649,19 +1649,21 @@ public class SystemDatabase implements AutoCloseable {
    */
   public void cancelWorkflows(
       List<String> workflowIds, boolean cancelChildren, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.cancelWorkflow",
         conn -> {
           WorkflowDAO.cancelWorkflows(
               conn, ctx.schema(), workflowIds, cancelChildren, callerWorkflowId(caller));
-          // After the DAO, which refuses a self-target, and in the work, which a replay skips.
-          logger.info(
-              "Cancelling workflow(s) {}{}",
-              workflowIds,
-              cancelChildren ? " and their children" : "");
+          ran.set(true);
           return null;
         });
+    // Once, after the commit, and only when the work ran rather than a replay of its checkpoint.
+    if (ran.get()) {
+      logger.info(
+          "Cancelled workflow(s) {}{}", workflowIds, cancelChildren ? " and their children" : "");
+    }
   }
 
   /**
@@ -1676,15 +1678,19 @@ public class SystemDatabase implements AutoCloseable {
   /** Resumes the workflows as the step {@code caller} makes; see {@link #runTransactionalStep}. */
   public void resumeWorkflows(
       List<String> workflowIds, String queueName, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.resumeWorkflow",
         conn -> {
           WorkflowDAO.resumeWorkflows(
               conn, ctx.schema(), workflowIds, queueName, callerWorkflowId(caller));
-          logger.info("Resuming workflow(s) {}", workflowIds);
+          ran.set(true);
           return null;
         });
+    if (ran.get()) {
+      logger.info("Resumed workflow(s) {}", workflowIds);
+    }
   }
 
   /**
@@ -1710,18 +1716,20 @@ public class SystemDatabase implements AutoCloseable {
    */
   public void deleteWorkflows(
       List<String> workflowIds, boolean deleteChildren, @Nullable StepCaller caller) {
+    var ran = new AtomicBoolean();
     runTransactionalStep(
         caller,
         "DBOS.deleteWorkflow",
         conn -> {
           WorkflowDAO.deleteWorkflows(
               conn, ctx.schema(), workflowIds, deleteChildren, callerWorkflowId(caller));
-          logger.info(
-              "Deleting workflow(s) {}{}",
-              workflowIds,
-              deleteChildren ? " and their children" : "");
+          ran.set(true);
           return null;
         });
+    if (ran.get()) {
+      logger.info(
+          "Deleted workflow(s) {}{}", workflowIds, deleteChildren ? " and their children" : "");
+    }
   }
 
   /** The workflow a call is made from, from its body or a step, or null outside any workflow. */
@@ -1750,11 +1758,12 @@ public class SystemDatabase implements AutoCloseable {
    * runs again.
    *
    * <p>Whatever {@code work} throws once the retries end is recorded, a conflict that outlasted
-   * them included, so a workflow that catches it takes the same branch on replay. Not recorded: a
-   * lost ownership or a checkpoint that disagrees with this call, which are thrown outside {@code
-   * work}; a failed commit, whose outcome is unknown and which a replay settles by finding the
-   * checkpoint or not; and a failure an interrupt cut short, which stops the execution rather than
-   * answering the step.
+   * them included, so a workflow that catches it takes the same branch on replay. Only what {@code
+   * work} throws is: a failure of the step check or of the record around it is not, so neither is a
+   * conflict the database happened to raise there rather than in {@code work}, nor a lost ownership
+   * or a checkpoint that disagrees with this call. Nor are a failed commit, whose outcome is
+   * unknown and which a replay settles by finding the checkpoint or not, and a failure an interrupt
+   * cut short, which stops the execution rather than answering the step.
    */
   <T> @Nullable T runTransactionalStep(
       @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
