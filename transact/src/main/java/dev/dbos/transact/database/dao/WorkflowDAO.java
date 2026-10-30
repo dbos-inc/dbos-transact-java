@@ -2337,21 +2337,74 @@ public class WorkflowDAO {
   }
 
   /**
-   * Checks that a workflow can be rewound, without changing anything: it must exist and be in a
-   * terminal state. A rewind repeats this check; this one lets a caller refuse before touching
-   * anything outside the system database.
+   * What a rewind finds before its step's transaction, read in one statement: whether the calling
+   * step is already recorded, whether the caller still owns its workflow, and the status of the
+   * workflow to rewind, null if it does not exist.
+   */
+  public record RewindPrecheck(
+      boolean recorded, boolean callerOwns, @Nullable WorkflowState targetState) {}
+
+  /**
+   * Reads a {@link RewindPrecheck} for a rewind of {@code workflowId} made as step {@code stepId}
+   * of {@code callerWorkflowId} by the execution holding {@code ownerXid}. A caller with no step of
+   * its own passes a negative {@code stepId}, which no step has. Changes nothing.
+   */
+  public static RewindPrecheck rewindPrecheck(
+      Connection conn,
+      String schema,
+      String callerWorkflowId,
+      int stepId,
+      String ownerXid,
+      String workflowId)
+      throws SQLException {
+    var sql =
+        """
+          SELECT
+            EXISTS (SELECT 1 FROM "%1$s".operation_outputs
+                    WHERE workflow_uuid = ? AND function_id = ?) AS recorded,
+            EXISTS (SELECT 1 FROM "%1$s".workflow_status
+                    WHERE workflow_uuid = ? AND owner_xid = ?) AS caller_owns,
+            (SELECT status FROM "%1$s".workflow_status WHERE workflow_uuid = ?) AS target_status
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, callerWorkflowId);
+      stmt.setInt(2, stepId);
+      stmt.setString(3, callerWorkflowId);
+      stmt.setString(4, ownerXid);
+      stmt.setString(5, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        rs.next();
+        var status = rs.getString("target_status");
+        return new RewindPrecheck(
+            rs.getBoolean("recorded"),
+            rs.getBoolean("caller_owns"),
+            status == null ? null : WorkflowState.valueOf(status));
+      }
+    }
+  }
+
+  /**
+   * Refuses a rewind from {@code startStep} of a workflow whose status is {@code state}, null if it
+   * does not exist, unless it exists and is in a terminal state. A rewind repeats this check; a
+   * caller checks first to refuse before touching anything outside the system database.
    */
   public static void checkRewindable(
-      Connection conn, String schema, String workflowId, int startStep) throws SQLException {
+      String workflowId, int startStep, @Nullable WorkflowState state) {
     if (startStep < 0) {
       throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
     }
-    readRewindableState(conn, schema, workflowId);
+    refuseUnlessTerminal(workflowId, state);
   }
 
   private static WorkflowState readRewindableState(
       Connection conn, String schema, String workflowId) throws SQLException {
     var state = getWorkflowState(conn, schema, workflowId);
+    refuseUnlessTerminal(workflowId, state);
+    return state;
+  }
+
+  private static void refuseUnlessTerminal(String workflowId, @Nullable WorkflowState state) {
     if (state == null) {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
@@ -2361,7 +2414,6 @@ public class WorkflowDAO {
                   + " first")
               .formatted(workflowId, state));
     }
-    return state;
   }
 
   /**

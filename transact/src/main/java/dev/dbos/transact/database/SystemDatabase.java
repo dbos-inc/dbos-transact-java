@@ -37,6 +37,7 @@ import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowIdReusePolicy;
 import dev.dbos.transact.workflow.WorkflowSchedule;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -1993,16 +1994,33 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Checks that a workflow can be rewound, without changing anything; see {@link
-   * WorkflowDAO#checkRewindable}.
+   * What a rewind of {@code workflowId} by {@code caller} must know before its step's transaction,
+   * in one round trip: whether the step would run its work, rather than replay its checkpoint or be
+   * refused because the caller has lost its workflow, and the status of the workflow to rewind.
    */
-  public void checkRewindable(String workflowId, int startStep) {
-    dbRetry(
-        () -> {
-          try (var conn = ctx.getConnection()) {
-            WorkflowDAO.checkRewindable(conn, ctx.schema(), workflowId, startStep);
-          }
-        });
+  public record RewindPrecheck(boolean runsWork, @Nullable WorkflowState targetState) {
+    /** Refuses the rewind unless the workflow exists and is in a terminal state. */
+    public void checkRewindable(String workflowId, int startStep) {
+      WorkflowDAO.checkRewindable(workflowId, startStep, targetState);
+    }
+  }
+
+  public RewindPrecheck rewindPrecheck(@Nullable StepCaller caller, String workflowId) {
+    var read =
+        dbRetry(
+            () -> {
+              try (var conn = ctx.getConnection()) {
+                return WorkflowDAO.rewindPrecheck(
+                    conn,
+                    ctx.schema(),
+                    caller == null ? null : caller.workflowId(),
+                    caller instanceof StepCaller.FromWorkflow step ? step.stepId() : -1,
+                    caller == null ? null : caller.ownerXid(),
+                    workflowId);
+              }
+            });
+    boolean runsWork = caller == null || (!read.recorded() && read.callerOwns());
+    return new RewindPrecheck(runsWork, read.targetState());
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {

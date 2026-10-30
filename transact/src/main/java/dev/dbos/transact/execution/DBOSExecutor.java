@@ -1182,20 +1182,19 @@ public class DBOSExecutor implements AutoCloseable {
     // The step factories' checkpoints go first, before the step's transaction opens, and the
     // system database last, in that transaction. Deleting them inside it would hold one pooled
     // connection while a factory sharing the pool asked for another. A step already recorded is
-    // replayed, so its deletes are not repeated against a workflow the rewind has since restarted;
-    // one recorded by a rival meanwhile is found by the step itself, which replays it instead of
+    // replayed, so its deletes are not repeated against a workflow the rewind has since restarted,
+    // and a caller that has lost its workflow leaves them alone for its step to refuse. One
+    // recorded by a rival meanwhile is found by the step itself, which replays it instead of
     // throwing the refusal below. If a delete fails, the workflow keeps its terminal status and is
     // not re-enqueued, and since a delete is idempotent the rewind can simply be retried. The
     // rewindable check runs first so a running workflow keeps its checkpoints.
+    var precheck = systemDatabase.rewindPrecheck(caller, workflowId);
     RuntimeException refusal = null;
-    if (!(caller instanceof StepCaller.FromWorkflow step
-        && systemDatabase.checkStepResult(
-                step.workflowId(), step.stepId(), "DBOS.rewindWorkflow", step.ownerXid())
-            != null)) {
+    if (precheck.runsWork()) {
       try {
         validateQueue(options.queueName(), options.queuePartitionKey());
         if (hasStepCheckpointStores()) {
-          systemDatabase.checkRewindable(workflowId, startStep);
+          precheck.checkRewindable(workflowId, startStep);
           deleteStepCheckpoints(workflowId, startStep);
         }
       } catch (RuntimeException e) {
