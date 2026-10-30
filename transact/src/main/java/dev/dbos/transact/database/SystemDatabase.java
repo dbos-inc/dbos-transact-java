@@ -1972,9 +1972,9 @@ public class SystemDatabase implements AutoCloseable {
    * rewindable, and before its system database history is touched. The executor validates the queue
    * there and clears the transactional step factories' checkpoints. Those deletes go through the
    * factories' own connections, a second one from this pool if a factory shares it, and so commit
-   * on their own: a rewind that then rolls back leaves them cleared, and the workflow terminal and
-   * not re-enqueued, so nothing runs against the partial history, and since the deletes are
-   * idempotent the rewind can be retried.
+   * on their own: a rewind that then rolls back leaves them cleared and the workflow terminal and
+   * not re-enqueued. Retrying the rewind is safe, as the deletes are idempotent; resuming the
+   * workflow instead would run it without those checkpoints.
    */
   public void rewindWorkflow(
       String workflowId,
@@ -2049,29 +2049,49 @@ public class SystemDatabase implements AutoCloseable {
 
   /**
    * Moves a DELAYED workflow's start as the step {@code caller} makes; see {@link
-   * #runTransactionalStep}. A relative delay is resolved in the work, so it runs from the attempt
-   * that commits, as a started workflow's deadline does.
+   * #runTransactionalStep}. A relative delay is resolved once, before the transaction and its
+   * retries, as {@link #resolveDelayUntil(Duration)} requires. A delay that cannot be resolved is
+   * refused inside the step, so the refusal is recorded as the step's error.
    */
   public void setWorkflowDelay(
       String workflowId, WorkflowDelay delay, @Nullable StepCaller caller) {
+    Long resolved;
+    RuntimeException refused;
+    try {
+      resolved = resolveDelayUntil(delay);
+      refused = null;
+    } catch (RuntimeException e) {
+      resolved = null;
+      refused = e;
+    }
+    final Long delayUntilEpochMs = resolved;
+    final RuntimeException refusal = refused;
     runTransactionalStep(
         caller,
         "DBOS.setWorkflowDelay",
         conn -> {
-          Objects.requireNonNull(delay, "delay must not be null");
-          long delayUntilEpochMs;
-          if (delay instanceof WorkflowDelay.Delay d) {
-            delayUntilEpochMs = resolveDelayUntil(d.delay());
-          } else if (delay instanceof WorkflowDelay.DelayUntil du) {
-            // An absolute delay is the caller's instant, taken as given.
-            delayUntilEpochMs = du.delayUntil().toEpochMilli();
-          } else {
-            throw new IllegalArgumentException("Unexpected WorkflowDelay value");
+          if (refusal != null) {
+            throw refusal;
           }
           WorkflowDAO.setWorkflowDelay(conn, ctx.schema(), workflowId, delayUntilEpochMs);
           logger.info("Delaying workflow {} until {}", workflowId, delayUntilEpochMs);
           return null;
         });
+  }
+
+  /**
+   * The absolute end of {@code delay}: a relative one from this JVM's clock, an absolute as given.
+   */
+  private static long resolveDelayUntil(WorkflowDelay delay) {
+    Objects.requireNonNull(delay, "delay must not be null");
+    if (delay instanceof WorkflowDelay.Delay d) {
+      return resolveDelayUntil(d.delay());
+    }
+    if (delay instanceof WorkflowDelay.DelayUntil du) {
+      // An absolute delay is the caller's instant, taken as given.
+      return du.delayUntil().toEpochMilli();
+    }
+    throw new IllegalArgumentException("Unexpected WorkflowDelay value");
   }
 
   /** See {@link WorkflowDAO#cancelTimedOutWorkflows}. */
