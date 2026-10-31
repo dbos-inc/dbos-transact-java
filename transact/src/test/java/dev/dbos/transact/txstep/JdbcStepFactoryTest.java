@@ -1,5 +1,6 @@
 package dev.dbos.transact.txstep;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -10,6 +11,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
@@ -18,15 +21,24 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 interface FactoryTestService {
   record TestResult(String user, int greetCount) {}
@@ -44,6 +56,8 @@ interface FactoryTestService {
   TestResult serializationRetryWorkflow(String user) throws SQLException;
 
   String isolationLevelWorkflow(IsolationLevel level) throws SQLException;
+
+  TestResult parentWorkflow(String user) throws SQLException;
 }
 
 class FactoryTestServiceImpl implements FactoryTestService {
@@ -52,6 +66,8 @@ class FactoryTestServiceImpl implements FactoryTestService {
   private final DataSource dataSource;
 
   final AtomicInteger retryAttempts = new AtomicInteger();
+
+  FactoryTestService proxy;
 
   public FactoryTestServiceImpl(JdbcStepFactory stepFactory, DataSource dataSource) {
     this.stepFactory = stepFactory;
@@ -177,6 +193,12 @@ class FactoryTestServiceImpl implements FactoryTestService {
 
   @Override
   @Workflow
+  public TestResult parentWorkflow(String user) throws SQLException {
+    return proxy.insertWorkflow(user);
+  }
+
+  @Override
+  @Workflow
   public TestResult conflictWorkflow(String user) throws SQLException {
     var winner = new TestResult(user, 99);
     return stepFactory.txStep((Connection c) -> conflictGreeting(c, user, winner), "conflictStep");
@@ -192,6 +214,29 @@ public class JdbcStepFactoryTest {
   JdbcStepFactory stepFactory;
   FactoryTestService proxy;
   FactoryTestServiceImpl impl;
+  // Two extra checkpoint stores that can be made to fail their batch delete. The stores have no
+  // fixed order, so with two failing ones at least one fails before another store runs.
+  final FailingCheckpointStore failingStore1 = new FailingCheckpointStore();
+  final FailingCheckpointStore failingStore2 = new FailingCheckpointStore();
+
+  static class FailingCheckpointStore implements StepCheckpointStore {
+    final AtomicBoolean fail = new AtomicBoolean();
+    final List<Collection<String>> batchDeletes = new CopyOnWriteArrayList<>();
+
+    @Override
+    public void deleteCheckpoints(String workflowId, int fromStepId) {}
+
+    @Override
+    public void deleteCheckpoints(Collection<String> workflowIds) throws SQLException {
+      batchDeletes.add(List.copyOf(workflowIds));
+      if (fail.get()) {
+        throw new SQLException("datasource down");
+      }
+    }
+
+    @Override
+    public void deleteCompletedCheckpoints(String workflowId) {}
+  }
 
   @BeforeEach
   void beforeEach() throws SQLException {
@@ -212,10 +257,13 @@ public class JdbcStepFactoryTest {
     dbos = new DBOS(dbosConfig);
     // These tests read the checkpoints a finished workflow's steps wrote.
     DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
+    dbos.integration().registerStepCheckpointStore(failingStore1);
+    dbos.integration().registerStepCheckpointStore(failingStore2);
     stepFactory = new JdbcStepFactory(dbos, dataSource);
 
     impl = new FactoryTestServiceImpl(stepFactory, dataSource);
     proxy = dbos.registerProxy(FactoryTestService.class, impl);
+    impl.proxy = proxy;
 
     dbos.launch();
   }
@@ -253,6 +301,88 @@ public class JdbcStepFactoryTest {
     assertEquals(new FactoryTestService.TestResult(user, 1), output);
 
     assertEquals(1, getGreetCount(user));
+  }
+
+  @Test
+  public void reusedIdAfterDeleteRunsTxStepAgain() throws Exception {
+    var wfid = "wf1";
+    var user = "testUser";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(1, proxy.insertWorkflow(user).greetCount());
+    }
+    assertEquals(1, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    dbos.deleteWorkflow(wfid);
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
+
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(2, proxy.insertWorkflow(user).greetCount());
+    }
+    assertEquals(2, getGreetCount(user));
+  }
+
+  @Test
+  public void deleteWithChildrenRemovesChildTxStepCheckpoints() throws Exception {
+    var wfid = "parent";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(1, proxy.parentWorkflow("testUser").greetCount());
+    }
+    assertEquals(0, DBUtils.getTxStepRows(dataSource, wfid).size());
+    assertEquals(1, countTxStepRows());
+
+    dbos.deleteWorkflow(wfid, true);
+    assertEquals(0, countTxStepRows());
+  }
+
+  @Test
+  public void failedCheckpointDeleteLogsWarningAndStillDeletesWorkflows() throws Exception {
+    // Unique, so warnings from tests running at the same time aren't counted.
+    var wfid = "failed-checkpoint-delete-parent";
+    try (var _o = new WorkflowOptions(wfid).setContext()) {
+      assertEquals(1, proxy.parentWorkflow("testUser").greetCount());
+    }
+    assertEquals(2, dbos.listWorkflows(null).size());
+    assertEquals(1, countTxStepRows());
+
+    var executorLogger = (Logger) LoggerFactory.getLogger(DBOSExecutor.class);
+    var appender = new ListAppender<ILoggingEvent>();
+    appender.start();
+    executorLogger.addAppender(appender);
+    failingStore1.fail.set(true);
+    failingStore2.fail.set(true);
+    try {
+      assertDoesNotThrow(() -> dbos.deleteWorkflow(wfid, true));
+    } finally {
+      executorLogger.detachAppender(appender);
+    }
+
+    assertEquals(0, dbos.listWorkflows(null).size());
+    // Each failing store was still called once, with the parent and the child, and the factory
+    // still deleted the child's checkpoint.
+    for (var store : List.of(failingStore1, failingStore2)) {
+      assertEquals(1, store.batchDeletes.size());
+      assertEquals(2, store.batchDeletes.get(0).size());
+      assertTrue(store.batchDeletes.get(0).contains(wfid));
+    }
+    assertEquals(0, countTxStepRows());
+    var warnings =
+        appender.list.stream()
+            .filter(e -> e.getLevel() == Level.WARN)
+            .filter(e -> e.getFormattedMessage().contains(wfid))
+            .toList();
+    assertEquals(2, warnings.size());
+    for (var warning : warnings) {
+      assertEquals("datasource down", warning.getThrowableProxy().getMessage());
+    }
+  }
+
+  private int countTxStepRows() throws SQLException {
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery("SELECT count(*) FROM dbos.tx_step_outputs")) {
+      rs.next();
+      return rs.getInt(1);
+    }
   }
 
   @Test

@@ -1014,6 +1014,15 @@ public class DBOS implements AutoCloseable {
    * Delete multiple workflows from the system. This permanently removes the workflows and their
    * associated data from the database.
    *
+   * <p>After the workflows are deleted, the checkpoints transactional step factories keep in the
+   * application's databases are deleted too, so a new workflow started under one of these IDs runs
+   * its transactional steps again. This is best effort: if deleting a factory's checkpoints fails,
+   * a warning is logged and the other factories still delete theirs. A new call for the same IDs
+   * deletes the checkpoints again, even though the workflows are gone. Children are found through
+   * their own status rows, so if those were deleted too (as by an earlier call with {@code
+   * deleteChildren}), pass the children's IDs. Called from a workflow, the delete is a recorded
+   * step, so a replay of that workflow doesn't repeat it.
+   *
    * @param workflowIds a list of workflow IDs to delete; must not be null
    * @param deleteChildren if true, also delete any child workflows; if false, preserve child
    *     workflows
