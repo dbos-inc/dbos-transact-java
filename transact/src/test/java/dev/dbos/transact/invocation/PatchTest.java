@@ -7,10 +7,17 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
+import dev.dbos.transact.workflow.WorkflowState;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
@@ -129,6 +136,46 @@ class PatchServiceImplFiveB implements PatchService2 {
     var a = dbos.runStep(() -> 2, "stepTwo");
     var b = dbos.runStep(() -> 2, "stepTwo");
     return a + b;
+  }
+}
+
+interface PatchRecvService {
+  String workflow();
+}
+
+@WorkflowClassName("PatchRecvService")
+class PatchRecvServiceImplOne implements PatchRecvService {
+  private final DBOS dbos;
+
+  PatchRecvServiceImplOne(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String workflow() {
+    dbos.runStep(() -> 1, "stepOne");
+    return dbos.<String>recv("approval", Duration.ofSeconds(60)).orElse(null);
+  }
+}
+
+@WorkflowClassName("PatchRecvService")
+class PatchRecvServiceImplTwo implements PatchRecvService {
+  private final DBOS dbos;
+  final List<String> patchedRuns = new CopyOnWriteArrayList<>();
+
+  PatchRecvServiceImplTwo(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String workflow() {
+    dbos.runStep(() -> 1, "stepOne");
+    if (dbos.patch("before-wait")) {
+      patchedRuns.add(DBOS.workflowId());
+    }
+    return dbos.<String>recv("approval", Duration.ofSeconds(60)).orElse(null);
   }
 }
 
@@ -333,6 +380,59 @@ public class PatchTest {
       assertThrows(
           IllegalStateException.class,
           () -> dbos.registerProxy(PatchService2.class, new PatchServiceImplFiveB(dbos)));
+    }
+  }
+
+  private static List<String> stepNames(DBOS dbos, String workflowId) {
+    return dbos.listWorkflowSteps(workflowId).stream().map(StepInfo::functionName).toList();
+  }
+
+  @Test
+  public void patchBeforeWaitingRecv() throws Exception {
+    // A recv records its timeout deadline, at the function ID after its own, while it waits. A
+    // patch added before that recv finds the recv's function ID empty on recovery; it must read the
+    // deadline past it as "already passed", not insert a marker that shifts the recv onto the
+    // deadline's function ID.
+    var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
+    var v1Id = "patch-recv-v1";
+
+    try (var dbos = new DBOS(dbosConfig)) {
+      var proxy1 = dbos.registerProxy(PatchRecvService.class, new PatchRecvServiceImplOne(dbos));
+      dbos.launch();
+
+      // v1: stepOne at 0, recv at 1, its timeout deadline at 2.
+      var handle = dbos.startWorkflow(() -> proxy1.workflow(), new StartWorkflowOptions(v1Id));
+      dbos.send(v1Id, "first", "approval");
+      assertEquals("first", handle.getResult());
+      assertEquals(List.of("stepOne", "DBOS.recv", "DBOS.sleep"), stepNames(dbos, v1Id));
+    }
+
+    // The process died while the recv waited: function IDs 0 and 2 recorded, 1 not.
+    var dataSource = pgContainer.dataSource();
+    DBUtils.deleteStepOutput(dataSource, v1Id, 1);
+    DBUtils.setWorkflowState(dataSource, v1Id, WorkflowState.PENDING.name());
+
+    // v2 adds a patch between the step and the recv.
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl2 = new PatchRecvServiceImplTwo(dbos);
+      var proxy2 = dbos.registerProxy(PatchRecvService.class, impl2);
+
+      // Launch recovers the v1 execution, which resumes on the old path.
+      dbos.launch();
+      dbos.send(v1Id, "second", "approval");
+      assertEquals("second", dbos.retrieveWorkflow(v1Id).getResult());
+      assertEquals(List.of(), impl2.patchedRuns);
+      assertEquals(List.of("stepOne", "DBOS.recv", "DBOS.sleep"), stepNames(dbos, v1Id));
+
+      // A new execution takes the patch and records its marker before the recv.
+      var v2Id = "patch-recv-v2";
+      var handle = dbos.startWorkflow(() -> proxy2.workflow(), new StartWorkflowOptions(v2Id));
+      dbos.send(v2Id, "third", "approval");
+      assertEquals("third", handle.getResult());
+      assertEquals(List.of(v2Id), impl2.patchedRuns);
+      assertEquals(
+          List.of("stepOne", "DBOS.patch-before-wait", "DBOS.recv", "DBOS.sleep"),
+          stepNames(dbos, v2Id));
     }
   }
 }
