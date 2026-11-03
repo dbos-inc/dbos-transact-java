@@ -327,19 +327,59 @@ public class StepsDAO {
     }
   }
 
+  /** A recorded checkpoint's function ID and name. */
+  record Checkpoint(int functionId, String functionName) {}
+
+  /**
+   * The earliest checkpoint at or past {@code functionId}, or null if the history ends before it.
+   */
+  static Checkpoint getCheckpointAtOrAfter(
+      Connection conn, String schema, String workflowId, int functionId) throws SQLException {
+    var sql =
+        """
+          SELECT function_id, function_name
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ? AND function_id >= ?
+          ORDER BY function_id
+          LIMIT 1
+        """
+            .formatted(schema);
+
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return new Checkpoint(rs.getInt("function_id"), rs.getString("function_name"));
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+
+  /**
+   * If the history ends before {@code functionId}, records a patch marker there and returns true.
+   * If a checkpoint is recorded at {@code functionId}, returns whether it is this patch marker. If
+   * the history has a checkpoint past {@code functionId} but none at it, the execution reached this
+   * point on pre-patch code, so returns false and records nothing. That happens when a later ID is
+   * recorded before an earlier one, as a waiting recv or getEvent records its timeout before its
+   * own result.
+   */
   public static boolean patch(
       DbContext ctx, String workflowId, int functionId, String patchName, String ownerXid)
       throws SQLException {
     Objects.requireNonNull(patchName, "patchName cannot be null");
     try (var txConn = ctx.getConnection()) {
-      // Reading an existing marker writes nothing, so only a new marker is checked against the
+      // Reading an existing checkpoint writes nothing, so only a new marker is checked against the
       // owner, in the transaction that records it.
       return SqlTransaction.call(
           txConn,
           conn -> {
-            var checkpointName = getCheckpointName(conn, ctx.schema(), workflowId, functionId);
-            if (checkpointName != null) {
-              return patchName.equals(checkpointName);
+            var checkpoint = getCheckpointAtOrAfter(conn, ctx.schema(), workflowId, functionId);
+            if (checkpoint != null) {
+              return checkpoint.functionId() == functionId
+                  && patchName.equals(checkpoint.functionName());
             }
             var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
             recordStepResult(ctx, conn, output, System.currentTimeMillis(), null, ownerXid);
