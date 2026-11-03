@@ -179,6 +179,65 @@ class PatchRecvServiceImplTwo implements PatchRecvService {
   }
 }
 
+interface PatchEventPublisher {
+  void publish(String value);
+}
+
+@WorkflowClassName("PatchEventPublisher")
+class PatchEventPublisherImpl implements PatchEventPublisher {
+  private final DBOS dbos;
+
+  PatchEventPublisherImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public void publish(String value) {
+    dbos.setEvent("status", value);
+  }
+}
+
+interface PatchGetEventService {
+  String workflow(String publisherId);
+}
+
+@WorkflowClassName("PatchGetEventService")
+class PatchGetEventServiceImplOne implements PatchGetEventService {
+  private final DBOS dbos;
+
+  PatchGetEventServiceImplOne(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String workflow(String publisherId) {
+    dbos.runStep(() -> 1, "stepOne");
+    return dbos.<String>getEvent(publisherId, "status", Duration.ofSeconds(60)).orElse(null);
+  }
+}
+
+@WorkflowClassName("PatchGetEventService")
+class PatchGetEventServiceImplTwo implements PatchGetEventService {
+  private final DBOS dbos;
+  final List<String> patchedRuns = new CopyOnWriteArrayList<>();
+
+  PatchGetEventServiceImplTwo(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
+  @Override
+  @Workflow
+  public String workflow(String publisherId) {
+    dbos.runStep(() -> 1, "stepOne");
+    if (dbos.patch("before-wait")) {
+      patchedRuns.add(DBOS.workflowId());
+    }
+    return dbos.<String>getEvent(publisherId, "status", Duration.ofSeconds(60)).orElse(null);
+  }
+}
+
 public class PatchTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -432,6 +491,63 @@ public class PatchTest {
       assertEquals(List.of(v2Id), impl2.patchedRuns);
       assertEquals(
           List.of("stepOne", "DBOS.patch-before-wait", "DBOS.recv", "DBOS.sleep"),
+          stepNames(dbos, v2Id));
+    }
+  }
+
+  @Test
+  public void patchBeforeWaitingGetEvent() throws Exception {
+    // A getEvent records its timeout deadline, at the function ID after its own, before it looks
+    // for the event. A patch added before that getEvent finds the getEvent's function ID empty on
+    // recovery; it must read the deadline past it as "already passed", not insert a marker that
+    // shifts the getEvent onto the deadline's function ID.
+    var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
+    var publisherId = "patch-event-publisher";
+    var v1Id = "patch-event-v1";
+
+    try (var dbos = new DBOS(dbosConfig)) {
+      var publisher =
+          dbos.registerProxy(PatchEventPublisher.class, new PatchEventPublisherImpl(dbos));
+      var proxy1 =
+          dbos.registerProxy(PatchGetEventService.class, new PatchGetEventServiceImplOne(dbos));
+      dbos.launch();
+
+      // The event is published up front, so no getEvent below ever waits on its timeout.
+      dbos.startWorkflow(() -> publisher.publish("ready"), new StartWorkflowOptions(publisherId))
+          .getResult();
+
+      // v1: stepOne at 0, getEvent at 1, its timeout deadline at 2.
+      var handle =
+          dbos.startWorkflow(() -> proxy1.workflow(publisherId), new StartWorkflowOptions(v1Id));
+      assertEquals("ready", handle.getResult());
+      assertEquals(List.of("stepOne", "DBOS.getEvent", "DBOS.sleep"), stepNames(dbos, v1Id));
+    }
+
+    // The process died while the getEvent waited: function IDs 0 and 2 recorded, 1 not.
+    var dataSource = pgContainer.dataSource();
+    DBUtils.deleteStepOutput(dataSource, v1Id, 1);
+    DBUtils.setWorkflowState(dataSource, v1Id, WorkflowState.PENDING.name());
+
+    // v2 adds a patch between the step and the getEvent.
+    try (var dbos = new DBOS(dbosConfig)) {
+      dbos.registerProxy(PatchEventPublisher.class, new PatchEventPublisherImpl(dbos));
+      var impl2 = new PatchGetEventServiceImplTwo(dbos);
+      var proxy2 = dbos.registerProxy(PatchGetEventService.class, impl2);
+
+      // Launch recovers the v1 execution, which resumes on the old path.
+      dbos.launch();
+      assertEquals("ready", dbos.retrieveWorkflow(v1Id).getResult());
+      assertEquals(List.of(), impl2.patchedRuns);
+      assertEquals(List.of("stepOne", "DBOS.getEvent", "DBOS.sleep"), stepNames(dbos, v1Id));
+
+      // A new execution takes the patch and records its marker before the getEvent.
+      var v2Id = "patch-event-v2";
+      var handle =
+          dbos.startWorkflow(() -> proxy2.workflow(publisherId), new StartWorkflowOptions(v2Id));
+      assertEquals("ready", handle.getResult());
+      assertEquals(List.of(v2Id), impl2.patchedRuns);
+      assertEquals(
+          List.of("stepOne", "DBOS.patch-before-wait", "DBOS.getEvent", "DBOS.sleep"),
           stepNames(dbos, v2Id));
     }
   }
