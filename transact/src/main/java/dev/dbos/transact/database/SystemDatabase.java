@@ -1663,8 +1663,13 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.updateWorkflowAttributes(ctx, workflowId, validated));
   }
 
-  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetryIncludingSerializationError(
+  /**
+   * Deletes the workflows and, when {@code deleteChildren}, their descendants. Returns the IDs it
+   * targeted: the given IDs (nulls and blanks dropped) plus any descendants found, whether or not a
+   * status row existed for them.
+   */
+  public List<String> deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
+    return dbRetryIncludingSerializationError(
         "deleteWorkflows", () -> WorkflowDAO.deleteWorkflows(ctx, workflowIds, deleteChildren));
   }
 
