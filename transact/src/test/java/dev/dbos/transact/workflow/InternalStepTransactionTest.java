@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AutoClose;
@@ -59,6 +60,7 @@ public class InternalStepTransactionTest {
     DebugTriggers.clearDebugTrigger(DebugTriggers.DEBUG_TRIGGER_CHILD_RECORDED);
     impl.release.countDown();
     impl.startChild.countDown();
+    impl.mutualRelease.countDown();
   }
 
   /**
@@ -75,6 +77,23 @@ public class InternalStepTransactionTest {
                 () -> {
                   if (callerId.equals(DBOSContextHolder.get().getWorkflowId())
                       && fired.compareAndSet(false, true)) {
+                    sneakyThrow(failure);
+                  }
+                }));
+    return fired;
+  }
+
+  /** As {@link #failOnce}, but throws {@code failure} the first {@code times} times. */
+  private static AtomicInteger failTimes(
+      String trigger, String callerId, int times, SQLException failure) {
+    var fired = new AtomicInteger();
+    DebugTriggers.setDebugTrigger(
+        trigger,
+        new DebugTriggers.DebugAction()
+            .setCallback(
+                () -> {
+                  if (callerId.equals(DBOSContextHolder.get().getWorkflowId())
+                      && fired.getAndIncrement() < times) {
                     sneakyThrow(failure);
                   }
                 }));
@@ -126,6 +145,128 @@ public class InternalStepTransactionTest {
     var recorded = stepsNamed(callerId, "DBOS.cancelWorkflow");
     assertEquals(1, recorded.size());
     assertNull(recorded.get(0).error());
+  }
+
+  /**
+   * A conflict the database raises after the work, in the record or the owner check, and that
+   * outlasts the retries is the step's answer as one raised in the work is: which statement a
+   * deadlock picks is not the caller's doing.
+   */
+  @Test
+  public void aConflictOutsideTheWorkThatOutlastsItsRetriesIsRecorded() throws Exception {
+    var targetId = startBlocked("target");
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    // Ten is every attempt the first cancel gets; the second cancel is left alone.
+    var fired =
+        failTimes(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            10,
+            new SQLException("conflict", "40001"));
+
+    var caller =
+        dbos.<String, RuntimeException>startWorkflow(
+            () -> proxy.cancelsAfterAFailure(targetId), new StartWorkflowOptions(callerId));
+
+    assertEquals("first failed, target PENDING", caller.getResult());
+    assertEquals(11, fired.get(), "ten conflicts, then the second cancel");
+    assertEquals(WorkflowState.CANCELLED, statusOf(targetId));
+    var recorded = stepsNamed(callerId, "DBOS.cancelWorkflow");
+    assertEquals(2, recorded.size());
+    assertTrue(recorded.get(0).error() != null, "the conflict is the first cancel's answer");
+    assertNull(recorded.get(1).error());
+
+    // A replay, which would now succeed at once, is refused the same way and takes the same branch.
+    var fork =
+        dbos.<String, RuntimeException>forkWorkflow(callerId, recorded.get(1).functionId() + 1);
+    assertEquals("first failed, target PENDING", fork.getResult());
+  }
+
+  @Test
+  public void aResumeThatFailsBeforeCommitLeavesNeitherEffectNorCheckpoint() throws Exception {
+    var targetId = startBlocked("target");
+    dbos.cancelWorkflow(targetId);
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMIT,
+            callerId,
+            new SQLException("crash", "XX000"));
+
+    var caller =
+        dbos.startWorkflow(
+            () -> proxy.resumesCatchingAFailure(targetId), new StartWorkflowOptions(callerId));
+
+    assertEquals("failed, target CANCELLED", caller.getResult(), "the resume rolled back");
+    assertTrue(fired.get());
+    assertTrue(stepsNamed(callerId, "DBOS.resumeWorkflow").isEmpty());
+  }
+
+  @Test
+  public void aResumeWhoseCommitAcknowledgementIsLostReplaysTheCheckpoint() throws Exception {
+    var targetId = startBlocked("target");
+    dbos.cancelWorkflow(targetId);
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var fired =
+        failOnce(
+            DebugTriggers.DEBUG_TRIGGER_INTERNAL_STEP_COMMITTED,
+            callerId,
+            new SQLTransientException());
+
+    var caller =
+        dbos.startWorkflow(
+            () -> proxy.resumesCatchingAFailure(targetId), new StartWorkflowOptions(callerId));
+
+    var result = caller.getResult();
+    assertTrue(
+        result.equals("resumed, target ENQUEUED") || result.equals("resumed, target PENDING"),
+        result);
+    assertTrue(fired.get());
+    var recorded = stepsNamed(callerId, "DBOS.resumeWorkflow");
+    assertEquals(1, recorded.size());
+    assertNull(recorded.get(0).error());
+  }
+
+  /**
+   * Two workflows cancelling each other lock each other's row and then their own. Whether one
+   * simply commits first or the database breaks a deadlock between them, one cancel wins and the
+   * other workflow, by then cancelled, commits nothing: never both, and neither hangs.
+   */
+  @Test
+  public void twoWorkflowsCancellingEachOtherLeaveExactlyOneCancelled() throws Exception {
+    var firstId = "mutual-a-%d".formatted(System.nanoTime());
+    var secondId = "mutual-b-%d".formatted(System.nanoTime());
+    dbos.startWorkflow(
+        () -> proxy.cancelsWhenReleased(secondId), new StartWorkflowOptions(firstId));
+    dbos.startWorkflow(
+        () -> proxy.cancelsWhenReleased(firstId), new StartWorkflowOptions(secondId));
+    assertTrue(impl.mutualWaiting.await(10, TimeUnit.SECONDS));
+    impl.mutualRelease.countDown();
+
+    var terminal = List.of(WorkflowState.SUCCESS, WorkflowState.CANCELLED, WorkflowState.ERROR);
+    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
+    while (!(terminal.contains(statusOf(firstId)) && terminal.contains(statusOf(secondId)))) {
+      assertTrue(System.nanoTime() < deadline, "both workflows end");
+      Thread.sleep(100);
+    }
+    var states = List.of(statusOf(firstId), statusOf(secondId));
+    assertTrue(
+        states.contains(WorkflowState.CANCELLED) && states.contains(WorkflowState.SUCCESS),
+        "one cancelled the other and finished: " + states);
+  }
+
+  @Test
+  public void aSendInAStartWorkflowLambdaIsRefused() throws Exception {
+    var targetId = startBlocked("target");
+    var callerId = "caller-%d".formatted(System.nanoTime());
+    var caller =
+        dbos.startWorkflow(
+            () -> proxy.sendsInStartLambda(targetId), new StartWorkflowOptions(callerId));
+
+    var result = caller.getResult();
+    assertTrue(
+        result.contains("DBOS operations cannot be called from the startWorkflow lambda"), result);
+    assertTrue(stepsNamed(callerId, "DBOS.send").isEmpty());
   }
 
   @Test
@@ -319,6 +460,12 @@ interface InternalStepService {
 
   String cancelsFromStep(String targetId);
 
+  String resumesCatchingAFailure(String targetId);
+
+  String cancelsWhenReleased(String otherId) throws InterruptedException;
+
+  String sendsInStartLambda(String targetId);
+
   String startsChild(String childId) throws Exception;
 
   String startsChildWhenReleased(String childId) throws Exception;
@@ -332,6 +479,8 @@ class InternalStepServiceImpl implements InternalStepService {
   final CountDownLatch parentWaiting = new CountDownLatch(1);
   final CountDownLatch startChild = new CountDownLatch(1);
   final CountDownLatch childAttempted = new CountDownLatch(1);
+  final CountDownLatch mutualWaiting = new CountDownLatch(2);
+  final CountDownLatch mutualRelease = new CountDownLatch(1);
 
   InternalStepServiceImpl(DBOS dbos) {
     this.dbos = dbos;
@@ -406,5 +555,43 @@ class InternalStepServiceImpl implements InternalStepService {
   public String cancelsFromStep(String targetId) {
     dbos.runStep(() -> dbos.cancelWorkflow(targetId), "cancelStep");
     return "done";
+  }
+
+  @Override
+  @Workflow
+  public String resumesCatchingAFailure(String targetId) {
+    String outcome;
+    try {
+      dbos.resumeWorkflow(targetId);
+      outcome = "resumed";
+    } catch (RuntimeException e) {
+      outcome = "failed";
+    }
+    return outcome + ", target " + dbos.getWorkflowStatus(targetId).orElseThrow().status();
+  }
+
+  @Override
+  @Workflow
+  public String cancelsWhenReleased(String otherId) throws InterruptedException {
+    mutualWaiting.countDown();
+    mutualRelease.await();
+    dbos.cancelWorkflow(otherId);
+    return "cancelled " + otherId;
+  }
+
+  @Override
+  @Workflow
+  public String sendsInStartLambda(String targetId) {
+    try {
+      dbos.startWorkflow(
+          () -> {
+            dbos.send(targetId, "message", "topic");
+            return self.quick();
+          },
+          new StartWorkflowOptions(DBOSContext.workflowId() + "-child"));
+      return "not refused";
+    } catch (RuntimeException e) {
+      return String.valueOf(e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
+    }
   }
 }
