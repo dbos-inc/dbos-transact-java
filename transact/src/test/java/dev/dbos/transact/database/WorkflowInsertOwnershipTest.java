@@ -114,7 +114,7 @@ public class WorkflowInsertOwnershipTest {
     var token = UUID.randomUUID().toString();
     var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     insert(status, token, null);
-    sysdb.cancelWorkflows(List.of(workflowId), false);
+    sysdb.cancelWorkflows(List.of(workflowId), false, null);
 
     var retried = insert(status, token, null);
 

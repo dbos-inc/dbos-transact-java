@@ -198,7 +198,7 @@ public class RecordStepResultTest {
   public void aReleasedWorkflowIsAConflict() throws Exception {
     var workflowId = "record-step-released-%d".formatted(System.nanoTime());
     var owner = createWorkflow(workflowId);
-    sysdb.cancelWorkflows(List.of(workflowId), false);
+    sysdb.cancelWorkflows(List.of(workflowId), false, null);
 
     assertThrows(
         DBOSWorkflowExecutionConflictException.class,
@@ -210,7 +210,7 @@ public class RecordStepResultTest {
   public void aDeletedWorkflowIsAConflict() throws Exception {
     var workflowId = "record-step-deleted-%d".formatted(System.nanoTime());
     var owner = createWorkflow(workflowId);
-    sysdb.deleteWorkflows(List.of(workflowId), false);
+    sysdb.deleteWorkflows(List.of(workflowId), false, null);
 
     assertThrows(
         DBOSWorkflowExecutionConflictException.class,
@@ -248,7 +248,7 @@ public class RecordStepResultTest {
     assertTrue(checked.await(10, TimeUnit.SECONDS));
 
     var cancel =
-        CompletableFuture.runAsync(() -> sysdb.cancelWorkflows(List.of(workflowId), false));
+        CompletableFuture.runAsync(() -> sysdb.cancelWorkflows(List.of(workflowId), false, null));
     assertThrows(
         TimeoutException.class,
         () -> cancel.get(1, TimeUnit.SECONDS),

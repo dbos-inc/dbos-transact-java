@@ -1597,7 +1597,7 @@ public class DBOSClient implements AutoCloseable {
    * @param cancelChildren if true, recursively cancel all descendant workflows
    */
   public void cancelWorkflows(@NonNull List<String> workflowIds, boolean cancelChildren) {
-    systemDatabase.cancelWorkflows(workflowIds, cancelChildren);
+    systemDatabase.cancelWorkflows(workflowIds, cancelChildren, null);
   }
 
   /**
@@ -1627,7 +1627,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId, @Nullable String queueName) {
-    systemDatabase.resumeWorkflows(List.of(workflowId), queueName);
+    systemDatabase.resumeWorkflows(List.of(workflowId), queueName, null);
     return retrieveWorkflow(workflowId);
   }
 
@@ -1674,7 +1674,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds, @Nullable String queueName) {
-    systemDatabase.resumeWorkflows(workflowIds, queueName);
+    systemDatabase.resumeWorkflows(workflowIds, queueName, null);
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
@@ -1719,7 +1719,7 @@ public class DBOSClient implements AutoCloseable {
    *     workflows
    */
   public void deleteWorkflows(@NonNull List<String> workflowIds, boolean deleteChildren) {
-    systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
+    systemDatabase.deleteWorkflows(workflowIds, deleteChildren, null);
   }
 
   /**
