@@ -5,7 +5,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
@@ -71,8 +70,9 @@ public class InternalWorkflows {
    * another call took it over. Returns null after cancelling when its user workflow already exists
    * -- it started that workflow and then went silent, which the cancel cannot undo, but left alone
    * it would hold the key forever once its node is gone -- or when the inputs do not name one.
-   * Either way the caller goes on as for any call on the key, and extends the promised workflow if
-   * it is still waiting.
+   * Returns null, cancelling nothing, when something else holds the key where the promised workflow
+   * would go. Either way the caller goes on as for any call on the key, and extends the promised
+   * workflow if it is still waiting.
    *
    * <p>With a {@code caller}, the takeover is that caller's step, checkpointed in the same
    * transaction, so a replay neither cancels again nor loses the id it returned.
@@ -84,26 +84,14 @@ public class InternalWorkflows {
       @Nullable DebounceCaller caller) {
     var status = systemDatabase.getWorkflowStatus(debouncerWorkflowId);
     var userWorkflowId = status == null ? null : getUserWorkflowId(status.input());
-    try {
-      return systemDatabase.takeOverDebouncerWorkflow(
-                  debouncerWorkflowId,
-                  userWorkflowId == null ? null : promised.apply(userWorkflowId),
-                  caller)
-              instanceof String id
-          ? id
-          : null;
-    } catch (DBOSQueueDuplicatedException e) {
-      // Something else holds the key where the promised workflow would go: a debounced workflow of
-      // a newer node, on a user queue, which the debouncer workflow's key on the internal queue
-      // never collided with. The transaction rolled back, cancel and all, and the caller extends
-      // that workflow as any other call on the key would.
-      logger.debug(
-          "Could not take over debouncer workflow {}: {} holds its key on queue {}",
-          debouncerWorkflowId,
-          e.deduplicationId(),
-          e.queueName());
-      return null;
-    }
+    // A collision with whatever else holds the key comes back as null, the takeover undone.
+    return systemDatabase.takeOverDebouncerWorkflow(
+                debouncerWorkflowId,
+                userWorkflowId == null ? null : promised.apply(userWorkflowId),
+                caller)
+            instanceof String id
+        ? id
+        : null;
   }
 
   /**

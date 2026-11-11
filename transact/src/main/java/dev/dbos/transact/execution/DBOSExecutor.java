@@ -1305,13 +1305,7 @@ public class DBOSExecutor implements AutoCloseable {
     validateQueue(schedule.queueName());
     validateWorkflow(schedule.workflowName(), schedule.className());
 
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.createSchedule(schedule);
-          return null;
-        },
-        "DBOS.createSchedule",
-        null);
+    systemDatabase.createSchedule(schedule, stepCaller());
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
@@ -1336,33 +1330,15 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void deleteSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.deleteSchedule(name);
-          return null;
-        },
-        "DBOS.deleteSchedule",
-        null);
+    systemDatabase.deleteSchedule(name, stepCaller());
   }
 
   public void pauseSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.pauseSchedule(name);
-          return null;
-        },
-        "DBOS.pauseSchedule",
-        null);
+    systemDatabase.pauseSchedule(name, stepCaller());
   }
 
   public void resumeSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.resumeSchedule(name);
-          return null;
-        },
-        "DBOS.resumeSchedule",
-        null);
+    systemDatabase.resumeSchedule(name, stepCaller());
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {

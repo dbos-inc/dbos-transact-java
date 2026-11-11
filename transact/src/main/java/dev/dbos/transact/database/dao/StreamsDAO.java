@@ -1,14 +1,12 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.database.DbContext;
-import dev.dbos.transact.database.SqlTransaction;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.signal.SignalKey;
 import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -19,69 +17,18 @@ public class StreamsDAO {
 
   private StreamsDAO() {}
 
-  public static void writeStreamFromStep(
-      DbContext ctx,
-      String workflowId,
-      int functionId,
-      String key,
-      Object value,
-      String serializationFormat,
-      String ownerXid)
-      throws SQLException {
-    // A step records nothing of its own, but its write lands only while its execution still owns
-    // the workflow. The owner is checked after the insert, so the status row is locked last, as
-    // every fenced write locks it.
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            insertStream(
-                conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
-            WorkflowDAO.checkOwner(conn, ctx.schema(), workflowId, ownerXid);
-          });
-    }
+  /**
+   * The step a write from the workflow body is recorded as: a close when it writes the close
+   * sentinel, however it was called.
+   */
+  public static String writeStepName(Object value) {
+    return STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
   }
 
-  public static void writeStreamFromWorkflow(
-      DbContext ctx,
-      String workflowId,
-      int functionId,
-      String key,
-      Object value,
-      String serializationFormat,
-      String ownerXid)
-      throws SQLException {
-    String functionName =
-        STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
-    long startTime = System.currentTimeMillis();
-
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            StepResult recordedOutput =
-                StepsDAO.checkStepResult(
-                    conn, ctx.schema(), workflowId, functionId, functionName, ownerXid);
-
-            if (recordedOutput != null) {
-              logger.debug("Replaying writeStream, id: {}, key: {}", functionId, key);
-              return;
-            } else {
-              logger.debug("Running writeStream, id: {}, key: {}", functionId, key);
-            }
-
-            insertStream(
-                conn, ctx.schema(), workflowId, functionId, key, value, serializationFormat);
-
-            var output =
-                new StepResult(workflowId, functionId, functionName, null, null, null, null);
-            StepsDAO.recordStepResult(
-                ctx, conn, output, startTime, System.currentTimeMillis(), ownerXid);
-          });
-    }
-  }
-
-  private static void insertStream(
+  /**
+   * Appends {@code value} to the stream on the caller's transaction, as step {@code functionId}.
+   */
+  public static void writeStream(
       Connection conn,
       String schema,
       String workflowId,
@@ -156,11 +103,11 @@ public class StreamsDAO {
     }
   }
 
+  /** Closes the stream on the caller's transaction, as step {@code functionId}. */
   public static void closeStream(
-      DbContext ctx, String workflowId, int functionId, String key, String ownerXid)
+      Connection conn, String schema, String workflowId, int functionId, String key)
       throws SQLException {
-    writeStreamFromWorkflow(
-        ctx, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json", ownerXid);
+    writeStream(conn, schema, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
   }
 
   public static Object readStream(

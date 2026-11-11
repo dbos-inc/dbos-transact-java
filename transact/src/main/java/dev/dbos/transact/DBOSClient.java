@@ -1912,7 +1912,7 @@ public class DBOSClient implements AutoCloseable {
    * @param schedule the schedule configuration
    */
   public void createSchedule(@NonNull WorkflowSchedule schedule) {
-    systemDatabase.createSchedule(schedule);
+    systemDatabase.createSchedule(schedule, null);
   }
 
   /**
@@ -1960,7 +1960,7 @@ public class DBOSClient implements AutoCloseable {
    * @param name schedule name
    */
   public void deleteSchedule(@NonNull String name) {
-    systemDatabase.deleteSchedule(name);
+    systemDatabase.deleteSchedule(name, null);
   }
 
   /**
@@ -1969,7 +1969,7 @@ public class DBOSClient implements AutoCloseable {
    * @param name schedule name
    */
   public void pauseSchedule(@NonNull String name) {
-    systemDatabase.pauseSchedule(name);
+    systemDatabase.pauseSchedule(name, null);
   }
 
   /**
@@ -1978,7 +1978,7 @@ public class DBOSClient implements AutoCloseable {
    * @param name schedule name
    */
   public void resumeSchedule(@NonNull String name) {
-    systemDatabase.resumeSchedule(name);
+    systemDatabase.resumeSchedule(name, null);
   }
 
   /**
