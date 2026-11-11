@@ -1610,7 +1610,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public void updateWorkflowAttributes(
       @NonNull String workflowId, @Nullable Map<String, Object> attributes) {
-    systemDatabase.updateWorkflowAttributes(workflowId, attributes);
+    systemDatabase.updateWorkflowAttributes(workflowId, attributes, null);
   }
 
   /**
@@ -1735,7 +1735,8 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String originalWorkflowId, int startStep, @NonNull ForkOptions options) {
-    var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
+    var forkedWorkflowId =
+        systemDatabase.forkWorkflow(originalWorkflowId, startStep, options, null, null);
     return retrieveWorkflow(forkedWorkflowId);
   }
 
@@ -1763,7 +1764,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
       @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
-    systemDatabase.rewindWorkflow(workflowId, startStep, options);
+    systemDatabase.rewindWorkflow(workflowId, startStep, options, null, null);
     return retrieveWorkflow(workflowId);
   }
 
@@ -2039,7 +2040,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public void setWorkflowDelay(@NonNull String workflowId, @NonNull Duration delay) {
     var wfDelay = new WorkflowDelay.Delay(Objects.requireNonNull(delay, "delay must not be null"));
-    systemDatabase.setWorkflowDelay(workflowId, wfDelay);
+    systemDatabase.setWorkflowDelay(workflowId, wfDelay, null);
   }
 
   /**
@@ -2055,7 +2056,7 @@ public class DBOSClient implements AutoCloseable {
     var wfDelay =
         new WorkflowDelay.DelayUntil(
             Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
-    systemDatabase.setWorkflowDelay(workflowId, wfDelay);
+    systemDatabase.setWorkflowDelay(workflowId, wfDelay, null);
   }
 
   /**

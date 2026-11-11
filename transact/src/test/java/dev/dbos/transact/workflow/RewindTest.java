@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -57,6 +58,8 @@ public class RewindTest {
 
   // When set, the extra checkpoint store registered in beforeEach fails its delete.
   private final AtomicBoolean failCheckpointDelete = new AtomicBoolean(false);
+  // How many times a rewind has asked the extra checkpoint store to delete.
+  private final AtomicInteger checkpointDeletes = new AtomicInteger();
 
   @BeforeEach
   void beforeEach() throws SQLException {
@@ -86,6 +89,7 @@ public class RewindTest {
             new StepCheckpointStore() {
               @Override
               public void deleteCheckpoints(String workflowId, int fromStepId) throws SQLException {
+                checkpointDeletes.incrementAndGet();
                 if (failCheckpointDelete.get()) {
                   throw new SQLException("datasource down");
                 }
@@ -633,6 +637,7 @@ public class RewindTest {
     assertEquals(2, dbos.retrieveWorkflow(repairerId).getResult());
     assertEquals(2, impl.runsOf("repaired"));
     stepIdOf(repairerId, "DBOS.rewindWorkflow", 0);
+    assertEquals(1, checkpointDeletes.get());
 
     // Crash and recover the repairer with its checkpoints intact. A second rewind would either
     // run the target again or be refused, because the first left it ENQUEUED.
@@ -642,9 +647,10 @@ public class RewindTest {
     assertTrue(recovered.contains(repairerId), "repairer was not recovered");
     assertEquals(2, dbos.retrieveWorkflow(repairerId).getResult());
 
-    // The repairer's body ran again, but the rewind did not.
+    // The repairer's body ran again, but the rewind did not, nor its checkpoint deletes.
     assertEquals(2, impl.runsOf("repairer"));
     assertEquals(2, impl.runsOf("repaired"));
+    assertEquals(1, checkpointDeletes.get(), "the replay deleted the target's checkpoints again");
   }
 
   @Test

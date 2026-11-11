@@ -1215,7 +1215,7 @@ public class SystemDatabaseTest {
 
     // Fork the workflow
     var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
-    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions, null, null);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
 
@@ -1270,7 +1270,7 @@ public class SystemDatabaseTest {
 
     // Fork the workflow
     var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
-    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions, null, null);
     assertNotNull(forkedWorkflowId);
 
     // Retrieve forked workflow and validate null authentication fields are preserved
@@ -1325,7 +1325,7 @@ public class SystemDatabaseTest {
 
     // Fork the workflow
     var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
-    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions, null, null);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
 
@@ -1705,7 +1705,7 @@ public class SystemDatabaseTest {
         null);
 
     long before = System.currentTimeMillis();
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(30)));
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(30)), null);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertNotNull(row.delayUntilEpochMs());
@@ -1725,7 +1725,7 @@ public class SystemDatabaseTest {
         null);
 
     var targetInstant = Instant.now().plusSeconds(120);
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(targetInstant));
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(targetInstant), null);
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertEquals(targetInstant.toEpochMilli(), row.delayUntilEpochMs());
@@ -1747,7 +1747,7 @@ public class SystemDatabaseTest {
           WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(), 5, null);
       DBUtils.setWorkflowState(dataSource, wfid, state.name());
 
-      sysdb.setWorkflowDelay(wfid, targetDelay);
+      sysdb.setWorkflowDelay(wfid, targetDelay, null);
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNull(row.delayUntilEpochMs(), "Expected no delay for status " + state);
@@ -1765,7 +1765,7 @@ public class SystemDatabaseTest {
         5,
         null);
 
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)), null);
     sysdb.transitionDelayedWorkflows();
 
     assertEquals(WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
@@ -1782,7 +1782,7 @@ public class SystemDatabaseTest {
         5,
         null);
 
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)), null);
     sysdb.transitionDelayedWorkflows();
 
     assertEquals(WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
@@ -1803,8 +1803,10 @@ public class SystemDatabaseTest {
           null);
     }
 
-    sysdb.setWorkflowDelay(pastWfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
-    sysdb.setWorkflowDelay(futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    sysdb.setWorkflowDelay(
+        pastWfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)), null);
+    sysdb.setWorkflowDelay(
+        futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)), null);
 
     sysdb.transitionDelayedWorkflows();
 

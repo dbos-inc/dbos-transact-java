@@ -1094,14 +1094,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {
     Objects.requireNonNull(workflowId);
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("Updating attributes of workflow: {}", workflowId);
-          systemDatabase.updateWorkflowAttributes(workflowId, attributes);
-          return null; // void
-        },
-        "DBOS.updateWorkflowAttributes",
-        null);
+    systemDatabase.updateWorkflowAttributes(workflowId, attributes, stepCaller());
   }
 
   /** Whether any transactional step factory has registered its checkpoints. */
@@ -1157,16 +1150,12 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowId, int startStep, ForkOptions options) {
 
     String forkedId =
-        this.runDbosFunctionAsStep(
-            () -> {
-              logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
-
-              validateQueue(options.queueName(), options.queuePartitionKey());
-
-              return systemDatabase.forkWorkflow(workflowId, startStep, options);
-            },
-            "DBOS.forkWorkflow",
-            null);
+        systemDatabase.forkWorkflow(
+            workflowId,
+            startStep,
+            options,
+            () -> validateQueue(options.queueName(), options.queuePartitionKey()),
+            stepCaller());
     return retrieveWorkflow(forkedId);
   }
 
@@ -1189,25 +1178,31 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(workflowId);
     Objects.requireNonNull(options);
 
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
-
-          validateQueue(options.queueName(), options.queuePartitionKey());
-
-          // The step factories' checkpoints go first and the system database last. If a delete
-          // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
-          // against a partly cleared history, and since a delete is idempotent the rewind can
-          // simply be retried. The checks run first so a running workflow keeps its checkpoints.
-          if (hasStepCheckpointStores()) {
-            systemDatabase.checkRewindable(workflowId, startStep);
-            deleteStepCheckpoints(workflowId, startStep);
-          }
-          systemDatabase.rewindWorkflow(workflowId, startStep, options);
-          return null; // void
-        },
-        "DBOS.rewindWorkflow",
-        null);
+    var caller = stepCaller();
+    // The step factories' checkpoints go first, before the step's transaction opens, and the
+    // system database last, in that transaction. Deleting them inside it would hold one pooled
+    // connection while a factory sharing the pool asked for another. A step already recorded is
+    // replayed, so its deletes are not repeated against a workflow the rewind has since restarted,
+    // and a caller that has lost its workflow leaves them alone for its step to refuse. One
+    // recorded by a rival meanwhile is found by the step itself, which replays it instead of
+    // throwing the refusal below. If a delete fails, the workflow keeps its terminal status and is
+    // not re-enqueued, and since a delete is idempotent the rewind can simply be retried. The
+    // rewindable check runs first so a running workflow keeps its checkpoints.
+    var precheck = systemDatabase.rewindPrecheck(caller, workflowId);
+    RuntimeException refusal = null;
+    if (precheck.runsWork()) {
+      try {
+        validateQueue(options.queueName(), options.queuePartitionKey());
+        if (hasStepCheckpointStores()) {
+          precheck.checkRewindable(workflowId, startStep);
+          deleteStepCheckpoints(workflowId, startStep);
+        }
+      } catch (RuntimeException e) {
+        // Thrown from inside the step, so it is recorded as the step's error.
+        refusal = e;
+      }
+    }
+    systemDatabase.rewindWorkflow(workflowId, startStep, options, refusal, caller);
     return retrieveWorkflow(workflowId);
   }
 
@@ -1218,14 +1213,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
     Objects.requireNonNull(workflowId);
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
-          systemDatabase.setWorkflowDelay(workflowId, delay);
-          return null; // void
-        },
-        "DBOS.setWorkflowDelay",
-        null);
+    systemDatabase.setWorkflowDelay(workflowId, delay, stepCaller());
   }
 
   public void writeStream(String key, Object value, SerializationStrategy serialization) {
