@@ -2046,15 +2046,7 @@ public class WorkflowDAO {
     if (workflowIds.isEmpty()) {
       return Map.of();
     }
-    var sql =
-        """
-          SELECT workflow_uuid, parent_workflow_id
-          FROM "%s".workflow_status
-          WHERE parent_workflow_id = ANY(?)
-        """
-            .formatted(schema);
-
-    try (var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = conn.prepareStatement(childrenSql(schema))) {
       var array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
       try {
         stmt.setArray(1, array);

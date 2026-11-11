@@ -6,9 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.json.DBOSJavaSerializer;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,11 +40,46 @@ public class SelfTargetTest {
 
   @BeforeEach
   void beforeEach() {
-    dbos = new DBOS(pgContainer.dbosConfig());
+    launch(pgContainer.dbosConfig());
+  }
+
+  private void launch(DBOSConfig config) {
+    dbos = new DBOS(config);
     impl = new SelfTargetServiceImpl(dbos);
     proxy = dbos.registerProxy(SelfTargetService.class, impl);
     impl.self = proxy;
     dbos.launch();
+  }
+
+  /**
+   * A serializer that keeps values as the native one does but loses an error's type, as a custom
+   * serializer may: every error reads back as a RuntimeException.
+   */
+  private static final class TypeLosingSerializer implements DBOSSerializer {
+    @Override
+    public String name() {
+      return "type-losing";
+    }
+
+    @Override
+    public String serialize(Object value) {
+      return DBOSJavaSerializer.INSTANCE.serialize(value);
+    }
+
+    @Override
+    public Object deserialize(String text) {
+      return DBOSJavaSerializer.INSTANCE.deserialize(text);
+    }
+
+    @Override
+    public String serializeThrowable(Throwable throwable) {
+      return throwable.getMessage();
+    }
+
+    @Override
+    public Throwable deserializeThrowable(String text) {
+      return new RuntimeException(text);
+    }
   }
 
   private StepInfo stepNamed(String workflowId, String name) {
@@ -76,6 +115,43 @@ public class SelfTargetTest {
     var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, cancelStep + 1);
     assertEquals(refusal, fork.getResult());
     assertTrue(refusal.contains(workflowId), refusal);
+  }
+
+  @Test
+  public void aRecordedRefusalReplaysAsItsOwnTypeUnderACustomSerializer() throws Exception {
+    dbos.close();
+    launch(pgContainer.dbosConfig().withSerializer(new TypeLosingSerializer()));
+    var workflowId = "self-cancel-custom-%d".formatted(System.nanoTime());
+    var original = dbos.startWorkflow(proxy::cancelSelf, new StartWorkflowOptions(workflowId));
+    var refusal = original.getResult();
+    assertEquals("refused: workflow %s cannot cancel itself".formatted(workflowId), refusal);
+
+    // The replay must rethrow the IllegalArgumentException the workflow catches, not the
+    // serializer's stand-in for it.
+    var cancelStep = stepNamed(workflowId, "DBOS.cancelWorkflow").functionId();
+    var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, cancelStep + 1);
+    assertEquals(refusal, fork.getResult());
+  }
+
+  @Test
+  public void aBulkCancelNamingItsCallerLeavesTheOthersUntouched() throws Exception {
+    var otherId = "bulk-other-%d".formatted(System.nanoTime());
+    var other = dbos.startWorkflow(proxy::blocked, new StartWorkflowOptions(otherId));
+    assertTrue(impl.blockedStarted.await(10, TimeUnit.SECONDS));
+
+    var callerId = "bulk-caller-%d".formatted(System.nanoTime());
+    var caller =
+        dbos.startWorkflow(
+            () -> proxy.cancelsOtherAndSelf(otherId), new StartWorkflowOptions(callerId));
+
+    assertEquals(
+        "refused: workflow %s cannot cancel itself".formatted(callerId), caller.getResult());
+    assertEquals(
+        WorkflowState.PENDING,
+        dbos.retrieveWorkflow(otherId).getStatus().status(),
+        "the refusal came before any write");
+    impl.release.countDown();
+    assertEquals(otherId, other.getResult());
   }
 
   @Test
@@ -144,6 +220,20 @@ public class SelfTargetTest {
 
     var result = handle.getResult();
     assertTrue(result.startsWith("refused: workflow "), result);
+    assertTrue(
+        result.endsWith("cannot cancel the tree of %s, which contains it".formatted(parentId)),
+        result);
+    // The walk cancelled the parent before reaching the child, and the refusal rolled it back.
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+  }
+
+  @Test
+  public void aStepCannotCancelATreeItsWorkflowBelongsTo() throws Exception {
+    var parentId = "step-tree-parent-%d".formatted(System.nanoTime());
+    var handle =
+        dbos.startWorkflow(proxy::parentOfStepCanceller, new StartWorkflowOptions(parentId));
+
+    var result = handle.getResult();
     assertTrue(
         result.endsWith("cannot cancel the tree of %s, which contains it".formatted(parentId)),
         result);
@@ -237,6 +327,12 @@ interface SelfTargetService {
   String middleOfTree(String rootId);
 
   String cancelsTree(String rootId);
+
+  String parentOfStepCanceller();
+
+  String cancelsTreeInStep(String rootId);
+
+  String cancelsOtherAndSelf(String otherId);
 
   String blocked() throws InterruptedException;
 
@@ -401,6 +497,38 @@ class SelfTargetServiceImpl implements SelfTargetService {
   public String cancelsTree(String rootId) {
     try {
       dbos.cancelWorkflow(rootId, true);
+      return "not refused";
+    } catch (IllegalArgumentException e) {
+      return "refused: " + e.getMessage();
+    }
+  }
+
+  @Override
+  @Workflow
+  public String parentOfStepCanceller() {
+    return self.cancelsTreeInStep(DBOSContext.workflowId());
+  }
+
+  @Override
+  @Workflow
+  public String cancelsTreeInStep(String rootId) {
+    return dbos.runStep(
+        () -> {
+          try {
+            dbos.cancelWorkflow(rootId, true);
+            return "not refused";
+          } catch (IllegalArgumentException e) {
+            return "refused: " + e.getMessage();
+          }
+        },
+        "cancelTreeFromStep");
+  }
+
+  @Override
+  @Workflow
+  public String cancelsOtherAndSelf(String otherId) {
+    try {
+      dbos.cancelWorkflows(List.of(otherId, DBOSContext.workflowId()));
       return "not refused";
     } catch (IllegalArgumentException e) {
       return "refused: " + e.getMessage();

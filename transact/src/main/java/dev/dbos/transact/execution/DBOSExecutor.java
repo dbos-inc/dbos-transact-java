@@ -1666,7 +1666,7 @@ public class DBOSExecutor implements AutoCloseable {
       return new StepCaller.FromStep(ctx.getWorkflowId(), ctx.getOwnerXid());
     }
     if (HOOK_HOLDER.get() != null) {
-      throw new RuntimeException("@Step functions cannot be called from the startWorkflow lambda");
+      throw new RuntimeException("DBOS operations cannot be called from the startWorkflow lambda");
     }
     return new StepCaller.FromWorkflow(
         ctx.getWorkflowId(), ctx.getAndIncrementFunctionId(), ctx.getOwnerXid());

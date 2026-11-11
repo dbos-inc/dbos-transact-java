@@ -1752,7 +1752,8 @@ public class SystemDatabase implements AutoCloseable {
           ran.set(true);
           return null;
         });
-    // Once, after the commit, and only when the work ran rather than a replay of its checkpoint.
+    // Once, after the commit, and only when this call ran the work: a call that only replays a
+    // checkpoint logs nothing.
     if (ran.get()) {
       logger.info(
           "Cancelled workflow(s) {}{}", workflowIds, cancelChildren ? " and their children" : "");
@@ -1850,13 +1851,17 @@ public class SystemDatabase implements AutoCloseable {
    * checkpoint and replays it; from a step or outside a workflow there is none, so {@code work}
    * runs again.
    *
-   * <p>Whatever {@code work} throws once the retries end is recorded, a conflict that outlasted
-   * them included, so a workflow that catches it takes the same branch on replay. Only what {@code
-   * work} throws is: a failure of the step check or of the record around it is not, so neither is a
-   * conflict the database happened to raise there rather than in {@code work}, nor a lost ownership
-   * or a checkpoint that disagrees with this call. Nor are a failed commit, whose outcome is
-   * unknown and which a replay settles by finding the checkpoint or not, and a failure an interrupt
-   * cut short, which stops the execution rather than answering the step.
+   * <p>Whatever {@code work} throws once the retries end is recorded, so a workflow that catches it
+   * takes the same branch on replay. So is a conflict that outlasted the retries, wherever the
+   * database raised it: in {@code work}, in the step check, or in the record and owner check after
+   * it. Which statement a deadlock picks as its victim is the database's choice, and the
+   * transaction is rolled back whichever it was.
+   *
+   * <p>No other failure outside {@code work} is recorded, and a workflow that catches one may take
+   * another branch on replay: a failure of the step check or of the record that is not a conflict,
+   * a lost ownership, or a checkpoint that disagrees with this call. Nor are a failed commit, whose
+   * outcome is unknown and which a replay settles by finding the checkpoint or not, and a failure
+   * an interrupt cut short, which stops the execution rather than answering the step.
    */
   <T> @Nullable T runTransactionalStep(
       @Nullable StepCaller caller, String stepName, SqlTransaction.SqlCall<T> work) {
@@ -1982,12 +1987,14 @@ public class SystemDatabase implements AutoCloseable {
       replayed = outcome.replayed();
       output = outcome.output();
     } catch (RuntimeException e) {
-      // Only the work's own failure is its answer: the exception that escaped must be it, or the
-      // retries' wrapping of it, not something that ended the retries after it was caught.
+      // The work's own failure is its answer: the exception that escaped must be it, or the
+      // retries' wrapping of it, not something that ended the retries after it was caught. A
+      // conflict that outlasted the retries is the answer too, whichever statement raised it,
+      // since the database rolled the transaction back.
       var failure = workFailure.get();
+      boolean fromWork = failure != null && (e == failure || e.getCause() == failure);
       if (step != null
-          && failure != null
-          && (e == failure || e.getCause() == failure)
+          && (fromWork || isSerializationError(e))
           && !Thread.currentThread().isInterrupted()) {
         recordStepError(step, stepName, e, startTime);
       }
@@ -2020,7 +2027,9 @@ public class SystemDatabase implements AutoCloseable {
    */
   private void recordStepError(
       StepCaller.FromWorkflow step, String stepName, RuntimeException error, long startTime) {
-    var serialized = SerializationUtil.serializeError(error, null, ctx.serializer());
+    // In the native format whatever serializer is configured: a replay must rethrow the exact
+    // type the workflow caught, which a custom serializer need not preserve.
+    var serialized = SerializationUtil.serializeError(error, SerializationUtil.NATIVE, null);
     try {
       recordStepResult(
           new StepResult(
