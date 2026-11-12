@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.json.DBOSJavaSerializer;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.util.List;
@@ -35,11 +38,46 @@ public class SelfTargetTest {
 
   @BeforeEach
   void beforeEach() {
-    dbos = new DBOS(pgContainer.dbosConfig());
+    launch(pgContainer.dbosConfig());
+  }
+
+  private void launch(DBOSConfig config) {
+    dbos = new DBOS(config);
     impl = new SelfTargetServiceImpl(dbos);
     proxy = dbos.registerProxy(SelfTargetService.class, impl);
     impl.self = proxy;
     dbos.launch();
+  }
+
+  /**
+   * A serializer that keeps values as the native one does but loses an error's type, as a custom
+   * serializer may: every error reads back as a RuntimeException.
+   */
+  private static final class TypeLosingSerializer implements DBOSSerializer {
+    @Override
+    public String name() {
+      return "type-losing";
+    }
+
+    @Override
+    public String serialize(Object value) {
+      return DBOSJavaSerializer.INSTANCE.serialize(value);
+    }
+
+    @Override
+    public Object deserialize(String text) {
+      return DBOSJavaSerializer.INSTANCE.deserialize(text);
+    }
+
+    @Override
+    public String serializeThrowable(Throwable throwable) {
+      return throwable.getMessage();
+    }
+
+    @Override
+    public Throwable deserializeThrowable(String text) {
+      return new RuntimeException(text);
+    }
   }
 
   private StepInfo stepNamed(String workflowId, String name) {
@@ -75,6 +113,38 @@ public class SelfTargetTest {
     var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, cancelStep + 1);
     assertEquals(refusal, fork.getResult());
     assertTrue(refusal.contains(workflowId), refusal);
+  }
+
+  @Test
+  public void aRecordedRefusalReplaysAsItsOwnTypeUnderACustomSerializer() throws Exception {
+    dbos.close();
+    launch(pgContainer.dbosConfig().withSerializer(new TypeLosingSerializer()));
+    var workflowId = "self-cancel-custom-%d".formatted(System.nanoTime());
+    var original = dbos.startWorkflow(proxy::cancelSelf, new StartWorkflowOptions(workflowId));
+    var refusal = original.getResult();
+    assertEquals("refused: workflow %s cannot cancel itself".formatted(workflowId), refusal);
+
+    // The replay must rethrow the IllegalArgumentException the workflow catches, not the
+    // serializer's stand-in for it.
+    var cancelStep = stepNamed(workflowId, "DBOS.cancelWorkflow").functionId();
+    var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, cancelStep + 1);
+    assertEquals(refusal, fork.getResult());
+  }
+
+  @Test
+  public void anAwaitedWorkflowsErrorKeepsTheConfiguredSerializer() throws Exception {
+    dbos.close();
+    launch(pgContainer.dbosConfig().withSerializer(new TypeLosingSerializer()));
+    var parentId = "awaits-failing-%d".formatted(System.nanoTime());
+    var childId = parentId + "-child";
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.awaitsFailingChild(childId), new StartWorkflowOptions(parentId));
+
+    assertEquals("child failed", handle.getResult());
+    // DBOS's own steps record their errors natively; getResult records the child's error, which
+    // is the application's, with the serializer the application configured.
+    assertEquals("type-losing", stepNamed(parentId, "DBOS.getResult").serialization());
   }
 
   @Test
@@ -223,6 +293,10 @@ interface SelfTargetService {
 
   String blocked() throws InterruptedException;
 
+  String failingChild();
+
+  String awaitsFailingChild(String childId) throws Exception;
+
   String cancelThenResume(String otherId);
 }
 
@@ -352,6 +426,23 @@ class SelfTargetServiceImpl implements SelfTargetService {
       return "not refused";
     } catch (IllegalArgumentException e) {
       return "refused: " + e.getMessage();
+    }
+  }
+
+  @Override
+  @Workflow
+  public String failingChild() {
+    throw new IllegalStateException("child failed");
+  }
+
+  @Override
+  @Workflow
+  public String awaitsFailingChild(String childId) throws Exception {
+    var child = dbos.startWorkflow(() -> self.failingChild(), new StartWorkflowOptions(childId));
+    try {
+      return child.getResult();
+    } catch (RuntimeException e) {
+      return e.getMessage();
     }
   }
 

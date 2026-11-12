@@ -1748,7 +1748,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (!ctx.isInWorkflow()) {
       return Objects.requireNonNull(step, "step must not be null").execute();
     }
-    return runStepInternal(step, options, childWorkflowId);
+    return runStepInternal(step, options, childWorkflowId, false);
   }
 
   public <T, E extends Exception> T runDbosFunctionAsStep(
@@ -1767,14 +1767,21 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException("DBOS step name must start with DBOS.");
     }
     // DBOS methods are never retried
-    return runStepInternal(step, new StepOptions(stepName), childWorkflowId);
+    // DBOS's own steps record what they throw in the native format, whatever serializer is
+    // configured: a replay must rethrow the exact type the workflow caught, such as a refused
+    // self-cancel's IllegalArgumentException, which a custom serializer need not preserve.
+    // DBOS.getResult is the exception: what it throws is the awaited workflow's own error, which
+    // keeps the configured serializer, as that workflow's outcome does.
+    boolean recordErrorNatively = !"DBOS.getResult".equals(stepName);
+    return runStepInternal(step, new StepOptions(stepName), childWorkflowId, recordErrorNatively);
   }
 
   @SuppressWarnings("unchecked")
   private <T, E extends Exception> T runStepInternal(
       @NonNull ThrowingSupplier<T, E> step,
       @NonNull StepOptions options,
-      @Nullable String childWorkflowId)
+      @Nullable String childWorkflowId,
+      boolean recordErrorNatively)
       throws E {
 
     Objects.requireNonNull(step, "step must not be null");
@@ -1877,7 +1884,10 @@ public class DBOSExecutor implements AutoCloseable {
       if (exception != null) {
         logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
 
-        var serializedException = SerializationUtil.serializeError(exception, null, serializer);
+        var serializedException =
+            recordErrorNatively
+                ? SerializationUtil.serializeError(exception, SerializationUtil.NATIVE, null)
+                : SerializationUtil.serializeError(exception, null, serializer);
         var stepResult =
             new StepResult(
                 workflowId,
