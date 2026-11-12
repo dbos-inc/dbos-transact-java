@@ -380,7 +380,13 @@ public class DBOS implements AutoCloseable {
     stepCheckpointStores.add(store);
   }
 
-  /** Launch DBOS, and start recovery. */
+  /**
+   * Launch DBOS, and start recovery.
+   *
+   * <p>If launch throws, for example because migrations are off and the system database is missing
+   * a migration, whatever it started is shut down and this instance is left as if launch had never
+   * been called, so a later {@code launch()} tries again from the start.
+   */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
 
@@ -388,24 +394,41 @@ public class DBOS implements AutoCloseable {
       var executor = new DBOSExecutor(config);
 
       if (dbosExecutor.compareAndSet(null, executor)) {
-        if (config.migrate()) {
-          MigrationManager.runMigrations(config);
-        } else {
-          // The deployment owns the schema, but it must have every migration this SDK defines.
-          MigrationManager.validateSysDbVersion(config);
-        }
+        try {
+          if (config.migrate()) {
+            MigrationManager.runMigrations(config);
+          } else {
+            // The deployment owns the schema, but it must have every migration this SDK defines.
+            MigrationManager.validateSysDbVersion(config);
+          }
 
-        executor.start(
-            this,
-            new HashSet<>(this.lifecycleRegistry),
-            workflowRegistry.getWorkflowSnapshot(),
-            workflowRegistry.getInstanceSnapshot(),
-            workflowRegistry.getInternalWorkflowSnapshot(),
-            workflowRegistry.getInternalInstanceSnapshot(),
-            queueRegistry.getSnapshot(),
-            Set.copyOf(stepCheckpointStores),
-            keepCompletedStepCheckpoints,
-            alertHandler);
+          executor.start(
+              this,
+              new HashSet<>(this.lifecycleRegistry),
+              workflowRegistry.getWorkflowSnapshot(),
+              workflowRegistry.getInstanceSnapshot(),
+              workflowRegistry.getInternalWorkflowSnapshot(),
+              workflowRegistry.getInternalInstanceSnapshot(),
+              queueRegistry.getSnapshot(),
+              Set.copyOf(stepCheckpointStores),
+              keepCompletedStepCheckpoints,
+              alertHandler);
+        } catch (Throwable e) {
+          // Left in place, the executor would make every later launch() return at once with
+          // nothing running, and every other call fail on what it never started. Throwable, not
+          // Exception: a listener or Conductor provider written in another JVM language can throw
+          // a checked exception undeclared, and the reset must happen whatever close() throws.
+          try {
+            executor.close();
+          } catch (Throwable closeFailure) {
+            if (closeFailure != e) {
+              e.addSuppressed(closeFailure);
+            }
+          } finally {
+            dbosExecutor.compareAndSet(executor, null);
+          }
+          throw e;
+        }
       }
     }
   }
@@ -429,9 +452,14 @@ public class DBOS implements AutoCloseable {
   public void shutdown() {
     var current = dbosExecutor.get();
     if (current != null) {
-      current.close();
-      if (!dbosExecutor.compareAndSet(current, null)) {
-        logger.error("failed to set DBOS executor to null on shut down");
+      try {
+        current.close();
+      } finally {
+        // Cleared even when closing threw: close() has stopped all it could, and a closed
+        // executor left in place would make launch() return at once with nothing running.
+        if (!dbosExecutor.compareAndSet(current, null)) {
+          logger.error("failed to set DBOS executor to null on shut down");
+        }
       }
     }
     logger.info("DBOS shut down");

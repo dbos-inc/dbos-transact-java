@@ -459,40 +459,85 @@ public class DBOSExecutor implements AutoCloseable {
     if (isRunning.compareAndSet(true, false)) {
       logger.info("DBOS Executor stopping");
 
-      if (adminServer != null) {
-        adminServer.stop();
-        adminServer = null;
+      // Every step runs even when an earlier one throws, so one component that fails to stop
+      // leaves none of the others running. The first failure is thrown at the end, with the rest
+      // attached to it.
+      var failures = new ArrayList<Throwable>();
+
+      var admin = adminServer;
+      adminServer = null;
+      if (admin != null) {
+        closeStep(failures, admin::stop);
       }
 
-      if (conductor != null) {
-        conductor.stop();
-        conductor = null;
+      var conductorConnection = conductor;
+      conductor = null;
+      if (conductorConnection != null) {
+        closeStep(failures, conductorConnection::stop);
       }
 
-      shutdownLifecycleListeners();
+      closeStep(failures, this::shutdownLifecycleListeners);
 
-      if (schedulerService != null) {
-        schedulerService.close();
-      }
+      var scheduler = schedulerService;
       schedulerService = null;
-      if (queueService != null) {
-        queueService.close();
+      if (scheduler != null) {
+        closeStep(failures, scheduler::close);
       }
+      var queues = queueService;
       queueService = null;
-      if (systemDatabase != null) {
-        systemDatabase.close();
+      if (queues != null) {
+        closeStep(failures, queues::close);
       }
+      var sysdb = systemDatabase;
       systemDatabase = null;
+      if (sysdb != null) {
+        closeStep(failures, sysdb::close);
+      }
 
-      timeoutScheduler.shutdownNow();
-      var notRun = executorService.shutdownNow();
-      logger.debug("Shutting down DBOS Executor threadpool. Tasks not run {}", notRun.size());
+      // Both are null when start() failed before creating them.
+      if (timeoutScheduler != null) {
+        closeStep(failures, timeoutScheduler::shutdownNow);
+      }
+      if (executorService != null) {
+        closeStep(
+            failures,
+            () -> {
+              var notRun = executorService.shutdownNow();
+              logger.debug(
+                  "Shutting down DBOS Executor threadpool. Tasks not run {}", notRun.size());
+            });
+      }
 
       this.workflowMap = null;
       this.instanceMap = null;
       this.internalWorkflowMap = null;
 
       logger.debug("DBOS Executor stopped");
+
+      if (!failures.isEmpty()) {
+        var first = failures.get(0);
+        for (var other : failures.subList(1, failures.size())) {
+          if (other != first) {
+            first.addSuppressed(other);
+          }
+        }
+        if (first instanceof RuntimeException e) {
+          throw e;
+        }
+        if (first instanceof Error e) {
+          throw e;
+        }
+        // A checked exception a listener or Conductor provider threw undeclared.
+        throw new RuntimeException(first);
+      }
+    }
+  }
+
+  private static void closeStep(List<Throwable> failures, Runnable step) {
+    try {
+      step.run();
+    } catch (Throwable t) {
+      failures.add(t);
     }
   }
 
