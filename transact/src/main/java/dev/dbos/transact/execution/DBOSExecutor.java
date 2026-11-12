@@ -1083,9 +1083,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void cancelWorkflows(List<String> workflowIds, boolean cancelChildren) {
     Objects.requireNonNull(workflowIds);
+    var callerWorkflowId = DBOSContextHolder.get().getWorkflowId();
 
     this.runDbosFunctionAsStep(
         () -> {
+          refuseSelfTarget(callerWorkflowId, workflowIds, "cancel");
           logger.info(
               "Cancelling workflow(s) {}{}",
               workflowIds,
@@ -1099,8 +1101,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
     Objects.requireNonNull(workflowIds);
+    var callerWorkflowId = DBOSContextHolder.get().getWorkflowId();
     this.runDbosFunctionAsStep(
         () -> {
+          refuseSelfTarget(callerWorkflowId, workflowIds, "delete");
           logger.info(
               "Deleting workflow(s) {}{}",
               workflowIds,
@@ -1115,10 +1119,12 @@ public class DBOSExecutor implements AutoCloseable {
   public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
+    var callerWorkflowId = DBOSContextHolder.get().getWorkflowId();
 
     // Execute the resume operation as a workflow step
     this.runDbosFunctionAsStep(
         () -> {
+          refuseSelfTarget(callerWorkflowId, workflowIds, "resume");
           logger.info("Resuming workflow(s) {}", workflowIds);
           systemDatabase.resumeWorkflows(workflowIds, queueName);
           return null; // void
@@ -1127,6 +1133,26 @@ public class DBOSExecutor implements AutoCloseable {
         null);
 
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  /**
+   * Refuses a cancel, resume or delete that names the workflow making the call, from its own body
+   * or from one of its steps, before anything is written. Each clears or removes the caller's own
+   * row, so the ownership check on the caller's next checkpoint would fail: a self-cancel would
+   * record no step, a self-delete would leave the workflow running with no row, and a self-resume
+   * would re-dispatch the workflow again and again. A workflow that wants to stop returns or throws
+   * instead.
+   *
+   * <p>It runs inside the call's step, so from a workflow body the refusal is recorded as that
+   * step's error and a replay throws it again; from a step body, where the call takes no step of
+   * its own, it is thrown into that step.
+   */
+  private static void refuseSelfTarget(
+      @Nullable String callerWorkflowId, Collection<String> targets, String action) {
+    if (callerWorkflowId != null && targets.contains(callerWorkflowId)) {
+      throw new IllegalArgumentException(
+          "workflow %s cannot %s itself".formatted(callerWorkflowId, action));
+    }
   }
 
   public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {

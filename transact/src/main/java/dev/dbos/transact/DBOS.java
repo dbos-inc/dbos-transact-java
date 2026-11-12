@@ -872,6 +872,8 @@ public class DBOS implements AutoCloseable {
    *     will be resumed in the default execution context
    * @return A handle to the resumed workflow
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
+   *     its steps: a workflow can't resume itself. Nothing is resumed.
    */
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
@@ -892,6 +894,8 @@ public class DBOS implements AutoCloseable {
    * @param workflowId ID of the workflow to resume; must not be null
    * @return A handle to the resumed workflow
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
+   *     its steps: a workflow can't resume itself. Nothing is resumed.
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId) {
@@ -909,6 +913,8 @@ public class DBOS implements AutoCloseable {
    *     workflows will be resumed in the default execution context
    * @return A list of handles to the resumed workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
+   *     one of its steps: a workflow can't resume itself. Nothing is resumed.
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds, @Nullable String queueName) {
@@ -924,6 +930,8 @@ public class DBOS implements AutoCloseable {
    * @param workflowIds a list of workflow IDs to resume; must not be null
    * @return A list of handles to the resumed workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
+   *     one of its steps: a workflow can't resume itself. Nothing is resumed.
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds) {
@@ -937,6 +945,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param workflowId ID of the workflow to cancel
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being cancelled, or one of
+   *     its steps: a workflow can't cancel itself. Nothing is cancelled.
    */
   public void cancelWorkflow(@NonNull String workflowId) {
     cancelWorkflows(List.of(workflowId), false);
@@ -948,6 +958,8 @@ public class DBOS implements AutoCloseable {
    * @param workflowId ID of the workflow to cancel
    * @param cancelChildren if true, recursively cancel all descendant workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being cancelled, or one of
+   *     its steps: a workflow can't cancel itself. Nothing is cancelled.
    */
   public void cancelWorkflow(@NonNull String workflowId, boolean cancelChildren) {
     cancelWorkflows(List.of(workflowId), cancelChildren);
@@ -959,6 +971,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param workflowIds a list of workflow IDs to cancel; must not be null
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being cancelled, or
+   *     one of its steps: a workflow can't cancel itself. Nothing is cancelled.
    */
   public void cancelWorkflows(@NonNull List<String> workflowIds) {
     cancelWorkflows(workflowIds, false);
@@ -970,6 +984,8 @@ public class DBOS implements AutoCloseable {
    * @param workflowIds a list of workflow IDs to cancel; must not be null
    * @param cancelChildren if true, recursively cancel all descendant workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being cancelled, or
+   *     one of its steps: a workflow can't cancel itself. Nothing is cancelled.
    */
   public void cancelWorkflows(@NonNull List<String> workflowIds, boolean cancelChildren) {
     ensureLaunched("cancelWorkflows").cancelWorkflows(workflowIds, cancelChildren);
@@ -981,6 +997,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param workflowId ID of the workflow to delete; must not be null
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being deleted, or one of
+   *     its steps: a workflow can't delete itself. Nothing is deleted.
    */
   public void deleteWorkflow(@NonNull String workflowId) {
     deleteWorkflows(List.of(workflowId), false);
@@ -994,6 +1012,8 @@ public class DBOS implements AutoCloseable {
    * @param deleteChildren if true, also delete any child workflows; if false, preserve child
    *     workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being deleted, or one of
+   *     its steps: a workflow can't delete itself. Nothing is deleted.
    */
   public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
     deleteWorkflows(List.of(workflowId), deleteChildren);
@@ -1005,6 +1025,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param workflowIds a list of workflow IDs to delete; must not be null
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being deleted, or
+   *     one of its steps: a workflow can't delete itself. Nothing is deleted.
    */
   public void deleteWorkflows(@NonNull List<String> workflowIds) {
     deleteWorkflows(workflowIds, false);
@@ -1018,6 +1040,8 @@ public class DBOS implements AutoCloseable {
    * @param deleteChildren if true, also delete any child workflows; if false, preserve child
    *     workflows
    * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being deleted, or
+   *     one of its steps: a workflow can't delete itself. Nothing is deleted.
    */
   public void deleteWorkflows(@NonNull List<String> workflowIds, boolean deleteChildren) {
     ensureLaunched("deleteWorkflows").deleteWorkflows(workflowIds, deleteChildren);
