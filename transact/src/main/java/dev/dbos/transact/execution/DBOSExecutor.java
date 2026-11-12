@@ -484,9 +484,14 @@ public class DBOSExecutor implements AutoCloseable {
       }
       systemDatabase = null;
 
-      timeoutScheduler.shutdownNow();
-      var notRun = executorService.shutdownNow();
-      logger.debug("Shutting down DBOS Executor threadpool. Tasks not run {}", notRun.size());
+      // Both are null when start() failed before creating them.
+      if (timeoutScheduler != null) {
+        timeoutScheduler.shutdownNow();
+      }
+      if (executorService != null) {
+        var notRun = executorService.shutdownNow();
+        logger.debug("Shutting down DBOS Executor threadpool. Tasks not run {}", notRun.size());
+      }
 
       this.workflowMap = null;
       this.instanceMap = null;

@@ -380,7 +380,13 @@ public class DBOS implements AutoCloseable {
     stepCheckpointStores.add(store);
   }
 
-  /** Launch DBOS, and start recovery. */
+  /**
+   * Launch DBOS, and start recovery.
+   *
+   * <p>If launch throws, for example because migrations are off and the system database is missing
+   * a migration, whatever it started is shut down and this instance is left as if launch had never
+   * been called, so a later {@code launch()} tries again from the start.
+   */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
 
@@ -388,24 +394,36 @@ public class DBOS implements AutoCloseable {
       var executor = new DBOSExecutor(config);
 
       if (dbosExecutor.compareAndSet(null, executor)) {
-        if (config.migrate()) {
-          MigrationManager.runMigrations(config);
-        } else {
-          // The deployment owns the schema, but it must have every migration this SDK defines.
-          MigrationManager.validateSysDbVersion(config);
-        }
+        try {
+          if (config.migrate()) {
+            MigrationManager.runMigrations(config);
+          } else {
+            // The deployment owns the schema, but it must have every migration this SDK defines.
+            MigrationManager.validateSysDbVersion(config);
+          }
 
-        executor.start(
-            this,
-            new HashSet<>(this.lifecycleRegistry),
-            workflowRegistry.getWorkflowSnapshot(),
-            workflowRegistry.getInstanceSnapshot(),
-            workflowRegistry.getInternalWorkflowSnapshot(),
-            workflowRegistry.getInternalInstanceSnapshot(),
-            queueRegistry.getSnapshot(),
-            Set.copyOf(stepCheckpointStores),
-            keepCompletedStepCheckpoints,
-            alertHandler);
+          executor.start(
+              this,
+              new HashSet<>(this.lifecycleRegistry),
+              workflowRegistry.getWorkflowSnapshot(),
+              workflowRegistry.getInstanceSnapshot(),
+              workflowRegistry.getInternalWorkflowSnapshot(),
+              workflowRegistry.getInternalInstanceSnapshot(),
+              queueRegistry.getSnapshot(),
+              Set.copyOf(stepCheckpointStores),
+              keepCompletedStepCheckpoints,
+              alertHandler);
+        } catch (RuntimeException | Error e) {
+          // Left in place, the executor would make every later launch() return at once with
+          // nothing running, and every other call fail on what it never started.
+          try {
+            executor.close();
+          } catch (RuntimeException closeFailure) {
+            e.addSuppressed(closeFailure);
+          }
+          dbosExecutor.compareAndSet(executor, null);
+          throw e;
+        }
       }
     }
   }
