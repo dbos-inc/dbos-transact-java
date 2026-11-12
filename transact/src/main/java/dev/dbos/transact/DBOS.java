@@ -413,15 +413,18 @@ public class DBOS implements AutoCloseable {
               Set.copyOf(stepCheckpointStores),
               keepCompletedStepCheckpoints,
               alertHandler);
-        } catch (RuntimeException | Error e) {
+        } catch (Throwable e) {
           // Left in place, the executor would make every later launch() return at once with
-          // nothing running, and every other call fail on what it never started.
+          // nothing running, and every other call fail on what it never started. Throwable, not
+          // Exception: a listener or Conductor provider written in another JVM language can throw
+          // a checked exception undeclared, and the reset must happen whatever close() throws.
           try {
             executor.close();
-          } catch (RuntimeException closeFailure) {
+          } catch (Throwable closeFailure) {
             e.addSuppressed(closeFailure);
+          } finally {
+            dbosExecutor.compareAndSet(executor, null);
           }
-          dbosExecutor.compareAndSet(executor, null);
           throw e;
         }
       }

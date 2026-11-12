@@ -10,10 +10,12 @@ import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * A launch that throws leaves the instance as if it had never been launched: a later launch tries
@@ -37,7 +39,10 @@ public class FailedLaunchTest {
     assertTrue(e.getMessage().contains("before DBOS is launched"), e.getMessage());
   }
 
+  // Migrates a schema from empty, which takes minutes on a slow CockroachDB runner, as in
+  // CustomSchemaTest.
   @Test
+  @Timeout(value = 5, unit = TimeUnit.MINUTES)
   public void aLaunchRefusedForAnUnmigratedSchemaCanBeRetriedOnceItIsMigrated() throws Exception {
     // A schema no migration has run on, which a launch with migrations off must refuse.
     var schema = "failed_launch_%d".formatted(System.nanoTime());

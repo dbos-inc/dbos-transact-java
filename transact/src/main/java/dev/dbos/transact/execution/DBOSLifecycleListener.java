@@ -10,6 +10,12 @@ public interface DBOSLifecycleListener {
   /** Called from within DBOS.launch, after workflow processing is allowed */
   void dbosLaunched(DBOS dbos);
 
-  /** Called from within DBOS.shutdown, before workflow processing is stopped */
+  /**
+   * Called from within DBOS.shutdown, before workflow processing is stopped.
+   *
+   * <p>Also called when {@code DBOS.launch()} fails, including before {@link #dbosLaunched} was
+   * called on this listener, or when this listener's own {@code dbosLaunched} threw. A later
+   * successful launch calls {@link #dbosLaunched} again.
+   */
   void dbosShutDown();
 }
