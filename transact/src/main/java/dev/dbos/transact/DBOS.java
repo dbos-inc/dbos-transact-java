@@ -421,7 +421,9 @@ public class DBOS implements AutoCloseable {
           try {
             executor.close();
           } catch (Throwable closeFailure) {
-            e.addSuppressed(closeFailure);
+            if (closeFailure != e) {
+              e.addSuppressed(closeFailure);
+            }
           } finally {
             dbosExecutor.compareAndSet(executor, null);
           }
@@ -450,9 +452,14 @@ public class DBOS implements AutoCloseable {
   public void shutdown() {
     var current = dbosExecutor.get();
     if (current != null) {
-      current.close();
-      if (!dbosExecutor.compareAndSet(current, null)) {
-        logger.error("failed to set DBOS executor to null on shut down");
+      try {
+        current.close();
+      } finally {
+        // Cleared even when closing threw: close() has stopped all it could, and a closed
+        // executor left in place would make launch() return at once with nothing running.
+        if (!dbosExecutor.compareAndSet(current, null)) {
+          logger.error("failed to set DBOS executor to null on shut down");
+        }
       }
     }
     logger.info("DBOS shut down");

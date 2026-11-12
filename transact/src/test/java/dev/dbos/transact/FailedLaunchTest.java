@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.QueueService;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
@@ -77,6 +78,52 @@ public class FailedLaunchTest {
     assertEquals(2, listener.launches.get());
     var handle = dbos.startWorkflow(() -> proxy.echo("again"), new StartWorkflowOptions("again"));
     assertEquals("again", handle.getResult());
+  }
+
+  @Test
+  public void aShutdownStepThatThrowsLeavesNothingElseRunning() throws Exception {
+    create(pgContainer.dbosConfig());
+    var listener = new FailingShutdownListener();
+    dbos.integration().registerLifecycleListener(listener);
+
+    var e = assertThrows(IllegalStateException.class, dbos::launch);
+    assertEquals("listener failed", e.getMessage());
+    // The listener's shutdown failed, and the launch's own failure is still the one thrown.
+    assertEquals(1, e.getSuppressed().length);
+    assertEquals("shutdown failed", e.getSuppressed()[0].getMessage());
+    assertTrue(
+        listener.failedLaunchQueues.isStopped(),
+        "the services after the failing step were still stopped");
+    assertNotLaunched();
+
+    dbos.launch();
+    var queues = DBOSTestAccess.getQueueService(dbos);
+    var thrown = assertThrows(AssertionError.class, dbos::shutdown);
+    assertEquals("shutdown failed", thrown.getMessage());
+    assertTrue(queues.isStopped(), "a normal shutdown also stops what comes after the failure");
+    assertNotLaunched();
+  }
+
+  /**
+   * Fails the first launch, and its own shutdown on every launch, with an Error, which nothing in
+   * DBOS catches for it.
+   */
+  private static final class FailingShutdownListener implements DBOSLifecycleListener {
+    final AtomicInteger launches = new AtomicInteger();
+    QueueService failedLaunchQueues;
+
+    @Override
+    public void dbosLaunched(DBOS dbos) {
+      if (launches.incrementAndGet() == 1) {
+        failedLaunchQueues = DBOSTestAccess.getQueueService(dbos);
+        throw new IllegalStateException("listener failed");
+      }
+    }
+
+    @Override
+    public void dbosShutDown() {
+      throw new AssertionError("shutdown failed");
+    }
   }
 
   /** Fails the first launch, after the executor has started its services, and not the next. */
