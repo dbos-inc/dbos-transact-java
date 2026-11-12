@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -36,11 +35,7 @@ public class SelfTargetTest {
 
   @BeforeEach
   void beforeEach() {
-    launch(pgContainer.dbosConfig());
-  }
-
-  private void launch(DBOSConfig config) {
-    dbos = new DBOS(config);
+    dbos = new DBOS(pgContainer.dbosConfig());
     impl = new SelfTargetServiceImpl(dbos);
     proxy = dbos.registerProxy(SelfTargetService.class, impl);
     impl.self = proxy;
@@ -86,20 +81,23 @@ public class SelfTargetTest {
   public void aBulkCancelNamingItsCallerLeavesTheOthersUntouched() throws Exception {
     var otherId = "bulk-other-%d".formatted(System.nanoTime());
     var other = dbos.startWorkflow(proxy::blocked, new StartWorkflowOptions(otherId));
-    assertTrue(impl.blockedStarted.await(10, TimeUnit.SECONDS));
+    try {
+      assertTrue(impl.blockedStarted.await(10, TimeUnit.SECONDS));
 
-    var callerId = "bulk-caller-%d".formatted(System.nanoTime());
-    var caller =
-        dbos.startWorkflow(
-            () -> proxy.cancelsOtherAndSelf(otherId), new StartWorkflowOptions(callerId));
+      var callerId = "bulk-caller-%d".formatted(System.nanoTime());
+      var caller =
+          dbos.startWorkflow(
+              () -> proxy.cancelsOtherAndSelf(otherId), new StartWorkflowOptions(callerId));
 
-    assertEquals(
-        "refused: workflow %s cannot cancel itself".formatted(callerId), caller.getResult());
-    assertEquals(
-        WorkflowState.PENDING,
-        dbos.retrieveWorkflow(otherId).getStatus().status(),
-        "the refusal came before any write");
-    impl.release.countDown();
+      assertEquals(
+          "refused: workflow %s cannot cancel itself".formatted(callerId), caller.getResult());
+      assertEquals(
+          WorkflowState.PENDING,
+          dbos.retrieveWorkflow(otherId).getStatus().status(),
+          "the refusal came before any write");
+    } finally {
+      impl.release.countDown();
+    }
     assertEquals(otherId, other.getResult());
   }
 
@@ -129,7 +127,7 @@ public class SelfTargetTest {
   }
 
   @Test
-  public void aStepCannotCancelOrResumeItsOwnWorkflow() throws Exception {
+  public void aStepCannotCancelResumeOrDeleteItsOwnWorkflow() throws Exception {
     var cancelId = "step-self-cancel-%d".formatted(System.nanoTime());
     var cancel = dbos.startWorkflow(proxy::cancelSelfInStep, new StartWorkflowOptions(cancelId));
     assertEquals(
@@ -160,6 +158,9 @@ public class SelfTargetTest {
     // Nothing of the cancel's own is recorded inside a step; the refusal is the step's result.
     var step = stepNamed(workflowId, "uncaughtCancel");
     assertEquals(IllegalArgumentException.class.getName(), step.error().className());
+    assertTrue(
+        dbos.listWorkflowSteps(workflowId).stream()
+            .noneMatch(s -> s.functionName().equals("DBOS.cancelWorkflow")));
   }
 
   @Test
@@ -170,27 +171,33 @@ public class SelfTargetTest {
         dbos.startWorkflow(
             () -> proxy.cancelsChildTree(childId), new StartWorkflowOptions(parentId));
 
-    assertEquals("cancelled " + childId, handle.getResult());
-    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
-    assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(childId).getStatus().status());
-    impl.release.countDown();
+    try {
+      assertEquals("cancelled " + childId, handle.getResult());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
+      assertEquals(WorkflowState.CANCELLED, dbos.retrieveWorkflow(childId).getStatus().status());
+    } finally {
+      impl.release.countDown();
+    }
   }
 
   @Test
   public void aWorkflowCanStillCancelAndResumeAnother() throws Exception {
     var otherId = "other-%d".formatted(System.nanoTime());
     var other = dbos.startWorkflow(proxy::blocked, new StartWorkflowOptions(otherId));
-    assertTrue(impl.blockedStarted.await(10, TimeUnit.SECONDS));
+    try {
+      assertTrue(impl.blockedStarted.await(10, TimeUnit.SECONDS));
 
-    var callerId = "canceller-%d".formatted(System.nanoTime());
-    var caller =
-        dbos.startWorkflow(
-            () -> proxy.cancelThenResume(otherId), new StartWorkflowOptions(callerId));
-    assertEquals("done", caller.getResult());
+      var callerId = "canceller-%d".formatted(System.nanoTime());
+      var caller =
+          dbos.startWorkflow(
+              () -> proxy.cancelThenResume(otherId), new StartWorkflowOptions(callerId));
+      assertEquals("done", caller.getResult());
 
-    assertNull(stepNamed(callerId, "DBOS.cancelWorkflow").error());
-    assertNull(stepNamed(callerId, "DBOS.resumeWorkflow").error());
-    impl.release.countDown();
+      assertNull(stepNamed(callerId, "DBOS.cancelWorkflow").error());
+      assertNull(stepNamed(callerId, "DBOS.resumeWorkflow").error());
+    } finally {
+      impl.release.countDown();
+    }
     assertEquals(otherId, other.getResult());
   }
 }
