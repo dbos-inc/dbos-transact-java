@@ -52,6 +52,34 @@ public class DBOSConfigKeysTest {
   }
 
   @Test
+  public void surroundingWhitespaceIsRemoved() {
+    // As read from a secret file that ends in a newline: the entitlement check and the Conductor
+    // client must both see the value without it.
+    var config =
+        DBOSConfig.defaults("app")
+            .withConductorKey(" conductor-key\n")
+            .withConductorDomain(" ws://localhost:8090\r\n")
+            .withTransactEnterpriseKey("enterprise-key\n");
+    assertEquals("conductor-key", config.conductorKey());
+    assertEquals("ws://localhost:8090", config.conductorDomain());
+    assertEquals("enterprise-key", config.transactEnterpriseKey());
+  }
+
+  @Test
+  public void credentialsInTheConductorDomainAreMaskedInToString() {
+    var text =
+        DBOSConfig.defaults("app")
+            .withConductorDomain("wss://user:secret@conductor.example.com/conductor/v1alpha1")
+            .toString();
+    assertFalse(text.contains("secret"), text);
+    assertFalse(text.contains("user"), text);
+    assertTrue(
+        text.contains("conductorDomain=wss://***@conductor.example.com/conductor/v1alpha1"), text);
+    var plain = DBOSConfig.defaults("app").withConductorDomain("ws://localhost:8090").toString();
+    assertTrue(plain.contains("conductorDomain=ws://localhost:8090,"), plain);
+  }
+
+  @Test
   public void theKeysAreMaskedInToString() {
     var text =
         DBOSConfig.defaults("app")

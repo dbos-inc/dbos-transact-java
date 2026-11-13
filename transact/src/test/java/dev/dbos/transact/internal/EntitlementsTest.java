@@ -240,12 +240,79 @@ public class EntitlementsTest {
     assertEquals("Bearer conductor-key", conductor.requests.get(1).getValue());
   }
 
-  @Test
-  public void aKeyWithAControlCharacterIsRefusedWithoutQuotingIt() {
-    var e = refused("enterprise\nkey");
-    assertTrue(e.getMessage().contains("contains a control character"), e.getMessage());
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"enterprise\nkey", "enterprise\u20ackey", "enterprise\u0100key", "enterprise key"})
+  public void aKeyThatIsNotPrintableAsciiIsRefusedWithoutQuotingIt(String key) {
+    var e = refused(key);
+    assertTrue(e.getMessage().contains("other than printable ASCII"), e.getMessage());
     assertFalse(e.getMessage().contains("enterprise"), e.getMessage());
     assertEquals(List.of(), conductor.requests);
+    // Against the hosted Conductor too, where an outage would start anyway.
+    var asked = new ArrayList<URI>();
+    var hosted =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                Entitlements.check(
+                    List.of(SOME_FEATURE),
+                    key,
+                    null,
+                    null,
+                    null,
+                    (uri, headers) -> {
+                      asked.add(uri);
+                      return new Answer(200, null, "{\"entitlements\": {\"someFeature\": true}}");
+                    }));
+    assertFalse(hosted.getMessage().contains("enterprise"), hosted.getMessage());
+    assertEquals(List.of(), asked);
+  }
+
+  @Test
+  public void aRequestTheHttpClientRefusesFailsClosedEvenWhenHosted() {
+    // Not an outage, so the hosted Conductor's fail-open does not apply. The client's message,
+    // which can quote the Authorization header, is not passed on.
+    Entitlements.Http refusing =
+        (uri, headers) -> {
+          throw new IllegalArgumentException("invalid header value: \"Bearer secret\"");
+        };
+    try (var logs = new LogCapture(Entitlements.class)) {
+      var e = assertThrows(IllegalStateException.class, () -> checkHosted(null, refusing));
+      assertTrue(e.getMessage().contains("could not be sent"), e.getMessage());
+      assertFalse(e.getMessage().contains("secret"), e.getMessage());
+      assertEquals(null, e.getCause());
+      assertEquals(List.of(), logs.messages(Level.WARN, ""));
+    }
+  }
+
+  @Test
+  public void anOversizedAnswerCountsAsAnOutage() {
+    conductor.body =
+        "{\"entitlements\": {\"someFeature\": true}, \"padding\": \""
+            + "x".repeat(Entitlements.MAX_ANSWER_BYTES)
+            + "\"}";
+    var message = refused("enterprise-key").getMessage();
+    assertTrue(
+        message.contains("the answer is larger than " + Entitlements.MAX_ANSWER_BYTES + " bytes"),
+        message);
+    assertTrue(message.contains("Retry once Conductor is reachable"), message);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", " ", "\n"})
+  public void aBlankConductorUrlMeansTheHostedOne(String url) {
+    var asked = new ArrayList<URI>();
+    Entitlements.check(
+        List.of(SOME_FEATURE),
+        "enterprise-key",
+        null,
+        url,
+        null,
+        (uri, headers) -> {
+          asked.add(uri);
+          return new Answer(200, null, "{\"entitlements\": {\"someFeature\": true}}");
+        });
+    assertEquals(List.of(URI.create(HOSTED_ROUTE)), asked);
   }
 
   @Test

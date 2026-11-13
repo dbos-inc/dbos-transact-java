@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.ProxySelector;
 import java.net.URI;
@@ -11,12 +12,17 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -64,6 +70,8 @@ public final class Entitlements {
   private static final String KEY_HINT =
       "Set transactEnterpriseKey or conductorKey in your DBOSConfig.";
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  // Read no more of an answer than this; an entitlement list is a few hundred bytes.
+  static final int MAX_ANSWER_BYTES = 1 << 20;
 
   private Entitlements() {}
 
@@ -130,21 +138,25 @@ public final class Entitlements {
     }
     var names = join(features, Feature::description);
     var entitlements = join(features, Feature::entitlement);
-    // A blank key is unset, and surrounding whitespace (a trailing newline from a secret file) is
-    // not part of it.
-    var key = configuredKey(enterpriseKey);
+    // As DBOSConfig reads them: blank is unset, and surrounding whitespace (a trailing newline from
+    // a secret file) is not part of the value.
+    var key = setting(enterpriseKey);
     if (key == null) {
-      key = configuredKey(conductorKey);
+      key = setting(conductorKey);
     }
+    conductorUrl = setting(conductorUrl);
     var target = conductorUrl != null ? conductorUrl : defaultConductorUrl(dbosDomain);
     // Only a Conductor named explicitly is asked without a key, and never DBOS's hosted one.
     if (key == null && (conductorUrl == null || target.equals(HOSTED_CONDUCTOR_URL))) {
       throw new IllegalStateException(names + " requires a DBOS key. " + KEY_HINT);
     }
-    if (key != null && key.chars().anyMatch(Character::isISOControl)) {
-      // Never quoted: an HTTP header cannot carry it, and the message would leak the key.
+    // A DBOS key is printable ASCII. Anything else is refused here, unquoted, rather than by the
+    // HTTP client, whose message would quote the key.
+    if (key != null && !key.chars().allMatch(c -> c > 0x20 && c < 0x7f)) {
       throw new IllegalStateException(
-          names + " requires a DBOS key, but the configured key contains a control character.");
+          names
+              + " requires a DBOS key, but the configured key is not one: it contains a character"
+              + " other than printable ASCII.");
     }
     String url;
     try {
@@ -237,9 +249,13 @@ public final class Entitlements {
       failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
       cause = e;
     } catch (IllegalArgumentException e) {
-      // The HTTP client refused the request. Its message may quote a header, so it is not passed
-      // on.
-      failure = "the request could not be sent";
+      // The HTTP client refused to send the request: not an outage, so it never fails open. Its
+      // message may quote a header, so it is not passed on.
+      throw refusal(
+          names
+              + " requires an entitled DBOS key, but the entitlement request to Conductor at "
+              + url
+              + " could not be sent.");
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException(
@@ -273,12 +289,12 @@ public final class Entitlements {
     return "wss://" + domain + "/conductor/v1alpha1";
   }
 
-  /** The key as configured, or null if it is unset or blank. */
-  private static @Nullable String configuredKey(@Nullable String key) {
-    if (key == null) {
+  /** A setting without surrounding whitespace, or null if it is unset or blank. */
+  private static @Nullable String setting(@Nullable String value) {
+    if (value == null) {
       return null;
     }
-    var stripped = key.strip();
+    var stripped = value.strip();
     return stripped.isEmpty() ? null : stripped;
   }
 
@@ -330,14 +346,15 @@ public final class Entitlements {
       if (proxies != null) {
         builder.proxy(proxies);
       }
-      var request = HttpRequest.newBuilder(uri).timeout(timeout).GET();
+      // No request timeout: it would end at the headers, and race the deadline below.
+      var request = HttpRequest.newBuilder(uri).GET();
       headers.forEach(request::header);
       var pending =
-          builder.build().sendAsync(request.build(), HttpResponse.BodyHandlers.ofString());
+          builder.build().sendAsync(request.build(), info -> new BoundedBody(MAX_ANSWER_BYTES));
       HttpResponse<String> response;
       try {
-        // The request's own timeout ends once the headers arrive. This deadline covers the body
-        // too, so an answer that stalls mid-body cannot hold up launch.
+        // One deadline for the whole exchange, body included, so an answer that stalls mid-body
+        // cannot hold up launch.
         response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
       } catch (TimeoutException e) {
         pending.cancel(true);
@@ -360,6 +377,59 @@ public final class Entitlements {
           response.headers().firstValue(ERROR_CODE_HEADER).orElse(null),
           response.body());
     };
+  }
+
+  /** Collects an answer as UTF-8 text, failing once it exceeds {@code max} bytes. */
+  static final class BoundedBody implements HttpResponse.BodySubscriber<String> {
+    private final int max;
+    private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    private final CompletableFuture<String> body = new CompletableFuture<>();
+    private Flow.@Nullable Subscription subscription;
+
+    BoundedBody(int max) {
+      this.max = max;
+    }
+
+    @Override
+    public void onSubscribe(Flow.Subscription subscription) {
+      this.subscription = subscription;
+      subscription.request(Long.MAX_VALUE);
+    }
+
+    @Override
+    public void onNext(List<ByteBuffer> buffers) {
+      if (body.isDone()) {
+        return;
+      }
+      for (var buffer : buffers) {
+        if (bytes.size() + buffer.remaining() > max) {
+          if (subscription != null) {
+            subscription.cancel();
+          }
+          body.completeExceptionally(
+              new IOException("the answer is larger than " + max + " bytes"));
+          return;
+        }
+        var chunk = new byte[buffer.remaining()];
+        buffer.get(chunk);
+        bytes.write(chunk, 0, chunk.length);
+      }
+    }
+
+    @Override
+    public void onError(Throwable error) {
+      body.completeExceptionally(error);
+    }
+
+    @Override
+    public void onComplete() {
+      body.complete(bytes.toString(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public CompletionStage<String> getBody() {
+      return body;
+    }
   }
 
   /** An answer that is not an entitlement list, which counts as Conductor failing to answer. */

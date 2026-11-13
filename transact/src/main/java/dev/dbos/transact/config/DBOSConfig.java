@@ -42,11 +42,12 @@ import org.jspecify.annotations.Nullable;
  * @param adminServerPort port for the built-in admin HTTP server; deprecated and will be removed
  *     before 1.0 — use DBOS Conductor instead
  * @param migrate whether to run database migrations on startup
- * @param conductorKey API key for DBOS Conductor; null or blank to not connect. Connecting to
- *     Conductor requires {@code dev.dbos:transact-enterprise} on the class path. Masked in {@link
- *     #toString()}
+ * @param conductorKey API key for DBOS Conductor; null or blank to not connect. Surrounding
+ *     whitespace is removed. Connecting to Conductor requires {@code dev.dbos:transact-enterprise}
+ *     on the class path. Masked in {@link #toString()}
  * @param conductorDomain custom hostname for DBOS Conductor; null or blank for DBOS's hosted
- *     Conductor
+ *     Conductor. Surrounding whitespace is removed, and credentials in it are masked in {@link
+ *     #toString()}
  * @param conductorExecutorMetadata arbitrary key-value metadata attached to this executor's
  *     registration in Conductor
  * @param appVersion application version string used for versioned workflow routing; must not be
@@ -80,7 +81,7 @@ import org.jspecify.annotations.Nullable;
  *     enforces it
  * @param transactEnterpriseKey the DBOS key that entitles this application to Transact Enterprise
  *     features. A blank value is the same as null, and when it is null, {@code conductorKey} stands
- *     in for it. Masked in {@link #toString()}
+ *     in for it. Surrounding whitespace is removed. Masked in {@link #toString()}
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -135,16 +136,12 @@ public record DBOSConfig(
       throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
     }
     // A blank Conductor setting is unset, as in the other SDKs, so an empty placeholder (an unset
-    // environment variable) means the default instead of failing.
-    if (conductorKey != null && conductorKey.isBlank()) {
-      conductorKey = null;
-    }
-    if (transactEnterpriseKey != null && transactEnterpriseKey.isBlank()) {
-      transactEnterpriseKey = null;
-    }
-    if (conductorDomain != null && conductorDomain.isBlank()) {
-      conductorDomain = null;
-    }
+    // environment variable) means the default instead of failing. Surrounding whitespace, such as
+    // the trailing newline of a secret file, is not part of the value, so the entitlement check
+    // and the Conductor client always see the same one.
+    conductorKey = setting(conductorKey);
+    conductorDomain = setting(conductorDomain);
+    transactEnterpriseKey = setting(transactEnterpriseKey);
     if (appVersion != null && appVersion.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appVersion must not be empty if specified");
     }
@@ -207,6 +204,21 @@ public record DBOSConfig(
   @Override
   public int adminServerPort() {
     return adminServerPort;
+  }
+
+  private static @Nullable String setting(@Nullable String value) {
+    if (value == null) {
+      return null;
+    }
+    var stripped = value.strip();
+    return stripped.isEmpty() ? null : stripped;
+  }
+
+  /** The domain with any {@code user:password@} replaced, for printing. */
+  private static @Nullable String withoutCredentials(@Nullable String domain) {
+    return domain == null
+        ? null
+        : domain.replaceFirst("^((?:[A-Za-z][A-Za-z0-9+.-]*://)?)[^/@]*@", "$1***@");
   }
 
   // Copy constructor
@@ -1162,7 +1174,8 @@ public record DBOSConfig(
         v);
   }
 
-  // Override toString to mask the DB password and the Conductor and Transact Enterprise keys
+  // Override toString to mask the DB password, the Conductor and Transact Enterprise keys, and any
+  // credentials in the Conductor domain
   @Override
   public String toString() {
     return """
@@ -1185,7 +1198,7 @@ public record DBOSConfig(
             adminServerPort,
             migrate,
             conductorKey == null ? null : "***",
-            conductorDomain,
+            withoutCredentials(conductorDomain),
             conductorExecutorMetadata,
             appVersion,
             executorId,
