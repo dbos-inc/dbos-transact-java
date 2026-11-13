@@ -38,6 +38,7 @@ class DBOSPropertiesTest {
     assertNull(props.getConductor().getDomain());
     assertFalse(props.getConductor().isMetadataOnlyMode());
     assertNull(props.getExecutorId());
+    assertNull(props.getTransactEnterpriseKey());
     assertNull(props.getDatasource().getSchema());
     assertNull(props.getSchedulerPollingInterval());
     assertNotNull(props.getDatasource());
@@ -101,6 +102,12 @@ class DBOSPropertiesTest {
     assertEquals("my-key", props.getConductor().getKey());
     assertEquals("my-domain", props.getConductor().getDomain());
     assertTrue(props.getConductor().isMetadataOnlyMode());
+  }
+
+  @Test
+  void bindsTheTransactEnterpriseKey() {
+    var props = bind(Map.of("dbos.transact-enterprise-key", "my-enterprise-key"));
+    assertEquals("my-enterprise-key", props.getTransactEnterpriseKey());
   }
 
   @Test

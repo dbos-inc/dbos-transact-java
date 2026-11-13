@@ -76,6 +76,9 @@ import org.jspecify.annotations.Nullable;
  *     workflow data: no inputs, outputs, errors, step outputs, events, notifications, streams,
  *     schedule context, exports or imports. Requires {@code dev.dbos:transact-enterprise}, which
  *     enforces it
+ * @param transactEnterpriseKey the DBOS key that entitles this application to Transact Enterprise
+ *     features; must not be empty if non-null. When it is null, {@code conductorKey} stands in for
+ *     it. Masked in {@link #toString()}
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -100,7 +103,8 @@ public record DBOSConfig(
     @Nullable Duration notificationCoalesceInterval,
     @Nullable Integer databasePollingConcurrency,
     @Nullable Duration systemDatabaseIdleTransactionTimeout,
-    boolean conductorMetadataOnlyMode) {
+    boolean conductorMetadataOnlyMode,
+    @Nullable String transactEnterpriseKey) {
 
   /** Default flush interval for batched stream and workflow-event notifications. */
   public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
@@ -130,6 +134,10 @@ public record DBOSConfig(
     }
     if (conductorKey != null && conductorKey.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");
+    }
+    if (transactEnterpriseKey != null && transactEnterpriseKey.isEmpty()) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.transactEnterpriseKey must not be empty if specified");
     }
     if (conductorDomain != null && conductorDomain.isEmpty()) {
       throw new IllegalArgumentException(
@@ -226,7 +234,8 @@ public record DBOSConfig(
         other.notificationCoalesceInterval,
         other.databasePollingConcurrency,
         other.systemDatabaseIdleTransactionTimeout,
-        other.conductorMetadataOnlyMode);
+        other.conductorMetadataOnlyMode,
+        other.transactEnterpriseKey);
   }
 
   /**
@@ -248,7 +257,8 @@ public record DBOSConfig(
         null, // notificationCoalesceInterval
         null, // databasePollingConcurrency
         null, // systemDatabaseIdleTransactionTimeout
-        false); // conductorMetadataOnlyMode
+        false, // conductorMetadataOnlyMode
+        null); // transactEnterpriseKey
   }
 
   /**
@@ -301,7 +311,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -329,7 +340,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -357,7 +369,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -385,7 +398,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -418,7 +432,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -451,7 +466,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -484,7 +500,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -512,7 +529,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -543,7 +561,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code conductorDomain} set to {@code v}. */
@@ -571,7 +590,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -599,7 +619,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -627,7 +648,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -655,7 +677,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -683,7 +706,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -721,7 +745,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -845,7 +870,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -873,7 +899,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -901,7 +928,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -929,7 +957,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -969,7 +998,8 @@ public record DBOSConfig(
         v,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -1008,7 +1038,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         v,
         systemDatabaseIdleTransactionTimeout,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -1053,7 +1084,8 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         v,
-        conductorMetadataOnlyMode);
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey);
   }
 
   /**
@@ -1087,10 +1119,44 @@ public record DBOSConfig(
         notificationCoalesceInterval,
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
+        v,
+        transactEnterpriseKey);
+  }
+
+  /**
+   * Returns a copy of this config with {@code transactEnterpriseKey} set to {@code v}: the DBOS key
+   * that entitles this application to Transact Enterprise features. When it is not set, the {@code
+   * conductorKey} stands in for it.
+   */
+  public @NonNull DBOSConfig withTransactEnterpriseKey(@Nullable String v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout,
+        conductorMetadataOnlyMode,
         v);
   }
 
-  // Override toString to mask the DB password
+  // Override toString to mask the DB password and the Transact Enterprise key
   @Override
   public String toString() {
     return """
@@ -1100,7 +1166,8 @@ public record DBOSConfig(
         conductorExecutorMetadata=%s, appVersion=%s, executorId=%s, enablePatching=%s, \
         listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
         notificationCoalesceInterval=%s, databasePollingConcurrency=%s, \
-        systemDatabaseIdleTransactionTimeout=%s, conductorMetadataOnlyMode=%s]
+        systemDatabaseIdleTransactionTimeout=%s, conductorMetadataOnlyMode=%s, \
+        transactEnterpriseKey=%s]
         """
         .formatted(
             appName,
@@ -1124,6 +1191,7 @@ public record DBOSConfig(
             notificationCoalesceInterval,
             databasePollingConcurrency,
             systemDatabaseIdleTransactionTimeout,
-            conductorMetadataOnlyMode);
+            conductorMetadataOnlyMode,
+            transactEnterpriseKey == null ? null : "***");
   }
 }

@@ -36,6 +36,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
@@ -245,6 +246,16 @@ public class DBOSExecutor implements AutoCloseable {
       }
       logger.warn(msg);
     }
+
+    // Every Transact Enterprise feature needs Conductor to report the organization entitled to it.
+    // Checked before anything is started, so a refusal fails launch cleanly.
+    var conductorDomain = config.conductorDomain();
+    Entitlements.require(
+        Entitlements.enabledFeatures(config),
+        config.transactEnterpriseKey(),
+        config.conductorKey(),
+        conductorDomain == null || conductorDomain.isBlank() ? null : conductorDomain.trim(),
+        dbosCloud);
 
     // Found before anything is started, so a missing provider fails launch cleanly. An
     // application that will not connect, including one on DBOS Cloud without Conductor settings,
