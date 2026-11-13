@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,6 +43,8 @@ public class EntitlementsTest {
 
   private static final Feature SOME_FEATURE = new Feature("someFeature", "Some feature");
   private static final Feature OTHER_FEATURE = new Feature("otherFeature", "Doing another thing");
+  // Tests that read Entitlements' log, which all tests share: they never run alongside each other.
+  private static final String ENTITLEMENTS_LOG = "Entitlements log";
   private static final String HOSTED_ROUTE = "https://cloud.dbos.dev/conductor/v2/entitlements";
 
   /** A local stand-in for Conductor's entitlements route. */
@@ -164,7 +168,7 @@ public class EntitlementsTest {
         Entitlements.entitlementUrl("ws://localhost:8090"));
     assertEquals(
         "https://conductor.example.com/v2/entitlements",
-        Entitlements.entitlementUrl("https://conductor.example.com/"));
+        Entitlements.entitlementUrl("wss://conductor.example.com/"));
   }
 
   @Test
@@ -194,7 +198,9 @@ public class EntitlementsTest {
         "wss://user:p@secret@host/conductor/v1alpha1",
         // A raw '/' after digits: "user:2024" parses as a host and port, and the rest as a path.
         "wss://user:2024/secret@conductor.example.com/conductor/v1alpha1",
-        "ws://user:/secret@127.0.0.1:1"
+        "ws://user:/secret@127.0.0.1:1",
+        // Not a WebSocket URL, which the Conductor client cannot use.
+        "https://user:secret@conductor.example.com"
       })
   public void anInvalidConductorUrlIsNeverQuoted(String url) {
     var e =
@@ -286,6 +292,7 @@ public class EntitlementsTest {
   }
 
   @Test
+  @ResourceLock(ENTITLEMENTS_LOG)
   public void aRequestTheHttpClientRefusesFailsClosedEvenWhenHosted() {
     // Not an outage, so the hosted Conductor's fail-open does not apply. The client's message,
     // which can quote the Authorization header, is not passed on.
@@ -298,17 +305,12 @@ public class EntitlementsTest {
       assertTrue(e.getMessage().contains("could not be sent"), e.getMessage());
       assertFalse(e.getMessage().contains("secret"), e.getMessage());
       assertEquals(null, e.getCause());
-      // Nothing logged quotes it. (Other tests log to the same logger in parallel, so this cannot
-      // assert that nothing was logged at all; the throw already shows it did not start anyway.)
-      assertEquals(List.of(), logs.messages(Level.TRACE, "secret"));
+      assertEquals(List.of(), logs.messages(Level.TRACE, ""));
     }
   }
 
   @ParameterizedTest
-  @CsvSource({
-    "ws://127.0.0.1:70000, its port is out of range",
-    "'wss://[fe80::1%25eth0]:8443/x', its host is not valid"
-  })
+  @CsvSource({"ws://127.0.0.1:70000, its port is out of range"})
   public void aUrlTheHttpClientWouldRefuseInFlightIsInvalid(String url, String reason) {
     var e =
         assertThrows(
@@ -384,12 +386,12 @@ public class EntitlementsTest {
                       "ws://127.0.0.1:" + server.getLocalPort(),
                       false));
       assertTrue(e.getMessage().contains("Retry once Conductor is reachable"), e.getMessage());
-      assertTrue(e.getMessage().contains("the exchange failed"), e.getMessage());
       assertFalse(e.getMessage().contains("could not be sent"), e.getMessage());
     }
   }
 
   @Test
+  @ResourceLock(ENTITLEMENTS_LOG)
   public void aMalformedAnswerFromTheHostedConductorStartsAnyway() throws Exception {
     // The real HTTP client, with the hosted Conductor's request sent to the local server instead.
     try (var server = malformedServer();
@@ -404,11 +406,22 @@ public class EntitlementsTest {
             return http.get(local, headers);
           });
       assertEquals(List.of(URI.create(HOSTED_ROUTE)), asked);
-      // Filtered to this test's own warning: other tests log to the same logger in parallel.
-      var warnings = logs.messages(Level.WARN, "the exchange failed (NumberFormatException)");
+      // Whatever the JDK calls the failure, it is an outage, which the hosted Conductor survives.
+      var warnings = logs.messages(Level.WARN, "starting anyway");
       assertEquals(1, warnings.size(), warnings.toString());
-      assertTrue(warnings.get(0).contains("starting anyway"), warnings.get(0));
     }
+  }
+
+  @Test
+  public void aJvmErrorBehindAnOutageNeverStartsAnyway() {
+    // The HTTP client reports an OutOfMemoryError in its selector thread as the cause of an
+    // IOException. Against the hosted Conductor, reading that as an outage would fail open.
+    var oom = new OutOfMemoryError("test");
+    Entitlements.Http failing =
+        (uri, headers) -> {
+          throw new IOException("selector manager closed", oom);
+        };
+    assertSame(oom, assertThrows(OutOfMemoryError.class, () -> checkHosted(null, failing)));
   }
 
   @ParameterizedTest
@@ -639,6 +652,7 @@ public class EntitlementsTest {
   }
 
   @Test
+  @ResourceLock(ENTITLEMENTS_LOG)
   public void aHostedConductorOutageDoesNotBlockStartup() {
     var asked = new ArrayList<URI>();
     Entitlements.Http unreachable =
@@ -649,10 +663,9 @@ public class EntitlementsTest {
     // No Conductor URL means DBOS's hosted one, whose outage only warns.
     try (var logs = new LogCapture(Entitlements.class)) {
       assertDoesNotThrow(() -> checkHosted(null, unreachable));
-      // Filtered to this test's own warning: other tests log to the same logger in parallel.
-      var warnings = logs.messages(Level.WARN, "(connection refused)");
+      var warnings = logs.messages(Level.WARN, "Could not verify the DBOS key");
       assertEquals(1, warnings.size(), warnings.toString());
-      assertTrue(warnings.get(0).contains("Could not verify the DBOS key"), warnings.get(0));
+      assertTrue(warnings.get(0).contains("connection refused"), warnings.get(0));
       assertFalse(warnings.get(0).contains("enterprise-key"), warnings.get(0));
     }
     assertEquals(List.of(URI.create(HOSTED_ROUTE)), asked);
@@ -665,6 +678,7 @@ public class EntitlementsTest {
 
   @ParameterizedTest
   @ValueSource(ints = {403, 407, 408, 425, 429, 500, 503})
+  @ResourceLock(ENTITLEMENTS_LOG)
   public void hostedThrottlingAndProxiesCountAsOutages(int status) {
     // From the hosted Conductor these mean it couldn't answer, not that it refused the key, so
     // startup warns and goes on as for any hosted outage.

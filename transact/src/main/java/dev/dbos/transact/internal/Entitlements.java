@@ -12,7 +12,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -238,6 +240,7 @@ public final class Entitlements {
       failure = e.getMessage();
       cause = e;
     } catch (IOException e) {
+      rethrowError(e);
       failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
       cause = e;
     } catch (IllegalArgumentException e) {
@@ -313,14 +316,14 @@ public final class Entitlements {
     }
     scheme =
         switch (scheme.toLowerCase()) {
-          case "wss", "https" -> "https";
-          case "ws", "http" -> "http";
-          default -> throw new InvalidUrl("its scheme is not ws, wss, http or https");
+          // The Conductor client is a WebSocket client, which takes only these.
+          case "wss" -> "https";
+          case "ws" -> "http";
+          default -> throw new InvalidUrl("its scheme is not ws or wss");
         };
     // A host the parser cannot identify (an underscore, a raw '/' or '@' in a password) leaves the
-    // credentials unseparated, and so does an IPv6 zone ID. The Conductor client cannot connect to
-    // such a URL either.
-    if (uri.getHost() == null || uri.getHost().contains("%")) {
+    // credentials unseparated. The Conductor client cannot connect to such a URL either.
+    if (uri.getHost() == null) {
       throw new InvalidUrl("its host is not valid");
     }
     // A raw '/' in a password can also parse as a port and a path ("user:2024/pass@host"), so the
@@ -374,15 +377,12 @@ public final class Entitlements {
       } catch (ExecutionException e) {
         // The exchange failed in flight: an outage. The JDK reports some malformed answers (a
         // non-numeric Content-Length) as an IllegalArgumentException, which must not read as a
-        // request this client refused to send. URLs the client would refuse in flight (a port out
-        // of range, a zone ID) are refused by entitlementUrl before any request.
+        // request this client refused to send. A port out of range, which the client would also
+        // refuse in flight, is refused by entitlementUrl before any request.
         var cause = e.getCause();
+        rethrowError(cause);
         if (cause instanceof IOException io) {
           throw io;
-        }
-        if (cause instanceof Error error) {
-          // Not an outage: a damaged JVM must never fail open.
-          throw error;
         }
         throw new IOException(
             "the exchange failed (" + cause.getClass().getSimpleName() + ")", cause);
@@ -392,6 +392,20 @@ public final class Entitlements {
           response.headers().firstValue(ERROR_CODE_HEADER).orElse(null),
           response.body());
     };
+  }
+
+  /**
+   * Throws the first {@link Error} in {@code failure}'s cause chain. Not an outage: a damaged JVM
+   * must never fail open, and the HTTP client reports one (an OutOfMemoryError in its selector
+   * thread) as the cause of an IOException.
+   */
+  private static void rethrowError(Throwable failure) {
+    var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+    for (var t = failure; t != null && seen.add(t); t = t.getCause()) {
+      if (t instanceof Error error) {
+        throw error;
+      }
+    }
   }
 
   /** An answer that is not an entitlement list, which counts as Conductor failing to answer. */
