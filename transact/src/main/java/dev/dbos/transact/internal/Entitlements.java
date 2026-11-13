@@ -317,11 +317,22 @@ public final class Entitlements {
           case "ws", "http" -> "http";
           default -> throw new InvalidUrl("its scheme is not ws, wss, http or https");
         };
-    // A host the parser cannot identify (a raw '/' or '@' in a password, or an underscore in the
-    // host) leaves the credentials unseparated. The Conductor client cannot connect to such a
-    // URL either.
-    if (uri.getHost() == null) {
+    // A host the parser cannot identify (an underscore, a raw '/' or '@' in a password) leaves the
+    // credentials unseparated, and so does an IPv6 zone ID. The Conductor client cannot connect to
+    // such a URL either.
+    if (uri.getHost() == null || uri.getHost().contains("%")) {
       throw new InvalidUrl("its host is not valid");
+    }
+    // A raw '/' in a password can also parse as a port and a path ("user:2024/pass@host"), so the
+    // host is wrong and the rest of the password sits in the path. A Conductor URL never has '@'
+    // after its authority.
+    for (var part : new String[] {uri.getRawPath(), uri.getRawQuery(), uri.getRawFragment()}) {
+      if (part != null && part.contains("@")) {
+        throw new InvalidUrl("it has an '@' after its host");
+      }
+    }
+    if (uri.getPort() > 65535) {
+      throw new InvalidUrl("its port is out of range");
     }
     // Without any user:password@, which would otherwise be sent and quoted in errors.
     var host = uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
@@ -361,15 +372,20 @@ public final class Entitlements {
         pending.cancel(true);
         throw e;
       } catch (ExecutionException e) {
-        // The exchange failed in flight, so an outage, whatever the exception. The JDK reports some
-        // malformed answers (a non-numeric Content-Length) as an IllegalArgumentException, which
-        // must not read as a request this client refused to send.
+        // The exchange failed in flight: an outage. The JDK reports some malformed answers (a
+        // non-numeric Content-Length) as an IllegalArgumentException, which must not read as a
+        // request this client refused to send. URLs the client would refuse in flight (a port out
+        // of range, a zone ID) are refused by entitlementUrl before any request.
         var cause = e.getCause();
         if (cause instanceof IOException io) {
           throw io;
         }
+        if (cause instanceof Error error) {
+          // Not an outage: a damaged JVM must never fail open.
+          throw error;
+        }
         throw new IOException(
-            "a malformed answer (" + cause.getClass().getSimpleName() + ")", cause);
+            "the exchange failed (" + cause.getClass().getSimpleName() + ")", cause);
       }
       return new Answer(
           response.statusCode(),

@@ -45,9 +45,9 @@ import org.jspecify.annotations.Nullable;
  * @param conductorKey API key for DBOS Conductor; null or blank to not connect. Surrounding
  *     whitespace is removed. Connecting to Conductor requires {@code dev.dbos:transact-enterprise}
  *     on the class path. Masked in {@link #toString()}
- * @param conductorDomain custom hostname for DBOS Conductor; null or blank for DBOS's hosted
- *     Conductor. Surrounding whitespace is removed, and credentials in it are masked in {@link
- *     #toString()}
+ * @param conductorDomain URL of a self-hosted DBOS Conductor, such as {@code ws://localhost:8090};
+ *     null or blank for DBOS's hosted Conductor. Surrounding whitespace is removed, and credentials
+ *     in it are masked in {@link #toString()}
  * @param conductorExecutorMetadata arbitrary key-value metadata attached to this executor's
  *     registration in Conductor
  * @param appVersion application version string used for versioned workflow routing; must not be
@@ -585,8 +585,9 @@ public record DBOSConfig(
   }
 
   /**
-   * Returns a copy of this config with {@code conductorDomain} set to {@code v}; null or blank for
-   * DBOS's hosted Conductor.
+   * Returns a copy of this config with {@code conductorDomain} set to {@code v}: the URL of a
+   * self-hosted DBOS Conductor, such as {@code ws://localhost:8090}; null or blank for DBOS's
+   * hosted Conductor.
    */
   public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
     return new DBOSConfig(

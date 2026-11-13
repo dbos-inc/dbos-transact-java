@@ -191,7 +191,10 @@ public class EntitlementsTest {
         // A raw '/' in the password: the parser reads "user:pa" as the whole authority.
         "ws://user:pa/secret@127.0.0.1:1/x",
         // A raw '@' in the password.
-        "wss://user:p@secret@host/conductor/v1alpha1"
+        "wss://user:p@secret@host/conductor/v1alpha1",
+        // A raw '/' after digits: "user:2024" parses as a host and port, and the rest as a path.
+        "wss://user:2024/secret@conductor.example.com/conductor/v1alpha1",
+        "ws://user:/secret@127.0.0.1:1"
       })
   public void anInvalidConductorUrlIsNeverQuoted(String url) {
     var e =
@@ -295,8 +298,23 @@ public class EntitlementsTest {
       assertTrue(e.getMessage().contains("could not be sent"), e.getMessage());
       assertFalse(e.getMessage().contains("secret"), e.getMessage());
       assertEquals(null, e.getCause());
-      assertEquals(List.of(), logs.messages(Level.WARN, ""));
+      // Nothing logged quotes it. (Other tests log to the same logger in parallel, so this cannot
+      // assert that nothing was logged at all; the throw already shows it did not start anyway.)
+      assertEquals(List.of(), logs.messages(Level.TRACE, "secret"));
     }
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "ws://127.0.0.1:70000, its port is out of range",
+    "'wss://[fe80::1%25eth0]:8443/x', its host is not valid"
+  })
+  public void aUrlTheHttpClientWouldRefuseInFlightIsInvalid(String url, String reason) {
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Entitlements.require(List.of(SOME_FEATURE), "enterprise-key", null, url, false));
+    assertTrue(e.getMessage().contains("the Conductor URL is invalid: " + reason), e.getMessage());
   }
 
   @Test
@@ -315,39 +333,46 @@ public class EntitlementsTest {
     assertTrue(e.getMessage().contains("its host is not valid"), e.getMessage());
   }
 
+  /**
+   * A local server that answers its first request with a non-numeric Content-Length, which the JDK
+   * reports as a NumberFormatException: an IllegalArgumentException that is the server's fault.
+   */
+  private static ServerSocket malformedServer() throws IOException {
+    var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+    var answering =
+        new Thread(
+            () -> {
+              try (var socket = server.accept()) {
+                var in = socket.getInputStream();
+                // Read the request up to its blank line.
+                var seen = 0;
+                while (seen < 4) {
+                  var c = in.read();
+                  if (c < 0) {
+                    return;
+                  }
+                  seen = (c == '\r' || c == '\n') ? seen + 1 : 0;
+                }
+                socket
+                    .getOutputStream()
+                    .write(
+                        "HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\n"
+                            .getBytes(StandardCharsets.US_ASCII));
+                socket.getOutputStream().flush();
+                Thread.sleep(2000);
+              } catch (IOException | InterruptedException e) {
+                // The test is over.
+              }
+            });
+    answering.setDaemon(true);
+    answering.start();
+    return server;
+  }
+
   @Test
   public void aMalformedAnswerIsAnOutageNotARefusalToSend() throws Exception {
-    // The JDK fails the exchange with a NumberFormatException, an IllegalArgumentException, for a
-    // non-numeric Content-Length. That is the server's fault: an outage, which only the hosted
-    // Conductor survives, never "could not be sent".
-    try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-      var answering =
-          new Thread(
-              () -> {
-                try (var socket = server.accept()) {
-                  var in = socket.getInputStream();
-                  // Read the request up to its blank line.
-                  var seen = 0;
-                  while (seen < 4) {
-                    var c = in.read();
-                    if (c < 0) {
-                      return;
-                    }
-                    seen = (c == '\r' || c == '\n') ? seen + 1 : 0;
-                  }
-                  socket
-                      .getOutputStream()
-                      .write(
-                          "HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\n"
-                              .getBytes(StandardCharsets.US_ASCII));
-                  socket.getOutputStream().flush();
-                  Thread.sleep(2000);
-                } catch (IOException | InterruptedException e) {
-                  // The test is over.
-                }
-              });
-      answering.setDaemon(true);
-      answering.start();
+    // An outage, which only the hosted Conductor survives, never "could not be sent".
+    try (var server = malformedServer()) {
       var e =
           assertThrows(
               IllegalStateException.class,
@@ -359,8 +384,30 @@ public class EntitlementsTest {
                       "ws://127.0.0.1:" + server.getLocalPort(),
                       false));
       assertTrue(e.getMessage().contains("Retry once Conductor is reachable"), e.getMessage());
-      assertTrue(e.getMessage().contains("a malformed answer"), e.getMessage());
+      assertTrue(e.getMessage().contains("the exchange failed"), e.getMessage());
       assertFalse(e.getMessage().contains("could not be sent"), e.getMessage());
+    }
+  }
+
+  @Test
+  public void aMalformedAnswerFromTheHostedConductorStartsAnyway() throws Exception {
+    // The real HTTP client, with the hosted Conductor's request sent to the local server instead.
+    try (var server = malformedServer();
+        var logs = new LogCapture(Entitlements.class)) {
+      var local = URI.create("http://127.0.0.1:" + server.getLocalPort() + "/v2/entitlements");
+      var http = Entitlements.http(Duration.ofSeconds(5));
+      var asked = new ArrayList<URI>();
+      checkHosted(
+          null,
+          (uri, headers) -> {
+            asked.add(uri);
+            return http.get(local, headers);
+          });
+      assertEquals(List.of(URI.create(HOSTED_ROUTE)), asked);
+      // Filtered to this test's own warning: other tests log to the same logger in parallel.
+      var warnings = logs.messages(Level.WARN, "the exchange failed (NumberFormatException)");
+      assertEquals(1, warnings.size(), warnings.toString());
+      assertTrue(warnings.get(0).contains("starting anyway"), warnings.get(0));
     }
   }
 
@@ -602,9 +649,10 @@ public class EntitlementsTest {
     // No Conductor URL means DBOS's hosted one, whose outage only warns.
     try (var logs = new LogCapture(Entitlements.class)) {
       assertDoesNotThrow(() -> checkHosted(null, unreachable));
-      var warnings = logs.messages(Level.WARN, "Could not verify the DBOS key");
+      // Filtered to this test's own warning: other tests log to the same logger in parallel.
+      var warnings = logs.messages(Level.WARN, "(connection refused)");
       assertEquals(1, warnings.size(), warnings.toString());
-      assertTrue(warnings.get(0).contains("connection refused"), warnings.get(0));
+      assertTrue(warnings.get(0).contains("Could not verify the DBOS key"), warnings.get(0));
       assertFalse(warnings.get(0).contains("enterprise-key"), warnings.get(0));
     }
     assertEquals(List.of(URI.create(HOSTED_ROUTE)), asked);
