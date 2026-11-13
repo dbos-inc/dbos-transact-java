@@ -42,8 +42,9 @@ import org.jspecify.annotations.Nullable;
  * @param adminServerPort port for the built-in admin HTTP server; deprecated and will be removed
  *     before 1.0 — use DBOS Conductor instead
  * @param migrate whether to run database migrations on startup
- * @param conductorKey API key for DBOS Conductor; must not be empty if non-null. Connecting to
- *     Conductor requires {@code dev.dbos:transact-enterprise} on the class path
+ * @param conductorKey API key for DBOS Conductor; null or blank to not connect. Connecting to
+ *     Conductor requires {@code dev.dbos:transact-enterprise} on the class path. Masked in {@link
+ *     #toString()}
  * @param conductorDomain custom hostname for DBOS Conductor; must not be empty if non-null
  * @param conductorExecutorMetadata arbitrary key-value metadata attached to this executor's
  *     registration in Conductor
@@ -132,11 +133,11 @@ public record DBOSConfig(
     if (appName == null || appName.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
     }
-    if (conductorKey != null && conductorKey.isEmpty()) {
-      throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");
+    // A blank key is unset, as in the other SDKs, so an empty placeholder (an unset environment
+    // variable) means no key instead of failing.
+    if (conductorKey != null && conductorKey.isBlank()) {
+      conductorKey = null;
     }
-    // Unset, as in the other SDKs, so an empty placeholder (an unset environment variable)
-    // falls back to the Conductor key instead of failing.
     if (transactEnterpriseKey != null && transactEnterpriseKey.isBlank()) {
       transactEnterpriseKey = null;
     }
@@ -535,8 +536,9 @@ public record DBOSConfig(
   }
 
   /**
-   * Returns a copy of this config with {@code conductorKey} set to {@code v}. Connecting to
-   * Conductor requires {@code dev.dbos:transact-enterprise} on the class path.
+   * Returns a copy of this config with {@code conductorKey} set to {@code v}; null or blank to not
+   * connect. Connecting to Conductor requires {@code dev.dbos:transact-enterprise} on the class
+   * path.
    */
   public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
     return new DBOSConfig(
@@ -1157,7 +1159,7 @@ public record DBOSConfig(
         v);
   }
 
-  // Override toString to mask the DB password and the Transact Enterprise key
+  // Override toString to mask the DB password and the Conductor and Transact Enterprise keys
   @Override
   public String toString() {
     return """
@@ -1179,7 +1181,7 @@ public record DBOSConfig(
             adminServer,
             adminServerPort,
             migrate,
-            conductorKey,
+            conductorKey == null ? null : "***",
             conductorDomain,
             conductorExecutorMetadata,
             appVersion,

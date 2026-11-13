@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -235,7 +236,8 @@ public class ConfigTest {
     assertThrows(IllegalArgumentException.class, () -> config.withAppName(""));
     assertThrows(IllegalArgumentException.class, () -> config.withAppName(null));
 
-    assertThrows(IllegalArgumentException.class, () -> config.withConductorKey(""));
+    // A blank Conductor key is unset rather than refused (see DBOSConfigKeysTest).
+    assertNull(config.withConductorKey("").conductorKey());
     assertDoesNotThrow(() -> config.withConductorKey(null));
     assertThrows(IllegalArgumentException.class, () -> config.withConductorDomain(""));
     assertDoesNotThrow(() -> config.withConductorDomain(null));
