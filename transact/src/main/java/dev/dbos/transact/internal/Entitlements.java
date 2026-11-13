@@ -3,7 +3,6 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.ProxySelector;
 import java.net.URI;
@@ -12,17 +11,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -70,8 +64,6 @@ public final class Entitlements {
   private static final String KEY_HINT =
       "Set transactEnterpriseKey or conductorKey in your DBOSConfig.";
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  // Read no more of an answer than this; an entitlement list is a few hundred bytes.
-  static final int MAX_ANSWER_BYTES = 1 << 20;
 
   private Entitlements() {}
 
@@ -356,7 +348,7 @@ public final class Entitlements {
       var request = HttpRequest.newBuilder(uri).GET();
       headers.forEach(request::header);
       var pending =
-          builder.build().sendAsync(request.build(), info -> new BoundedBody(MAX_ANSWER_BYTES));
+          builder.build().sendAsync(request.build(), HttpResponse.BodyHandlers.ofString());
       HttpResponse<String> response;
       try {
         // One deadline for the whole exchange, body included, so an answer that stalls mid-body
@@ -384,59 +376,6 @@ public final class Entitlements {
           response.headers().firstValue(ERROR_CODE_HEADER).orElse(null),
           response.body());
     };
-  }
-
-  /** Collects an answer as UTF-8 text, failing once it exceeds {@code max} bytes. */
-  static final class BoundedBody implements HttpResponse.BodySubscriber<String> {
-    private final int max;
-    private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    private final CompletableFuture<String> body = new CompletableFuture<>();
-    private Flow.@Nullable Subscription subscription;
-
-    BoundedBody(int max) {
-      this.max = max;
-    }
-
-    @Override
-    public void onSubscribe(Flow.Subscription subscription) {
-      this.subscription = subscription;
-      subscription.request(Long.MAX_VALUE);
-    }
-
-    @Override
-    public void onNext(List<ByteBuffer> buffers) {
-      if (body.isDone()) {
-        return;
-      }
-      for (var buffer : buffers) {
-        if (bytes.size() + buffer.remaining() > max) {
-          if (subscription != null) {
-            subscription.cancel();
-          }
-          body.completeExceptionally(
-              new IOException("the answer is larger than " + max + " bytes"));
-          return;
-        }
-        var chunk = new byte[buffer.remaining()];
-        buffer.get(chunk);
-        bytes.write(chunk, 0, chunk.length);
-      }
-    }
-
-    @Override
-    public void onError(Throwable error) {
-      body.completeExceptionally(error);
-    }
-
-    @Override
-    public void onComplete() {
-      body.complete(bytes.toString(StandardCharsets.UTF_8));
-    }
-
-    @Override
-    public CompletionStage<String> getBody() {
-      return body;
-    }
   }
 
   /** An answer that is not an entitlement list, which counts as Conductor failing to answer. */

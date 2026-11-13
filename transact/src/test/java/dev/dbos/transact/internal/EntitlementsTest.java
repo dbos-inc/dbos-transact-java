@@ -316,15 +316,6 @@ public class EntitlementsTest {
   }
 
   @Test
-  public void anAnswerOfExactlyTheLimitIsRead() {
-    var prefix = "{\"entitlements\": {\"someFeature\": true}, \"padding\": \"";
-    conductor.body =
-        prefix + "x".repeat(Entitlements.MAX_ANSWER_BYTES - prefix.length() - 2) + "\"}";
-    assertEquals(Entitlements.MAX_ANSWER_BYTES, conductor.body.length());
-    check("enterprise-key", null);
-  }
-
-  @Test
   public void aMalformedAnswerIsAnOutageNotARefusalToSend() throws Exception {
     // The JDK fails the exchange with a NumberFormatException, an IllegalArgumentException, for a
     // non-numeric Content-Length. That is the server's fault: an outage, which only the hosted
@@ -371,19 +362,6 @@ public class EntitlementsTest {
       assertTrue(e.getMessage().contains("a malformed answer"), e.getMessage());
       assertFalse(e.getMessage().contains("could not be sent"), e.getMessage());
     }
-  }
-
-  @Test
-  public void anOversizedAnswerCountsAsAnOutage() {
-    conductor.body =
-        "{\"entitlements\": {\"someFeature\": true}, \"padding\": \""
-            + "x".repeat(Entitlements.MAX_ANSWER_BYTES)
-            + "\"}";
-    var message = refused("enterprise-key").getMessage();
-    assertTrue(
-        message.contains("the answer is larger than " + Entitlements.MAX_ANSWER_BYTES + " bytes"),
-        message);
-    assertTrue(message.contains("Retry once Conductor is reachable"), message);
   }
 
   @ParameterizedTest
