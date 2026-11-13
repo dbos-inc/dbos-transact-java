@@ -3,7 +3,6 @@ package dev.dbos.transact.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -31,12 +30,13 @@ public class TransactEnterpriseKeyTest {
   }
 
   @Test
-  public void anEmptyKeyIsRefused() {
-    var e =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> DBOSConfig.defaults("app").withTransactEnterpriseKey(""));
-    assertTrue(e.getMessage().contains("transactEnterpriseKey"), e.getMessage());
+  public void aBlankKeyIsUnset() {
+    // So an empty placeholder, such as an unset environment variable, falls back to the Conductor
+    // key instead of failing.
+    for (var blank : new String[] {"", " ", "\n"}) {
+      assertNull(
+          DBOSConfig.defaults("app").withTransactEnterpriseKey(blank).transactEnterpriseKey());
+    }
   }
 
   @Test

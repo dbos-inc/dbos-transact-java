@@ -50,6 +50,18 @@ class DBOSAutoConfigurationTest {
   }
 
   @Test
+  void anEmptyTransactEnterpriseKeyIsUnset() {
+    // As from a placeholder whose environment variable is unset: the Conductor key stands in.
+    runner
+        .withPropertyValues("dbos.transact-enterprise-key=")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context.getBean(DBOSConfig.class).transactEnterpriseKey()).isNull();
+            });
+  }
+
+  @Test
   void dbosConfigReflectsDatasourceProperties() {
     runner
         .withPropertyValues(

@@ -10,12 +10,15 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -53,8 +56,6 @@ public final class Entitlements {
   private static final String PAST_LIMIT = "past_limit";
   // From the hosted Conductor, these mean it could not answer, not that it refused the key.
   private static final Set<Integer> HOSTED_UNAVAILABLE = Set.of(403, 407, 408, 425, 429);
-  // Read no more of an answer than this; an entitlement list is a few hundred bytes.
-  private static final int MAX_BODY_BYTES = 1 << 20;
   private static final String LICENSE_URL = "https://www.dbos.dev/conductor-license";
   private static final String LICENSE_NOTICE =
       "Transact Enterprise is licensed under the DBOS Conductor Software License ("
@@ -105,7 +106,7 @@ public final class Entitlements {
         conductorKey,
         conductorUrl,
         System.getenv("DBOS_DOMAIN"),
-        Entitlements::fetch);
+        http(TIMEOUT));
   }
 
   /** The answer to the entitlement request. */
@@ -129,18 +130,31 @@ public final class Entitlements {
     }
     var names = join(features, Feature::description);
     var entitlements = join(features, Feature::entitlement);
-    var key = enterpriseKey != null ? enterpriseKey : conductorKey;
+    // A blank key is unset, and surrounding whitespace (a trailing newline from a secret file) is
+    // not part of it.
+    var key = configuredKey(enterpriseKey);
+    if (key == null) {
+      key = configuredKey(conductorKey);
+    }
     var target = conductorUrl != null ? conductorUrl : defaultConductorUrl(dbosDomain);
     // Only a Conductor named explicitly is asked without a key, and never DBOS's hosted one.
     if (key == null && (conductorUrl == null || target.equals(HOSTED_CONDUCTOR_URL))) {
       throw new IllegalStateException(names + " requires a DBOS key. " + KEY_HINT);
     }
+    if (key != null && key.chars().anyMatch(Character::isISOControl)) {
+      // Never quoted: an HTTP header cannot carry it, and the message would leak the key.
+      throw new IllegalStateException(
+          names + " requires a DBOS key, but the configured key contains a control character.");
+    }
     String url;
     try {
       url = entitlementUrl(target);
-    } catch (URISyntaxException | IllegalArgumentException e) {
+    } catch (InvalidUrl e) {
+      // The URL is not quoted: it may carry credentials.
       throw new IllegalStateException(
-          names + " requires an entitled DBOS key, but the Conductor URL is invalid: " + e, e);
+          names
+              + " requires an entitled DBOS key, but the Conductor URL is invalid: "
+              + e.getMessage());
     }
     var headers = new HashMap<String, String>();
     headers.put("User-Agent", "dbos-transact-java/" + DBOS.version());
@@ -222,6 +236,10 @@ public final class Entitlements {
     } catch (IOException e) {
       failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
       cause = e;
+    } catch (IllegalArgumentException e) {
+      // The HTTP client refused the request. Its message may quote a header, so it is not passed
+      // on.
+      failure = "the request could not be sent";
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException(
@@ -255,19 +273,41 @@ public final class Entitlements {
     return "wss://" + domain + "/conductor/v1alpha1";
   }
 
+  /** The key as configured, or null if it is unset or blank. */
+  private static @Nullable String configuredKey(@Nullable String key) {
+    if (key == null) {
+      return null;
+    }
+    var stripped = key.strip();
+    return stripped.isEmpty() ? null : stripped;
+  }
+
+  /** A Conductor URL that cannot be used, with a message that never quotes it. */
+  static final class InvalidUrl extends Exception {
+    InvalidUrl(String message) {
+      super(message);
+    }
+  }
+
   /** The entitlement route of the Conductor at {@code conductorUrl}, over HTTP(S). */
-  static String entitlementUrl(String conductorUrl) throws URISyntaxException {
-    var uri = new URI(conductorUrl);
+  static String entitlementUrl(String conductorUrl) throws InvalidUrl {
+    URI uri;
+    try {
+      uri = new URI(conductorUrl);
+    } catch (URISyntaxException e) {
+      // The reason, but not the message, which quotes the whole URL.
+      throw new InvalidUrl(e.getReason());
+    }
     var scheme = uri.getScheme();
     var authority = uri.getRawAuthority();
     if (scheme == null || authority == null) {
-      throw new IllegalArgumentException("not an absolute URL: " + conductorUrl);
+      throw new InvalidUrl("it is not an absolute URL");
     }
     scheme =
         switch (scheme.toLowerCase()) {
-          case "wss" -> "https";
-          case "ws" -> "http";
-          default -> scheme;
+          case "wss", "https" -> "https";
+          case "ws", "http" -> "http";
+          default -> throw new InvalidUrl("its scheme is not ws, wss, http or https");
         };
     // Without any user:password@, which would otherwise be sent and quoted in errors.
     var host = authority.substring(authority.lastIndexOf('@') + 1);
@@ -279,25 +319,47 @@ public final class Entitlements {
     return scheme + "://" + host + path + ENTITLEMENTS_PATH;
   }
 
-  private static Answer fetch(URI uri, Map<String, String> headers)
-      throws IOException, InterruptedException {
-    var builder = HttpClient.newBuilder().connectTimeout(TIMEOUT);
-    // Never follow a redirect: it would carry the key to whatever host it names.
-    builder.followRedirects(HttpClient.Redirect.NEVER);
-    // Built per call, so proxy settings are read when the check runs.
-    var proxies = ProxySelector.getDefault();
-    if (proxies != null) {
-      builder.proxy(proxies);
-    }
-    var request = HttpRequest.newBuilder(uri).timeout(TIMEOUT).GET();
-    headers.forEach(request::header);
-    var response = builder.build().send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-    try (var body = response.body()) {
+  /** Sends the request over HTTP, giving the whole exchange, body included, {@code timeout}. */
+  static Http http(Duration timeout) {
+    return (uri, headers) -> {
+      var builder = HttpClient.newBuilder().connectTimeout(timeout);
+      // Never follow a redirect: it would carry the key to whatever host it names.
+      builder.followRedirects(HttpClient.Redirect.NEVER);
+      // Built per call, so proxy settings are read when the check runs.
+      var proxies = ProxySelector.getDefault();
+      if (proxies != null) {
+        builder.proxy(proxies);
+      }
+      var request = HttpRequest.newBuilder(uri).timeout(timeout).GET();
+      headers.forEach(request::header);
+      var pending =
+          builder.build().sendAsync(request.build(), HttpResponse.BodyHandlers.ofString());
+      HttpResponse<String> response;
+      try {
+        // The request's own timeout ends once the headers arrive. This deadline covers the body
+        // too, so an answer that stalls mid-body cannot hold up launch.
+        response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      } catch (TimeoutException e) {
+        pending.cancel(true);
+        throw new HttpTimeoutException("no answer within " + timeout.toMillis() + " ms");
+      } catch (InterruptedException e) {
+        pending.cancel(true);
+        throw e;
+      } catch (ExecutionException e) {
+        var cause = e.getCause();
+        if (cause instanceof IOException io) {
+          throw io;
+        }
+        if (cause instanceof RuntimeException runtime) {
+          throw runtime;
+        }
+        throw new IOException(cause);
+      }
       return new Answer(
           response.statusCode(),
           response.headers().firstValue(ERROR_CODE_HEADER).orElse(null),
-          new String(body.readNBytes(MAX_BODY_BYTES), StandardCharsets.UTF_8));
-    }
+          response.body());
+    };
   }
 
   /** An answer that is not an entitlement list, which counts as Conductor failing to answer. */

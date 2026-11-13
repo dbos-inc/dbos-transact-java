@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
@@ -17,11 +18,13 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import ch.qos.logback.classic.Level;
 import com.sun.net.httpserver.HttpServer;
@@ -48,6 +51,9 @@ public class EntitlementsTest {
     volatile int status = 200;
     volatile String body = "{\"entitlements\": {\"someFeature\": true}}";
     volatile Map<String, String> headers = Map.of();
+    // When set, the answer's headers go out, then its body stalls until the server closes.
+    volatile boolean stall = false;
+    final CountDownLatch closed = new CountDownLatch(1);
 
     FakeConductor() throws IOException {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -63,6 +69,16 @@ public class EntitlementsTest {
             headers.forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
             exchange.sendResponseHeaders(status, payload.length);
             try (var out = exchange.getResponseBody()) {
+              if (stall) {
+                out.write(payload, 0, 1);
+                out.flush();
+                try {
+                  closed.await();
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+                return;
+              }
               out.write(payload);
             }
           });
@@ -88,6 +104,7 @@ public class EntitlementsTest {
 
     @Override
     public void close() {
+      closed.countDown();
       server.stop(0);
     }
   }
@@ -160,6 +177,29 @@ public class EntitlementsTest {
     assertTrue(e.getMessage().contains("the Conductor URL is invalid"), e.getMessage());
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        // An unencoded % in the password, which java.net.URI rejects quoting the whole URL.
+        "wss://user:p%zzsecret@host/conductor/v1alpha1",
+        // A space in the password.
+        "wss://user:pa secret@host/conductor/v1alpha1",
+        // No scheme, so the user name reads as one.
+        "user:secret@host",
+        "htp://user:secret@host"
+      })
+  public void anInvalidConductorUrlIsNeverQuoted(String url) {
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Entitlements.require(List.of(SOME_FEATURE), "enterprise-key", null, url, false));
+    assertTrue(e.getMessage().contains("the Conductor URL is invalid"), e.getMessage());
+    assertFalse(e.getMessage().contains("secret"), e.getMessage());
+    assertFalse(e.getMessage().contains("user"), e.getMessage());
+    // Nor in the stack trace.
+    assertEquals(null, e.getCause());
+  }
+
   @Test
   public void theDefaultConductorFollowsTheDbosDomain() {
     assertEquals(Entitlements.HOSTED_CONDUCTOR_URL, Entitlements.defaultConductorUrl(null));
@@ -181,6 +221,53 @@ public class EntitlementsTest {
             Map.entry("/v2/entitlements", "Bearer conductor-key"),
             Map.entry("/v2/entitlements", "Bearer enterprise-key")),
         conductor.requests.stream().map(e -> Map.entry(e.getKey(), e.getValue())).toList());
+  }
+
+  @Test
+  public void aBlankEnterpriseKeyFallsBackToTheConductorKey() {
+    check(" ", "conductor-key");
+    check("", "conductor-key");
+    assertEquals(2, conductor.requests.size());
+    conductor.requests.forEach(r -> assertEquals("Bearer conductor-key", r.getValue()));
+  }
+
+  @Test
+  public void surroundingWhitespaceIsNotPartOfTheKey() {
+    // As read from a secret file that ends in a newline.
+    check("enterprise-key\n", null);
+    check(null, " conductor-key\r\n");
+    assertEquals("Bearer enterprise-key", conductor.requests.get(0).getValue());
+    assertEquals("Bearer conductor-key", conductor.requests.get(1).getValue());
+  }
+
+  @Test
+  public void aKeyWithAControlCharacterIsRefusedWithoutQuotingIt() {
+    var e = refused("enterprise\nkey");
+    assertTrue(e.getMessage().contains("contains a control character"), e.getMessage());
+    assertFalse(e.getMessage().contains("enterprise"), e.getMessage());
+    assertEquals(List.of(), conductor.requests);
+  }
+
+  @Test
+  public void anAnswerThatStallsMidBodyTimesOut() {
+    // Headers arrive, then the body never finishes: the deadline covers the whole exchange.
+    conductor.stall = true;
+    var e =
+        assertTimeoutPreemptively(
+            Duration.ofSeconds(10),
+            () ->
+                assertThrows(
+                    IllegalStateException.class,
+                    () ->
+                        Entitlements.check(
+                            List.of(SOME_FEATURE),
+                            "enterprise-key",
+                            null,
+                            conductor.url,
+                            null,
+                            Entitlements.http(Duration.ofMillis(500)))));
+    assertTrue(e.getMessage().contains("no answer within 500 ms"), e.getMessage());
+    assertTrue(e.getMessage().contains("Retry once Conductor is reachable"), e.getMessage());
   }
 
   @Test

@@ -77,8 +77,8 @@ import org.jspecify.annotations.Nullable;
  *     schedule context, exports or imports. Requires {@code dev.dbos:transact-enterprise}, which
  *     enforces it
  * @param transactEnterpriseKey the DBOS key that entitles this application to Transact Enterprise
- *     features; must not be empty if non-null. When it is null, {@code conductorKey} stands in for
- *     it. Masked in {@link #toString()}
+ *     features. A blank value is the same as null, and when it is null, {@code conductorKey} stands
+ *     in for it. Masked in {@link #toString()}
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -135,9 +135,10 @@ public record DBOSConfig(
     if (conductorKey != null && conductorKey.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");
     }
-    if (transactEnterpriseKey != null && transactEnterpriseKey.isEmpty()) {
-      throw new IllegalArgumentException(
-          "DBOSConfig.transactEnterpriseKey must not be empty if specified");
+    // Unset, as in the other SDKs, so an empty placeholder (an unset environment variable)
+    // falls back to the Conductor key instead of failing.
+    if (transactEnterpriseKey != null && transactEnterpriseKey.isBlank()) {
+      transactEnterpriseKey = null;
     }
     if (conductorDomain != null && conductorDomain.isEmpty()) {
       throw new IllegalArgumentException(
@@ -1125,8 +1126,8 @@ public record DBOSConfig(
 
   /**
    * Returns a copy of this config with {@code transactEnterpriseKey} set to {@code v}: the DBOS key
-   * that entitles this application to Transact Enterprise features. When it is not set, the {@code
-   * conductorKey} stands in for it.
+   * that entitles this application to Transact Enterprise features. When it is null or blank, the
+   * {@code conductorKey} stands in for it.
    */
   public @NonNull DBOSConfig withTransactEnterpriseKey(@Nullable String v) {
     return new DBOSConfig(
