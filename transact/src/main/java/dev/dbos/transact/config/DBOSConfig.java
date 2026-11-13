@@ -214,11 +214,15 @@ public record DBOSConfig(
     return stripped.isEmpty() ? null : stripped;
   }
 
-  /** The domain with any {@code user:password@} replaced, for printing. */
+  /**
+   * The domain with everything up to its last {@code @} replaced, for printing. That masks any
+   * {@code user:password@}, even one with a raw '/' or '@' in the password, at the cost of also
+   * masking a path that contains '@'.
+   */
   private static @Nullable String withoutCredentials(@Nullable String domain) {
     return domain == null
         ? null
-        : domain.replaceFirst("^((?:[A-Za-z][A-Za-z0-9+.-]*://)?)[^/@]*@", "$1***@");
+        : domain.replaceFirst("(?s)^((?:[A-Za-z][A-Za-z0-9+.-]*://)?).*@", "$1***@");
   }
 
   // Copy constructor

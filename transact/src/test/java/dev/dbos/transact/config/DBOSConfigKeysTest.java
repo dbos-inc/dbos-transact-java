@@ -75,6 +75,15 @@ public class DBOSConfigKeysTest {
     assertFalse(text.contains("user"), text);
     assertTrue(
         text.contains("conductorDomain=wss://***@conductor.example.com/conductor/v1alpha1"), text);
+    // Even with a raw '@' or '/' in the password.
+    for (var domain :
+        new String[] {
+          "wss://user:p@secret@host/conductor/v1alpha1", "ws://user:pa/secret@host/x"
+        }) {
+      var masked = DBOSConfig.defaults("app").withConductorDomain(domain).toString();
+      assertFalse(masked.contains("secret"), masked);
+      assertFalse(masked.contains("user"), masked);
+    }
     var plain = DBOSConfig.defaults("app").withConductorDomain("ws://localhost:8090").toString();
     assertTrue(plain.contains("conductorDomain=ws://localhost:8090,"), plain);
   }

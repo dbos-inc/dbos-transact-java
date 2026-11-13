@@ -14,6 +14,7 @@ import dev.dbos.transact.utils.LogCapture;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -186,7 +187,11 @@ public class EntitlementsTest {
         "wss://user:pa secret@host/conductor/v1alpha1",
         // No scheme, so the user name reads as one.
         "user:secret@host",
-        "htp://user:secret@host"
+        "htp://user:secret@host",
+        // A raw '/' in the password: the parser reads "user:pa" as the whole authority.
+        "ws://user:pa/secret@127.0.0.1:1/x",
+        // A raw '@' in the password.
+        "wss://user:p@secret@host/conductor/v1alpha1"
       })
   public void anInvalidConductorUrlIsNeverQuoted(String url) {
     var e =
@@ -242,7 +247,16 @@ public class EntitlementsTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"enterprise\nkey", "enterprise\u20ackey", "enterprise\u0100key", "enterprise key"})
+      strings = {
+        "enterprise\nkey",
+        "enterprise\tkey",
+        "enterprise\u007fkey",
+        "enterprise\u0080key",
+        "enterprise\u00ffkey",
+        "enterprise\u20ackey",
+        "enterprise\u0100key",
+        "enterprise key"
+      })
   public void aKeyThatIsNotPrintableAsciiIsRefusedWithoutQuotingIt(String key) {
     var e = refused(key);
     assertTrue(e.getMessage().contains("other than printable ASCII"), e.getMessage());
@@ -282,6 +296,80 @@ public class EntitlementsTest {
       assertFalse(e.getMessage().contains("secret"), e.getMessage());
       assertEquals(null, e.getCause());
       assertEquals(List.of(), logs.messages(Level.WARN, ""));
+    }
+  }
+
+  @Test
+  public void aHostTheParserCannotIdentifyIsInvalid() {
+    // Such as an underscore in the host. The Conductor client cannot connect to it either.
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                Entitlements.require(
+                    List.of(SOME_FEATURE),
+                    "enterprise-key",
+                    null,
+                    "ws://conductor_svc:8090",
+                    false));
+    assertTrue(e.getMessage().contains("its host is not valid"), e.getMessage());
+  }
+
+  @Test
+  public void anAnswerOfExactlyTheLimitIsRead() {
+    var prefix = "{\"entitlements\": {\"someFeature\": true}, \"padding\": \"";
+    conductor.body =
+        prefix + "x".repeat(Entitlements.MAX_ANSWER_BYTES - prefix.length() - 2) + "\"}";
+    assertEquals(Entitlements.MAX_ANSWER_BYTES, conductor.body.length());
+    check("enterprise-key", null);
+  }
+
+  @Test
+  public void aMalformedAnswerIsAnOutageNotARefusalToSend() throws Exception {
+    // The JDK fails the exchange with a NumberFormatException, an IllegalArgumentException, for a
+    // non-numeric Content-Length. That is the server's fault: an outage, which only the hosted
+    // Conductor survives, never "could not be sent".
+    try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+      var answering =
+          new Thread(
+              () -> {
+                try (var socket = server.accept()) {
+                  var in = socket.getInputStream();
+                  // Read the request up to its blank line.
+                  var seen = 0;
+                  while (seen < 4) {
+                    var c = in.read();
+                    if (c < 0) {
+                      return;
+                    }
+                    seen = (c == '\r' || c == '\n') ? seen + 1 : 0;
+                  }
+                  socket
+                      .getOutputStream()
+                      .write(
+                          "HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\n"
+                              .getBytes(StandardCharsets.US_ASCII));
+                  socket.getOutputStream().flush();
+                  Thread.sleep(2000);
+                } catch (IOException | InterruptedException e) {
+                  // The test is over.
+                }
+              });
+      answering.setDaemon(true);
+      answering.start();
+      var e =
+          assertThrows(
+              IllegalStateException.class,
+              () ->
+                  Entitlements.require(
+                      List.of(SOME_FEATURE),
+                      "enterprise-key",
+                      null,
+                      "ws://127.0.0.1:" + server.getLocalPort(),
+                      false));
+      assertTrue(e.getMessage().contains("Retry once Conductor is reachable"), e.getMessage());
+      assertTrue(e.getMessage().contains("a malformed answer"), e.getMessage());
+      assertFalse(e.getMessage().contains("could not be sent"), e.getMessage());
     }
   }
 

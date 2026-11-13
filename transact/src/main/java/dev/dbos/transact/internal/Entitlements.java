@@ -325,8 +325,14 @@ public final class Entitlements {
           case "ws", "http" -> "http";
           default -> throw new InvalidUrl("its scheme is not ws, wss, http or https");
         };
+    // A host the parser cannot identify (a raw '/' or '@' in a password, or an underscore in the
+    // host) leaves the credentials unseparated. The Conductor client cannot connect to such a
+    // URL either.
+    if (uri.getHost() == null) {
+      throw new InvalidUrl("its host is not valid");
+    }
     // Without any user:password@, which would otherwise be sent and quoted in errors.
-    var host = authority.substring(authority.lastIndexOf('@') + 1);
+    var host = uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
     // The hosted websocket URL carries an API version; routes sit beside it.
     var path = uri.getRawPath() == null ? "" : uri.getRawPath().replaceAll("/+$", "");
     if (path.endsWith("/v1alpha1")) {
@@ -363,14 +369,15 @@ public final class Entitlements {
         pending.cancel(true);
         throw e;
       } catch (ExecutionException e) {
+        // The exchange failed in flight, so an outage, whatever the exception. The JDK reports some
+        // malformed answers (a non-numeric Content-Length) as an IllegalArgumentException, which
+        // must not read as a request this client refused to send.
         var cause = e.getCause();
         if (cause instanceof IOException io) {
           throw io;
         }
-        if (cause instanceof RuntimeException runtime) {
-          throw runtime;
-        }
-        throw new IOException(cause);
+        throw new IOException(
+            "a malformed answer (" + cause.getClass().getSimpleName() + ")", cause);
       }
       return new Answer(
           response.statusCode(),
