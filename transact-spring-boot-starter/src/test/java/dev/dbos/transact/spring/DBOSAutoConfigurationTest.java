@@ -54,12 +54,14 @@ class DBOSAutoConfigurationTest {
     // As from placeholders whose environment variables are unset: no Conductor connection, and no
     // enterprise key.
     runner
-        .withPropertyValues("dbos.conductor.key=", "dbos.transact-enterprise-key=")
+        .withPropertyValues(
+            "dbos.conductor.key=", "dbos.conductor.domain=", "dbos.transact-enterprise-key=")
         .run(
             context -> {
               assertThat(context).hasNotFailed();
               var config = context.getBean(DBOSConfig.class);
               assertThat(config.conductorKey()).isNull();
+              assertThat(config.conductorDomain()).isNull();
               assertThat(config.transactEnterpriseKey()).isNull();
             });
   }

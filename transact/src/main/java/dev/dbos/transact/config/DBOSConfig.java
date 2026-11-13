@@ -45,7 +45,8 @@ import org.jspecify.annotations.Nullable;
  * @param conductorKey API key for DBOS Conductor; null or blank to not connect. Connecting to
  *     Conductor requires {@code dev.dbos:transact-enterprise} on the class path. Masked in {@link
  *     #toString()}
- * @param conductorDomain custom hostname for DBOS Conductor; must not be empty if non-null
+ * @param conductorDomain custom hostname for DBOS Conductor; null or blank for DBOS's hosted
+ *     Conductor
  * @param conductorExecutorMetadata arbitrary key-value metadata attached to this executor's
  *     registration in Conductor
  * @param appVersion application version string used for versioned workflow routing; must not be
@@ -133,17 +134,16 @@ public record DBOSConfig(
     if (appName == null || appName.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
     }
-    // A blank key is unset, as in the other SDKs, so an empty placeholder (an unset environment
-    // variable) means no key instead of failing.
+    // A blank Conductor setting is unset, as in the other SDKs, so an empty placeholder (an unset
+    // environment variable) means the default instead of failing.
     if (conductorKey != null && conductorKey.isBlank()) {
       conductorKey = null;
     }
     if (transactEnterpriseKey != null && transactEnterpriseKey.isBlank()) {
       transactEnterpriseKey = null;
     }
-    if (conductorDomain != null && conductorDomain.isEmpty()) {
-      throw new IllegalArgumentException(
-          "DBOSConfig.conductorDomain must not be empty if specified");
+    if (conductorDomain != null && conductorDomain.isBlank()) {
+      conductorDomain = null;
     }
     if (appVersion != null && appVersion.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.appVersion must not be empty if specified");
@@ -568,7 +568,10 @@ public record DBOSConfig(
         transactEnterpriseKey);
   }
 
-  /** Returns a copy of this config with {@code conductorDomain} set to {@code v}. */
+  /**
+   * Returns a copy of this config with {@code conductorDomain} set to {@code v}; null or blank for
+   * DBOS's hosted Conductor.
+   */
   public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
     return new DBOSConfig(
         appName,

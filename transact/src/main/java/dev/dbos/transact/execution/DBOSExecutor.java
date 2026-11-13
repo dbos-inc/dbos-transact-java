@@ -249,12 +249,11 @@ public class DBOSExecutor implements AutoCloseable {
 
     // Every Transact Enterprise feature needs Conductor to report the organization entitled to it.
     // Checked before anything is started, so a refusal fails launch cleanly.
-    var conductorDomain = config.conductorDomain();
     Entitlements.require(
         Entitlements.enabledFeatures(config),
         config.transactEnterpriseKey(),
         config.conductorKey(),
-        conductorDomain == null || conductorDomain.isBlank() ? null : conductorDomain.trim(),
+        config.conductorDomain(),
         dbosCloud);
 
     // Found before anything is started, so a missing provider fails launch cleanly. An
@@ -450,11 +449,8 @@ public class DBOSExecutor implements AutoCloseable {
     if (conductorKey == null) {
       return null;
     }
-    String domain = config.conductorDomain();
-    if (domain != null && domain.trim().isEmpty()) {
-      domain = null;
-    }
-    return new ConductorOptions(conductorKey, null, domain, config.conductorMetadataOnlyMode());
+    return new ConductorOptions(
+        conductorKey, null, config.conductorDomain(), config.conductorMetadataOnlyMode());
   }
 
   @Nullable ConductorOptions conductorOptions() {

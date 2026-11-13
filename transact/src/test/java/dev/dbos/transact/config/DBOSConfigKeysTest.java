@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-/** The Conductor key and the Transact Enterprise key, which DBOSConfig handles alike. */
+/** The Conductor key and domain and the Transact Enterprise key, which DBOSConfig handles alike. */
 public class DBOSConfigKeysTest {
 
   @Test
@@ -41,8 +41,12 @@ public class DBOSConfigKeysTest {
     // failing: no Conductor connection, and the Conductor key standing in for the enterprise key.
     for (var blank : new String[] {"", " ", "\n"}) {
       var config =
-          DBOSConfig.defaults("app").withConductorKey(blank).withTransactEnterpriseKey(blank);
+          DBOSConfig.defaults("app")
+              .withConductorKey(blank)
+              .withConductorDomain(blank)
+              .withTransactEnterpriseKey(blank);
       assertNull(config.conductorKey(), "conductorKey " + blank);
+      assertNull(config.conductorDomain(), "conductorDomain " + blank);
       assertNull(config.transactEnterpriseKey(), "transactEnterpriseKey " + blank);
     }
   }

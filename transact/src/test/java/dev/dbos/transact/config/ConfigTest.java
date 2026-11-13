@@ -236,10 +236,10 @@ public class ConfigTest {
     assertThrows(IllegalArgumentException.class, () -> config.withAppName(""));
     assertThrows(IllegalArgumentException.class, () -> config.withAppName(null));
 
-    // A blank Conductor key is unset rather than refused (see DBOSConfigKeysTest).
+    // Blank Conductor settings are unset rather than refused (see DBOSConfigKeysTest).
     assertNull(config.withConductorKey("").conductorKey());
     assertDoesNotThrow(() -> config.withConductorKey(null));
-    assertThrows(IllegalArgumentException.class, () -> config.withConductorDomain(""));
+    assertNull(config.withConductorDomain("").conductorDomain());
     assertDoesNotThrow(() -> config.withConductorDomain(null));
     assertThrows(IllegalArgumentException.class, () -> config.withExecutorId(""));
     assertDoesNotThrow(() -> config.withExecutorId(null));
