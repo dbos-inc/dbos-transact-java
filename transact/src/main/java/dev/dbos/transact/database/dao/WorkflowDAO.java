@@ -2,6 +2,7 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.conductor.WorkflowFork;
+import dev.dbos.transact.database.AdvisoryLocks;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
@@ -36,10 +37,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -2671,14 +2668,7 @@ public class WorkflowDAO {
    * one system database contend for the same lock.
    */
   public static long retentionLockKey(String schema) {
-    try {
-      var digest =
-          MessageDigest.getInstance("SHA-256")
-              .digest(("dbos.retention." + schema).getBytes(StandardCharsets.UTF_8));
-      return ByteBuffer.wrap(digest, 0, Long.BYTES).getLong();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException("SHA-256 is unavailable", e);
-    }
+    return AdvisoryLocks.lockKey("dbos.retention." + schema);
   }
 
   /** A held retention lock. Closing it releases the lock and the session holding it. */

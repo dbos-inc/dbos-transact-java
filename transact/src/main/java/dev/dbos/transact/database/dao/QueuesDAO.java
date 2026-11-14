@@ -1,9 +1,11 @@
 package dev.dbos.transact.database.dao;
 
+import dev.dbos.transact.database.AdvisoryLocks;
 import dev.dbos.transact.database.DbContext;
 import dev.dbos.transact.database.DequeueResult;
 import dev.dbos.transact.database.DequeueResult.StopReason;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.workflow.Field;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueOptions;
@@ -53,55 +55,70 @@ public class QueuesDAO {
     // A queue-wide concurrency limit or limiter is a budget shared with every other executor.
     boolean queueWideBudget = limits.concurrency() != null || limits.rateLimit() != null;
     // Spending a queue-wide budget while sweeping one partition at a time is a write skew: each
-    // partition's sweep reads the same budget and claims against its own snapshot, so the
-    // partitions together can overshoot it. Only serializability rules that out.
+    // partition's claim reads the same budget, so the claim lock must span the whole queue.
     boolean crossPartitionBudget = queueWideBudget && partition != null;
     boolean sharedBudget =
         queueWideBudget
             || limits.partitionConcurrency() != null
             || limits.partitionRateLimit() != null;
 
-    try (Connection connection = ctx.getConnection()) {
-      connection.setAutoCommit(false);
-      // Worker-scoped concurrency is tracked in memory and needs no consistent DB snapshot, so a
-      // dequeue bounded only by that stays at READ COMMITTED.
-      if (crossPartitionBudget) {
-        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
-      } else if (sharedBudget) {
-        connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+    long maxTasks = Integer.MAX_VALUE;
+
+    // This worker's own limits use the caller-supplied in-memory counts and need no database, so a
+    // full worker returns before taking a claim lock a peer could use.
+    if (limits.workerConcurrency() != null) {
+      // A limit of 0 or less is a paused queue, not one running over its limit.
+      if (limits.workerConcurrency() > 0 && localRunningCount > limits.workerConcurrency()) {
+        logger.warn(
+            "Local running workflows ({}) on queue {} exceeds the worker concurrency limit ({})",
+            localRunningCount,
+            queue.name(),
+            limits.workerConcurrency());
       }
+      maxTasks = Math.min(maxTasks, Math.max(0, limits.workerConcurrency() - localRunningCount));
+      if (maxTasks == 0) {
+        return DequeueResult.stopped(StopReason.WORKER_CONCURRENCY);
+      }
+    }
+    if (limits.partitionWorkerConcurrency() != null) {
+      maxTasks =
+          Math.min(
+              maxTasks,
+              Math.max(0, limits.partitionWorkerConcurrency() - partitionLocalRunningCount));
+      if (maxTasks == 0) {
+        return DequeueResult.stopped(StopReason.PARTITION_WORKER_CONCURRENCY);
+      }
+    }
+
+    // Workers that pick the same head collide on its row lock, but workers that pick different
+    // heads -- different versions mid-deploy, or a higher-priority row enqueued between their reads
+    // -- lock different rows, and no isolation short of SERIALIZABLE stops both claiming. So a
+    // claim that spends a shared budget first takes an advisory lock on that budget's scope.
+    // CockroachDB has no advisory locks to rely on, so there the claim runs at SERIALIZABLE.
+    try (Connection connection = ctx.getConnection()) {
+      boolean useClaimLock = sharedBudget && !ctx.isCockroach(connection);
+      connection.setAutoCommit(false);
+      if (useClaimLock) {
+        // Set rather than inherited, since a user-supplied pool may default to another level. Under
+        // the lock each statement must see what the previous holder committed, which a snapshot
+        // taken before the lock was granted would not.
+        connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+      } else if (sharedBudget) {
+        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+      }
+      // Worker-scoped concurrency is tracked in memory and needs no consistent DB snapshot, so a
+      // dequeue bounded only by that keeps the pool's level.
 
       try {
-        long maxTasks = Integer.MAX_VALUE;
-
-        // Both worker-scoped limits use the caller-supplied in-memory counts — no DB round trip.
-        if (limits.workerConcurrency() != null) {
-          // A limit of 0 or less is a paused queue, not one running over its limit.
-          if (limits.workerConcurrency() > 0 && localRunningCount > limits.workerConcurrency()) {
-            logger.warn(
-                "Local running workflows ({}) on queue {} exceeds the worker concurrency limit ({})",
-                localRunningCount,
-                queue.name(),
-                limits.workerConcurrency());
-          }
-          maxTasks =
-              Math.min(maxTasks, Math.max(0, limits.workerConcurrency() - localRunningCount));
-          if (maxTasks == 0) {
-            // Nothing claimable. End the transaction here rather than leaving it open for
-            // the pool to roll back on return.
-            connection.rollback();
-            return DequeueResult.stopped(StopReason.WORKER_CONCURRENCY);
-          }
-        }
-        if (limits.partitionWorkerConcurrency() != null) {
-          maxTasks =
-              Math.min(
-                  maxTasks,
-                  Math.max(0, limits.partitionWorkerConcurrency() - partitionLocalRunningCount));
-          if (maxTasks == 0) {
-            connection.rollback();
-            return DequeueResult.stopped(StopReason.PARTITION_WORKER_CONCURRENCY);
-          }
+        if (useClaimLock
+            && !tryClaimLock(
+                connection,
+                AdvisoryLocks.queueClaimKey(
+                    ctx.schema(), queue.name(), crossPartitionBudget ? null : partition))) {
+          // Another worker is claiming from this scope, so it still has work; the next poll
+          // retries.
+          connection.rollback();
+          return DequeueResult.stopped(StopReason.CLAIM_LOCK);
         }
 
         // Bound the claim by each limiter's remaining slots, so a backlogged queue locks and
@@ -213,6 +230,7 @@ public class QueuesDAO {
             }
           }
         }
+        DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_FIND_AND_MARK_AFTER_SELECT);
 
         if (!dequeuedWorkflowIds.isEmpty()) {
           logger.debug(
@@ -290,8 +308,8 @@ public class QueuesDAO {
 
         return new DequeueResult(updatedWorkflowIds, null);
       } catch (Throwable t) {
-        // No path may leave the transaction open: it may hold FOR UPDATE locks on rows other
-        // executors are waiting to claim.
+        // No path may leave the transaction open: it may hold FOR UPDATE locks, or the claim lock,
+        // that other executors are waiting to claim under.
         try {
           connection.rollback();
         } catch (SQLException rollbackFailure) {
@@ -306,16 +324,32 @@ public class QueuesDAO {
   public static final int PARTITIONED_DEQUEUE_SWEEP_CAP = 8192;
 
   /**
-   * Claims the head workflow of every partition that has none running, in one transaction.
+   * The most partitions a batched sweep claims in one transaction, which bounds how many locks it
+   * holds at once, and for how long.
+   */
+  public static final int PARTITIONED_DEQUEUE_BATCH_SIZE = 64;
+
+  /**
+   * Claims the head workflow of every partition that has none running.
    *
    * <p>The per-partition sweep costs a transaction per partition per poll. This walks the distinct
    * partition keys with a recursive CTE -- a loose index scan, one seek per key -- so the cost
    * grows with the number of partitions, not with the depth of their backlog.
    *
+   * <p>The walk takes no lock. The partitions it finds are then claimed {@code batchSize} to a
+   * transaction. Each batch first takes an advisory lock on each of its partitions, leaving any
+   * that another sweep holds to that sweep or the next poll, and then picks the heads of the rest
+   * again under those locks. Without them, two sweeps that pick different heads of one idle
+   * partition -- different versions mid-deploy, or a higher-priority row enqueued between their
+   * reads -- would lock different rows and could both claim. On CockroachDB, which has no advisory
+   * locks to rely on, each batch runs at SERIALIZABLE instead.
+   *
    * @param maxTasks this worker's remaining budget, which bounds the claim alongside {@code
    *     sweepCap}
    * @param sweepCap the most heads one sweep claims; {@link #PARTITIONED_DEQUEUE_SWEEP_CAP} outside
    *     tests
+   * @param batchSize the most partitions one transaction claims; {@link
+   *     #PARTITIONED_DEQUEUE_BATCH_SIZE} outside tests
    * @param ownerXid the token the claim installs on every workflow it takes, which the executions
    *     it dispatches own them with
    * @return the claimed workflow IDs, ordered by partition key
@@ -328,6 +362,7 @@ public class QueuesDAO {
       String appVersion,
       long maxTasks,
       int sweepCap,
+      int batchSize,
       String ownerXid)
       throws SQLException {
     if (!queue.canBatchPartitionedDequeue()) {
@@ -345,179 +380,54 @@ public class QueuesDAO {
     String sweepOrder = sweepLimit < sweepCap ? "random()" : "partitions.pk ASC";
 
     try (Connection connection = ctx.getConnection()) {
+      boolean usePartitionLocks = !ctx.isCockroach(connection);
       connection.setAutoCommit(false);
-      // Set rather than inherited, since a user-supplied pool may default to another level.
-      // Workers that pick the same head serialize on its row lock. Workers that pick different
-      // heads of one idle partition -- different versions mid-deploy, or a higher-priority row
-      // enqueued between their reads -- can both claim, and REPEATABLE READ would not stop that
-      // either, since the two claims write different rows. The per-partition dequeue has the same
-      // gap; only SERIALIZABLE would close it.
+      // Set rather than inherited, since a user-supplied pool may default to another level. The
+      // walk only reads, and each batch below reads again under its locks.
       connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+      String versionClause;
+      List<String> partitionKeys = new ArrayList<>();
       try {
-        String versionClause = versionClause(ctx, connection, appVersion);
+        versionClause = versionClause(ctx, connection, appVersion);
 
-        var candidateQuery =
+        var walkQuery =
             """
-            %5$s,
+            %1$s,
             chosen AS (
               SELECT partitions.pk
               FROM partitions
               WHERE partitions.pk IS NOT NULL
-                -- Not scoped to this application: a partition running any owner's workflow is busy.
-                AND NOT EXISTS (
-                  SELECT 1
-                  FROM "%1$s".workflow_status
-                  WHERE queue_name = ? AND status = ?
-                    AND queue_partition_key IS NOT NULL
-                    AND queue_partition_key = partitions.pk)
+                AND %2$s
               ORDER BY %3$s
               LIMIT ?
             )
-            SELECT head.workflow_uuid
+            SELECT chosen.pk
             FROM chosen
-            -- LATERAL plans as a nested loop of top-1 probes; a correlated scalar subquery would
-            -- run as a slower per-row SubPlan.
-            JOIN LATERAL (
-              SELECT workflow_uuid
-              FROM "%1$s".workflow_status
-              WHERE queue_name = ? AND status = ?
-                AND queue_partition_key = chosen.pk
-                AND %4$s%2$s
-              -- workflow_uuid breaks created_at ties, so every worker picks the same head, and it
-              -- ends idx_workflow_status_partition_dequeue_v3, so this stays a pure index probe.
-              ORDER BY priority ASC, created_at ASC, workflow_uuid ASC
-              LIMIT 1
-            ) head ON TRUE
+            -- Only partitions with a head this worker may run. LATERAL plans as a nested loop of
+            -- top-1 probes; a correlated scalar subquery would run as a slower per-row SubPlan.
+            JOIN LATERAL (%4$s) head ON TRUE
             -- Which partitions to claim is settled above; this orders the claim and its dispatch.
             ORDER BY chosen.pk ASC
             """
                 .formatted(
-                    ctx.schema(),
-                    ctx.andAppScope(),
+                    partitionKeysCte(ctx),
+                    noPending(ctx, "partitions.pk"),
                     sweepOrder,
-                    versionClause,
-                    partitionKeysCte(ctx));
+                    headOf(ctx, "chosen.pk", versionClause));
 
-        List<String> candidateIds = new ArrayList<>();
-        try (var ps = connection.prepareStatement(candidateQuery)) {
+        try (var ps = connection.prepareStatement(walkQuery)) {
           int i = bindPartitionKeysCte(ctx, ps, 1, queue.name());
-          ps.setString(i++, queue.name());
-          ps.setString(i++, WorkflowState.PENDING.name());
+          i = bindNoPending(ps, i, queue.name());
           ps.setLong(i++, sweepLimit);
-          ps.setString(i++, queue.name());
-          ps.setString(i++, WorkflowState.ENQUEUED.name());
-          ps.setString(i++, appVersion);
-          ctx.bindAppScope(ps, i);
+          bindHeadOf(ctx, ps, i, queue.name(), appVersion);
           try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-              candidateIds.add(rs.getString(1));
+              partitionKeys.add(rs.getString(1));
             }
           }
         }
-        if (candidateIds.isEmpty()) {
-          connection.rollback();
-          return List.of();
-        }
-
-        // Re-check queue, partition and version alongside status, so a row moved to another queue
-        // since the candidate read is dropped rather than claimed from the wrong queue.
-        String claimGuard =
-            """
-            workflow_uuid = ANY(?)
-              AND status = ?
-              AND queue_name = ?
-              AND queue_partition_key IS NOT NULL
-              AND %s"""
-                    .formatted(versionClause)
-                + ctx.andAppScope();
-
-        // Lock the fixed candidate set. A LIMIT query's SKIP LOCKED could slide past a locked head
-        // to the row behind it, and admit a partition out of order.
-        Array candidateArray = connection.createArrayOf("text", candidateIds.toArray());
-        var lockedIds = new HashSet<String>();
-        try (var ps =
-            connection.prepareStatement(
-                """
-                SELECT workflow_uuid FROM "%s".workflow_status WHERE %s FOR UPDATE SKIP LOCKED
-                """
-                    .formatted(ctx.schema(), claimGuard))) {
-          ps.setArray(1, candidateArray);
-          ps.setString(2, WorkflowState.ENQUEUED.name());
-          ps.setString(3, queue.name());
-          ps.setString(4, appVersion);
-          ctx.bindAppScope(ps, 5);
-          try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-              lockedIds.add(rs.getString(1));
-            }
-          }
-        }
-        var claimIds = candidateIds.stream().filter(lockedIds::contains).toList();
-        if (claimIds.isEmpty()) {
-          connection.rollback();
-          return List.of();
-        }
-
-        String updateQuery =
-            """
-            UPDATE "%1$s".workflow_status
-            SET status = ?,
-                application_version = ?,
-                executor_id = ?,
-                -- The claim's token, as in the per-partition dequeue.
-                owner_xid = ?,
-                started_at_epoch_ms = %2$s,
-                updated_at = %2$s,
-                rate_limited = FALSE,
-                -- Count this dispatch against the dead-letter budget; no later write does it.
-                recovery_attempts = recovery_attempts + 1,
-                -- Claim it as it is taken, as the per-partition dequeue does.
-                application_name = COALESCE(application_name, ?),
-                -- The database's clock, as in the per-partition dequeue.
-                workflow_deadline_epoch_ms = CASE
-                    WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                    THEN %4$s
-                    ELSE workflow_deadline_epoch_ms
-                END
-            WHERE %3$s
-            RETURNING workflow_uuid
-            """
-                .formatted(
-                    ctx.schema(),
-                    SystemDatabase.NOW_EPOCH_MS,
-                    claimGuard,
-                    SystemDatabase.deadlineEpochMs("workflow_timeout_ms"));
-
-        var flippedIds = new HashSet<String>();
-        try (var ps = connection.prepareStatement(updateQuery)) {
-          ps.setString(1, WorkflowState.PENDING.name());
-          ps.setString(2, appVersion);
-          ps.setString(3, executorId);
-          ps.setString(4, ownerXid);
-          ps.setString(5, ctx.appName());
-          ps.setArray(6, connection.createArrayOf("text", claimIds.toArray()));
-          ps.setString(7, WorkflowState.ENQUEUED.name());
-          ps.setString(8, queue.name());
-          ps.setString(9, appVersion);
-          ctx.bindAppScope(ps, 10);
-          try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-              flippedIds.add(rs.getString(1));
-            }
-          }
-        }
-
-        // As in the per-partition dequeue: a round that claims nothing rolls back rather than
-        // committing the row locks it took.
-        if (flippedIds.isEmpty()) {
-          connection.rollback();
-          return List.of();
-        }
-        connection.commit();
-        var claimedIds = claimIds.stream().filter(flippedIds::contains).toList();
-        logger.debug(
-            "dequeued {} partition head(s) from {} queue", claimedIds.size(), queue.name());
-        return claimedIds;
+        // It only read, so there is nothing to commit.
+        connection.rollback();
       } catch (Throwable t) {
         try {
           connection.rollback();
@@ -526,7 +436,311 @@ public class QueuesDAO {
         }
         throw t;
       }
+      if (partitionKeys.isEmpty()) {
+        return List.of();
+      }
+
+      if (!usePartitionLocks) {
+        // CockroachDB, without advisory locks: SERIALIZABLE aborts one of two sweeps that claim
+        // into the same partition.
+        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+      }
+      // One short transaction per batch, so a sweep holds at most a batch's locks, and only while
+      // it claims that batch.
+      var claimedIds = new ArrayList<String>();
+      for (int start = 0; start < partitionKeys.size(); start += batchSize) {
+        var batch = partitionKeys.subList(start, Math.min(start + batchSize, partitionKeys.size()));
+        try {
+          var batchIds =
+              claimBatch(
+                  ctx,
+                  connection,
+                  queue,
+                  executorId,
+                  appVersion,
+                  versionClause,
+                  ownerXid,
+                  batch,
+                  usePartitionLocks);
+          // As in the per-partition dequeue: a batch that claims nothing rolls back rather than
+          // committing the row locks it took.
+          if (batchIds.isEmpty()) {
+            connection.rollback();
+          } else {
+            connection.commit();
+          }
+          claimedIds.addAll(batchIds);
+        } catch (Throwable t) {
+          // No path may leave the transaction open: it holds partition locks and row locks other
+          // executors are waiting to claim under.
+          try {
+            connection.rollback();
+          } catch (SQLException rollbackFailure) {
+            t.addSuppressed(rollbackFailure);
+          }
+          if (claimedIds.isEmpty() || !(t instanceof Exception)) {
+            throw t;
+          }
+          // Earlier batches committed their claims, which must still reach dispatch; the next
+          // poll retries the rest.
+          logger.warn(
+              "Stopping a partitioned sweep of queue {} after {} claim(s)",
+              queue.name(),
+              claimedIds.size(),
+              t);
+          break;
+        }
+      }
+      if (!claimedIds.isEmpty()) {
+        logger.debug(
+            "dequeued {} partition head(s) from {} queue", claimedIds.size(), queue.name());
+      }
+      return claimedIds;
     }
+  }
+
+  /**
+   * Claims the heads of {@code batch}'s partitions in the transaction open on {@code connection},
+   * and returns the IDs it marked PENDING, in partition key order. Leaves the transaction open for
+   * the caller to end.
+   */
+  private static List<String> claimBatch(
+      DbContext ctx,
+      Connection connection,
+      Queue queue,
+      String executorId,
+      String appVersion,
+      String versionClause,
+      String ownerXid,
+      List<String> batch,
+      boolean usePartitionLocks)
+      throws SQLException {
+    List<String> held = batch;
+    if (usePartitionLocks) {
+      DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_PARTITIONED_DEQUEUE_BEFORE_LOCKS);
+      // Partitions another sweep holds are left to it, or to the next poll.
+      held = lockPartitions(connection, ctx.schema(), queue.name(), batch);
+      if (held.isEmpty()) {
+        return List.of();
+      }
+    }
+
+    // Pick the heads again under the locks, so the previous holder's claims, and any head that has
+    // become visible since the walk, are seen.
+    var headQuery =
+        """
+        SELECT head.workflow_uuid
+        FROM unnest(CAST(? AS text[])) AS chosen(pk)
+        JOIN LATERAL (%s) head ON TRUE
+        WHERE %s
+        ORDER BY chosen.pk ASC
+        """
+            .formatted(headOf(ctx, "chosen.pk", versionClause), noPending(ctx, "chosen.pk"));
+    List<String> candidateIds = new ArrayList<>();
+    try (var ps = connection.prepareStatement(headQuery)) {
+      ps.setArray(1, connection.createArrayOf("text", held.toArray()));
+      int i = bindHeadOf(ctx, ps, 2, queue.name(), appVersion);
+      bindNoPending(ps, i, queue.name());
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          candidateIds.add(rs.getString(1));
+        }
+      }
+    }
+    if (candidateIds.isEmpty()) {
+      return List.of();
+    }
+    DebugTriggers.debugTriggerPoint(
+        DebugTriggers.DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES);
+
+    // Re-check queue, partition and version alongside status, so a row moved to another queue
+    // since the head read is dropped rather than claimed from the wrong queue.
+    String claimGuard =
+        """
+        workflow_uuid = ANY(?)
+          AND status = ?
+          AND queue_name = ?
+          AND queue_partition_key IS NOT NULL
+          AND %s"""
+                .formatted(versionClause)
+            + ctx.andAppScope();
+
+    // Lock the fixed candidate set. A LIMIT query's SKIP LOCKED could slide past a locked head
+    // to the row behind it, and admit a partition out of order.
+    Array candidateArray = connection.createArrayOf("text", candidateIds.toArray());
+    var lockedIds = new HashSet<String>();
+    try (var ps =
+        connection.prepareStatement(
+            """
+            SELECT workflow_uuid FROM "%s".workflow_status WHERE %s FOR UPDATE SKIP LOCKED
+            """
+                .formatted(ctx.schema(), claimGuard))) {
+      ps.setArray(1, candidateArray);
+      ps.setString(2, WorkflowState.ENQUEUED.name());
+      ps.setString(3, queue.name());
+      ps.setString(4, appVersion);
+      ctx.bindAppScope(ps, 5);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          lockedIds.add(rs.getString(1));
+        }
+      }
+    }
+    var claimIds = candidateIds.stream().filter(lockedIds::contains).toList();
+    if (claimIds.isEmpty()) {
+      return List.of();
+    }
+
+    String updateQuery =
+        """
+        UPDATE "%1$s".workflow_status
+        SET status = ?,
+            application_version = ?,
+            executor_id = ?,
+            -- The claim's token, as in the per-partition dequeue.
+            owner_xid = ?,
+            started_at_epoch_ms = %2$s,
+            updated_at = %2$s,
+            rate_limited = FALSE,
+            -- Count this dispatch against the dead-letter budget; no later write does it.
+            recovery_attempts = recovery_attempts + 1,
+            -- Claim it as it is taken, as the per-partition dequeue does.
+            application_name = COALESCE(application_name, ?),
+            -- The database's clock, as in the per-partition dequeue.
+            workflow_deadline_epoch_ms = CASE
+                WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
+                THEN %4$s
+                ELSE workflow_deadline_epoch_ms
+            END
+        WHERE %3$s
+        RETURNING workflow_uuid
+        """
+            .formatted(
+                ctx.schema(),
+                SystemDatabase.NOW_EPOCH_MS,
+                claimGuard,
+                SystemDatabase.deadlineEpochMs("workflow_timeout_ms"));
+
+    var flippedIds = new HashSet<String>();
+    try (var ps = connection.prepareStatement(updateQuery)) {
+      ps.setString(1, WorkflowState.PENDING.name());
+      ps.setString(2, appVersion);
+      ps.setString(3, executorId);
+      ps.setString(4, ownerXid);
+      ps.setString(5, ctx.appName());
+      ps.setArray(6, connection.createArrayOf("text", claimIds.toArray()));
+      ps.setString(7, WorkflowState.ENQUEUED.name());
+      ps.setString(8, queue.name());
+      ps.setString(9, appVersion);
+      ctx.bindAppScope(ps, 10);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          flippedIds.add(rs.getString(1));
+        }
+      }
+    }
+
+    // Preserve partition order for dispatch.
+    return claimIds.stream().filter(flippedIds::contains).toList();
+  }
+
+  /**
+   * Takes {@code key}'s advisory lock for the open transaction, if no other transaction holds it.
+   *
+   * @return whether this transaction now holds it
+   */
+  private static boolean tryClaimLock(Connection connection, long key) throws SQLException {
+    try (var ps = connection.prepareStatement("SELECT pg_try_advisory_xact_lock(?)")) {
+      ps.setLong(1, key);
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next() && rs.getBoolean(1);
+      }
+    }
+  }
+
+  /**
+   * Takes the open transaction's advisory lock on each of {@code partitionKeys}, skipping any
+   * another transaction holds. Two-int keys, the queue and then the partition, so the locks of one
+   * queue's partitions never collide with another queue's.
+   *
+   * @return the partitions this transaction now holds
+   */
+  private static List<String> lockPartitions(
+      Connection connection, String schema, String queueName, List<String> partitionKeys)
+      throws SQLException {
+    var lockIds =
+        partitionKeys.stream().map(AdvisoryLocks::partitionClaimId).toArray(Integer[]::new);
+    try (var ps =
+        connection.prepareStatement(
+            """
+            SELECT coalesce(array_agg(p.pk), '{}')
+            FROM unnest(CAST(? AS text[]), CAST(? AS int4[])) AS p(pk, lock_id)
+            WHERE pg_try_advisory_xact_lock(CAST(? AS int4), p.lock_id)
+            """)) {
+      ps.setArray(1, connection.createArrayOf("text", partitionKeys.toArray()));
+      ps.setArray(2, connection.createArrayOf("int4", lockIds));
+      ps.setInt(3, AdvisoryLocks.partitionClaimQueueId(schema, queueName));
+      try (ResultSet rs = ps.executeQuery()) {
+        if (!rs.next()) {
+          return List.of();
+        }
+        var held = rs.getArray(1);
+        return held == null ? List.of() : List.of((String[]) held.getArray());
+      }
+    }
+  }
+
+  /**
+   * A partition's head: its first ENQUEUED workflow this worker may run, as a subquery for a
+   * LATERAL join on the partition key expression {@code pk}. Bind its parameters with {@link
+   * #bindHeadOf}.
+   */
+  private static String headOf(DbContext ctx, String pk, String versionClause) {
+    return """
+        SELECT workflow_uuid
+        FROM "%1$s".workflow_status
+        WHERE queue_name = ? AND status = ?
+          AND queue_partition_key = %2$s
+          AND %3$s%4$s
+        -- workflow_uuid breaks created_at ties, so every worker picks the same head, and it ends
+        -- idx_workflow_status_partition_dequeue_v3, so this stays a pure index probe.
+        ORDER BY priority ASC, created_at ASC, workflow_uuid ASC
+        LIMIT 1"""
+        .formatted(ctx.schema(), pk, versionClause, ctx.andAppScope());
+  }
+
+  /** Binds {@link #headOf}'s parameters from {@code index}, and returns the next free index. */
+  private static int bindHeadOf(
+      DbContext ctx, PreparedStatement ps, int index, String queueName, String appVersion)
+      throws SQLException {
+    ps.setString(index++, queueName);
+    ps.setString(index++, WorkflowState.ENQUEUED.name());
+    ps.setString(index++, appVersion);
+    return ctx.bindAppScope(ps, index);
+  }
+
+  /**
+   * A predicate that the partition named by the key expression {@code pk} has no PENDING workflow.
+   * Not scoped to this application: a partition running any owner's workflow is busy. Bind its
+   * parameters with {@link #bindNoPending}.
+   */
+  private static String noPending(DbContext ctx, String pk) {
+    return """
+        NOT EXISTS (
+          SELECT 1
+          FROM "%s".workflow_status
+          WHERE queue_name = ? AND status = ?
+            AND queue_partition_key IS NOT NULL
+            AND queue_partition_key = %s)"""
+        .formatted(ctx.schema(), pk);
+  }
+
+  /** Binds {@link #noPending}'s parameters from {@code index}, and returns the next free index. */
+  private static int bindNoPending(PreparedStatement ps, int index, String queueName)
+      throws SQLException {
+    ps.setString(index++, queueName);
+    ps.setString(index++, WorkflowState.PENDING.name());
+    return index;
   }
 
   /**

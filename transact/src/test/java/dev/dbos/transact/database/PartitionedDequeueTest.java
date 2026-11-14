@@ -60,7 +60,16 @@ public class PartitionedDequeueTest {
     sysdb = SystemDatabase.create(dbosConfig, null, dbosConfig.appName());
     dataSource = pgContainer.dataSource();
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    ctx = new DbContext(dataSource, schema, null, () -> false, null, null, new PollingLimiter(0));
+    ctx =
+        new DbContext(
+            dataSource,
+            schema,
+            null,
+            () -> false,
+            null,
+            null,
+            new PollingLimiter(0),
+            new CockroachProbe());
   }
 
   /** Partitioned by a per-partition limit, as a queue registered today is. */
@@ -104,7 +113,14 @@ public class PartitionedDequeueTest {
   private List<String> claimOnce(Queue queue, long maxTasks, int sweepCap) throws SQLException {
     var claimed =
         QueuesDAO.startQueuedPartitionedWorkflows(
-            ctx, queue, "exec", APP_VERSION, maxTasks, sweepCap, "test-claim");
+            ctx,
+            queue,
+            "exec",
+            APP_VERSION,
+            maxTasks,
+            sweepCap,
+            QueuesDAO.PARTITIONED_DEQUEUE_BATCH_SIZE,
+            "test-claim");
     assertEquals(
         claimed.stream().sorted(Comparator.comparing(partitionOf::get)).toList(),
         claimed,
@@ -328,6 +344,6 @@ public class PartitionedDequeueTest {
         IllegalArgumentException.class,
         () ->
             QueuesDAO.startQueuedPartitionedWorkflows(
-                ctx, partitionedQueue("q", null, 2), "exec", APP_VERSION, 1, 1, "test-claim"));
+                ctx, partitionedQueue("q", null, 2), "exec", APP_VERSION, 1, 1, 1, "test-claim"));
   }
 }

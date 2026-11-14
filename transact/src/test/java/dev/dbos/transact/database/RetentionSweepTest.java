@@ -41,7 +41,14 @@ class RetentionSweepTest {
     }
     ctx =
         new DbContext(
-            dataSource, Constants.DB_SCHEMA, null, () -> false, null, null, new PollingLimiter(0));
+            dataSource,
+            Constants.DB_SCHEMA,
+            null,
+            () -> false,
+            null,
+            null,
+            new PollingLimiter(0),
+            new CockroachProbe());
   }
 
   /** A status row plus the three child rows a completed workflow leaves behind. */
@@ -137,7 +144,14 @@ class RetentionSweepTest {
     try (var otherPool = pgContainer.dataSource()) {
       var other =
           new DbContext(
-              otherPool, Constants.DB_SCHEMA, null, () -> false, null, null, new PollingLimiter(0));
+              otherPool,
+              Constants.DB_SCHEMA,
+              null,
+              () -> false,
+              null,
+              null,
+              new PollingLimiter(0),
+              new CockroachProbe());
       try (var held = WorkflowDAO.acquireRetentionLock(other)) {
         assertNotNull(held);
         WorkflowDAO.runRetentionRound(ctx, Instant.now(), null, 2);
@@ -337,7 +351,8 @@ class RetentionSweepTest {
                 () -> false,
                 null,
                 null,
-                new PollingLimiter(0));
+                new PollingLimiter(0),
+                new CockroachProbe());
         assertNull(
             WorkflowDAO.acquireRetentionLock(other), "a concurrent round must be turned away");
       }

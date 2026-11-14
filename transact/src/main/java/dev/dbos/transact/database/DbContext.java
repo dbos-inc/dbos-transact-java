@@ -19,10 +19,24 @@ public record DbContext(
     BooleanSupplier closed,
     String executorId,
     @Nullable String appName,
-    PollingLimiter pollingLimiter) {
+    PollingLimiter pollingLimiter,
+    CockroachProbe cockroachProbe) {
 
   public Connection getConnection() throws SQLException {
     return dataSource.getConnection();
+  }
+
+  /** Whether the system database is CockroachDB, checking out a connection only the first time. */
+  public boolean isCockroach() throws SQLException {
+    return cockroachProbe.isCockroach(dataSource);
+  }
+
+  /**
+   * Whether the system database is CockroachDB, asking on {@code connection} only the first time.
+   * Call it before the connection's transaction begins.
+   */
+  public boolean isCockroach(Connection connection) throws SQLException {
+    return cockroachProbe.isCockroach(connection);
   }
 
   /**

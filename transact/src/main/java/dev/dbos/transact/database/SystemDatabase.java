@@ -205,10 +205,18 @@ public class SystemDatabase implements AutoCloseable {
         new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
     this.ctx =
         new DbContext(
-            dataSource, schema, serializer, this.closed::get, executorId, appName, pollingLimiter);
+            dataSource,
+            schema,
+            serializer,
+            this.closed::get,
+            executorId,
+            appName,
+            pollingLimiter,
+            new CockroachProbe());
     this.created = created;
     try {
-      useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
+      // Through the context, so the queue claims that branch on it need not ask again.
+      useListenNotify = ctx.isCockroach() ? false : useListenNotify;
     } catch (SQLException e) {
       logger.error("Failed to determine if dataSource is CockroachDB", e);
       useListenNotify = false;
@@ -1548,7 +1556,7 @@ public class SystemDatabase implements AutoCloseable {
                 ownerXid));
   }
 
-  /** Claims every idle partition's head workflow in one transaction; see {@link QueuesDAO}. */
+  /** Claims every idle partition's head workflow; see {@link QueuesDAO}. */
   public List<String> startQueuedPartitionedWorkflows(
       Queue queue, String executorId, String appVersion, long maxTasks, String ownerXid) {
     return dbOnce(
@@ -1560,6 +1568,7 @@ public class SystemDatabase implements AutoCloseable {
                 appVersion,
                 maxTasks,
                 QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP,
+                QueuesDAO.PARTITIONED_DEQUEUE_BATCH_SIZE,
                 ownerXid));
   }
 

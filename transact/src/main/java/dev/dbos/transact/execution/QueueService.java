@@ -2,6 +2,7 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.DequeueResult;
+import dev.dbos.transact.database.DequeueResult.StopReason;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
@@ -276,6 +277,9 @@ public class QueueService implements AutoCloseable {
           // A queue-wide limit spent, perhaps by peers since the count, leaves every other
           // partition without room too.
           if (result.stopReason() != null && result.stopReason().isQueueWide()) break;
+          // With a queue-wide budget the claim lock spans the queue, so a peer holding it holds
+          // every other partition too. A partition's own lock leaves the rest to claim.
+          if (result.stopReason() == StopReason.CLAIM_LOCK && hasQueueWideBudget()) break;
         } catch (Exception e) {
           // Skip just this partition, no queue-wide backoff -- deliberately including 40001,
           // which would back off from a non-partitioned dequeue. The other partitions are
@@ -323,6 +327,12 @@ public class QueueService implements AutoCloseable {
           || (limits.partitionWorkerConcurrency() != null
               && limits.partitionWorkerConcurrency() <= 0)
           || (limits.partitionRateLimit() != null && limits.partitionRateLimit().limit() <= 0);
+    }
+
+    /** Whether every executor shares a queue-wide concurrency or rate limit on this queue. */
+    private boolean hasQueueWideBudget() {
+      var limits = queue.resolveLimits();
+      return limits.concurrency() != null || limits.rateLimit() != null;
     }
 
     /**
