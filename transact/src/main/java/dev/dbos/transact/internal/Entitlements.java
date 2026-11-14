@@ -53,6 +53,8 @@ public final class Entitlements {
   static final String ENTITLEMENTS_PATH = "/v2/entitlements";
   static final Duration TIMEOUT = Duration.ofSeconds(10);
   static final String HOSTED_CONDUCTOR_URL = "wss://cloud.dbos.dev/conductor/v1alpha1";
+  // The hosted Conductor's entitlement route, which identifies it however its URL is written.
+  static final String HOSTED_ROUTE = "https://cloud.dbos.dev/conductor" + ENTITLEMENTS_PATH;
   // Conductor's machine-readable error code, in this header, for an org past its plan limit.
   private static final String ERROR_CODE_HEADER = "X-DBOS-Error";
   private static final String PAST_LIMIT = "past_limit";
@@ -140,18 +142,6 @@ public final class Entitlements {
     }
     conductorUrl = setting(conductorUrl);
     var target = conductorUrl != null ? conductorUrl : defaultConductorUrl(dbosDomain);
-    // Only a Conductor named explicitly is asked without a key, and never DBOS's hosted one.
-    if (key == null && (conductorUrl == null || target.equals(HOSTED_CONDUCTOR_URL))) {
-      throw new IllegalStateException(names + " requires a DBOS key. " + KEY_HINT);
-    }
-    // A DBOS key is printable ASCII. Anything else is refused here, unquoted, rather than by the
-    // HTTP client, whose message would quote the key.
-    if (key != null && !key.chars().allMatch(c -> c > 0x20 && c < 0x7f)) {
-      throw new IllegalStateException(
-          names
-              + " requires a DBOS key, but the configured key is not one: it contains a character"
-              + " other than printable ASCII.");
-    }
     String url;
     try {
       url = entitlementUrl(target);
@@ -161,6 +151,21 @@ public final class Entitlements {
           names
               + " requires an entitled DBOS key, but the Conductor URL is invalid: "
               + e.getMessage());
+    }
+    // DBOS's hosted Conductor however its URL is written (a trailing slash, upper case), by the
+    // route the check asks.
+    var hosted = url.equalsIgnoreCase(HOSTED_ROUTE);
+    // Only a Conductor named explicitly is asked without a key, and never DBOS's hosted one.
+    if (key == null && (conductorUrl == null || hosted)) {
+      throw new IllegalStateException(names + " requires a DBOS key. " + KEY_HINT);
+    }
+    // A DBOS key is printable ASCII. Anything else is refused here, unquoted, rather than by the
+    // HTTP client, whose message would quote the key.
+    if (key != null && !key.chars().allMatch(c -> c > 0x20 && c < 0x7f)) {
+      throw new IllegalStateException(
+          names
+              + " requires a DBOS key, but the configured key is not one: it contains a character"
+              + " other than printable ASCII.");
     }
     var headers = new HashMap<String, String>();
     headers.put("User-Agent", "dbos-transact-java/" + DBOS.version());
@@ -188,7 +193,8 @@ public final class Entitlements {
         }
         return;
       }
-      var detail = problemDetail(answer.body());
+      // Conductor's own words, but never the key, should an answer echo it.
+      var detail = redact(problemDetail(answer.body()), key);
       var reason = detail != null ? ": " + detail : "";
       if (status == 403 && PAST_LIMIT.equals(answer.errorCode())) {
         throw refusal(
@@ -198,7 +204,7 @@ public final class Entitlements {
                 + names
                 + "). Upgrade its plan to continue.");
       }
-      if (target.equals(HOSTED_CONDUCTOR_URL) && HOSTED_UNAVAILABLE.contains(status)) {
+      if (hosted && HOSTED_UNAVAILABLE.contains(status)) {
         // An outage, handled below.
       } else if (status == 404 && detail == null) {
         // A bare 404 is a missing route: a Conductor predating per-feature entitlements.
@@ -241,7 +247,7 @@ public final class Entitlements {
       cause = e;
     } catch (IOException e) {
       rethrowError(e);
-      failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+      failure = e.getMessage() != null ? redact(e.getMessage(), key) : e.getClass().getSimpleName();
       cause = e;
     } catch (IllegalArgumentException e) {
       // The HTTP client refused to send the request: not an outage, so it never fails open. Its
@@ -256,7 +262,7 @@ public final class Entitlements {
       throw new IllegalStateException(
           "Interrupted while checking the DBOS key's entitlements with Conductor at " + url, e);
     }
-    if (target.equals(HOSTED_CONDUCTOR_URL)) {
+    if (hosted) {
       logger.warn(
           "Could not verify the DBOS key's entitlements with Conductor at {} ({}); starting anyway.",
           url,
@@ -282,6 +288,11 @@ public final class Entitlements {
   static String defaultConductorUrl(@Nullable String dbosDomain) {
     var domain = dbosDomain == null || dbosDomain.isBlank() ? "cloud.dbos.dev" : dbosDomain.trim();
     return "wss://" + domain + "/conductor/v1alpha1";
+  }
+
+  /** {@code text} with every occurrence of {@code key} masked, for a diagnostic. */
+  private static @Nullable String redact(@Nullable String text, @Nullable String key) {
+    return text == null || key == null ? text : text.replace(key, "***");
   }
 
   /** A setting without surrounding whitespace, or null if it is unset or blank. */

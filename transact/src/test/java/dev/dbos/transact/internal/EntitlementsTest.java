@@ -413,6 +413,91 @@ public class EntitlementsTest {
   }
 
   @Test
+  public void anAnswerThatEchoesTheKeyNeverQuotesIt() {
+    conductor.reject(401, "invalid API key: enterprise-key");
+    var message = refused("enterprise-key").getMessage();
+    assertTrue(message.contains("rejected the key (HTTP 401): invalid API key: ***"), message);
+    assertFalse(message.contains("enterprise-key"), message);
+    conductor.reject(503, "no org for enterprise-key");
+    message = refused("enterprise-key").getMessage();
+    assertTrue(message.contains("failed (HTTP 503: no org for ***)"), message);
+    assertFalse(message.contains("enterprise-key"), message);
+  }
+
+  @Test
+  @ResourceLock(ENTITLEMENTS_LOG)
+  public void aTransportFailureThatEchoesTheKeyNeverQuotesIt() {
+    Entitlements.Http echoing =
+        (uri, headers) -> {
+          throw new IOException("bad answer to enterprise-key");
+        };
+    // Another Conductor fails closed, without the key in its message.
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                Entitlements.check(
+                    List.of(SOME_FEATURE),
+                    "enterprise-key",
+                    null,
+                    "ws://localhost:8090",
+                    null,
+                    echoing));
+    assertTrue(e.getMessage().contains("failed (bad answer to ***)"), e.getMessage());
+    assertFalse(e.getMessage().contains("enterprise-key"), e.getMessage());
+    // The hosted one warns, without the key in its warning.
+    try (var logs = new LogCapture(Entitlements.class)) {
+      checkHosted(null, echoing);
+      var warnings = logs.messages(Level.WARN, "starting anyway");
+      assertEquals(1, warnings.size(), warnings.toString());
+      assertTrue(warnings.get(0).contains("bad answer to ***"), warnings.get(0));
+      assertFalse(warnings.get(0).contains("enterprise-key"), warnings.get(0));
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "wss://cloud.dbos.dev/conductor/v1alpha1/",
+        "WSS://Cloud.DBOS.dev/conductor/v1alpha1",
+        "wss://cloud.dbos.dev/conductor"
+      })
+  @ResourceLock(ENTITLEMENTS_LOG)
+  public void theHostedConductorIsRecognizedHoweverItsUrlIsWritten(String url) {
+    // Never asked without a key.
+    var asked = new ArrayList<URI>();
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                Entitlements.check(
+                    List.of(SOME_FEATURE),
+                    null,
+                    null,
+                    url,
+                    null,
+                    (uri, headers) -> {
+                      asked.add(uri);
+                      return new Answer(200, null, "{\"entitlements\": {\"someFeature\": true}}");
+                    }));
+    assertTrue(e.getMessage().startsWith("Some feature requires a DBOS key."), e.getMessage());
+    assertEquals(List.of(), asked);
+    // And its outage starts anyway, as for the default URL.
+    try (var logs = new LogCapture(Entitlements.class)) {
+      Entitlements.check(
+          List.of(SOME_FEATURE),
+          "enterprise-key",
+          null,
+          url,
+          null,
+          (uri, headers) -> {
+            throw new IOException("connection refused");
+          });
+      assertEquals(1, logs.messages(Level.WARN, "starting anyway").size());
+    }
+  }
+
+  @Test
   public void aJvmErrorBehindAnOutageNeverStartsAnyway() {
     // The HTTP client reports an OutOfMemoryError in its selector thread as the cause of an
     // IOException. Against the hosted Conductor, reading that as an outage would fail open.
