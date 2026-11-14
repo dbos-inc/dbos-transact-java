@@ -102,6 +102,11 @@ jobs:
         working-directory: dbos-demo-apps/${{ matrix.app }}
         run: |
           VERSION="${{ needs.publish.outputs.version }}"
+          # Only this repository's artifacts are published at VERSION. transact-enterprise is built
+          # in the enterprise repository, and a released one requires its own transact version
+          # exactly, so it cannot sit beside this build. The apps only need it to connect to
+          # Conductor (DBOS_CONDUCTOR_KEY), which this job doesn't do, so it is left out.
+          sed -i '/dev\.dbos:transact-enterprise:/d' "${{ matrix.build_file }}"
           sed -i "s|dev\.dbos:\([^:]*\):[^\"']*|dev.dbos:\1:${VERSION}|g" "${{ matrix.build_file }}"
           sed -i 's/repositories {/repositories { mavenLocal();/' "${{ matrix.build_file }}"
 
