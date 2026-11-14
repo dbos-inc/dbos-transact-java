@@ -1375,7 +1375,7 @@ public class WorkflowDAO {
    * <p>A row that a dequeue or a peer's sweep holds is skipped and left for the next sweep. So, on
    * CockroachDB, is a row that a transaction which just committed wrote or locked, until its locks
    * are cleaned up a moment later. The status values are literals rather than parameters, so the
-   * planner can match idx_workflow_status_deadline's predicate under a generic plan.
+   * planner can match idx_workflow_status_deadline_v2's predicate under a generic plan.
    *
    * @return the IDs of the workflows cancelled
    */

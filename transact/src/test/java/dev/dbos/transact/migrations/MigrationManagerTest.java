@@ -148,6 +148,7 @@ class MigrationManagerTest {
                   Constants.DB_SCHEMA, true, PgContainer.USE_COCKROACH_DB));
       var version = getVersion(conn);
       assertEquals(migrations.size(), version);
+      assertSuspendModeSchema(conn);
     }
   }
 
@@ -595,7 +596,7 @@ class MigrationManagerTest {
 
     var schema = Constants.DB_SCHEMA;
     var latest = MigrationManager.getMigrations(schema, true, PgContainer.USE_COCKROACH_DB).size();
-    assertEquals(125, latest, "The shared history currently ends at migration 125");
+    assertEquals(130, latest, "The shared history currently ends at migration 130");
 
     // A database last migrated by a build that predates the shared base: the runner must walk the
     // padding between this language's own history and SHARED_MIGRATION_BASE without stalling.
@@ -635,7 +636,7 @@ class MigrationManagerTest {
       assertIndexExists(conn, "idx_workflow_topic");
 
       assertColumnExists(conn, "notifications", "consumed_by_function_id");
-      assertIndexExists(conn, "idx_workflow_status_deadline");
+      assertSuspendModeSchema(conn);
 
       for (var index : REBUILT_INDEXES) {
         assertIndexExists(conn, index[1]);
@@ -783,13 +784,19 @@ class MigrationManagerTest {
       MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 121));
       assertEquals(121, getVersion(conn));
       assertIndexAbsent(conn, "idx_workflow_status_deadline");
+
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 122));
+      assertEquals(122, getVersion(conn));
+      assertIndexExists(conn, "idx_workflow_status_deadline");
     }
 
     MigrationManager.runMigrations(dbosConfig);
 
+    // Migration 129 drops it again, superseded by idx_workflow_status_deadline_v2 (migration 128).
     try (var conn = dataSource.getConnection()) {
       assertEquals(migrations.size(), getVersion(conn));
-      assertIndexExists(conn, "idx_workflow_status_deadline");
+      assertIndexAbsent(conn, "idx_workflow_status_deadline");
+      assertIndexExists(conn, "idx_workflow_status_deadline_v2");
     }
 
     // Re-running is a no-op.
@@ -824,6 +831,242 @@ class MigrationManagerTest {
 
     // Re-running is a no-op.
     assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+  }
+
+  /**
+   * Migrations 126 to 130 take a database at 125 to suspend mode, whichever SDK created it. Java's
+   * migration 14 names send_message's fourth parameter idempotency_key and every other SDK's names
+   * it message_id; 130 must succeed on both and leave message_id behind.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"idempotency_key", "message_id"})
+  void testMigrations126To130_SuspendMode(String fourthParameter) throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var dbosConfig = pgContainer.dbosConfig();
+    var useListenNotify = !PgContainer.USE_COCKROACH_DB;
+    var migrations =
+        MigrationManager.getMigrations(schema, useListenNotify, PgContainer.USE_COCKROACH_DB);
+
+    // A database last migrated by an SDK that stopped at 125.
+    MigrationManager.createDatabaseIfNotExists(
+        pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+    try (var conn = dataSource.getConnection()) {
+      MigrationManager.ensureDbosSchema(conn, schema);
+      MigrationManager.ensureMigrationTable(conn, schema);
+      MigrationManager.runDbosMigrations(conn, schema, migrations.subList(0, 125));
+      assertEquals(125, getVersion(conn));
+      if (fourthParameter.equals("message_id")) {
+        recreateSendMessageAsOtherSdksDo(conn);
+      }
+      assertEquals(fourthParameter, sendMessageFourthParameter(conn));
+      assertColumnAbsent(conn, "workflow_status", "suspend_key");
+      assertIndexAbsent(conn, "idx_workflow_status_suspended");
+      assertIndexAbsent(conn, "idx_workflow_status_deadline_v2");
+      assertIndexExists(conn, "idx_workflow_status_deadline");
+    }
+
+    MigrationManager.runMigrations(dbosConfig);
+
+    try (var conn = dataSource.getConnection()) {
+      assertEquals(130, migrations.size());
+      assertEquals(migrations.size(), getVersion(conn));
+      assertSuspendModeSchema(conn);
+    }
+
+    // Re-execute the DDL as well as the runner's normal already-current path.
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      for (var migration : migrations.subList(125, 130)) {
+        stmt.execute(migration);
+      }
+      assertSuspendModeSchema(conn);
+    }
+    assertDoesNotThrow(() -> MigrationManager.runMigrations(dbosConfig));
+  }
+
+  /**
+   * After migration 130, a send wakes its destination if it is parked SUSPENDED waiting on the
+   * send's topic, and touches no other row.
+   */
+  @Test
+  void testMigration130_SendMessageWakesASuspendedReceiver() throws Exception {
+    MigrationManager.runMigrations(pgContainer.dbosConfig());
+
+    var schema = Constants.DB_SCHEMA;
+    var parked = 9_000_000_000_000L;
+    try (var conn = dataSource.getConnection()) {
+      // {workflow, status, suspend_key}
+      String[][] rows = {
+        {"waiting", "SUSPENDED", "topic"},
+        {"waiting-null-topic", "SUSPENDED", "__null__topic__"},
+        {"other-topic", "SUSPENDED", "elsewhere"},
+        {"not-suspended", "PENDING", "topic"},
+        {"not-addressed", "SUSPENDED", "topic"},
+        {"no-key", "SUSPENDED", null},
+      };
+      var insert =
+          "INSERT INTO \"%s\".workflow_status (workflow_uuid, status, name, suspend_key, delay_until_epoch_ms) VALUES (?, ?, 'wf', ?, ?)"
+              .formatted(schema);
+      try (var ps = conn.prepareStatement(insert)) {
+        for (var row : rows) {
+          ps.setString(1, row[0]);
+          ps.setString(2, row[1]);
+          ps.setString(3, row[2]);
+          ps.setLong(4, parked);
+          ps.addBatch();
+        }
+        ps.executeBatch();
+      }
+
+      sendMessage(conn, "waiting", "topic");
+      sendMessage(conn, "waiting-null-topic", null);
+      sendMessage(conn, "other-topic", "topic");
+      sendMessage(conn, "not-suspended", "topic");
+      sendMessage(conn, "no-key", "topic");
+
+      assertEquals(0L, delayUntil(conn, "waiting"));
+      assertEquals(0L, delayUntil(conn, "waiting-null-topic"));
+      assertEquals(parked, delayUntil(conn, "other-topic"));
+      assertEquals(parked, delayUntil(conn, "not-suspended"));
+      assertEquals(parked, delayUntil(conn, "not-addressed"));
+      assertEquals(parked, delayUntil(conn, "no-key"));
+
+      // Each send still delivered its message, whether or not it woke anything.
+      try (var stmt = conn.createStatement();
+          var rs =
+              stmt.executeQuery("SELECT count(*) FROM \"%s\".notifications".formatted(schema))) {
+        assertTrue(rs.next());
+        assertEquals(5, rs.getInt(1));
+      }
+
+      // A send to a workflow that does not exist still fails as it did before.
+      var e =
+          assertThrows(java.sql.SQLException.class, () -> sendMessage(conn, "missing", "topic"));
+      assertTrue(
+          e.getMessage().contains("DBOS non-existent workflow"),
+          "Expected the non-existent workflow error, got: " + e.getMessage());
+    }
+  }
+
+  private static void sendMessage(Connection conn, String destination, String topic)
+      throws Exception {
+    var sql = "SELECT \"%s\".send_message(?, ?::json, ?)".formatted(Constants.DB_SCHEMA);
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, destination);
+      ps.setString(2, "\"hello\"");
+      ps.setString(3, topic);
+      ps.execute();
+    }
+  }
+
+  private static long delayUntil(Connection conn, String workflowId) throws Exception {
+    var sql =
+        "SELECT delay_until_epoch_ms FROM \"%s\".workflow_status WHERE workflow_uuid = ?"
+            .formatted(Constants.DB_SCHEMA);
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, workflowId);
+      try (var rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  /** What migrations 126 to 130 leave behind. */
+  static void assertSuspendModeSchema(Connection conn) throws Exception {
+    assertColumnExists(conn, "workflow_status", "suspend_key");
+    assertIndexExists(conn, "idx_workflow_status_suspended");
+    assertIndexExists(conn, "idx_workflow_status_deadline_v2");
+    assertIndexAbsent(conn, "idx_workflow_status_deadline");
+    assertFunctionExists(conn.getMetaData(), "send_message");
+    assertEquals("message_id", sendMessageFourthParameter(conn));
+    if (!PgContainer.USE_COCKROACH_DB) {
+      assertEquals(
+          List.of("search_path=pg_catalog, pg_temp"),
+          sendMessageConfig(conn),
+          "send_message keeps the search_path migration 20 gave it");
+    }
+  }
+
+  /** The name of send_message's fourth parameter, the one the SDKs disagreed on before 130. */
+  private static String sendMessageFourthParameter(Connection conn) throws Exception {
+    var sql =
+        "SELECT p.proargnames FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid"
+            + " WHERE n.nspname = ? AND p.proname = 'send_message'";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      try (var rs = ps.executeQuery()) {
+        assertTrue(rs.next(), "send_message should exist");
+        var names = (String[]) rs.getArray(1).getArray();
+        assertFalse(rs.next(), "send_message should have one overload");
+        assertEquals(4, names.length);
+        return names[3];
+      }
+    }
+  }
+
+  private static List<String> sendMessageConfig(Connection conn) throws Exception {
+    var sql =
+        "SELECT p.proconfig FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid"
+            + " WHERE n.nspname = ? AND p.proname = 'send_message'";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      try (var rs = ps.executeQuery()) {
+        assertTrue(rs.next(), "send_message should exist");
+        var config = rs.getArray(1);
+        return config == null ? List.of() : List.of((String[]) config.getArray());
+      }
+    }
+  }
+
+  /**
+   * Recreates send_message the way every SDK but Java creates it in migration 14 and secures it in
+   * migration 20: the same function, with its fourth parameter named message_id.
+   */
+  private static void recreateSendMessageAsOtherSdksDo(Connection conn) throws Exception {
+    var schema = Constants.DB_SCHEMA;
+    var sql =
+        """
+        DROP FUNCTION "%1$s".send_message(TEXT, JSON, TEXT, TEXT);
+
+        CREATE FUNCTION "%1$s".send_message(
+            destination_id TEXT,
+            message JSON,
+            topic TEXT DEFAULT NULL,
+            message_id TEXT DEFAULT NULL
+        ) RETURNS VOID AS $$
+        DECLARE
+            v_topic TEXT := COALESCE(topic, '__null__topic__');
+            v_message_id TEXT := COALESCE(message_id, gen_random_uuid()::TEXT);
+        BEGIN
+            INSERT INTO "%1$s".notifications (
+                destination_uuid, topic, message, message_uuid, serialization
+            ) VALUES (
+                destination_id, v_topic, message, v_message_id, 'portable_json'
+            )
+            ON CONFLICT (message_uuid) DO NOTHING;
+        EXCEPTION
+            WHEN foreign_key_violation THEN
+                RAISE EXCEPTION 'DBOS non-existent workflow'
+                   USING DETAIL = format('Destination workflow %%s does not exist', destination_id),
+                        ERRCODE = 'foreign_key_violation';
+        END;
+        $$ LANGUAGE plpgsql;
+        """
+            .formatted(schema);
+    if (!PgContainer.USE_COCKROACH_DB) {
+      sql +=
+          """
+
+          ALTER FUNCTION "%1$s".send_message(
+              TEXT, JSON, TEXT, TEXT
+          ) SET search_path = pg_catalog, pg_temp;
+          """
+              .formatted(schema);
+    }
+    try (var stmt = conn.createStatement()) {
+      stmt.execute(sql);
+    }
   }
 
   // application_name is the one non-key column: stored in the index, after the key columns.
