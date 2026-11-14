@@ -1682,6 +1682,8 @@ public class DBOSClient implements AutoCloseable {
    * Delete a workflow from the system. This permanently removes the workflow and its associated
    * data from the database. Child workflows are preserved by default.
    *
+   * <p>Transactional step checkpoints are not deleted; see {@link #deleteWorkflows(List, boolean)}.
+   *
    * @param workflowId ID of the workflow to delete; must not be null
    */
   public void deleteWorkflow(@NonNull String workflowId) {
@@ -1691,6 +1693,8 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Delete a workflow from the system. This permanently removes the workflow and its associated
    * data from the database.
+   *
+   * <p>Transactional step checkpoints are not deleted; see {@link #deleteWorkflows(List, boolean)}.
    *
    * @param workflowId ID of the workflow to delete; must not be null
    * @param deleteChildren if true, also delete any child workflows; if false, preserve child
@@ -1704,6 +1708,8 @@ public class DBOSClient implements AutoCloseable {
    * Delete multiple workflows from the system. This permanently removes the workflows and their
    * associated data from the database. Child workflows are preserved by default.
    *
+   * <p>Transactional step checkpoints are not deleted; see {@link #deleteWorkflows(List, boolean)}.
+   *
    * @param workflowIds a list of workflow IDs to delete; must not be null
    */
   public void deleteWorkflows(@NonNull List<String> workflowIds) {
@@ -1713,6 +1719,14 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Delete multiple workflows from the system. This permanently removes the workflows and their
    * associated data from the database.
+   *
+   * <p>A client cannot reach the application's databases, so unlike {@link
+   * DBOS#deleteWorkflows(List, boolean)}, it does not delete the checkpoints transactional step
+   * factories keep there. A new workflow started under a deleted ID replays the recorded result of
+   * any transactional step that still has one instead of running it. To delete those checkpoints
+   * too, delete from within the application; that also works for an ID a client already deleted.
+   * Children are found through their own status rows, so if a client deleted those too, pass the
+   * children's IDs.
    *
    * @param workflowIds a list of workflow IDs to delete; must not be null
    * @param deleteChildren if true, also delete any child workflows; if false, preserve child

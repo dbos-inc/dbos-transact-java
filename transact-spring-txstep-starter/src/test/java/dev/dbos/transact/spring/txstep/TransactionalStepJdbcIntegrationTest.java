@@ -235,6 +235,35 @@ public class TransactionalStepJdbcIntegrationTest {
   }
 
   @Test
+  void deleteRerunsTheTransactionalStepUnderTheSameId() throws SQLException {
+    try (var db = new TransactionalStepTest.TestDatabase()) {
+      runner(db)
+          .run(
+              ctx -> {
+                assertThat(ctx).hasNotFailed();
+                var workflow = ctx.getBean(OrderWorkflowService.class);
+                var dbos = ctx.getBean(DBOS.class);
+                var wfid = "wf-jdbc-int-delete-reuse";
+
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  workflow.processOrder("ord-du", "Widget", 1);
+                }
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).hasSize(1);
+
+                dbos.deleteWorkflow(wfid);
+                assertThat(TransactionalStepTest.getTxRows(db.dataSource, wfid)).isEmpty();
+
+                // As in the rewind test: only a step that runs again places the order again.
+                new JdbcTemplate(db.dataSource).update("DELETE FROM orders WHERE id = ?", "ord-du");
+                try (var _o = new WorkflowOptions(wfid).setContext()) {
+                  workflow.processOrder("ord-du", "Widget", 1);
+                }
+                assertThat(orderCount(db.dataSource, "ord-du")).isEqualTo(1);
+              });
+    }
+  }
+
+  @Test
   void rewindRerunsTheTransactionalStep() throws SQLException {
     try (var db = new TransactionalStepTest.TestDatabase()) {
       runner(db)
