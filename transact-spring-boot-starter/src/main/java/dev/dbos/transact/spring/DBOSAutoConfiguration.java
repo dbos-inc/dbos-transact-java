@@ -131,6 +131,9 @@ public class DBOSAutoConfiguration {
       config = config.withConductorDomain(props.getConductor().getDomain());
     }
     config = config.withConductorMetadataOnlyMode(props.getConductor().isMetadataOnlyMode());
+    if (props.getTransactEnterpriseKey() != null) {
+      config = config.withTransactEnterpriseKey(props.getTransactEnterpriseKey());
+    }
     if (props.getApplication().getVersion() != null) {
       config = config.withAppVersion(props.getApplication().getVersion());
     }

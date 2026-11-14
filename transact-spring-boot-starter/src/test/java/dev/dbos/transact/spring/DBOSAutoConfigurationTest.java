@@ -50,6 +50,23 @@ class DBOSAutoConfigurationTest {
   }
 
   @Test
+  void emptyKeysAreUnset() {
+    // As from placeholders whose environment variables are unset: no Conductor connection, and no
+    // enterprise key.
+    runner
+        .withPropertyValues(
+            "dbos.conductor.key=", "dbos.conductor.domain=", "dbos.transact-enterprise-key=")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              var config = context.getBean(DBOSConfig.class);
+              assertThat(config.conductorKey()).isNull();
+              assertThat(config.conductorDomain()).isNull();
+              assertThat(config.transactEnterpriseKey()).isNull();
+            });
+  }
+
+  @Test
   void dbosConfigReflectsDatasourceProperties() {
     runner
         .withPropertyValues(
@@ -73,6 +90,7 @@ class DBOSAutoConfigurationTest {
             "dbos.conductor.key=my-key",
             "dbos.conductor.domain=my-domain",
             "dbos.conductor.metadata-only-mode=true",
+            "dbos.transact-enterprise-key=my-enterprise-key",
             "dbos.application.version=1.2.3",
             "dbos.executor-id=exec-1",
             "dbos.datasource.schema=my_schema",
@@ -88,6 +106,7 @@ class DBOSAutoConfigurationTest {
               assertThat(config.conductorKey()).isEqualTo("my-key");
               assertThat(config.conductorDomain()).isEqualTo("my-domain");
               assertThat(config.conductorMetadataOnlyMode()).isTrue();
+              assertThat(config.transactEnterpriseKey()).isEqualTo("my-enterprise-key");
               assertThat(config.appVersion()).isEqualTo("1.2.3");
               assertThat(config.executorId()).isEqualTo("exec-1");
               assertThat(config.databaseSchema()).isEqualTo("my_schema");

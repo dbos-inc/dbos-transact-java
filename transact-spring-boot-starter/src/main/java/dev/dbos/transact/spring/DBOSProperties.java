@@ -28,6 +28,12 @@ public class DBOSProperties {
   /** Executor ID for this instance. */
   private String executorId;
 
+  /**
+   * The DBOS key that entitles this application to Transact Enterprise features. When not set, the
+   * Conductor key stands in for it.
+   */
+  private String transactEnterpriseKey;
+
   /** Whether to enable workflow patching. Defaults to {@code false}. */
   private boolean enablePatching = false;
 
@@ -240,6 +246,14 @@ public class DBOSProperties {
 
   public void setExecutorId(String executorId) {
     this.executorId = executorId;
+  }
+
+  public String getTransactEnterpriseKey() {
+    return transactEnterpriseKey;
+  }
+
+  public void setTransactEnterpriseKey(String transactEnterpriseKey) {
+    this.transactEnterpriseKey = transactEnterpriseKey;
   }
 
   public boolean isEnablePatching() {
