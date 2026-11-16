@@ -9,9 +9,9 @@ import org.jspecify.annotations.Nullable;
  * claim's lock.
  *
  * @param workflowIds the workflows claimed
- * @param stopReason why the dequeue claimed nothing without looking for candidates: the limit that
- *     left no room, or {@link StopReason#CLAIM_LOCK}; null when it looked, whatever it found, or
- *     did not run because the queue service is paused
+ * @param stopReason the reason the dequeue claimed nothing without looking for candidates, either
+ *     the limit that left no room or {@link StopReason#CLAIM_LOCK}; null when it looked, whatever
+ *     it found, or did not run because the queue service is paused
  */
 public record DequeueResult(List<String> workflowIds, @Nullable StopReason stopReason) {
 
@@ -27,12 +27,6 @@ public record DequeueResult(List<String> workflowIds, @Nullable StopReason stopR
   public enum StopReason {
     WORKER_CONCURRENCY,
     PARTITION_WORKER_CONCURRENCY,
-    /**
-     * Another worker held the lock serializing claims on the budget this dequeue would spend: the
-     * whole queue's when it has a queue-wide concurrency limit or rate limit, otherwise the
-     * partition's. Taken after the worker-scoped limits and before every shared one. The scope
-     * still has work, as far as anyone knows, so the next poll retries without backing off.
-     */
     CLAIM_LOCK,
     RATE_LIMIT,
     PARTITION_RATE_LIMIT,

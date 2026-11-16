@@ -95,15 +95,15 @@ public class QueuesDAO {
     // -- lock different rows, and no isolation short of SERIALIZABLE stops both claiming. So a
     // claim that spends a shared budget first takes an advisory lock on that budget's scope.
     // CockroachDB has no advisory locks to rely on, so there the claim runs at SERIALIZABLE.
+    boolean useClaimLock = sharedBudget && !ctx.isCockroach();
     try (Connection connection = ctx.getConnection()) {
-      boolean useClaimLock = sharedBudget && !ctx.isCockroach();
       connection.setAutoCommit(false);
       if (useClaimLock) {
-        // Set rather than inherited, since a user-supplied pool may default to another level. Under
-        // the lock each statement must see what the previous holder committed, which a snapshot
-        // taken before the lock was granted would not.
+        // The lock keeps other claimers out, so each statement need only see what the previous
+        // holder committed, which a snapshot taken before the lock was granted would not.
         connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
       } else if (sharedBudget) {
+        // CockroachDB, with no lock: SERIALIZABLE aborts one of two claims that would overspend.
         connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
       }
       // Worker-scoped concurrency is tracked in memory and needs no consistent DB snapshot, so a
@@ -379,11 +379,10 @@ public class QueuesDAO {
     // would hand every sweep to the same low keys and starve the high ones.
     String sweepOrder = sweepLimit < sweepCap ? "random()" : "partitions.pk ASC";
 
+    boolean usePartitionLocks = !ctx.isCockroach();
     try (Connection connection = ctx.getConnection()) {
-      boolean usePartitionLocks = !ctx.isCockroach();
       connection.setAutoCommit(false);
-      // Set rather than inherited, since a user-supplied pool may default to another level. The
-      // walk only reads, and each batch below reads again under its locks.
+      // The walk only reads, and each batch below reads again under its locks.
       connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
       String versionClause;
       List<String> partitionKeys = new ArrayList<>();
