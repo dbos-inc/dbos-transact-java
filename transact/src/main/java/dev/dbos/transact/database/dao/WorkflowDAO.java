@@ -1388,9 +1388,9 @@ public class WorkflowDAO {
                  completed_at = %2$s
            WHERE workflow_uuid IN (
                SELECT workflow_uuid FROM "%1$s".workflow_status
-                WHERE status IN ('%3$s', '%4$s', '%5$s')
+                WHERE status IN ('%3$s', '%4$s', '%5$s', '%6$s')
                   AND workflow_deadline_epoch_ms IS NOT NULL
-                  AND workflow_deadline_epoch_ms <= %2$s%6$s
+                  AND workflow_deadline_epoch_ms <= %2$s%7$s
                 ORDER BY workflow_deadline_epoch_ms
                 LIMIT ?
                 FOR UPDATE SKIP LOCKED)
@@ -1402,6 +1402,7 @@ public class WorkflowDAO {
                 WorkflowState.ENQUEUED.name(),
                 WorkflowState.PENDING.name(),
                 WorkflowState.DELAYED.name(),
+                WorkflowState.SUSPENDED.name(),
                 ctx.andAppScope());
 
     var cancelled = new ArrayList<String>();
@@ -1479,10 +1480,11 @@ public class WorkflowDAO {
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
       if (input.status() == null || input.status().isEmpty()) {
-        whereConditions.add("status IN (?, ?, ?)");
+        whereConditions.add("status IN (?, ?, ?, ?)");
         parameters.add(WorkflowState.ENQUEUED.name());
         parameters.add(WorkflowState.PENDING.name());
         parameters.add(WorkflowState.DELAYED.name());
+        parameters.add(WorkflowState.SUSPENDED.name());
       }
     }
     if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {

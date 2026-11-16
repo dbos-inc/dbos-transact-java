@@ -37,7 +37,8 @@ public class ApplicationRenameDAO {
       List.of(
           WorkflowState.PENDING.name(),
           WorkflowState.ENQUEUED.name(),
-          WorkflowState.DELAYED.name());
+          WorkflowState.DELAYED.name(),
+          WorkflowState.SUSPENDED.name());
 
   private ApplicationRenameDAO() {}
 

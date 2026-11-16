@@ -213,6 +213,12 @@ public class NotificationsDAO {
               throw e;
             }
 
+            wakeReceivers(
+                conn,
+                ctx.schema(),
+                rows.stream().map(InsertRow::destId).distinct().sorted().toList(),
+                rows.stream().map(InsertRow::topic).distinct().sorted().toList());
+
             // The owner is checked after the messages, so the status row is locked last, as every
             // fenced write locks it. Recording the step checks it first; a send from inside a step
             // has no step to record, so it is checked on its own.
@@ -226,6 +232,39 @@ public class NotificationsDAO {
               WorkflowDAO.checkOwner(conn, ctx.schema(), caller.workflowId(), caller.ownerXid());
             }
           });
+    }
+  }
+
+  /**
+   * Makes the SUSPENDED receivers waiting on one of {@code topics} due, so whichever executor
+   * resumes parked workflows re-enqueues them. Runs on every send, whether or not this process
+   * parks receivers itself, so any sender wakes a workflow another process parked. A primary-key
+   * probe per destination, which matches nothing in the common case.
+   *
+   * <p>The match is destinations x topics, so a batch sending A on topic X and B on topic Y also
+   * wakes A if it waits on Y. That is harmless: the replayed recv finds no message and parks again.
+   *
+   * <p>The status is tested in SET, not WHERE, so the planner cannot choose to scan the partial
+   * index on SUSPENDED rows rather than probe the primary key.
+   */
+  private static void wakeReceivers(
+      Connection conn, String schema, List<String> destinations, List<String> topics)
+      throws SQLException {
+    if (destinations.isEmpty()) {
+      return;
+    }
+    final String sql =
+        """
+          UPDATE "%s".workflow_status
+             SET delay_until_epoch_ms =
+                 CASE WHEN status = 'SUSPENDED' THEN 0 ELSE delay_until_epoch_ms END
+           WHERE workflow_uuid = ANY(?) AND suspend_key = ANY(?)
+        """
+            .formatted(schema);
+    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setArray(1, conn.createArrayOf("text", destinations.toArray(String[]::new)));
+      stmt.setArray(2, conn.createArrayOf("text", topics.toArray(String[]::new)));
+      stmt.executeUpdate();
     }
   }
 

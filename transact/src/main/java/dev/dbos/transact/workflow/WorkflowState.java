@@ -9,10 +9,11 @@ public enum WorkflowState {
   MAX_RECOVERY_ATTEMPTS_EXCEEDED,
   CANCELLED,
   ENQUEUED,
-  DELAYED;
+  DELAYED,
+  SUSPENDED;
 
   @JsonIgnore
   public boolean isActive() {
-    return this == PENDING || this == ENQUEUED || this == DELAYED;
+    return this == PENDING || this == ENQUEUED || this == DELAYED || this == SUSPENDED;
   }
 }
