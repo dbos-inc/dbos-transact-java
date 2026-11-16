@@ -294,11 +294,12 @@ public class QueueService implements AutoCloseable {
     }
 
     /**
-     * Claims and dispatches the head of every idle partition in one transaction, for a queue that
-     * runs one workflow per partition and has no queue-wide limit.
+     * Claims and dispatches the head of every idle partition, in batched transactions, for a queue
+     * that runs one workflow per partition and has no queue-wide limit.
      *
      * <p>Contention here is queue-wide, like a non-partitioned dequeue's, so it propagates and
-     * backs the whole queue off.
+     * backs the whole queue off. The exception is a failure after an earlier batch has claimed:
+     * those claims are dispatched, and the failure is logged and left to the next poll.
      */
     void sweepPartitionHeads() {
       long maxTasks = workerBudget(dbosExecutor.queueActiveCount(queue.name()));

@@ -209,6 +209,9 @@ public class SystemDatabase implements AutoCloseable {
     try {
       cockroach = isCockroach(dataSource);
     } catch (SQLException e) {
+      if (created && dataSource instanceof HikariDataSource hikariDataSource) {
+        hikariDataSource.close();
+      }
       throw new IllegalStateException("Failed to determine if dataSource is CockroachDB", e);
     }
     if (cockroach) {
@@ -613,11 +616,11 @@ public class SystemDatabase implements AutoCloseable {
    * 55P03 lock_not_available, raised by the {@code FOR UPDATE NOWAIT} that rate-limited queues take
    * so every executor sees a consistent count.
    *
-   * <p>40001 serialization_failure counts too: a dequeue that escalates to REPEATABLE READ to keep
-   * a shared budget consistent loses the race the same way, and the queue listener reacts to both
-   * identically. TypeScript classifies exactly these two codes here, and Go the same plus 40P01.
-   * Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects one, so a
-   * deadlock is a real error and should be logged as one.
+   * <p>40001 serialization_failure counts too: on CockroachDB, which has no claim lock, a dequeue
+   * claims a shared budget at SERIALIZABLE and loses the race the same way, and the queue listener
+   * reacts to both identically. TypeScript classifies exactly these two codes here, and Go the same
+   * plus 40P01. Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects
+   * one, so a deadlock is a real error and should be logged as one.
    *
    * <p>{@link #dbRetry} no longer absorbs class 40, so a serialization failure now reaches this
    * caller rather than being slept off on a pooled thread.

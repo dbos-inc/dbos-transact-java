@@ -2250,7 +2250,15 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null, null, new PollingLimiter(0), false);
+    return new DbContext(
+        ds,
+        schema,
+        null,
+        () -> false,
+        null,
+        null,
+        new PollingLimiter(0),
+        PgContainer.USE_COCKROACH_DB);
   }
 
   /** Whether {@code ds} prepared a statement taking an advisory lock. */

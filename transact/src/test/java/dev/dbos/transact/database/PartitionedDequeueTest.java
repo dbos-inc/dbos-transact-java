@@ -62,7 +62,14 @@ public class PartitionedDequeueTest {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
     ctx =
         new DbContext(
-            dataSource, schema, null, () -> false, null, null, new PollingLimiter(0), false);
+            dataSource,
+            schema,
+            null,
+            () -> false,
+            null,
+            null,
+            new PollingLimiter(0),
+            PgContainer.USE_COCKROACH_DB);
   }
 
   /** Partitioned by a per-partition limit, as a queue registered today is. */

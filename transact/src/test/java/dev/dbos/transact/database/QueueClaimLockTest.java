@@ -85,7 +85,14 @@ public class QueueClaimLockTest {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
     ctx =
         new DbContext(
-            dataSource, schema, null, () -> false, null, null, new PollingLimiter(0), false);
+            dataSource,
+            schema,
+            null,
+            () -> false,
+            null,
+            null,
+            new PollingLimiter(0),
+            PgContainer.USE_COCKROACH_DB);
     claimerB = Executors.newSingleThreadExecutor(r -> new Thread(r, CLAIMER_B));
   }
 

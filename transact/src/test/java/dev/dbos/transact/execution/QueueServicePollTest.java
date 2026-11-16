@@ -312,19 +312,17 @@ public class QueueServicePollTest {
   @Test
   @DisplayName("a partition's own claim lock skips only that partition")
   public void aPartitionClaimLockSkipsOnlyThatPartition() {
-    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b"));
+    // Every partition's lock is held, so a sweep that stopped at the first would visit one of the
+    // three whichever order it shuffled them into.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
     when(systemDatabase.startQueuedWorkflows(
-            any(), any(), any(), eq("a"), anyLong(), anyLong(), anyString()))
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
         .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.CLAIM_LOCK));
-    when(systemDatabase.startQueuedWorkflows(
-            any(), any(), any(), eq("b"), anyLong(), anyLong(), anyString()))
-        .thenReturn(claimed("wf-b"));
 
     taskFor(WORKER_BUDGETED).sweepPartitions();
 
-    verify(systemDatabase, times(2))
+    verify(systemDatabase, times(3))
         .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
-    verify(dbosExecutor).executeWorkflowById(eq("wf-b"), anyString());
   }
 
   @Test

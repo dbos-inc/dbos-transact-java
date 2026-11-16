@@ -233,8 +233,8 @@ public record Queue(
   }
 
   /**
-   * Whether every partition's head can be claimed in one transaction rather than one partition at a
-   * time: the queue is partitioned, each partition runs one workflow at a time, and nothing is
+   * Whether every partition's head can be claimed in batched transactions rather than one partition
+   * at a time: the queue is partitioned, each partition runs one workflow at a time, and nothing is
    * limited queue-wide or by rate.
    *
    * <p>A positive per-partition worker limit does not disqualify it: that limit cannot exceed a
