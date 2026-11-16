@@ -26,7 +26,7 @@ public class MigrationManager {
   private static final Set<Integer> ONLINE_MIGRATIONS =
       Set.of(
           22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 37, 45, 46, 47, 107, 111, 114, 115, 116,
-          117, 118, 119, 120, 122, 124, 125);
+          117, 118, 119, 120, 122, 124, 125, 127, 128, 129);
 
   // From this index on, every SDK defines the same migration at the same index, so a migration
   // added here must be added to all of them.
@@ -580,7 +580,12 @@ public class MigrationManager {
             migration122(isCockroach),
             MIGRATION_123,
             migration124(isCockroach),
-            migration125(isCockroach)));
+            migration125(isCockroach),
+            MIGRATION_126,
+            migration127(isCockroach),
+            migration128(isCockroach),
+            migration129(isCockroach),
+            migration130(isCockroach)));
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -1779,5 +1784,94 @@ public class MigrationManager {
         + concurrently(isCockroach)
         + " IF NOT EXISTS \"idx_application_versions_owner_timestamp\""
         + " ON \"%1$s\".\"application_versions\" (\"application_name\", \"version_timestamp\" DESC)";
+  }
+
+  // Migration 126: the topic a SUSPENDED recv waits on, so a send on that topic can wake it.
+  static final String MIGRATION_126 =
+      """
+      ALTER TABLE "%1$s"."workflow_status"
+          ADD COLUMN IF NOT EXISTS "suspend_key" TEXT DEFAULT NULL;
+      """;
+
+  // Migration 127: index suspended workflows by wake-up time, so the wake-up sweep reads only the
+  // ones that are due.
+  static String migration127(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_suspended\""
+        + " ON \"%1$s\".\"workflow_status\" (\"delay_until_epoch_ms\")"
+        + " WHERE \"status\" = 'SUSPENDED'";
+  }
+
+  // Migration 128: idx_workflow_status_deadline (migration 122), with a predicate that also covers
+  // SUSPENDED workflows, so the workflow-timeout sweep can cancel them too.
+  static String migration128(boolean isCockroach) {
+    return "CREATE INDEX "
+        + concurrently(isCockroach)
+        + " IF NOT EXISTS \"idx_workflow_status_deadline_v2\""
+        + " ON \"%1$s\".\"workflow_status\" (\"workflow_deadline_epoch_ms\")"
+        + " WHERE \"status\" IN ('ENQUEUED', 'PENDING', 'DELAYED', 'SUSPENDED')"
+        + " AND \"workflow_deadline_epoch_ms\" IS NOT NULL";
+  }
+
+  // Migration 129: drop idx_workflow_status_deadline (migration 122), superseded by
+  // idx_workflow_status_deadline_v2 (migration 128).
+  static String migration129(boolean isCockroach) {
+    return "DROP INDEX "
+        + concurrently(isCockroach)
+        + " IF EXISTS \"%1$s\".\"idx_workflow_status_deadline\"";
+  }
+
+  // Migration 130: send_message also wakes a SUSPENDED recv waiting on its topic, as every SDK's
+  // send does.
+  //
+  // The function is dropped rather than replaced. Migration 14 here named the fourth parameter
+  // idempotency_key, where every other DBOS SDK names it message_id, and CREATE OR REPLACE cannot
+  // rename an input parameter. Dropping it first lets this migration run on a system database
+  // created by any SDK, and leaves the parameter named message_id on all of them.
+  static String migration130(boolean isCockroach) {
+    var migration =
+        """
+        DROP FUNCTION IF EXISTS "%1$s".send_message(TEXT, JSON, TEXT, TEXT);
+
+        CREATE FUNCTION "%1$s".send_message(
+            destination_id TEXT,
+            message JSON,
+            topic TEXT DEFAULT NULL,
+            message_id TEXT DEFAULT NULL
+        ) RETURNS VOID AS $$
+        DECLARE
+            v_topic TEXT := COALESCE(topic, '__null__topic__');
+            v_message_id TEXT := COALESCE(message_id, gen_random_uuid()::TEXT);
+        BEGIN
+            INSERT INTO "%1$s".notifications (
+                destination_uuid, topic, message, message_uuid, serialization
+            ) VALUES (
+                destination_id, v_topic, message, v_message_id, 'portable_json'
+            )
+            ON CONFLICT (message_uuid) DO NOTHING;
+            UPDATE "%1$s".workflow_status
+            -- Status is tested in SET, not WHERE, so the planner cannot scan idx_workflow_status_suspended.
+            SET delay_until_epoch_ms = CASE WHEN status = 'SUSPENDED' THEN 0 ELSE delay_until_epoch_ms END
+            WHERE workflow_uuid = destination_id
+                AND suspend_key = v_topic;
+        EXCEPTION
+            WHEN foreign_key_violation THEN
+                RAISE EXCEPTION 'DBOS non-existent workflow'
+                   USING DETAIL = format('Destination workflow %%s does not exist', destination_id),
+                        ERRCODE = 'foreign_key_violation';
+        END;
+        $$ LANGUAGE plpgsql;
+        """;
+    if (!isCockroach) {
+      migration +=
+          """
+
+          ALTER FUNCTION "%1$s".send_message(
+              TEXT, JSON, TEXT, TEXT
+          ) SET search_path = pg_catalog, pg_temp;
+          """;
+    }
+    return migration;
   }
 }
