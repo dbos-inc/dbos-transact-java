@@ -53,6 +53,15 @@ public final class AdvisoryLocks {
   }
 
   /**
+   * The lock that guards one schema's retention rounds. Every SDK derives it from the plain name
+   * {@code dbos.retention.<schema>}, so rounds in different languages against one system database
+   * contend for the same lock.
+   */
+  public static long retentionKey(String schema) {
+    return lockKey("dbos.retention." + schema);
+  }
+
+  /**
    * The first half of a batched partition sweep's two-int lock keys, naming the queue: bytes 4-7 of
    * the SHA-256 of its lock name, big-endian signed. That is the low half of {@link #lockKey}'s
    * value for the same name.

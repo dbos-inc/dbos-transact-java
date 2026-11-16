@@ -361,18 +361,4 @@ class RetentionSweepTest {
       assertNotNull(afterRelease, "releasing the lock lets the next round in");
     }
   }
-
-  @Test
-  void theRetentionLockKeyIsDerivedTheSameWayInEverySdk() throws Exception {
-    // sha256("dbos.retention.dbos")[:8], big-endian signed -- the value Python and TS compute.
-    assertEquals(
-        new java.math.BigInteger(
-                1,
-                java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(
-                        "dbos.retention.dbos".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
-            .shiftRight(256 - 64)
-            .longValue(),
-        WorkflowDAO.retentionLockKey("dbos"));
-  }
 }

@@ -66,6 +66,13 @@ public class AdvisoryLocksTest {
   }
 
   @Test
+  public void retentionKeyMatchesTheOtherSdks() {
+    // sha256("dbos.retention.dbos")[:8], big-endian signed, as Python, TypeScript and Go compute
+    // it.
+    assertEquals(7208852302618897048L, AdvisoryLocks.retentionKey("dbos"));
+  }
+
+  @Test
   public void partitionClaimKeysMatchTheOtherSdks() {
     assertEquals(-294798389, AdvisoryLocks.partitionClaimQueueId("dbos", "q"));
     assertEquals(

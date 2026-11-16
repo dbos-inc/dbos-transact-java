@@ -2662,15 +2662,6 @@ public class WorkflowDAO {
     }
   }
 
-  /**
-   * The advisory lock key guarding one schema's retention rounds. Every SDK derives it this way --
-   * the leading 8 bytes of SHA-256, big-endian signed -- so rounds in different languages against
-   * one system database contend for the same lock.
-   */
-  public static long retentionLockKey(String schema) {
-    return AdvisoryLocks.lockKey("dbos.retention." + schema);
-  }
-
   /** A held retention lock. Closing it releases the lock and the session holding it. */
   public static final class RetentionLock implements AutoCloseable {
     private final String schema;
@@ -2689,7 +2680,7 @@ public class WorkflowDAO {
       try (conn) {
         // Explicit, since closing only returns the session to the pool.
         try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
-          stmt.setLong(1, retentionLockKey(schema));
+          stmt.setLong(1, AdvisoryLocks.retentionKey(schema));
           try (var rs = stmt.executeQuery()) {
             if (rs.next() && !rs.getBoolean(1)) {
               // False means this session no longer holds it, which a transaction-pooling proxy
@@ -2722,7 +2713,7 @@ public class WorkflowDAO {
       // Autocommit keeps the session clear of idle-in-transaction timeouts.
       conn.setAutoCommit(true);
       try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
-        stmt.setLong(1, retentionLockKey(ctx.schema()));
+        stmt.setLong(1, AdvisoryLocks.retentionKey(ctx.schema()));
         try (var rs = stmt.executeQuery()) {
           if (!rs.next() || !rs.getBoolean(1)) {
             conn.close();
