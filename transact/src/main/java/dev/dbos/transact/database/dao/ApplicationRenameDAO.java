@@ -29,17 +29,6 @@ public class ApplicationRenameDAO {
   /** Workflows and steps re-owned per transaction, when the caller does not choose. */
   public static final int DEFAULT_RENAME_BATCH_SIZE = 10_000;
 
-  /**
-   * Statuses whose rows move in the same transaction as the queues, schedules and versions. A
-   * half-owned application would dequeue work whose version row it can no longer see.
-   */
-  private static final List<String> ATOMIC_STATUSES =
-      List.of(
-          WorkflowState.PENDING.name(),
-          WorkflowState.ENQUEUED.name(),
-          WorkflowState.DELAYED.name(),
-          WorkflowState.SUSPENDED.name());
-
   private ApplicationRenameDAO() {}
 
   /**
@@ -288,8 +277,12 @@ public class ApplicationRenameDAO {
         stmt.setObject(i + 1, params.get(i));
       }
       if (atomicStatusesOnly) {
+        // The in-flight workflows move in the same transaction as the queues, schedules and
+        // versions: a half-owned application would dequeue work whose version row it can no
+        // longer see.
         stmt.setArray(
-            params.size() + 1, conn.createArrayOf("text", ATOMIC_STATUSES.toArray(String[]::new)));
+            params.size() + 1,
+            conn.createArrayOf("text", WorkflowState.activeNames().toArray(String[]::new)));
       }
       return stmt.executeUpdate();
     }

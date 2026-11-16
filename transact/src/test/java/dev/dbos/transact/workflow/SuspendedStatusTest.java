@@ -82,6 +82,22 @@ public class SuspendedStatusTest {
   }
 
   @Test
+  void theActiveStatesAreExactlyThoseTheDeadlineIndexCovers() {
+    // The timeout sweep lists these as literals so the planner can match the predicate of
+    // idx_workflow_status_deadline_v2, which names exactly these four. A fifth active state needs
+    // a new index first, or the sweep would quietly stop using this one.
+    assertEquals(
+        List.of(
+            WorkflowState.PENDING,
+            WorkflowState.ENQUEUED,
+            WorkflowState.DELAYED,
+            WorkflowState.SUSPENDED),
+        WorkflowState.activeStates());
+    assertEquals(
+        List.of("PENDING", "ENQUEUED", "DELAYED", "SUSPENDED"), WorkflowState.activeNames());
+  }
+
+  @Test
   void aSuspendedWorkflowIsInTheDefaultQueueListing() throws Exception {
     plant("suspended", "SUSPENDED", "some-queue", "topic");
     plant("finished", "SUCCESS", "some-queue", null);

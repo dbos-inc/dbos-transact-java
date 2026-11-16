@@ -60,6 +60,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.Nullable;
@@ -1365,6 +1366,17 @@ public class WorkflowDAO {
   }
 
   /**
+   * The in-flight statuses as a quoted SQL list, for {@code status IN (...)}. Literals rather than
+   * a bind parameter, so the planner sees the same constant list on every execution, whatever plan
+   * it reuses, and can match the predicate of idx_workflow_status_deadline_v2. They are enum names,
+   * never user input.
+   */
+  private static final String ACTIVE_STATUS_LITERALS =
+      WorkflowState.activeNames().stream()
+          .map(name -> "'" + name + "'")
+          .collect(Collectors.joining(", "));
+
+  /**
    * Cancels up to {@code limit} of this application's active workflows whose deadline has passed on
    * the database's clock, oldest deadline first, whichever executor they belong to and whether or
    * not anything is running them.
@@ -1388,9 +1400,9 @@ public class WorkflowDAO {
                  completed_at = %2$s
            WHERE workflow_uuid IN (
                SELECT workflow_uuid FROM "%1$s".workflow_status
-                WHERE status IN ('%3$s', '%4$s', '%5$s', '%6$s')
+                WHERE status IN (%3$s)
                   AND workflow_deadline_epoch_ms IS NOT NULL
-                  AND workflow_deadline_epoch_ms <= %2$s%7$s
+                  AND workflow_deadline_epoch_ms <= %2$s%4$s
                 ORDER BY workflow_deadline_epoch_ms
                 LIMIT ?
                 FOR UPDATE SKIP LOCKED)
@@ -1399,10 +1411,7 @@ public class WorkflowDAO {
             .formatted(
                 ctx.schema(),
                 SystemDatabase.NOW_EPOCH_MS,
-                WorkflowState.ENQUEUED.name(),
-                WorkflowState.PENDING.name(),
-                WorkflowState.DELAYED.name(),
-                WorkflowState.SUSPENDED.name(),
+                ACTIVE_STATUS_LITERALS,
                 ctx.andAppScope());
 
     var cancelled = new ArrayList<String>();
@@ -1480,11 +1489,7 @@ public class WorkflowDAO {
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
       if (input.status() == null || input.status().isEmpty()) {
-        whereConditions.add("status IN (?, ?, ?, ?)");
-        parameters.add(WorkflowState.ENQUEUED.name());
-        parameters.add(WorkflowState.PENDING.name());
-        parameters.add(WorkflowState.DELAYED.name());
-        parameters.add(WorkflowState.SUSPENDED.name());
+        whereConditions.add("status IN (" + ACTIVE_STATUS_LITERALS + ")");
       }
     }
     if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {
