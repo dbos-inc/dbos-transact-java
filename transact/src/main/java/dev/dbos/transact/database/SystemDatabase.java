@@ -203,16 +203,31 @@ public class SystemDatabase implements AutoCloseable {
 
     var pollingLimiter =
         new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
-    this.ctx =
-        new DbContext(
-            dataSource, schema, serializer, this.closed::get, executorId, appName, pollingLimiter);
-    this.created = created;
+    // Asked once, here, and kept on the context for the queue claims that branch on it. The
+    // validation above has already connected, so this fails only if the database just went away.
+    boolean cockroach;
     try {
-      useListenNotify = isCockroach(dataSource) ? false : useListenNotify;
+      cockroach = isCockroach(dataSource);
     } catch (SQLException e) {
-      logger.error("Failed to determine if dataSource is CockroachDB", e);
+      if (created && dataSource instanceof HikariDataSource hikariDataSource) {
+        hikariDataSource.close();
+      }
+      throw new IllegalStateException("Failed to determine if dataSource is CockroachDB", e);
+    }
+    if (cockroach) {
       useListenNotify = false;
     }
+    this.ctx =
+        new DbContext(
+            dataSource,
+            schema,
+            serializer,
+            this.closed::get,
+            executorId,
+            appName,
+            pollingLimiter,
+            cockroach);
+    this.created = created;
 
     notificationSource =
         useListenNotify
@@ -601,11 +616,11 @@ public class SystemDatabase implements AutoCloseable {
    * 55P03 lock_not_available, raised by the {@code FOR UPDATE NOWAIT} that rate-limited queues take
    * so every executor sees a consistent count.
    *
-   * <p>40001 serialization_failure counts too: a dequeue that escalates to REPEATABLE READ to keep
-   * a shared budget consistent loses the race the same way, and the queue listener reacts to both
-   * identically. TypeScript classifies exactly these two codes here, and Go the same plus 40P01.
-   * Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects one, so a
-   * deadlock is a real error and should be logged as one.
+   * <p>40001 serialization_failure counts too: on CockroachDB, which has no claim lock, a dequeue
+   * claims a shared budget at SERIALIZABLE and loses the race the same way, and the queue listener
+   * reacts to both identically. TypeScript classifies exactly these two codes here, and Go the same
+   * plus 40P01. Java follows TypeScript and leaves deadlocks out: nothing in the dequeue expects
+   * one, so a deadlock is a real error and should be logged as one.
    *
    * <p>{@link #dbRetry} no longer absorbs class 40, so a serialization failure now reaches this
    * caller rather than being slept off on a pooled thread.
@@ -1548,7 +1563,7 @@ public class SystemDatabase implements AutoCloseable {
                 ownerXid));
   }
 
-  /** Claims every idle partition's head workflow in one transaction; see {@link QueuesDAO}. */
+  /** Claims every idle partition's head workflow; see {@link QueuesDAO}. */
   public List<String> startQueuedPartitionedWorkflows(
       Queue queue, String executorId, String appVersion, long maxTasks, String ownerXid) {
     return dbOnce(
@@ -1560,6 +1575,7 @@ public class SystemDatabase implements AutoCloseable {
                 appVersion,
                 maxTasks,
                 QueuesDAO.PARTITIONED_DEQUEUE_SWEEP_CAP,
+                QueuesDAO.PARTITIONED_DEQUEUE_BATCH_SIZE,
                 ownerXid));
   }
 

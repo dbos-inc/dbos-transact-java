@@ -11,8 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.Constants;
@@ -41,8 +40,10 @@ import java.io.PrintWriter;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -822,6 +823,26 @@ public class SystemDatabaseTest {
     assertThrows(RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup")));
   }
 
+  /**
+   * A PostgreSQL connection whose every statement fails with {@code failure}, except the one {@code
+   * SELECT version()} that {@link SystemDatabase}'s constructor asks to tell it from CockroachDB.
+   */
+  private static Connection postgresConnectionFailingAfterVersion(SQLException failure)
+      throws SQLException {
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
+    var version = mock(ResultSet.class);
+    when(version.next()).thenReturn(true);
+    when(version.getString(1)).thenReturn("PostgreSQL 16.0");
+    var versionStatement = mock(Statement.class);
+    when(versionStatement.executeQuery(anyString())).thenReturn(version);
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    when(conn.prepareStatement(anyString())).thenThrow(failure);
+    when(conn.createStatement()).thenReturn(versionStatement).thenThrow(failure);
+    return conn;
+  }
+
   @Test
   @DisplayName("dbRetry hands a non-retryable failure back as a typed, chained exception")
   public void dbRetryThrowsTypedOnANonRetryableFailure() throws SQLException {
@@ -830,12 +851,7 @@ public class SystemDatabaseTest {
     // state dbRetry retries, so it takes the terminal path on the first attempt and the test
     // does not sit through any backoff.
     var failure = new SQLException("relation \"dbos.workflow_schedules\" does not exist", "42P01");
-    var meta = mock(DatabaseMetaData.class);
-    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
-    var conn = mock(Connection.class);
-    when(conn.getMetaData()).thenReturn(meta);
-    when(conn.prepareStatement(anyString())).thenThrow(failure);
-    when(conn.createStatement()).thenThrow(failure);
+    var conn = postgresConnectionFailingAfterVersion(failure);
     var ds = mock(DataSource.class);
     when(ds.getConnection()).thenReturn(conn);
 
@@ -857,12 +873,7 @@ public class SystemDatabaseTest {
     // database stayed down. 08006 is a state dbRetry retries forever, so a regression hangs here
     // until the timeout rather than passing.
     var failure = new SQLException("connection failure", "08006");
-    var meta = mock(DatabaseMetaData.class);
-    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
-    var conn = mock(Connection.class);
-    when(conn.getMetaData()).thenReturn(meta);
-    when(conn.prepareStatement(anyString())).thenThrow(failure);
-    when(conn.createStatement()).thenThrow(failure);
+    var conn = postgresConnectionFailingAfterVersion(failure);
     var ds = mock(DataSource.class);
     when(ds.getConnection()).thenReturn(conn);
     var partitioned =
@@ -889,7 +900,14 @@ public class SystemDatabaseTest {
         clearInvocations(conn);
         var thrown = assertThrows(DBOSSystemDatabaseException.class, poll::run);
         assertSame(failure, thrown.getCause());
-        verify(conn, times(1)).prepareStatement(anyString());
+        // Counting plain statements too, so a probe of which database this is would show up.
+        assertEquals(
+            1,
+            mockingDetails(conn).getInvocations().stream()
+                .map(invocation -> invocation.getMethod().getName())
+                .filter(name -> name.equals("prepareStatement") || name.equals("createStatement"))
+                .count(),
+            "the poll must issue its first statement once, without retrying it");
       }
     }
   }
@@ -1437,7 +1455,8 @@ public class SystemDatabaseTest {
     sysdb.recordWorkflowOutput(workflowId, null, DBTestAccess.takeOwnership(sysdb, workflowId));
 
     var ctx =
-        new DbContext(dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0));
+        new DbContext(
+            dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0), false);
     var signals = new SignalMap();
     var passes = new AtomicInteger();
 
@@ -2231,12 +2250,40 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(ds, schema, null, () -> false, null, null, new PollingLimiter(0));
+    return new DbContext(
+        ds,
+        schema,
+        null,
+        () -> false,
+        null,
+        null,
+        new PollingLimiter(0),
+        PgContainer.USE_COCKROACH_DB);
+  }
+
+  /** Whether {@code ds} prepared a statement taking an advisory lock. */
+  private static boolean tookAdvisoryLock(IsolationRecordingDataSource ds) {
+    return ds.preparedSql.stream().anyMatch(sql -> sql.contains("pg_try_advisory_xact_lock"));
+  }
+
+  /**
+   * Asserts the claim recorded on {@code ds} spent a shared budget as this database requires: under
+   * an advisory claim lock at READ COMMITTED on PostgreSQL, or at SERIALIZABLE on CockroachDB,
+   * which has no advisory locks to rely on.
+   */
+  private static void assertSharedBudgetClaim(IsolationRecordingDataSource ds) {
+    if (PgContainer.USE_COCKROACH_DB) {
+      assertEquals(Connection.TRANSACTION_SERIALIZABLE, ds.lastIsolationLevel);
+      assertFalse(tookAdvisoryLock(ds), "CockroachDB has no advisory locks");
+    } else {
+      assertEquals(Connection.TRANSACTION_READ_COMMITTED, ds.lastIsolationLevel);
+      assertTrue(tookAdvisoryLock(ds), "a claim spending a shared budget must take the claim lock");
+    }
   }
 
   @Test
   public void testWorkerConcurrencyOnlyUsesReadCommitted() throws SQLException {
-    // workerConcurrency only → local in-memory tracking, no global state → READ COMMITTED
+    // workerConcurrency only → local in-memory tracking, no global state → READ COMMITTED, no lock
     Queue queue = new Queue("iso-wc").withWorkerConcurrency(2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
@@ -2245,21 +2292,33 @@ public class SystemDatabaseTest {
     assertEquals(
         Connection.TRANSACTION_READ_COMMITTED,
         ds.lastIsolationLevel,
-        "workerConcurrency-only queue must not escalate to REPEATABLE READ");
+        "workerConcurrency-only queue must not escalate");
+    assertFalse(tookAdvisoryLock(ds), "a worker-scoped budget is not shared, so it takes no lock");
   }
 
   @Test
-  public void testGlobalConcurrencyUsesRepeatableRead() throws SQLException {
-    // concurrency (global) → needs a consistent snapshot across workers → REPEATABLE READ
+  public void testFullWorkerTakesNoClaimLock() throws SQLException {
+    // A worker with no room returns before opening a transaction, so it never holds a claim lock
+    // a peer with room could use.
+    Queue queue = new Queue("iso-full-worker").withConcurrency(3).withWorkerConcurrency(1);
+    var ds = new IsolationRecordingDataSource(dataSource);
+
+    var result =
+        QueuesDAO.startQueuedWorkflows(
+            recordingCtx(ds), queue, "exec", "v1", null, 1, 0, "test-claim");
+
+    assertEquals(DequeueResult.StopReason.WORKER_CONCURRENCY, result.stopReason());
+    assertTrue(ds.preparedSql.isEmpty(), "no statement may run: " + ds.preparedSql);
+  }
+
+  @Test
+  public void testGlobalConcurrencyTakesTheClaimLock() throws SQLException {
     Queue queue = new Queue("iso-gc").withConcurrency(3);
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
-    assertEquals(
-        Connection.TRANSACTION_REPEATABLE_READ,
-        ds.lastIsolationLevel,
-        "global-concurrency queue must use REPEATABLE READ");
+    assertSharedBudgetClaim(ds);
   }
 
   /** A queue partitioned by its limits, which only the full constructor can express. */
@@ -2288,44 +2347,33 @@ public class SystemDatabaseTest {
     ds.lastIsolationLevel = Connection.TRANSACTION_NONE;
 
     QueuesDAO.startQueuedPartitionedWorkflows(
-        recordingCtx(ds), queue, "exec", "v1", 1, 1, "test-claim");
+        recordingCtx(ds), queue, "exec", "v1", 1, 1, 1, "test-claim");
 
     assertEquals(Connection.TRANSACTION_READ_COMMITTED, ds.lastIsolationLevel);
   }
 
   @Test
-  public void testQueueWideBudgetInAPartitionUsesSerializable() throws SQLException {
-    // A queue-wide budget spent one partition at a time is a write skew: each partition's sweep
-    // reads the same budget and claims against its own snapshot, so together they overshoot it.
-    // REPEATABLE READ does not rule that out; only serializability does. Without a partition
-    // there is nothing to skew across, which the two tests above cover at their own levels.
+  public void testQueueWideBudgetInAPartitionTakesTheClaimLock() throws SQLException {
+    // A queue-wide budget spent one partition at a time is shared across partitions, so the claim
+    // lock spans the whole queue; QueueClaimLockTest checks which lock each scope takes.
     Queue queue = partitionedQueue("iso-partition-gc", 3, 1);
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(
         recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
-    assertEquals(
-        Connection.TRANSACTION_SERIALIZABLE,
-        ds.lastIsolationLevel,
-        "a queue-wide budget claimed within one partition must use SERIALIZABLE");
+    assertSharedBudgetClaim(ds);
   }
 
   @Test
-  public void testPartitionLimitAloneUsesRepeatableRead() throws SQLException {
-    // A per-partition budget is counted within the partition being swept, so the sweeps do not
-    // share it and a consistent snapshot is enough. This pins the boundary: the escalation above
-    // must follow the queue-wide budget, not the presence of a partition key.
+  public void testPartitionLimitAloneTakesTheClaimLock() throws SQLException {
     Queue queue = partitionedQueue("iso-partition-only", null, 2);
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(
         recordingCtx(ds), queue, "exec", "v1", "key-a", 0, 0, "test-claim");
 
-    assertEquals(
-        Connection.TRANSACTION_REPEATABLE_READ,
-        ds.lastIsolationLevel,
-        "a partition-scoped budget must not escalate to SERIALIZABLE");
+    assertSharedBudgetClaim(ds);
   }
 
   @Test
@@ -2459,16 +2507,13 @@ public class SystemDatabaseTest {
   }
 
   @Test
-  public void testRateLimitUsesRepeatableRead() throws SQLException {
-    // rateLimit → count must be consistent across concurrent dequeue attempts → REPEATABLE READ
+  public void testRateLimitTakesTheClaimLock() throws SQLException {
+    // A rate limit is a budget every executor spends, like a concurrency limit.
     Queue queue = new Queue("iso-rl").withRateLimit(5, Duration.ofSeconds(1));
     var ds = new IsolationRecordingDataSource(dataSource);
 
     QueuesDAO.startQueuedWorkflows(recordingCtx(ds), queue, "exec", "v1", null, 0, 0, "test-claim");
 
-    assertEquals(
-        Connection.TRANSACTION_REPEATABLE_READ,
-        ds.lastIsolationLevel,
-        "rate-limited queue must use REPEATABLE READ");
+    assertSharedBudgetClaim(ds);
   }
 }

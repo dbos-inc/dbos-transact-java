@@ -79,4 +79,14 @@ public final class DebugTriggers {
   // Inside a debouncer's takeover transaction, after it cancels a stranded debouncer workflow and
   // before it creates the promised workflow.
   public static final String DEBUG_TRIGGER_DEBOUNCE_TAKEOVER = "DEBUG_TRIGGER_DEBOUNCE_TAKEOVER";
+  // In startQueuedWorkflows after the candidate rows are locked, before they are marked PENDING.
+  public static final String DEBUG_TRIGGER_FIND_AND_MARK_AFTER_SELECT =
+      "DEBUG_TRIGGER_FIND_AND_MARK_AFTER_SELECT";
+  // In startQueuedPartitionedWorkflows inside a batch's transaction, before it takes its partition
+  // locks.
+  public static final String DEBUG_TRIGGER_PARTITIONED_DEQUEUE_BEFORE_LOCKS =
+      "DEBUG_TRIGGER_PARTITIONED_DEQUEUE_BEFORE_LOCKS";
+  // In startQueuedPartitionedWorkflows between a batch's head re-pick and its row lock.
+  public static final String DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES =
+      "DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES";
 }

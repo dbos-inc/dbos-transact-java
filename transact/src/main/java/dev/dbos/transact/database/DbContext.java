@@ -19,7 +19,8 @@ public record DbContext(
     BooleanSupplier closed,
     String executorId,
     @Nullable String appName,
-    PollingLimiter pollingLimiter) {
+    PollingLimiter pollingLimiter,
+    boolean isCockroach) {
 
   public Connection getConnection() throws SQLException {
     return dataSource.getConnection();

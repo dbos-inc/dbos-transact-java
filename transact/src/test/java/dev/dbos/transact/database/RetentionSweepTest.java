@@ -41,7 +41,14 @@ class RetentionSweepTest {
     }
     ctx =
         new DbContext(
-            dataSource, Constants.DB_SCHEMA, null, () -> false, null, null, new PollingLimiter(0));
+            dataSource,
+            Constants.DB_SCHEMA,
+            null,
+            () -> false,
+            null,
+            null,
+            new PollingLimiter(0),
+            false);
   }
 
   /** A status row plus the three child rows a completed workflow leaves behind. */
@@ -137,7 +144,14 @@ class RetentionSweepTest {
     try (var otherPool = pgContainer.dataSource()) {
       var other =
           new DbContext(
-              otherPool, Constants.DB_SCHEMA, null, () -> false, null, null, new PollingLimiter(0));
+              otherPool,
+              Constants.DB_SCHEMA,
+              null,
+              () -> false,
+              null,
+              null,
+              new PollingLimiter(0),
+              false);
       try (var held = WorkflowDAO.acquireRetentionLock(other)) {
         assertNotNull(held);
         WorkflowDAO.runRetentionRound(ctx, Instant.now(), null, 2);
@@ -337,7 +351,8 @@ class RetentionSweepTest {
                 () -> false,
                 null,
                 null,
-                new PollingLimiter(0));
+                new PollingLimiter(0),
+                false);
         assertNull(
             WorkflowDAO.acquireRetentionLock(other), "a concurrent round must be turned away");
       }
@@ -345,19 +360,5 @@ class RetentionSweepTest {
     try (var afterRelease = WorkflowDAO.acquireRetentionLock(ctx)) {
       assertNotNull(afterRelease, "releasing the lock lets the next round in");
     }
-  }
-
-  @Test
-  void theRetentionLockKeyIsDerivedTheSameWayInEverySdk() throws Exception {
-    // sha256("dbos.retention.dbos")[:8], big-endian signed -- the value Python and TS compute.
-    assertEquals(
-        new java.math.BigInteger(
-                1,
-                java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(
-                        "dbos.retention.dbos".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
-            .shiftRight(256 - 64)
-            .longValue(),
-        WorkflowDAO.retentionLockKey("dbos"));
   }
 }

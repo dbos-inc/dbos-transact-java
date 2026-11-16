@@ -2,6 +2,7 @@ package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.conductor.WorkflowFork;
+import dev.dbos.transact.database.AdvisoryLocks;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
 import dev.dbos.transact.database.DbContext;
@@ -36,10 +37,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -2665,22 +2662,6 @@ public class WorkflowDAO {
     }
   }
 
-  /**
-   * The advisory lock key guarding one schema's retention rounds. Every SDK derives it this way --
-   * the leading 8 bytes of SHA-256, big-endian signed -- so rounds in different languages against
-   * one system database contend for the same lock.
-   */
-  public static long retentionLockKey(String schema) {
-    try {
-      var digest =
-          MessageDigest.getInstance("SHA-256")
-              .digest(("dbos.retention." + schema).getBytes(StandardCharsets.UTF_8));
-      return ByteBuffer.wrap(digest, 0, Long.BYTES).getLong();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException("SHA-256 is unavailable", e);
-    }
-  }
-
   /** A held retention lock. Closing it releases the lock and the session holding it. */
   public static final class RetentionLock implements AutoCloseable {
     private final String schema;
@@ -2699,7 +2680,7 @@ public class WorkflowDAO {
       try (conn) {
         // Explicit, since closing only returns the session to the pool.
         try (var stmt = conn.prepareStatement("SELECT pg_advisory_unlock(?)")) {
-          stmt.setLong(1, retentionLockKey(schema));
+          stmt.setLong(1, AdvisoryLocks.retentionKey(schema));
           try (var rs = stmt.executeQuery()) {
             if (rs.next() && !rs.getBoolean(1)) {
               // False means this session no longer holds it, which a transaction-pooling proxy
@@ -2732,7 +2713,7 @@ public class WorkflowDAO {
       // Autocommit keeps the session clear of idle-in-transaction timeouts.
       conn.setAutoCommit(true);
       try (var stmt = conn.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
-        stmt.setLong(1, retentionLockKey(ctx.schema()));
+        stmt.setLong(1, AdvisoryLocks.retentionKey(ctx.schema()));
         try (var rs = stmt.executeQuery()) {
           if (!rs.next() || !rs.getBoolean(1)) {
             conn.close();

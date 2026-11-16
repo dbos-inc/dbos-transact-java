@@ -293,6 +293,39 @@ public class QueueServicePollTest {
   }
 
   @Test
+  @DisplayName("a peer holding a queue-wide claim lock ends the sweep at its first claim")
+  public void aQueueWideClaimLockEndsTheSweep() {
+    // With a queue-wide budget every partition claims under the whole queue's lock, so the peer
+    // holding it holds every other partition too.
+    when(systemDatabase.countPendingQueueWorkflows("q")).thenReturn(0);
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.CLAIM_LOCK));
+
+    taskFor(QUEUE_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(1))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  @DisplayName("a partition's own claim lock skips only that partition")
+  public void aPartitionClaimLockSkipsOnlyThatPartition() {
+    // Every partition's lock is held, so a sweep that stopped at the first would visit one of the
+    // three whichever order it shuffled them into.
+    when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));
+    when(systemDatabase.startQueuedWorkflows(
+            any(), any(), any(), any(), anyLong(), anyLong(), anyString()))
+        .thenReturn(DequeueResult.stopped(DequeueResult.StopReason.CLAIM_LOCK));
+
+    taskFor(WORKER_BUDGETED).sweepPartitions();
+
+    verify(systemDatabase, times(3))
+        .startQueuedWorkflows(any(), any(), any(), any(), anyLong(), anyLong(), anyString());
+  }
+
+  @Test
   @DisplayName("a claim that finds only its own partition full leaves the sweep going")
   public void aPartitionScopedStopDoesNotEndTheSweep() {
     when(systemDatabase.getQueuePartitions("q")).thenReturn(List.of("a", "b", "c"));

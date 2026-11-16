@@ -5,12 +5,13 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * What one dequeue claimed, and why it claimed nothing when a limit left no room.
+ * What one dequeue claimed, and why it claimed nothing when a limit left no room or a peer held the
+ * claim's lock.
  *
  * @param workflowIds the workflows claimed
- * @param stopReason the limit that left no room, so the dequeue claimed nothing without looking for
- *     candidates; null when it looked, whatever it found, or did not run because the queue service
- *     is paused
+ * @param stopReason the reason the dequeue claimed nothing without looking for candidates, either
+ *     the limit that left no room or {@link StopReason#CLAIM_LOCK}; null when it looked, whatever
+ *     it found, or did not run because the queue service is paused
  */
 public record DequeueResult(List<String> workflowIds, @Nullable StopReason stopReason) {
 
@@ -19,10 +20,14 @@ public record DequeueResult(List<String> workflowIds, @Nullable StopReason stopR
     return new DequeueResult(List.of(), reason);
   }
 
-  /** The limit a dequeue found no room under, checked in this order. */
+  /**
+   * Why a dequeue claimed nothing: a limit it found no room under, checked in this order, or a
+   * claim lock another worker held.
+   */
   public enum StopReason {
     WORKER_CONCURRENCY,
     PARTITION_WORKER_CONCURRENCY,
+    CLAIM_LOCK,
     RATE_LIMIT,
     PARTITION_RATE_LIMIT,
     CONCURRENCY,

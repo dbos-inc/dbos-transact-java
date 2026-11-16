@@ -60,7 +60,8 @@ public class RecordStepResultTest {
             () -> false,
             "test-executor",
             dbosConfig.appName(),
-            new PollingLimiter(0));
+            new PollingLimiter(0),
+            false);
   }
 
   // Starts the workflow directly and returns the token its execution owns it with.
