@@ -380,17 +380,74 @@ public class QueuesDAO {
     String sweepOrder = sweepLimit < sweepCap ? "random()" : "partitions.pk ASC";
 
     boolean usePartitionLocks = !ctx.isCockroach();
-    try (Connection connection = ctx.getConnection()) {
-      connection.setAutoCommit(false);
-      // The walk only reads, and each batch below reads again under its locks.
-      connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-      String versionClause;
-      List<String> partitionKeys = new ArrayList<>();
+    var claimedIds = new ArrayList<String>();
+    Connection connection = ctx.getConnection();
+    try {
+      claimPartitionHeads(
+          ctx,
+          connection,
+          queue,
+          executorId,
+          appVersion,
+          sweepLimit,
+          sweepOrder,
+          usePartitionLocks,
+          batchSize,
+          ownerXid,
+          claimedIds);
+    } catch (Throwable t) {
       try {
-        versionClause = versionClause(ctx, connection, appVersion);
+        connection.close();
+      } catch (SQLException closeFailure) {
+        t.addSuppressed(closeFailure);
+      }
+      throw t;
+    }
+    try {
+      connection.close();
+    } catch (SQLException closeFailure) {
+      // The batches have committed, so their workflows are claimed whether or not the connection
+      // closes cleanly. Dropping the IDs would leave them PENDING with nothing dispatching them.
+      if (claimedIds.isEmpty()) {
+        throw closeFailure;
+      }
+      logger.warn(
+          "Closing the connection after claiming {} partition head(s) of queue {} failed",
+          claimedIds.size(),
+          queue.name(),
+          closeFailure);
+    }
+    return claimedIds;
+  }
 
-        var walkQuery =
-            """
+  /**
+   * Walks the idle partitions and claims their heads in batches on {@code connection}, adding the
+   * IDs each committed batch claims to {@code claimedIds} as it commits. Throws only when no batch
+   * has committed; a failure after that ends the sweep with what it already claimed.
+   */
+  private static void claimPartitionHeads(
+      DbContext ctx,
+      Connection connection,
+      Queue queue,
+      String executorId,
+      String appVersion,
+      long sweepLimit,
+      String sweepOrder,
+      boolean usePartitionLocks,
+      int batchSize,
+      String ownerXid,
+      List<String> claimedIds)
+      throws SQLException {
+    connection.setAutoCommit(false);
+    // The walk only reads, and each batch below reads again under its locks.
+    connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+    String versionClause;
+    List<String> partitionKeys = new ArrayList<>();
+    try {
+      versionClause = versionClause(ctx, connection, appVersion);
+
+      var walkQuery =
+          """
             %1$s,
             chosen AS (
               SELECT partitions.pk
@@ -408,93 +465,89 @@ public class QueuesDAO {
             -- Which partitions to claim is settled above; this orders the claim and its dispatch.
             ORDER BY chosen.pk ASC
             """
-                .formatted(
-                    partitionKeysCte(ctx),
-                    noPending(ctx, "partitions.pk"),
-                    sweepOrder,
-                    headOf(ctx, "chosen.pk", versionClause));
+              .formatted(
+                  partitionKeysCte(ctx),
+                  noPending(ctx, "partitions.pk"),
+                  sweepOrder,
+                  headOf(ctx, "chosen.pk", versionClause));
 
-        try (var ps = connection.prepareStatement(walkQuery)) {
-          int i = bindPartitionKeysCte(ctx, ps, 1, queue.name());
-          i = bindNoPending(ps, i, queue.name());
-          ps.setLong(i++, sweepLimit);
-          bindHeadOf(ctx, ps, i, queue.name(), appVersion);
-          try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-              partitionKeys.add(rs.getString(1));
-            }
+      try (var ps = connection.prepareStatement(walkQuery)) {
+        int i = bindPartitionKeysCte(ctx, ps, 1, queue.name());
+        i = bindNoPending(ps, i, queue.name());
+        ps.setLong(i++, sweepLimit);
+        bindHeadOf(ctx, ps, i, queue.name(), appVersion);
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            partitionKeys.add(rs.getString(1));
           }
         }
-        // It only read, so there is nothing to commit.
+      }
+      // It only read, so there is nothing to commit.
+      connection.rollback();
+    } catch (Throwable t) {
+      try {
         connection.rollback();
+      } catch (SQLException rollbackFailure) {
+        t.addSuppressed(rollbackFailure);
+      }
+      throw t;
+    }
+    if (partitionKeys.isEmpty()) {
+      return;
+    }
+
+    if (!usePartitionLocks) {
+      // CockroachDB, without advisory locks: SERIALIZABLE aborts one of two sweeps that claim
+      // into the same partition.
+      connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    }
+    // One short transaction per batch, so a sweep holds at most a batch's locks, and only while
+    // it claims that batch.
+    for (int start = 0; start < partitionKeys.size(); start += batchSize) {
+      var batch = partitionKeys.subList(start, Math.min(start + batchSize, partitionKeys.size()));
+      try {
+        var batchIds =
+            claimBatch(
+                ctx,
+                connection,
+                queue,
+                executorId,
+                appVersion,
+                versionClause,
+                ownerXid,
+                batch,
+                usePartitionLocks);
+        // As in the per-partition dequeue: a batch that claims nothing rolls back rather than
+        // committing the row locks it took.
+        if (batchIds.isEmpty()) {
+          connection.rollback();
+        } else {
+          connection.commit();
+        }
+        claimedIds.addAll(batchIds);
       } catch (Throwable t) {
+        // No path may leave the transaction open: it holds partition locks and row locks other
+        // executors are waiting to claim under.
         try {
           connection.rollback();
         } catch (SQLException rollbackFailure) {
           t.addSuppressed(rollbackFailure);
         }
-        throw t;
-      }
-      if (partitionKeys.isEmpty()) {
-        return List.of();
-      }
-
-      if (!usePartitionLocks) {
-        // CockroachDB, without advisory locks: SERIALIZABLE aborts one of two sweeps that claim
-        // into the same partition.
-        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
-      }
-      // One short transaction per batch, so a sweep holds at most a batch's locks, and only while
-      // it claims that batch.
-      var claimedIds = new ArrayList<String>();
-      for (int start = 0; start < partitionKeys.size(); start += batchSize) {
-        var batch = partitionKeys.subList(start, Math.min(start + batchSize, partitionKeys.size()));
-        try {
-          var batchIds =
-              claimBatch(
-                  ctx,
-                  connection,
-                  queue,
-                  executorId,
-                  appVersion,
-                  versionClause,
-                  ownerXid,
-                  batch,
-                  usePartitionLocks);
-          // As in the per-partition dequeue: a batch that claims nothing rolls back rather than
-          // committing the row locks it took.
-          if (batchIds.isEmpty()) {
-            connection.rollback();
-          } else {
-            connection.commit();
-          }
-          claimedIds.addAll(batchIds);
-        } catch (Throwable t) {
-          // No path may leave the transaction open: it holds partition locks and row locks other
-          // executors are waiting to claim under.
-          try {
-            connection.rollback();
-          } catch (SQLException rollbackFailure) {
-            t.addSuppressed(rollbackFailure);
-          }
-          if (claimedIds.isEmpty() || !(t instanceof Exception)) {
-            throw t;
-          }
-          // Earlier batches committed their claims, which must still reach dispatch; the next
-          // poll retries the rest.
-          logger.warn(
-              "Stopping a partitioned sweep of queue {} after {} claim(s)",
-              queue.name(),
-              claimedIds.size(),
-              t);
-          break;
+        if (claimedIds.isEmpty() || !(t instanceof Exception)) {
+          throw t;
         }
+        // Earlier batches committed their claims, which must still reach dispatch; the next
+        // poll retries the rest.
+        logger.warn(
+            "Stopping a partitioned sweep of queue {} after {} claim(s)",
+            queue.name(),
+            claimedIds.size(),
+            t);
+        break;
       }
-      if (!claimedIds.isEmpty()) {
-        logger.debug(
-            "dequeued {} partition head(s) from {} queue", claimedIds.size(), queue.name());
-      }
-      return claimedIds;
+    }
+    if (!claimedIds.isEmpty()) {
+      logger.debug("dequeued {} partition head(s) from {} queue", claimedIds.size(), queue.name());
     }
   }
 

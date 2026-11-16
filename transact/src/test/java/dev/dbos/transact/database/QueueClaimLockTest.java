@@ -16,6 +16,9 @@ import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -31,6 +34,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+
+import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -146,8 +151,14 @@ public class QueueClaimLockTest {
 
   private List<String> sweep(Queue queue, String executorId, String version, int batchSize)
       throws SQLException {
+    return sweepOn(ctx, queue, executorId, version, batchSize);
+  }
+
+  private List<String> sweepOn(
+      DbContext context, Queue queue, String executorId, String version, int batchSize)
+      throws SQLException {
     return QueuesDAO.startQueuedPartitionedWorkflows(
-        ctx,
+        context,
         queue,
         executorId,
         version,
@@ -484,5 +495,92 @@ public class QueueClaimLockTest {
 
     DebugTriggers.clearDebugTrigger(trigger);
     assertEquals(List.of(p0, p1), sweep(queue, "exec", VERSION, 1));
+  }
+
+  /**
+   * A context whose connections close for real, then throw, as a pool's can when it fails to reset
+   * or return one.
+   */
+  private DbContext ctxWhoseConnectionsFailToClose() {
+    var real = ctx.dataSource();
+    var loader = getClass().getClassLoader();
+    var failing =
+        (DataSource)
+            Proxy.newProxyInstance(
+                loader,
+                new Class<?>[] {DataSource.class},
+                (proxy, method, args) -> {
+                  var result = invoke(method, real, args);
+                  if (!method.getName().equals("getConnection")) {
+                    return result;
+                  }
+                  var connection = (Connection) result;
+                  return Proxy.newProxyInstance(
+                      loader,
+                      new Class<?>[] {Connection.class},
+                      (connectionProxy, connectionMethod, connectionArgs) -> {
+                        var value = invoke(connectionMethod, connection, connectionArgs);
+                        if (connectionMethod.getName().equals("close")) {
+                          throw new SQLException("synthetic close failure");
+                        }
+                        return value;
+                      });
+                });
+    return new DbContext(
+        failing,
+        ctx.schema(),
+        ctx.serializer(),
+        ctx.closed(),
+        ctx.executorId(),
+        ctx.appName(),
+        ctx.pollingLimiter(),
+        ctx.isCockroach());
+  }
+
+  private static Object invoke(Method method, Object target, Object[] args) throws Throwable {
+    try {
+      return method.invoke(target, args);
+    } catch (InvocationTargetException e) {
+      throw e.getCause();
+    }
+  }
+
+  @Test
+  public void aCloseThatFailsAfterEveryBatchCommittedKeepsTheClaims() throws Exception {
+    assumeFalse(PgContainer.USE_COCKROACH_DB, "first-pass claims are not exact on CockroachDB");
+    var queue = queue(null, 1, null);
+    var p0 = enqueue(queue, "p0", 0, VERSION);
+    var p1 = enqueue(queue, "p1", 0, VERSION);
+
+    // The claims committed, so they must reach dispatch whatever the connection does on close.
+    assertEquals(
+        List.of(p0, p1), sweepOn(ctxWhoseConnectionsFailToClose(), queue, "exec", VERSION, 1));
+    assertEquals(WorkflowState.PENDING.name(), status(p0));
+    assertEquals(WorkflowState.PENDING.name(), status(p1));
+  }
+
+  @ResourceLock(DebugTriggers.DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES)
+  @Test
+  public void aCloseThatFailsAfterALaterBatchFailedKeepsTheEarlierClaims() throws Exception {
+    assumeFalse(PgContainer.USE_COCKROACH_DB, "first-pass claims are not exact on CockroachDB");
+    var queue = queue(null, 1, null);
+    var p0 = enqueue(queue, "p0", 0, VERSION);
+    var p1 = enqueue(queue, "p1", 0, VERSION);
+
+    failBatch(2);
+    assertEquals(List.of(p0), sweepOn(ctxWhoseConnectionsFailToClose(), queue, "exec", VERSION, 1));
+    assertEquals(WorkflowState.PENDING.name(), status(p0));
+    assertEquals(WorkflowState.ENQUEUED.name(), status(p1));
+  }
+
+  @Test
+  public void aCloseThatFailsBeforeAnythingWasClaimedThrows() throws Exception {
+    var queue = queue(null, 1, null);
+
+    var thrown =
+        assertThrows(
+            SQLException.class,
+            () -> sweepOn(ctxWhoseConnectionsFailToClose(), queue, "exec", VERSION, 1));
+    assertEquals("synthetic close failure", thrown.getMessage());
   }
 }
