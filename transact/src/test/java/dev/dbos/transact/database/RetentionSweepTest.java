@@ -48,7 +48,7 @@ class RetentionSweepTest {
             null,
             null,
             new PollingLimiter(0),
-            new CockroachProbe());
+            false);
   }
 
   /** A status row plus the three child rows a completed workflow leaves behind. */
@@ -151,7 +151,7 @@ class RetentionSweepTest {
               null,
               null,
               new PollingLimiter(0),
-              new CockroachProbe());
+              false);
       try (var held = WorkflowDAO.acquireRetentionLock(other)) {
         assertNotNull(held);
         WorkflowDAO.runRetentionRound(ctx, Instant.now(), null, 2);
@@ -352,7 +352,7 @@ class RetentionSweepTest {
                 null,
                 null,
                 new PollingLimiter(0),
-                new CockroachProbe());
+                false);
         assertNull(
             WorkflowDAO.acquireRetentionLock(other), "a concurrent round must be turned away");
       }

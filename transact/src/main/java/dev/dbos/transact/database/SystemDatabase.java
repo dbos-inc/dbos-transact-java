@@ -203,6 +203,17 @@ public class SystemDatabase implements AutoCloseable {
 
     var pollingLimiter =
         new PollingLimiter(resolvePollingConcurrency(dataSource, pollingConcurrency));
+    // Asked once, here, and kept on the context for the queue claims that branch on it. The
+    // validation above has already connected, so this fails only if the database just went away.
+    boolean cockroach;
+    try {
+      cockroach = isCockroach(dataSource);
+    } catch (SQLException e) {
+      throw new IllegalStateException("Failed to determine if dataSource is CockroachDB", e);
+    }
+    if (cockroach) {
+      useListenNotify = false;
+    }
     this.ctx =
         new DbContext(
             dataSource,
@@ -212,15 +223,8 @@ public class SystemDatabase implements AutoCloseable {
             executorId,
             appName,
             pollingLimiter,
-            new CockroachProbe());
+            cockroach);
     this.created = created;
-    try {
-      // Through the context, so the queue claims that branch on it need not ask again.
-      useListenNotify = ctx.isCockroach() ? false : useListenNotify;
-    } catch (SQLException e) {
-      logger.error("Failed to determine if dataSource is CockroachDB", e);
-      useListenNotify = false;
-    }
 
     notificationSource =
         useListenNotify

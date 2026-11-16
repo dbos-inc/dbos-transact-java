@@ -40,8 +40,10 @@ import java.io.PrintWriter;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -821,6 +823,26 @@ public class SystemDatabaseTest {
     assertThrows(RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup")));
   }
 
+  /**
+   * A PostgreSQL connection whose every statement fails with {@code failure}, except the one {@code
+   * SELECT version()} that {@link SystemDatabase}'s constructor asks to tell it from CockroachDB.
+   */
+  private static Connection postgresConnectionFailingAfterVersion(SQLException failure)
+      throws SQLException {
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
+    var version = mock(ResultSet.class);
+    when(version.next()).thenReturn(true);
+    when(version.getString(1)).thenReturn("PostgreSQL 16.0");
+    var versionStatement = mock(Statement.class);
+    when(versionStatement.executeQuery(anyString())).thenReturn(version);
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    when(conn.prepareStatement(anyString())).thenThrow(failure);
+    when(conn.createStatement()).thenReturn(versionStatement).thenThrow(failure);
+    return conn;
+  }
+
   @Test
   @DisplayName("dbRetry hands a non-retryable failure back as a typed, chained exception")
   public void dbRetryThrowsTypedOnANonRetryableFailure() throws SQLException {
@@ -829,12 +851,7 @@ public class SystemDatabaseTest {
     // state dbRetry retries, so it takes the terminal path on the first attempt and the test
     // does not sit through any backoff.
     var failure = new SQLException("relation \"dbos.workflow_schedules\" does not exist", "42P01");
-    var meta = mock(DatabaseMetaData.class);
-    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
-    var conn = mock(Connection.class);
-    when(conn.getMetaData()).thenReturn(meta);
-    when(conn.prepareStatement(anyString())).thenThrow(failure);
-    when(conn.createStatement()).thenThrow(failure);
+    var conn = postgresConnectionFailingAfterVersion(failure);
     var ds = mock(DataSource.class);
     when(ds.getConnection()).thenReturn(conn);
 
@@ -856,12 +873,7 @@ public class SystemDatabaseTest {
     // database stayed down. 08006 is a state dbRetry retries forever, so a regression hangs here
     // until the timeout rather than passing.
     var failure = new SQLException("connection failure", "08006");
-    var meta = mock(DatabaseMetaData.class);
-    when(meta.getDatabaseProductName()).thenReturn("PostgreSQL");
-    var conn = mock(Connection.class);
-    when(conn.getMetaData()).thenReturn(meta);
-    when(conn.prepareStatement(anyString())).thenThrow(failure);
-    when(conn.createStatement()).thenThrow(failure);
+    var conn = postgresConnectionFailingAfterVersion(failure);
     var ds = mock(DataSource.class);
     when(ds.getConnection()).thenReturn(conn);
     var partitioned =
@@ -888,7 +900,7 @@ public class SystemDatabaseTest {
         clearInvocations(conn);
         var thrown = assertThrows(DBOSSystemDatabaseException.class, poll::run);
         assertSame(failure, thrown.getCause());
-        // Counting plain statements too: a probe of which database this is may come first.
+        // Counting plain statements too, so a probe of which database this is would show up.
         assertEquals(
             1,
             mockingDetails(conn).getInvocations().stream()
@@ -1444,14 +1456,7 @@ public class SystemDatabaseTest {
 
     var ctx =
         new DbContext(
-            dataSource,
-            "dbos",
-            null,
-            () -> false,
-            null,
-            null,
-            new PollingLimiter(0),
-            new CockroachProbe());
+            dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0), false);
     var signals = new SignalMap();
     var passes = new AtomicInteger();
 
@@ -2245,8 +2250,7 @@ public class SystemDatabaseTest {
 
   private DbContext recordingCtx(IsolationRecordingDataSource ds) {
     String schema = SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
-    return new DbContext(
-        ds, schema, null, () -> false, null, null, new PollingLimiter(0), new CockroachProbe());
+    return new DbContext(ds, schema, null, () -> false, null, null, new PollingLimiter(0), false);
   }
 
   /** Whether {@code ds} prepared a statement taking an advisory lock. */

@@ -61,7 +61,7 @@ public class RecordStepResultTest {
             "test-executor",
             dbosConfig.appName(),
             new PollingLimiter(0),
-            new CockroachProbe());
+            false);
   }
 
   // Starts the workflow directly and returns the token its execution owns it with.

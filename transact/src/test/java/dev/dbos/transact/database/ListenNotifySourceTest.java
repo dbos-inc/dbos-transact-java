@@ -53,14 +53,7 @@ class ListenNotifySourceTest {
     dataSource = pgContainer.dataSource();
     ctx =
         new DbContext(
-            dataSource,
-            "dbos",
-            null,
-            () -> false,
-            null,
-            null,
-            new PollingLimiter(0),
-            new CockroachProbe());
+            dataSource, "dbos", null, () -> false, null, null, new PollingLimiter(0), false);
   }
 
   @Test

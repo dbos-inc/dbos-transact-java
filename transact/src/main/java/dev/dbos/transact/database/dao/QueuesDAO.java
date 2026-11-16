@@ -96,7 +96,7 @@ public class QueuesDAO {
     // claim that spends a shared budget first takes an advisory lock on that budget's scope.
     // CockroachDB has no advisory locks to rely on, so there the claim runs at SERIALIZABLE.
     try (Connection connection = ctx.getConnection()) {
-      boolean useClaimLock = sharedBudget && !ctx.isCockroach(connection);
+      boolean useClaimLock = sharedBudget && !ctx.isCockroach();
       connection.setAutoCommit(false);
       if (useClaimLock) {
         // Set rather than inherited, since a user-supplied pool may default to another level. Under
@@ -380,7 +380,7 @@ public class QueuesDAO {
     String sweepOrder = sweepLimit < sweepCap ? "random()" : "partitions.pk ASC";
 
     try (Connection connection = ctx.getConnection()) {
-      boolean usePartitionLocks = !ctx.isCockroach(connection);
+      boolean usePartitionLocks = !ctx.isCockroach();
       connection.setAutoCommit(false);
       // Set rather than inherited, since a user-supplied pool may default to another level. The
       // walk only reads, and each batch below reads again under its locks.
