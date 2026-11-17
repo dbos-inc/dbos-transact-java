@@ -39,7 +39,6 @@ import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSConductorEngine;
-import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
@@ -48,7 +47,6 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.suspend.Suspend;
-import dev.dbos.transact.suspend.SuspendProvider;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -202,7 +200,6 @@ public class DBOSExecutor implements AutoCloseable {
   private AdminServer adminServer;
   private final @Nullable ConductorOptions conductorOptions;
   private @Nullable ConductorProvider conductorProvider;
-  private @Nullable SuspendProvider suspendProvider;
   private @Nullable Suspend suspend;
   private final AtomicBoolean suspendPassRunning = new AtomicBoolean();
   private ConductorConnection conductor;
@@ -268,17 +265,14 @@ public class DBOSExecutor implements AutoCloseable {
         config.conductorDomain(),
         dbosCloud);
 
-    // Found before anything is started, so a missing provider fails launch cleanly. An
-    // application that will not connect, including one on DBOS Cloud without Conductor settings,
-    // needs no provider.
+    // Found before anything is started, so a missing provider fails launch cleanly. One provider
+    // builds every enterprise feature. An application that uses none, including one on DBOS Cloud
+    // without Conductor settings, needs no provider.
     conductorOptions = conductorOptions(config, dbosCloud);
     if (conductorOptions != null) {
-      conductorProvider = ConductorProviders.load();
-    }
-    if (config.suspendMode()) {
-      suspendProvider =
-          EnterpriseProviders.load(
-              SuspendProvider.class, Entitlements.SUSPEND_WORKFLOWS.description());
+      conductorProvider = ConductorProviders.load(ConductorProviders.CONDUCTOR);
+    } else if (config.suspendMode()) {
+      conductorProvider = ConductorProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
     }
 
     if (!dbosCloud) {
@@ -363,12 +357,12 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
-      // The providers are another artifact's code, so build what they provide before anything else
+      // The provider is another artifact's code, so build what it provides before anything else
       // starts: if one throws, launch fails with no queue, scheduler or listener running.
       var engine = new DBOSConductorEngine(this, systemDatabase);
       conductor = createConductor(engine);
-      if (suspendProvider != null) {
-        suspend = suspendProvider.create(engine);
+      if (config.suspendMode()) {
+        suspend = Objects.requireNonNull(conductorProvider).createSuspend(engine);
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
@@ -450,7 +444,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (conductorProvider == null || conductorOptions == null) {
       return null;
     }
-    return conductorProvider.create(engine, conductorOptions);
+    return conductorProvider.createConductor(engine, conductorOptions);
   }
 
   /**
