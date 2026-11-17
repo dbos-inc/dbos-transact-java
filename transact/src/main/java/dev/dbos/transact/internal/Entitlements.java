@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -50,6 +51,10 @@ public final class Entitlements {
    */
   public record Feature(String entitlement, String description) {}
 
+  /** Suspend mode: parking a waiting recv or a sleep in the database. */
+  public static final Feature SUSPEND_WORKFLOWS =
+      new Feature("suspendWorkflows", "Suspending workflows on recv");
+
   static final String ENTITLEMENTS_PATH = "/v2/entitlements";
   static final Duration TIMEOUT = Duration.ofSeconds(10);
   static final String HOSTED_CONDUCTOR_URL = "wss://cloud.dbos.dev/conductor/v1alpha1";
@@ -76,7 +81,11 @@ public final class Entitlements {
    * lands, so the check runs for it at launch.
    */
   public static List<Feature> enabledFeatures(DBOSConfig config) {
-    return List.of();
+    var features = new ArrayList<Feature>();
+    if (config.suspendMode()) {
+      features.add(SUSPEND_WORKFLOWS);
+    }
+    return List.copyOf(features);
   }
 
   /**

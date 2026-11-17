@@ -21,6 +21,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1651,6 +1652,31 @@ public class SystemDatabase implements AutoCloseable {
                 caller,
                 notificationRecheckInterval(),
                 createSubscription));
+  }
+
+  /** Whether this system database is CockroachDB. */
+  public boolean isCockroach() {
+    return ctx.isCockroach();
+  }
+
+  /** What the recv recorded under {@code stepId} returned, if it has run. */
+  public Optional<RecordedRecv> recordedRecv(String workflowId, int stepId, String ownerXid) {
+    return dbRetry(() -> NotificationsDAO.recordedRecv(ctx, workflowId, stepId, ownerXid));
+  }
+
+  /** The instant a recv's timeout runs out, recorded the first time and read back by a replay. */
+  public Instant recvDeadline(
+      String workflowId, int timeoutStepId, Duration timeout, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "recvDeadline",
+        () -> StepsDAO.durableDeadline(ctx, workflowId, timeoutStepId, timeout, ownerXid));
+  }
+
+  /** The instant a sleep ends, recorded the first time and read back by a replay. */
+  public Instant sleepEnd(String workflowId, int functionId, Duration duration, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "sleepEnd",
+        () -> StepsDAO.durableSleepEndTime(ctx, workflowId, functionId, duration, ownerXid));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration, String ownerXid) {

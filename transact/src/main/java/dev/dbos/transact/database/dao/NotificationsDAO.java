@@ -15,6 +15,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -266,6 +267,20 @@ public class NotificationsDAO {
       stmt.setArray(2, conn.createArrayOf("text", topics.toArray(String[]::new)));
       stmt.executeUpdate();
     }
+  }
+
+  /**
+   * What the recv recorded under {@code stepId} returned, if it has run. A recv that recorded no
+   * message, because its timeout passed or a peer took the message it saw, records none.
+   */
+  public static Optional<RecordedRecv> recordedRecv(
+      DbContext ctx, String workflowId, int stepId, String ownerXid) throws SQLException {
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, "DBOS.recv", ownerXid);
+    if (result == null) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        new RecordedRecv(result.output() != null ? result.toResult(ctx.serializer()) : null));
   }
 
   public static Object recv(
