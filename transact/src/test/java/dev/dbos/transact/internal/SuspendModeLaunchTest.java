@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.conductor.TestConductorProvider;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.spi.TestEnterpriseProvider;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -56,13 +56,13 @@ class SuspendFlagServiceImpl implements SuspendFlagService {
 
 /**
  * Suspend mode is a Transact Enterprise feature: turning it on checks the entitlement, and builds
- * suspend mode through the one enterprise provider. Here that is {@link TestConductorProvider};
- * {@code ConductorProvidersTest} covers the error when no provider is on the class path.
+ * suspend mode through the one enterprise provider. Here that is {@link TestEnterpriseProvider};
+ * {@code EnterpriseProvidersTest} covers the error when no provider is on the class path.
  */
 public class SuspendModeLaunchTest {
   // Only this class builds suspend mode, so a lock here keeps the provider's count steady.
   private static final String SUSPEND_BACKENDS_CREATED =
-      "TestConductorProvider.suspendBackendsCreated";
+      "TestEnterpriseProvider.suspendBackendsCreated";
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -96,26 +96,26 @@ public class SuspendModeLaunchTest {
       conductor.entitle("{\"suspendWorkflows\": true}");
       var config =
           pgContainer.dbosConfig().withConductorDomain(conductor.url).withSuspendMode(true);
-      var suspends = TestConductorProvider.suspendBackendsCreated();
+      var suspends = TestEnterpriseProvider.suspendBackendsCreated();
 
       try (var dbos = new DBOS(config)) {
         dbos.launch();
       }
 
-      assertEquals(suspends + 1, TestConductorProvider.suspendBackendsCreated());
+      assertEquals(suspends + 1, TestEnterpriseProvider.suspendBackendsCreated());
     }
   }
 
   @Test
   @ResourceLock(SUSPEND_BACKENDS_CREATED)
   void launchWithoutSuspendModeBuildsNoSuspend() {
-    var suspends = TestConductorProvider.suspendBackendsCreated();
+    var suspends = TestEnterpriseProvider.suspendBackendsCreated();
 
     try (var dbos = new DBOS(pgContainer.dbosConfig())) {
       dbos.launch();
     }
 
-    assertEquals(suspends, TestConductorProvider.suspendBackendsCreated());
+    assertEquals(suspends, TestEnterpriseProvider.suspendBackendsCreated());
   }
 
   @Test

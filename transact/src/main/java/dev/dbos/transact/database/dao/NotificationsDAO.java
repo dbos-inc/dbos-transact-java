@@ -15,7 +15,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.suspend.RecordedRecv;
+import dev.dbos.transact.spi.RecordedRecv;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.internal.StepResult;
 

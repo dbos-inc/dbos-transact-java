@@ -1,4 +1,4 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.spi;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -10,12 +10,12 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The system database, for the operations {@code dev.dbos:transact-enterprise} runs in SQL of its
- * own. It is not application API, and it changes only as {@link ConductorEngine} does.
+ * own. It is not application API, and it changes only as {@link EnterpriseEngine} does.
  *
  * <p>It hands out the means to run SQL, not an abstraction over the tables: that SQL addresses the
  * system database's tables directly and follows DBOS Transact's migrations.
  */
-public interface ConductorSystemDatabase {
+public interface EnterpriseSystemDatabase {
 
   /** Database work that may fail with {@link SQLException}. */
   @FunctionalInterface

@@ -1,7 +1,6 @@
 package dev.dbos.transact.database.dao;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.AdvisoryLocks;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DatabaseTime;
@@ -24,6 +23,7 @@ import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;

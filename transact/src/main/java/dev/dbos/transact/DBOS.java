@@ -416,7 +416,7 @@ public class DBOS implements AutoCloseable {
         } catch (Throwable e) {
           // Left in place, the executor would make every later launch() return at once with
           // nothing running, and every other call fail on what it never started. Throwable, not
-          // Exception: a listener or Conductor provider written in another JVM language can throw
+          // Exception: a listener or enterprise provider written in another JVM language can throw
           // a checked exception undeclared, and the reset must happen whatever close() throws.
           try {
             executor.close();

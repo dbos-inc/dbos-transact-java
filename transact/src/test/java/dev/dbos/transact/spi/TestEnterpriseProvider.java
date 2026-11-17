@@ -1,6 +1,7 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.spi;
 
-import dev.dbos.transact.suspend.SuspendBackend;
+import dev.dbos.transact.conductor.ConductorConnection;
+import dev.dbos.transact.conductor.ConductorOptions;
 
 import java.time.Duration;
 import java.util.List;
@@ -15,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * and it records the options each was created with. Its suspend mode counts how often it is built
  * and suspends nothing.
  */
-public final class TestConductorProvider implements ConductorProvider {
+public final class TestEnterpriseProvider implements EnterpriseProvider {
   private static final List<ConductorOptions> created = new CopyOnWriteArrayList<>();
   private static final AtomicInteger suspendBackendsCreated = new AtomicInteger();
 
@@ -30,7 +31,7 @@ public final class TestConductorProvider implements ConductorProvider {
   }
 
   @Override
-  public ConductorConnection createConductor(ConductorEngine engine, ConductorOptions options) {
+  public ConductorConnection createConductor(EnterpriseEngine engine, ConductorOptions options) {
     created.add(options);
     return new ConductorConnection() {
       @Override
@@ -42,7 +43,7 @@ public final class TestConductorProvider implements ConductorProvider {
   }
 
   @Override
-  public SuspendBackend createSuspendBackend(ConductorEngine engine) {
+  public SuspendBackend createSuspendBackend(EnterpriseEngine engine) {
     suspendBackendsCreated.incrementAndGet();
     return new SuspendBackend() {
       @Override

@@ -1,4 +1,4 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.spi;
 
 import java.util.Objects;
 

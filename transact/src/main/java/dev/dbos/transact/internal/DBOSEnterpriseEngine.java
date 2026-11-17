@@ -1,12 +1,12 @@
 package dev.dbos.transact.internal;
 
 import dev.dbos.transact.AlertHandler;
-import dev.dbos.transact.conductor.ConductorEngine;
-import dev.dbos.transact.conductor.ConductorSystemDatabase;
-import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.suspend.RecordedRecv;
+import dev.dbos.transact.spi.EnterpriseEngine;
+import dev.dbos.transact.spi.EnterpriseSystemDatabase;
+import dev.dbos.transact.spi.RecordedRecv;
+import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -28,13 +28,13 @@ import org.jspecify.annotations.Nullable;
 /**
  * Serves {@code dev.dbos:transact-enterprise} from a launched DBOS instance. When a method of
  * DBOSExecutor or SystemDatabase changes, the delegation here changes with it and {@link
- * ConductorEngine} keeps its signatures.
+ * EnterpriseEngine} keeps its signatures.
  */
-public final class DBOSConductorEngine implements ConductorEngine {
+public final class DBOSEnterpriseEngine implements EnterpriseEngine {
   private final DBOSExecutor executor;
   private final SystemDatabase systemDatabase;
 
-  public DBOSConductorEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
+  public DBOSEnterpriseEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
     this.executor = executor;
     this.systemDatabase = systemDatabase;
   }
@@ -179,8 +179,8 @@ public final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
-  public ConductorSystemDatabase systemDatabase() {
-    return systemDatabase.forConductor();
+  public EnterpriseSystemDatabase systemDatabase() {
+    return systemDatabase.forEnterprise();
   }
 
   @Override

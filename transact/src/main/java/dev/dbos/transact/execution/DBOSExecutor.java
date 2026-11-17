@@ -8,9 +8,6 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.ConductorConnection;
 import dev.dbos.transact.conductor.ConductorOptions;
-import dev.dbos.transact.conductor.ConductorProvider;
-import dev.dbos.transact.conductor.ConductorProviders;
-import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -37,7 +34,8 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
-import dev.dbos.transact.internal.DBOSConductorEngine;
+import dev.dbos.transact.internal.DBOSEnterpriseEngine;
+import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
@@ -45,7 +43,9 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.suspend.SuspendBackend;
+import dev.dbos.transact.spi.EnterpriseProvider;
+import dev.dbos.transact.spi.SuspendBackend;
+import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -198,7 +198,7 @@ public class DBOSExecutor implements AutoCloseable {
   private SchedulerService schedulerService;
   private AdminServer adminServer;
   private final @Nullable ConductorOptions conductorOptions;
-  private @Nullable ConductorProvider conductorProvider;
+  private @Nullable EnterpriseProvider enterpriseProvider;
   private @Nullable SuspendBackend suspendBackend;
   private final AtomicBoolean suspendPassRunning = new AtomicBoolean();
   private ConductorConnection conductor;
@@ -269,9 +269,9 @@ public class DBOSExecutor implements AutoCloseable {
     // without Conductor settings, needs no provider.
     conductorOptions = conductorOptions(config, dbosCloud);
     if (conductorOptions != null) {
-      conductorProvider = ConductorProviders.load(ConductorProviders.CONDUCTOR);
+      enterpriseProvider = EnterpriseProviders.load(EnterpriseProviders.CONDUCTOR);
     } else if (config.suspendMode()) {
-      conductorProvider = ConductorProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
+      enterpriseProvider = EnterpriseProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
     }
 
     if (!dbosCloud) {
@@ -359,13 +359,13 @@ public class DBOSExecutor implements AutoCloseable {
       // The provider is another artifact's code, so build what it provides before anything else
       // starts: if one throws, launch fails with no queue, scheduler or listener running. It was
       // loaded only if some feature needs it.
-      if (conductorProvider != null) {
-        var engine = new DBOSConductorEngine(this, systemDatabase);
+      if (enterpriseProvider != null) {
+        var engine = new DBOSEnterpriseEngine(this, systemDatabase);
         if (conductorOptions != null) {
-          conductor = conductorProvider.createConductor(engine, conductorOptions);
+          conductor = enterpriseProvider.createConductor(engine, conductorOptions);
         }
         if (config.suspendMode()) {
-          suspendBackend = conductorProvider.createSuspendBackend(engine);
+          suspendBackend = enterpriseProvider.createSuspendBackend(engine);
         }
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
@@ -478,8 +478,8 @@ public class DBOSExecutor implements AutoCloseable {
     return conductorOptions;
   }
 
-  @Nullable ConductorProvider conductorProvider() {
-    return conductorProvider;
+  @Nullable EnterpriseProvider enterpriseProvider() {
+    return enterpriseProvider;
   }
 
   @Override
@@ -555,7 +555,7 @@ public class DBOSExecutor implements AutoCloseable {
         if (first instanceof Error e) {
           throw e;
         }
-        // A checked exception a listener or Conductor provider threw undeclared.
+        // A checked exception a listener or the enterprise provider threw undeclared.
         throw new RuntimeException(first);
       }
     }
