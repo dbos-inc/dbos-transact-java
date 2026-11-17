@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -145,6 +146,31 @@ public class QueuePreservationTest {
 
     assertQueue(a, WorkflowState.ENQUEUED, QUEUE, "a", 0);
     assertQueue(b, WorkflowState.ENQUEUED, QUEUE, "b", 0);
+  }
+
+  @Test
+  void dbosChecksTheQueueAResumeNamesAndMovesEveryRowToTheKeyItGives() throws Exception {
+    var a = plant(WorkflowState.ENQUEUED, "a", 1);
+    var b = plant(WorkflowState.ENQUEUED, "b", 2);
+    client.cancelWorkflows(List.of(a, b));
+
+    try (var dbos = new DBOS(pgContainer.dbosConfig())) {
+      dbos.launch();
+
+      // A named queue must exist, and a key cannot go with one that is not partitioned. Nothing
+      // is resumed when either is refused.
+      assertThrows(IllegalArgumentException.class, () -> dbos.resumeWorkflow(a, "no-such-queue"));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> dbos.resumeWorkflow(a, Constants.DBOS_INTERNAL_QUEUE, "a"));
+      assertQueue(a, WorkflowState.CANCELLED, QUEUE, "a", 1);
+
+      // A key alone is not checked: it goes to each workflow's own queue.
+      dbos.resumeWorkflows(List.of(a, b), null, "moved");
+    }
+
+    assertQueue(a, WorkflowState.ENQUEUED, QUEUE, "moved", 1);
+    assertQueue(b, WorkflowState.ENQUEUED, QUEUE, "moved", 2);
   }
 
   @Test

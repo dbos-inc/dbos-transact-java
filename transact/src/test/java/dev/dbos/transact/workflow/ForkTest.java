@@ -373,12 +373,16 @@ public class ForkTest {
       assertEquals("hellohello", result);
     }
 
-    // specify partition key for default or custom non partitioned queue should throw
+    // A partition key cannot go with a named queue that is not partitioned.
     assertThrows(
         IllegalArgumentException.class,
         () ->
             dbos.forkWorkflow(
-                workflowId, 0, new ForkOptions().withQueuePartitionKey("test-part-key")));
+                workflowId,
+                0,
+                new ForkOptions()
+                    .withQueue(Constants.DBOS_INTERNAL_QUEUE)
+                    .withQueuePartitionKey("test-part-key")));
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -386,12 +390,30 @@ public class ForkTest {
                 workflowId,
                 0,
                 new ForkOptions().withQueue(testQueue).withQueuePartitionKey("test-part-key")));
+  }
 
-    // not specify partition key for partitioned queue should throw
+  @Test
+  public void aForkThatNamesOnlyAQueueOrAKeyKeepsTheOther() throws Exception {
+    var original =
+        dbos.<String, RuntimeException>startWorkflow(
+            () -> proxy.simpleWorkflow("hello"),
+            new StartWorkflowOptions().withQueue(testPartitionQueue).withQueuePartitionKey("k"));
+    assertEquals("hellohello", original.getResult());
 
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testPartitionQueue)));
+    // A partitioned queue named without a key takes the original's key.
+    var sameKey =
+        dbos.forkWorkflow(
+            original.workflowId(), 0, new ForkOptions().withQueue(testPartitionQueue));
+    assertEquals(testPartitionQueue, sameKey.getStatus().queueName());
+    assertEquals("k", sameKey.getStatus().queuePartitionKey());
+    assertEquals("hellohello", sameKey.getResult());
+
+    // A key alone moves the fork to that partition of the original's queue.
+    var otherKey =
+        dbos.forkWorkflow(original.workflowId(), 0, new ForkOptions().withQueuePartitionKey("k2"));
+    assertEquals(testPartitionQueue, otherKey.getStatus().queueName());
+    assertEquals("k2", otherKey.getStatus().queuePartitionKey());
+    assertEquals("hellohello", otherKey.getResult());
   }
 
   @Test

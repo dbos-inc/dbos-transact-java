@@ -480,6 +480,21 @@ public class RewindTest {
                     .withQueuePartitionKey("pk")));
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(workflowId).getStatus().status());
     assertEquals("rewind_partitioned", dbos.retrieveWorkflow(workflowId).getStatus().queueName());
+
+    // Naming the queue without a key keeps the workflow's partition.
+    dbos.rewindWorkflow(workflowId, 0, new RewindOptions().withQueue("rewind_partitioned"));
+    assertEquals(5, dbos.retrieveWorkflow(workflowId).getResult());
+    status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("rewind_partitioned", status.queueName());
+    assertEquals("other", status.queuePartitionKey());
+
+    // So does naming another queue without one: a key changes only when one is given.
+    dbos.rewindWorkflow(
+        workflowId, 0, new RewindOptions().withQueue(Constants.DBOS_INTERNAL_QUEUE));
+    assertEquals(6, dbos.retrieveWorkflow(workflowId).getResult());
+    status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals(Constants.DBOS_INTERNAL_QUEUE, status.queueName());
+    assertEquals("other", status.queuePartitionKey());
   }
 
   @Test

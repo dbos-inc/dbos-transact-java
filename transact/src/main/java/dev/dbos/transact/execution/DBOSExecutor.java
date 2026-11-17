@@ -1177,6 +1177,7 @@ public class DBOSExecutor implements AutoCloseable {
     this.runDbosFunctionAsStep(
         () -> {
           refuseSelfTarget(callerWorkflowId, workflowIds, "resume");
+          validateRequeue(queueName, queuePartitionKey);
           logger.info("Resuming workflow(s) {}", workflowIds);
           systemDatabase.resumeWorkflows(workflowIds, queueName, queuePartitionKey);
           return null; // void
@@ -2495,12 +2496,31 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /**
-   * Validates the queue and partition key a fork or rewind is given. Without a queue the workflow
-   * goes back to its own, which only its row says, so there is nothing to check yet.
+   * Validates the queue and partition key a resume, fork or rewind names. Either may be null, which
+   * keeps what the workflow's row has, so only what is named is checked: a named queue must exist,
+   * and a partition key cannot go with a named queue that is not partitioned. A named partitioned
+   * queue needs no key, since the row may have one, and a key without a queue goes to the
+   * workflow's own queue, which only its row says.
    */
   private void validateRequeue(@Nullable String queueName, @Nullable String queuePartitionKey) {
-    if (queueName != null) {
-      validateQueue(queueName, queuePartitionKey);
+    if (queueName == null) {
+      return;
+    }
+    if (queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      if (queuePartitionKey != null) {
+        throw new IllegalArgumentException(
+            "DBOS internal queue is not a partitioned queue, but a partition key was provided");
+      }
+      return;
+    }
+    var queue =
+        findQueue(queueName)
+            .orElseThrow(
+                () -> new IllegalArgumentException("queue %s does not exist".formatted(queueName)));
+    if (!queue.isPartitioned() && queuePartitionKey != null) {
+      throw new IllegalArgumentException(
+          "queue %s is not a partitioned queue, but a partition key was provided"
+              .formatted(queueName));
     }
   }
 

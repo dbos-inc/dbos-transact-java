@@ -901,7 +901,8 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the resumed workflow
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
-   *     its steps: a workflow can't resume itself. Nothing is resumed.
+   *     its steps: a workflow can't resume itself. Also if {@code queueName} names a queue that
+   *     does not exist. Nothing is resumed.
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId, @Nullable String queueName) {
@@ -923,7 +924,9 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the resumed workflow
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
-   *     its steps: a workflow can't resume itself. Nothing is resumed.
+   *     its steps: a workflow can't resume itself. Also if {@code queueName} names a queue that
+   *     does not exist, or a partition key is given with a queue that is not partitioned. Nothing
+   *     is resumed.
    */
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
@@ -964,7 +967,8 @@ public class DBOS implements AutoCloseable {
    * @return A list of handles to the resumed workflows
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
-   *     one of its steps: a workflow can't resume itself. Nothing is resumed.
+   *     one of its steps: a workflow can't resume itself. Also if {@code queueName} names a queue
+   *     that does not exist. Nothing is resumed.
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds, @Nullable String queueName) {
@@ -984,7 +988,9 @@ public class DBOS implements AutoCloseable {
    * @return A list of handles to the resumed workflows
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
-   *     one of its steps: a workflow can't resume itself. Nothing is resumed.
+   *     one of its steps: a workflow can't resume itself. Also if {@code queueName} names a queue
+   *     that does not exist, or a partition key is given with a queue that is not partitioned.
+   *     Nothing is resumed.
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds,
@@ -1145,8 +1151,11 @@ public class DBOS implements AutoCloseable {
    * @param <E> Checked exception thrown by the workflow function, if any
    * @param workflowId Original workflow Id
    * @param startStep Start execution from this step. Prior steps copied over
-   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
+   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout,
+   *     and the queue and partition key, which default to the original's
    * @return handle to the workflow
+   * @throws IllegalArgumentException if the options name a queue that does not exist, or a
+   *     partition key with a named queue that is not partitioned
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
@@ -1196,8 +1205,8 @@ public class DBOS implements AutoCloseable {
    * @return handle to the rewound workflow
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
    *     exist
-   * @throws IllegalArgumentException if {@code startStep} is negative, the queue does not exist, or
-   *     the partition key does not match whether the queue is partitioned
+   * @throws IllegalArgumentException if {@code startStep} is negative, or the options name a queue
+   *     that does not exist, or a partition key with a named queue that is not partitioned
    * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
    *     while it was being rewound; in the second case, retry the rewind
    * @throws RuntimeException if a transactional step factory's checkpoints could not be deleted;

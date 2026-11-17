@@ -94,12 +94,13 @@ public interface ConductorEngine {
    *
    * @param forks the forks to write
    * @param applicationVersion the forks' application version, or {@code null} for the originals'
-   * @param queueName the queue the forks are enqueued on, or {@code null} for DBOS's internal queue
-   * @param queuePartitionKey the forks' partition key on a partitioned queue, or {@code null}
+   * @param queueName the queue the forks are enqueued on, or {@code null} for each original's own,
+   *     or DBOS's internal queue if it had none
+   * @param queuePartitionKey the forks' partition key, or {@code null} for each original's own
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
    *     exist
-   * @throws IllegalArgumentException if the queue is not registered, or the partition key does not
-   *     match whether the queue is partitioned
+   * @throws IllegalArgumentException if a queue is named but not registered, or a partition key is
+   *     given with a named queue that is not partitioned
    */
   void forkWorkflows(
       List<WorkflowFork> forks,

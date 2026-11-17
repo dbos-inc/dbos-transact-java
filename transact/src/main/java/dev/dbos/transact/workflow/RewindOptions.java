@@ -9,9 +9,9 @@ import org.jspecify.annotations.Nullable;
  *
  * @param applicationVersion Application version to run the rewound workflow on; {@code null} keeps
  *     the version the workflow already has
- * @param queueName Queue to re-enqueue the workflow on; {@code null} uses the internal queue
- * @param queuePartitionKey Partition key on that queue; {@code null} clears any key the workflow
- *     had
+ * @param queueName Queue to re-enqueue the workflow on; {@code null} keeps the workflow's own
+ *     queue, or the internal queue if it has none
+ * @param queuePartitionKey Partition key on that queue; {@code null} keeps the workflow's own key
  */
 public record RewindOptions(
     @Nullable String applicationVersion,

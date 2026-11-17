@@ -267,7 +267,8 @@ public class WorkflowDAO {
   }
 
   /**
-   * Moves claimed workflows that have exhausted their attempts off the queue.
+   * Dead-letters claimed workflows that have exhausted their attempts. They keep their queue, so a
+   * resume puts them back on it.
    *
    * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
    * decision was read from: a row another executor has already moved on, or one given a fresh
