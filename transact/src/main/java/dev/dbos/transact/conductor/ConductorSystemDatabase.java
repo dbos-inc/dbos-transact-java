@@ -32,9 +32,6 @@ public interface ConductorSystemDatabase {
    */
   String schema();
 
-  /** SQL for the system database's clock now, in epoch milliseconds. */
-  String clockEpochMsSql();
-
   /**
    * Whether the system database is CockroachDB, which has no advisory locks: work that would take
    * one to keep its processes from doing the same thing at once must run without it there.

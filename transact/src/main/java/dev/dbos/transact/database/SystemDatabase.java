@@ -1915,11 +1915,6 @@ public class SystemDatabase implements AutoCloseable {
       }
 
       @Override
-      public String clockEpochMsSql() {
-        return CLOCK_TIMESTAMP_EPOCH_MS;
-      }
-
-      @Override
       public boolean isCockroach() {
         return SystemDatabase.this.isCockroach();
       }
