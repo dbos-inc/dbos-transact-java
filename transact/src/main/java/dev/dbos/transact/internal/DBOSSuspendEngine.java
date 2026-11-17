@@ -1,4 +1,4 @@
-package dev.dbos.transact.execution;
+package dev.dbos.transact.internal;
 
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
 import dev.dbos.transact.database.SystemDatabase;
@@ -15,11 +15,11 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /** Suspend mode's view of a DBOS instance: its system database, and the recv it falls back to. */
-final class DBOSSuspendEngine implements SuspendEngine {
+public final class DBOSSuspendEngine implements SuspendEngine {
   private final SystemDatabase systemDatabase;
   private final @Nullable String appName;
 
-  DBOSSuspendEngine(SystemDatabase systemDatabase, @Nullable String appName) {
+  public DBOSSuspendEngine(SystemDatabase systemDatabase, @Nullable String appName) {
     this.systemDatabase = Objects.requireNonNull(systemDatabase);
     this.appName = appName;
   }

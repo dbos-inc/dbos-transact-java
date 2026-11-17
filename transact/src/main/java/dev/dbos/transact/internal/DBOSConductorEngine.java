@@ -1,10 +1,11 @@
-package dev.dbos.transact.execution;
+package dev.dbos.transact.internal;
 
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
 import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -27,11 +28,11 @@ import org.jspecify.annotations.Nullable;
  * SystemDatabase changes, the delegation here changes with it and {@link ConductorEngine} keeps its
  * signatures.
  */
-final class DBOSConductorEngine implements ConductorEngine {
+public final class DBOSConductorEngine implements ConductorEngine {
   private final DBOSExecutor executor;
   private final SystemDatabase systemDatabase;
 
-  DBOSConductorEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
+  public DBOSConductorEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
     this.executor = executor;
     this.systemDatabase = systemDatabase;
   }

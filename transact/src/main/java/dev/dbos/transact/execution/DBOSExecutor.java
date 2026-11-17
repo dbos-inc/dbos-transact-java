@@ -37,6 +37,8 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.DBOSConductorEngine;
+import dev.dbos.transact.internal.DBOSSuspendEngine;
 import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
