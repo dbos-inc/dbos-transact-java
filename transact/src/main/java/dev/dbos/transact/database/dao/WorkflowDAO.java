@@ -1023,6 +1023,7 @@ public class WorkflowDAO {
           UPDATE "%1$s".workflow_status
           SET status = ?,
               deduplication_id = NULL,
+              suspend_key = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
               updated_at = %2$s,
@@ -1394,6 +1395,7 @@ public class WorkflowDAO {
           UPDATE "%1$s".workflow_status
              SET status = ?,
                  deduplication_id = NULL,
+                 suspend_key = NULL,
                  started_at_epoch_ms = NULL,
                  owner_xid = NULL,
                  updated_at = %2$s,
@@ -1869,6 +1871,7 @@ public class WorkflowDAO {
           UPDATE "%1$s".workflow_status
           SET status = ?,
               deduplication_id = NULL,
+              suspend_key = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
               updated_at = %2$s,
@@ -1897,6 +1900,7 @@ public class WorkflowDAO {
           UPDATE "%1$s".workflow_status
           SET status = ?,
               deduplication_id = NULL,
+              suspend_key = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
               updated_at = %2$s,
@@ -1941,6 +1945,7 @@ public class WorkflowDAO {
               recovery_attempts = 0,
               workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
+              suspend_key = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
               completed_at = NULL,
@@ -2213,7 +2218,8 @@ public class WorkflowDAO {
                   SET status = ?, owner_xid = NULL, queue_name = COALESCE(?, queue_name, ?),
                       queue_partition_key = COALESCE(?, queue_partition_key),
                       recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
-                      deduplication_id = NULL, started_at_epoch_ms = NULL, completed_at = NULL,
+                      deduplication_id = NULL, suspend_key = NULL, started_at_epoch_ms = NULL,
+                      completed_at = NULL,
                       output = NULL, error = NULL, updated_at = %2$s%3$s
                   WHERE workflow_uuid = ? AND status = ?
                 """

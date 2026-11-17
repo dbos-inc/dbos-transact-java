@@ -46,14 +46,15 @@ public class QueuePreservationTest {
     sysdb = DBOSTestAccess.getSystemDatabase(client);
   }
 
-  private String plant(WorkflowState status, String partition, int priority) throws SQLException {
+  private String plant(WorkflowState status, String partition, int priority, String suspendKey)
+      throws SQLException {
     var id = UUID.randomUUID().toString();
     var sql =
         """
           INSERT INTO "dbos".workflow_status
               (workflow_uuid, status, name, class_name, queue_name, queue_partition_key, priority,
-               executor_id, recovery_attempts)
-          VALUES (?, ?, 'planted', 'com.example.Planted', ?, ?, ?, 'other-sdk', ?)
+               suspend_key, executor_id, recovery_attempts)
+          VALUES (?, ?, 'planted', 'com.example.Planted', ?, ?, ?, ?, 'other-sdk', ?)
         """;
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -62,10 +63,24 @@ public class QueuePreservationTest {
       stmt.setString(3, QUEUE);
       stmt.setString(4, partition);
       stmt.setInt(5, priority);
-      stmt.setInt(6, status == WorkflowState.PENDING ? 5 : 0);
+      stmt.setString(6, suspendKey);
+      stmt.setInt(7, status == WorkflowState.PENDING ? 5 : 0);
       stmt.executeUpdate();
     }
     return id;
+  }
+
+  private String suspendKey(String id) throws SQLException {
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "SELECT suspend_key FROM \"dbos\".workflow_status WHERE workflow_uuid = ?")) {
+      stmt.setString(1, id);
+      try (var rs = stmt.executeQuery()) {
+        rs.next();
+        return rs.getString(1);
+      }
+    }
   }
 
   private void assertQueue(String id, WorkflowState state, String queue, String partition, int pri)
@@ -79,7 +94,7 @@ public class QueuePreservationTest {
 
   @Test
   void cancelKeepsTheQueuePartitionAndPriority() throws Exception {
-    var id = plant(WorkflowState.ENQUEUED, "p1", 7);
+    var id = plant(WorkflowState.ENQUEUED, "p1", 7, null);
 
     client.cancelWorkflow(id);
 
@@ -88,8 +103,8 @@ public class QueuePreservationTest {
 
   @Test
   void bulkCancelKeepsEachRowsQueue() throws Exception {
-    var a = plant(WorkflowState.ENQUEUED, "a", 1);
-    var b = plant(WorkflowState.DELAYED, "b", 2);
+    var a = plant(WorkflowState.ENQUEUED, "a", 1, null);
+    var b = plant(WorkflowState.DELAYED, "b", 2, null);
 
     client.cancelWorkflows(List.of(a, b));
 
@@ -99,7 +114,7 @@ public class QueuePreservationTest {
 
   @Test
   void deadLetteringKeepsTheQueue() throws Exception {
-    var id = plant(WorkflowState.PENDING, "p1", 3);
+    var id = plant(WorkflowState.PENDING, "p1", 3, null);
 
     sysdb.deadLetterWorkflows(List.of(id), 5);
 
@@ -108,7 +123,7 @@ public class QueuePreservationTest {
 
   @Test
   void aResumeWithNoQueueGoesBackToTheWorkflowsOwn() throws Exception {
-    var id = plant(WorkflowState.ENQUEUED, "p1", 7);
+    var id = plant(WorkflowState.ENQUEUED, "p1", 7, null);
     client.cancelWorkflow(id);
 
     client.resumeWorkflow(id);
@@ -118,7 +133,7 @@ public class QueuePreservationTest {
 
   @Test
   void aResumeThatNamesAQueueOrPartitionChangesOnlyThat() throws Exception {
-    var id = plant(WorkflowState.ENQUEUED, "p1", 7);
+    var id = plant(WorkflowState.ENQUEUED, "p1", 7, null);
     client.cancelWorkflow(id);
 
     // A partition alone moves it within its queue.
@@ -138,8 +153,8 @@ public class QueuePreservationTest {
 
   @Test
   void aBulkResumePutsEachRowBackInItsOwnPartition() throws Exception {
-    var a = plant(WorkflowState.ENQUEUED, "a", 0);
-    var b = plant(WorkflowState.ENQUEUED, "b", 0);
+    var a = plant(WorkflowState.ENQUEUED, "a", 0, null);
+    var b = plant(WorkflowState.ENQUEUED, "b", 0, null);
     client.cancelWorkflows(List.of(a, b));
 
     client.resumeWorkflows(List.of(a, b));
@@ -150,8 +165,8 @@ public class QueuePreservationTest {
 
   @Test
   void dbosChecksTheQueueAResumeNamesAndMovesEveryRowToTheKeyItGives() throws Exception {
-    var a = plant(WorkflowState.ENQUEUED, "a", 1);
-    var b = plant(WorkflowState.ENQUEUED, "b", 2);
+    var a = plant(WorkflowState.ENQUEUED, "a", 1, null);
+    var b = plant(WorkflowState.ENQUEUED, "b", 2, null);
     client.cancelWorkflows(List.of(a, b));
 
     try (var dbos = new DBOS(pgContainer.dbosConfig())) {
@@ -197,7 +212,7 @@ public class QueuePreservationTest {
 
   @Test
   void aForkRunsWhereItsOriginalRan() throws Exception {
-    var original = plant(WorkflowState.SUCCESS, "p1", 7);
+    var original = plant(WorkflowState.SUCCESS, "p1", 7, null);
 
     var inherited = client.<Object, Exception>forkWorkflow(original, 0, new ForkOptions());
     assertQueue(inherited.workflowId(), WorkflowState.ENQUEUED, QUEUE, "p1", 7);
@@ -213,5 +228,35 @@ public class QueuePreservationTest {
         client.<Object, Exception>forkWorkflow(
             original, 0, new ForkOptions().withQueue("other-queue"));
     assertQueue(requeued.workflowId(), WorkflowState.ENQUEUED, "other-queue", "p1", 7);
+  }
+
+  @Test
+  void cancellingOrResumingASuspendedWorkflowClearsItsWakeKey() throws Exception {
+    var cancelled = plant(WorkflowState.SUSPENDED, null, 0, "topic");
+    client.cancelWorkflow(cancelled);
+    assertNull(suspendKey(cancelled));
+
+    var resumed = plant(WorkflowState.SUSPENDED, null, 0, "topic");
+    client.resumeWorkflow(resumed);
+    assertNull(suspendKey(resumed));
+    assertQueue(resumed, WorkflowState.ENQUEUED, QUEUE, null, 0);
+  }
+
+  @Test
+  void theTimeoutSweepClearsASuspendedWorkflowsWakeKey() throws Exception {
+    var id = plant(WorkflowState.SUSPENDED, null, 0, "topic");
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET workflow_deadline_epoch_ms = 1 WHERE"
+                    + " workflow_uuid = ?")) {
+      stmt.setString(1, id);
+      stmt.executeUpdate();
+    }
+
+    assertEquals(List.of(id), sysdb.cancelTimedOutWorkflows(1_000));
+
+    assertNull(suspendKey(id));
+    assertQueue(id, WorkflowState.CANCELLED, QUEUE, null, 0);
   }
 }
