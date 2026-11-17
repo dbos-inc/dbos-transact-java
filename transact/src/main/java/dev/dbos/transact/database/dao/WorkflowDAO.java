@@ -267,7 +267,8 @@ public class WorkflowDAO {
   }
 
   /**
-   * Moves claimed workflows that have exhausted their attempts off the queue.
+   * Dead-letters claimed workflows that have exhausted their attempts. They keep their queue, so a
+   * resume puts them back on it.
    *
    * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
    * decision was read from: a row another executor has already moved on, or one given a fresh
@@ -279,7 +280,7 @@ public class WorkflowDAO {
     final String sql =
         """
           UPDATE "%1$s".workflow_status
-          SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL,
+          SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL,
               owner_xid = NULL, updated_at = %2$s, completed_at = %2$s
           WHERE workflow_uuid = ANY(?) AND status = ? AND recovery_attempts >= ?
         """
@@ -1020,7 +1021,6 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
           SET status = ?,
-              queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
@@ -1381,7 +1381,6 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
              SET status = ?,
-                 queue_name = NULL,
                  deduplication_id = NULL,
                  started_at_epoch_ms = NULL,
                  owner_xid = NULL,
@@ -1862,7 +1861,6 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
           SET status = ?,
-              queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
@@ -1891,7 +1889,6 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
           SET status = ?,
-              queue_name = NULL,
               deduplication_id = NULL,
               started_at_epoch_ms = NULL,
               owner_xid = NULL,
@@ -1917,7 +1914,11 @@ public class WorkflowDAO {
     }
   }
 
-  public static void resumeWorkflows(DbContext ctx, List<String> workflowIds, String queueName)
+  public static void resumeWorkflows(
+      DbContext ctx,
+      List<String> workflowIds,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey)
       throws SQLException {
     var filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
@@ -1928,7 +1929,8 @@ public class WorkflowDAO {
         """
           UPDATE "%1$s".workflow_status
           SET status = ?,
-              queue_name = ?,
+              queue_name = COALESCE(?, queue_name, ?),
+              queue_partition_key = COALESCE(?, queue_partition_key),
               recovery_attempts = 0,
               workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
@@ -1946,10 +1948,12 @@ public class WorkflowDAO {
       Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
-        stmt.setString(2, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setArray(3, array);
-        stmt.setString(4, WorkflowState.SUCCESS.name());
-        stmt.setString(5, WorkflowState.ERROR.name());
+        stmt.setString(2, queueName);
+        stmt.setString(3, Constants.DBOS_INTERNAL_QUEUE);
+        stmt.setString(4, queuePartitionKey);
+        stmt.setArray(5, array);
+        stmt.setString(6, WorkflowState.SUCCESS.name());
+        stmt.setString(7, WorkflowState.ERROR.name());
         stmt.executeUpdate();
       } finally {
         array.free();
@@ -2199,7 +2203,8 @@ public class WorkflowDAO {
             var enqueueSql =
                 """
                   UPDATE "%1$s".workflow_status
-                  SET status = ?, owner_xid = NULL, queue_name = ?, queue_partition_key = ?,
+                  SET status = ?, owner_xid = NULL, queue_name = COALESCE(?, queue_name, ?),
+                      queue_partition_key = COALESCE(?, queue_partition_key),
                       recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
                       deduplication_id = NULL, started_at_epoch_ms = NULL, completed_at = NULL,
                       output = NULL, error = NULL, updated_at = %2$s%3$s
@@ -2209,9 +2214,8 @@ public class WorkflowDAO {
             try (var stmt = conn.prepareStatement(enqueueSql)) {
               int i = 1;
               stmt.setString(i++, WorkflowState.ENQUEUED.name());
-              stmt.setString(
-                  i++,
-                  Objects.requireNonNullElse(options.queueName(), Constants.DBOS_INTERNAL_QUEUE));
+              stmt.setString(i++, options.queueName());
+              stmt.setString(i++, Constants.DBOS_INTERNAL_QUEUE);
               stmt.setString(i++, options.queuePartitionKey());
               if (options.applicationVersion() != null) {
                 stmt.setString(i++, options.applicationVersion());
@@ -2277,7 +2281,6 @@ public class WorkflowDAO {
     var workflowIds = forks.stream().map(WorkflowFork::workflowId).toList();
 
     var timeoutMs = timeout != null ? timeout.toMillis() : null;
-    final var forkQueueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
 
     try (var txConn = ctx.getConnection()) {
       SqlTransaction.run(
@@ -2309,7 +2312,7 @@ public class WorkflowDAO {
                 ctx.schema(),
                 rows,
                 applicationVersion,
-                forkQueueName,
+                queueName,
                 queuePartitionKey,
                 timeoutMs);
 
@@ -2336,7 +2339,10 @@ public class WorkflowDAO {
       String inputs,
       String serialization,
       String attributes,
-      @Nullable String applicationName) {}
+      @Nullable String applicationName,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey,
+      int priority) {}
 
   /** A fork with what it takes from its original: the original's row, and the fork's app name. */
   private record ForkRow(WorkflowFork fork, ForkWorkflowData original, @Nullable String appName) {}
@@ -2347,7 +2353,8 @@ public class WorkflowDAO {
         """
           SELECT workflow_status.workflow_uuid, name, class_name, config_name,
                  application_version, application_id, authenticated_user, authenticated_roles,
-                 assumed_role, %1$s, serialization, attributes, application_name
+                 assumed_role, %1$s, serialization, attributes, application_name,
+                 queue_name, queue_partition_key, priority
           FROM "%2$s".workflow_status
           %3$s
           WHERE workflow_status.workflow_uuid = ANY(?)
@@ -2375,7 +2382,10 @@ public class WorkflowDAO {
                     rs.getString("inputs"),
                     rs.getString("serialization"),
                     rs.getString("attributes"),
-                    rs.getString("application_name")));
+                    rs.getString("application_name"),
+                    rs.getString("queue_name"),
+                    rs.getString("queue_partition_key"),
+                    rs.getInt("priority")));
           }
         }
       } finally {
@@ -2403,14 +2413,14 @@ public class WorkflowDAO {
                 application_version, application_id, authenticated_user,
                 authenticated_roles, assumed_role, queue_name, queue_partition_key,
                 workflow_timeout_ms, forked_from, serialization, attributes,
-                application_name
+                application_name, priority
               ) VALUES\s
             """
                 .formatted(schema));
 
     StringJoiner values = new StringJoiner(", ");
     for (int i = 0; i < rows.size(); i++) {
-      values.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)");
+      values.add("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)");
     }
     sql.append(values);
 
@@ -2431,13 +2441,20 @@ public class WorkflowDAO {
         stmt.setString(p++, rd.authenticatedUser());
         stmt.setString(p++, rd.authenticatedRoles());
         stmt.setString(p++, rd.assumedRole());
-        stmt.setString(p++, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
-        stmt.setString(p++, queuePartitionKey);
+        // The given queue and partition key, else the original's, so a fork runs where its original
+        // ran: on its queue and in its partition, at its priority.
+        stmt.setString(
+            p++,
+            queueName != null
+                ? queueName
+                : Objects.requireNonNullElse(rd.queueName(), Constants.DBOS_INTERNAL_QUEUE));
+        stmt.setString(p++, queuePartitionKey != null ? queuePartitionKey : rd.queuePartitionKey());
         stmt.setObject(p++, timeoutMs);
         stmt.setString(p++, row.fork().workflowId());
         stmt.setString(p++, rd.serialization());
         stmt.setString(p++, rd.attributes());
         stmt.setString(p++, row.appName());
+        stmt.setInt(p++, rd.priority());
       }
       stmt.executeUpdate();
     }

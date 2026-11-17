@@ -1169,7 +1169,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
-      List<String> workflowIds, String queueName) {
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey) {
     Objects.requireNonNull(workflowIds);
     var callerWorkflowId = DBOSContextHolder.get().getWorkflowId();
 
@@ -1177,8 +1177,9 @@ public class DBOSExecutor implements AutoCloseable {
     this.runDbosFunctionAsStep(
         () -> {
           refuseSelfTarget(callerWorkflowId, workflowIds, "resume");
+          validateRequeue(queueName, queuePartitionKey);
           logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds, queueName);
+          systemDatabase.resumeWorkflows(workflowIds, queueName, queuePartitionKey);
           return null; // void
         },
         "DBOS.resumeWorkflow",
@@ -1276,7 +1277,7 @@ public class DBOSExecutor implements AutoCloseable {
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
-              validateQueue(options.queueName(), options.queuePartitionKey());
+              validateRequeue(options.queueName(), options.queuePartitionKey());
 
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
@@ -1294,7 +1295,7 @@ public class DBOSExecutor implements AutoCloseable {
     // Only Conductor forks a batch, never from inside a workflow, so this is not run as a step.
     logger.info("Forking {} workflow(s)", forks.size());
 
-    validateQueue(queueName, queuePartitionKey);
+    validateRequeue(queueName, queuePartitionKey);
 
     systemDatabase.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
@@ -1308,7 +1309,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
 
-          validateQueue(options.queueName(), options.queuePartitionKey());
+          validateRequeue(options.queueName(), options.queuePartitionKey());
 
           // The step factories' checkpoints go first and the system database last. If a delete
           // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
@@ -2491,6 +2492,35 @@ public class DBOSExecutor implements AutoCloseable {
       findQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
+    }
+  }
+
+  /**
+   * Validates the queue and partition key a resume, fork or rewind names. Either may be null, which
+   * keeps what the workflow's row has, so only what is named is checked: a named queue must exist,
+   * and a partition key cannot go with a named queue that is not partitioned. A named partitioned
+   * queue needs no key, since the row may have one, and a key without a queue goes to the
+   * workflow's own queue, which only its row says.
+   */
+  private void validateRequeue(@Nullable String queueName, @Nullable String queuePartitionKey) {
+    if (queueName == null) {
+      return;
+    }
+    if (queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      if (queuePartitionKey != null) {
+        throw new IllegalArgumentException(
+            "DBOS internal queue is not a partitioned queue, but a partition key was provided");
+      }
+      return;
+    }
+    var queue =
+        findQueue(queueName)
+            .orElseThrow(
+                () -> new IllegalArgumentException("queue %s does not exist".formatted(queueName)));
+    if (!queue.isPartitioned() && queuePartitionKey != null) {
+      throw new IllegalArgumentException(
+          "queue %s is not a partitioned queue, but a partition key was provided"
+              .formatted(queueName));
     }
   }
 

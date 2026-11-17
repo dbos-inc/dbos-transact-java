@@ -67,8 +67,9 @@ final class DBOSConductorEngine implements ConductorEngine {
   }
 
   @Override
-  public void resumeWorkflows(List<String> workflowIds, @Nullable String queueName) {
-    executor.resumeWorkflows(workflowIds, queueName);
+  public void resumeWorkflows(
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey) {
+    executor.resumeWorkflows(workflowIds, queueName, queuePartitionKey);
   }
 
   @Override

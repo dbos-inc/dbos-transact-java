@@ -897,22 +897,47 @@ public class DBOS implements AutoCloseable {
    * @param <E> Type of checked exception thrown by the workflow function, if any
    * @param workflowId ID of the workflow to resume; must not be null
    * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
-   *     will be resumed in the default execution context
+   *     goes back on its own queue, or the internal queue if it has none
    * @return A handle to the resumed workflow
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
-   *     its steps: a workflow can't resume itself. Nothing is resumed.
+   *     its steps: a workflow can't resume itself. Also if {@code queueName} names a queue that
+   *     does not exist. Nothing is resumed.
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId, @Nullable String queueName) {
+    return resumeWorkflow(workflowId, queueName, null);
+  }
+
+  /**
+   * Resume a workflow starting from the step after the last complete step, on a given queue and in
+   * a given partition. The workflow will continue execution from where it left off, replaying any
+   * completed steps deterministically.
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Type of checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
+   *     goes back on its own queue, or the internal queue if it has none
+   * @param queuePartitionKey optional partition to enqueue the resumed workflow in; if null, the
+   *     workflow keeps its own partition
+   * @return A handle to the resumed workflow
+   * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside the workflow being resumed, or one of
+   *     its steps: a workflow can't resume itself. Also if {@code queueName} names a queue that
+   *     does not exist, or a partition key is given with a queue that is not partitioned. Nothing
+   *     is resumed.
    */
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
-      @NonNull String workflowId, @Nullable String queueName) {
-    var handles = resumeWorkflows(List.of(workflowId), queueName);
+      @NonNull String workflowId, @Nullable String queueName, @Nullable String queuePartitionKey) {
+    var handles = resumeWorkflows(List.of(workflowId), queueName, queuePartitionKey);
     assert (handles.size() == 1);
     return (WorkflowHandle<T, E>) handles.get(0);
   }
 
   /**
-   * Resume a workflow starting from the step after the last complete step using the default queue.
+   * Resume a workflow starting from the step after the last complete step, back on its own queue.
    * This method is equivalent to calling {@code resumeWorkflow(workflowId, null)}. The workflow
    * will continue execution from where it left off, replaying any completed steps
    * deterministically.
@@ -937,21 +962,47 @@ public class DBOS implements AutoCloseable {
    * any completed steps deterministically.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
-   * @param queueName optional queue name to enqueue the resumed workflows to; if null, the
-   *     workflows will be resumed in the default execution context
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, each
+   *     workflow goes back on its own queue, or the internal queue if it has none
    * @return A list of handles to the resumed workflows
    * @throws IllegalStateException if called before DBOS is launched
    * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
-   *     one of its steps: a workflow can't resume itself. Nothing is resumed.
+   *     one of its steps: a workflow can't resume itself. Also if {@code queueName} names a queue
+   *     that does not exist. Nothing is resumed.
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds, @Nullable String queueName) {
-    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds, queueName);
+    return resumeWorkflows(workflowIds, queueName, null);
   }
 
   /**
-   * Resume multiple workflows starting from the step after the last complete step for each workflow
-   * using the default queue. This method is equivalent to calling {@code
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow, on a given queue and in a given partition. Each workflow will continue execution from
+   * where it left off, replaying any completed steps deterministically.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, each
+   *     workflow goes back on its own queue, or the internal queue if it has none
+   * @param queuePartitionKey optional partition to enqueue the resumed workflows in; if null, each
+   *     workflow keeps its own partition
+   * @return A list of handles to the resumed workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   * @throws IllegalArgumentException if called from inside one of the workflows being resumed, or
+   *     one of its steps: a workflow can't resume itself. Also if {@code queueName} names a queue
+   *     that does not exist, or a partition key is given with a queue that is not partitioned.
+   *     Nothing is resumed.
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    return ensureLaunched("resumeWorkflow")
+        .resumeWorkflows(workflowIds, queueName, queuePartitionKey);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow, each back on its own queue. This method is equivalent to calling {@code
    * resumeWorkflows(workflowIds, null)}. Each workflow will continue execution from where it left
    * off, replaying any completed steps deterministically.
    *
@@ -1100,8 +1151,11 @@ public class DBOS implements AutoCloseable {
    * @param <E> Checked exception thrown by the workflow function, if any
    * @param workflowId Original workflow Id
    * @param startStep Start execution from this step. Prior steps copied over
-   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
+   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout,
+   *     and the queue and partition key, which default to the original's
    * @return handle to the workflow
+   * @throws IllegalArgumentException if the options name a queue that does not exist, or a
+   *     partition key with a named queue that is not partitioned
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
@@ -1151,8 +1205,8 @@ public class DBOS implements AutoCloseable {
    * @return handle to the rewound workflow
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if the workflow does not
    *     exist
-   * @throws IllegalArgumentException if {@code startStep} is negative, the queue does not exist, or
-   *     the partition key does not match whether the queue is partitioned
+   * @throws IllegalArgumentException if {@code startStep} is negative, or the options name a queue
+   *     that does not exist, or a partition key with a named queue that is not partitioned
    * @throws IllegalStateException if the workflow is not in a terminal state, or its status changed
    *     while it was being rewound; in the second case, retry the rewind
    * @throws RuntimeException if a transactional step factory's checkpoints could not be deleted;

@@ -1443,7 +1443,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * Moves claimed workflows that have exhausted their attempts off the queue.
+   * Dead-letters claimed workflows that have exhausted their attempts. They keep their queue, so a
+   * resume puts them back on it.
    *
    * <p>Guarded on PENDING like every other claim-owning write, and on the attempt count the
    * decision was read from, so a row another executor has already moved on -- or one given a fresh
@@ -1670,8 +1671,9 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
   }
 
-  public void resumeWorkflows(List<String> workflowIds, String queueName) {
-    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName));
+  public void resumeWorkflows(
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey) {
+    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName, queuePartitionKey));
   }
 
   public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {

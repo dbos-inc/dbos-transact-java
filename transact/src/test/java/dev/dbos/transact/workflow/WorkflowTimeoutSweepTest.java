@@ -184,7 +184,8 @@ public class WorkflowTimeoutSweepTest {
     for (var id : expected) {
       var row = DBUtils.getWorkflowRow(dataSource, id);
       assertEquals(WorkflowState.CANCELLED.name(), row.status());
-      assertNull(row.queueName());
+      // The sweep keeps the queue a workflow was on, so a resume puts it back there.
+      assertEquals(id.equals(orphaned) ? null : "unlistened-queue", row.queueName());
       assertNull(row.deduplicationId());
       assertNotNull(row.completedAt(), "completed_at was not stamped");
     }

@@ -1663,10 +1663,20 @@ public class DynamicQueuesTest {
     Thread.sleep(200);
     assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
 
-    var resumedHandle = dbos.<Integer, Exception>resumeWorkflow("resumable");
-    assertEquals(99, (int) resumedHandle.getResult());
+    // Resuming leaves the workflow on its queue, behind the concurrency limit. Resuming it onto the
+    // internal queue bypasses the limit and runs it immediately.
+    try {
+      dbos.resumeWorkflow("resumable");
+      var status = regularHandle.getStatus();
+      assertEquals(WorkflowState.ENQUEUED, status.status());
+      assertEquals("test_queue", status.queueName());
 
-    impl.latch.countDown();
+      var resumedHandle =
+          dbos.<Integer, Exception>resumeWorkflow("resumable", Constants.DBOS_INTERNAL_QUEUE);
+      assertEquals(99, (int) resumedHandle.getResult());
+    } finally {
+      impl.latch.countDown();
+    }
     blockedHandle.getResult();
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }

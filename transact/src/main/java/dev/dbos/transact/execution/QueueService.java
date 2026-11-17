@@ -504,8 +504,9 @@ public class QueueService implements AutoCloseable {
    * uncontended control.
    *
    * <p>A serialization failure (40001) should: a peer already committed, and under a shared budget
-   * that can keep happening, so damping spreads the contenders out. Python draws the line in the
-   * same place; TypeScript and Go back off on both codes.
+   * that can keep happening, so damping spreads the contenders out. Python and TypeScript draw the
+   * line in the same place; Go backs off on both codes, and on a deadlock (40P01), for a queue with
+   * no partitions.
    *
    * <p>Everything else is a genuine error, which backing off would not help either -- see the catch
    * in {@code run()}.
