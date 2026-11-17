@@ -1169,7 +1169,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
-      List<String> workflowIds, String queueName) {
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey) {
     Objects.requireNonNull(workflowIds);
     var callerWorkflowId = DBOSContextHolder.get().getWorkflowId();
 
@@ -1178,7 +1178,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           refuseSelfTarget(callerWorkflowId, workflowIds, "resume");
           logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds, queueName);
+          systemDatabase.resumeWorkflows(workflowIds, queueName, queuePartitionKey);
           return null; // void
         },
         "DBOS.resumeWorkflow",
@@ -1276,7 +1276,7 @@ public class DBOSExecutor implements AutoCloseable {
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
-              validateQueue(options.queueName(), options.queuePartitionKey());
+              validateRequeue(options.queueName(), options.queuePartitionKey());
 
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
@@ -1294,7 +1294,7 @@ public class DBOSExecutor implements AutoCloseable {
     // Only Conductor forks a batch, never from inside a workflow, so this is not run as a step.
     logger.info("Forking {} workflow(s)", forks.size());
 
-    validateQueue(queueName, queuePartitionKey);
+    validateRequeue(queueName, queuePartitionKey);
 
     systemDatabase.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
@@ -1308,7 +1308,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
 
-          validateQueue(options.queueName(), options.queuePartitionKey());
+          validateRequeue(options.queueName(), options.queuePartitionKey());
 
           // The step factories' checkpoints go first and the system database last. If a delete
           // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
@@ -2491,6 +2491,16 @@ public class DBOSExecutor implements AutoCloseable {
       findQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
+    }
+  }
+
+  /**
+   * Validates the queue and partition key a fork or rewind is given. Without a queue the workflow
+   * goes back to its own, which only its row says, so there is nothing to check yet.
+   */
+  private void validateRequeue(@Nullable String queueName, @Nullable String queuePartitionKey) {
+    if (queueName != null) {
+      validateQueue(queueName, queuePartitionKey);
     }
   }
 

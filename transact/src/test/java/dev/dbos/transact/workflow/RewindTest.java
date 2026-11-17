@@ -454,18 +454,32 @@ public class RewindTest {
     assertEquals("rewind_partitioned", status.queueName());
     assertEquals("repaired", status.queuePartitionKey());
 
-    // Omitting the key clears it; omitting the queue falls back to the internal queue.
+    // Omitting both keeps the queue and the partition the workflow was on.
     dbos.rewindWorkflow(workflowId, 0);
     assertEquals(3, dbos.retrieveWorkflow(workflowId).getResult());
     status = dbos.retrieveWorkflow(workflowId).getStatus();
-    assertEquals(Constants.DBOS_INTERNAL_QUEUE, status.queueName());
-    assertNull(status.queuePartitionKey());
+    assertEquals("rewind_partitioned", status.queueName());
+    assertEquals("repaired", status.queuePartitionKey());
+
+    // A partition key alone moves the workflow to that partition of the queue it was on.
+    dbos.rewindWorkflow(workflowId, 0, new RewindOptions().withQueuePartitionKey("other"));
+    assertEquals(4, dbos.retrieveWorkflow(workflowId).getResult());
+    status = dbos.retrieveWorkflow(workflowId).getStatus();
+    assertEquals("rewind_partitioned", status.queueName());
+    assertEquals("other", status.queuePartitionKey());
 
     // A partition key needs a partitioned queue, and nothing is written when it is refused.
     assertThrows(
         IllegalArgumentException.class,
-        () -> dbos.rewindWorkflow(workflowId, 0, new RewindOptions().withQueuePartitionKey("pk")));
+        () ->
+            dbos.rewindWorkflow(
+                workflowId,
+                0,
+                new RewindOptions()
+                    .withQueue(Constants.DBOS_INTERNAL_QUEUE)
+                    .withQueuePartitionKey("pk")));
     assertEquals(WorkflowState.SUCCESS, dbos.retrieveWorkflow(workflowId).getStatus().status());
+    assertEquals("rewind_partitioned", dbos.retrieveWorkflow(workflowId).getStatus().queueName());
   }
 
   @Test

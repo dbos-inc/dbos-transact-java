@@ -59,9 +59,13 @@ public interface ConductorEngine {
    * Resumes workflows.
    *
    * @param workflowIds the workflows to resume
-   * @param queueName the queue to resume them on; {@code null} means the internal queue
+   * @param queueName the queue to resume them on; {@code null} keeps each workflow's own queue, or
+   *     the internal queue for one that has none
+   * @param queuePartitionKey the partition to resume them in; {@code null} keeps each workflow's
+   *     own
    */
-  void resumeWorkflows(List<String> workflowIds, @Nullable String queueName);
+  void resumeWorkflows(
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey);
 
   /**
    * Deletes workflows.

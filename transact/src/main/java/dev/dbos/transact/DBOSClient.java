@@ -1622,17 +1622,36 @@ public class DBOSClient implements AutoCloseable {
    * @param <E> Type of any checked exception thrown by the workflow
    * @param workflowId ID of the workflow to resume; must not be null
    * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
-   *     will be resumed in the default execution context
+   *     goes back on its own queue, or the internal queue if it has none
    * @return WorkflowHandle for the resumed workflow
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId, @Nullable String queueName) {
-    systemDatabase.resumeWorkflows(List.of(workflowId), queueName);
+    return resumeWorkflow(workflowId, queueName, null);
+  }
+
+  /**
+   * Resume a workflow starting from the step after the last complete step, on a given queue and in
+   * a given partition. The workflow will continue execution from where it left off, replaying any
+   * completed steps deterministically.
+   *
+   * @param <T> Type of the workflow's return value
+   * @param <E> Type of any checked exception thrown by the workflow
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
+   *     goes back on its own queue, or the internal queue if it has none
+   * @param queuePartitionKey optional partition to enqueue the resumed workflow in; if null, the
+   *     workflow keeps its own partition
+   * @return WorkflowHandle for the resumed workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId, @Nullable String queueName, @Nullable String queuePartitionKey) {
+    systemDatabase.resumeWorkflows(List.of(workflowId), queueName, queuePartitionKey);
     return retrieveWorkflow(workflowId);
   }
 
   /**
-   * Resume a workflow starting from the step after the last complete step using the default queue.
+   * Resume a workflow starting from the step after the last complete step, back on its own queue.
    * This method is equivalent to calling {@code resumeWorkflow(workflowId, null)}. The workflow
    * will continue execution from where it left off, replaying any completed steps
    * deterministically.
@@ -1648,8 +1667,8 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Resume multiple workflows starting from the step after the last complete step for each workflow
-   * using the default queue. This method is equivalent to calling {@code
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow, each back on its own queue. This method is equivalent to calling {@code
    * resumeWorkflows(workflowIds, null)}. Each workflow will continue execution from where it left
    * off, replaying any completed steps deterministically.
    *
@@ -1668,13 +1687,32 @@ public class DBOSClient implements AutoCloseable {
    * any completed steps deterministically.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
-   * @param queueName optional queue name to enqueue the resumed workflows to; if null, the
-   *     workflows will be resumed in the default execution context
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, each
+   *     workflow goes back on its own queue, or the internal queue if it has none
    * @return A list of handles to the resumed workflows
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds, @Nullable String queueName) {
-    systemDatabase.resumeWorkflows(workflowIds, queueName);
+    return resumeWorkflows(workflowIds, queueName, null);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow, on a given queue and in a given partition. Each workflow will continue execution from
+   * where it left off, replaying any completed steps deterministically.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, each
+   *     workflow goes back on its own queue, or the internal queue if it has none
+   * @param queuePartitionKey optional partition to enqueue the resumed workflows in; if null, each
+   *     workflow keeps its own partition
+   * @return A list of handles to the resumed workflows
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey) {
+    systemDatabase.resumeWorkflows(workflowIds, queueName, queuePartitionKey);
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 

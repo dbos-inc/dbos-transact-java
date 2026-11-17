@@ -1670,8 +1670,9 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> WorkflowDAO.cancelOwnedWorkflow(ctx, workflowId, ownerXid));
   }
 
-  public void resumeWorkflows(List<String> workflowIds, String queueName) {
-    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName));
+  public void resumeWorkflows(
+      List<String> workflowIds, @Nullable String queueName, @Nullable String queuePartitionKey) {
+    dbRetry(() -> WorkflowDAO.resumeWorkflows(ctx, workflowIds, queueName, queuePartitionKey));
   }
 
   public void updateWorkflowAttributes(String workflowId, Map<String, Object> attributes) {

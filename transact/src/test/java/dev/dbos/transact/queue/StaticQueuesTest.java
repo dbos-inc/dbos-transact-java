@@ -837,7 +837,8 @@ public class StaticQueuesTest {
 
   @Test
   public void testResumingQueuedWorkflows() throws Exception {
-    // Resuming an ENQUEUED workflow bypasses the queue concurrency limit and runs it immediately.
+    // Resuming an ENQUEUED workflow leaves it on its queue, behind the concurrency limit. Resuming
+    // it onto the internal queue bypasses the limit and runs it immediately.
     Queue queue = new Queue("test_queue").withConcurrency(1);
     dbos.registerQueue(queue);
 
@@ -855,10 +856,18 @@ public class StaticQueuesTest {
     impl.wfSemaphore.acquire(1);
     assertEquals(WorkflowState.ENQUEUED, regularHandle.getStatus().status());
 
-    var resumedHandle = dbos.<Integer, Exception>resumeWorkflow("resumable");
-    assertEquals(99, (int) resumedHandle.getResult());
+    try {
+      dbos.resumeWorkflow("resumable");
+      var status = regularHandle.getStatus();
+      assertEquals(WorkflowState.ENQUEUED, status.status());
+      assertEquals("test_queue", status.queueName());
 
-    impl.latch.countDown();
+      var resumedHandle =
+          dbos.<Integer, Exception>resumeWorkflow("resumable", Constants.DBOS_INTERNAL_QUEUE);
+      assertEquals(99, (int) resumedHandle.getResult());
+    } finally {
+      impl.latch.countDown();
+    }
     blockedHandle.getResult();
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }

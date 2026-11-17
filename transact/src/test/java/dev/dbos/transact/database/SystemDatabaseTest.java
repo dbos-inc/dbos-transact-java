@@ -277,7 +277,7 @@ public class SystemDatabaseTest {
     long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(workflowIds, null);
+    sysdb.resumeWorkflows(workflowIds, null, null);
 
     // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
@@ -303,7 +303,7 @@ public class SystemDatabaseTest {
     long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(workflowIds, "customQueue");
+    sysdb.resumeWorkflows(workflowIds, "customQueue", null);
 
     // CANCELLED ones become ENQUEUED; updated_at advances; deadline and completed_at are cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
@@ -395,7 +395,7 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
     long beforeResume = System.currentTimeMillis();
-    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null);
+    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null, null);
 
     var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
     assertEquals(WorkflowState.ENQUEUED.name(), row.status());

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.EnqueueOptions;
@@ -138,22 +139,39 @@ public class PartitionedQueuesTest {
         dbos.startWorkflow(() -> proxy.regularWorkflow(), options.withWorkflowId(wfid));
     var regHandle2 = dbos.startWorkflow(() -> proxy.regularWorkflow(), options);
 
-    // Verify that the blocked workflow starts and is PENDING while the regular workflows remain
-    // ENQUEUED.
-    impl.startLatch.await();
-    assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED, regHandle1.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED, regHandle2.getStatus().status());
+    try {
+      // Verify that the blocked workflow starts and is PENDING while the regular workflows remain
+      // ENQUEUED.
+      impl.startLatch.await();
+      assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
+      assertEquals(WorkflowState.ENQUEUED, regHandle1.getStatus().status());
+      assertEquals(WorkflowState.ENQUEUED, regHandle2.getStatus().status());
 
-    // Resume a regular workflow. Verify it completes.
-    dbos.resumeWorkflow(wfid);
-    assertEquals(42, regHandle1.getResult());
-    assertEquals(WorkflowState.SUCCESS, regHandle1.getStatus().status());
+      // Resuming without a queue leaves the workflow waiting on its own queue and partition.
+      dbos.resumeWorkflow(wfid);
+      var status = regHandle1.getStatus();
+      assertEquals(WorkflowState.ENQUEUED, status.status());
+      assertEquals(queue, status.queueName());
+      assertEquals("key", status.queuePartitionKey());
 
-    // Complete the blocked workflow. Verify the second regular workflow also completes.
-    impl.blockingLatch.countDown();
+      // Resuming onto the internal queue starts it immediately, bypassing its queue.
+      dbos.resumeWorkflow(wfid, Constants.DBOS_INTERNAL_QUEUE);
+      assertEquals(42, regHandle1.getResult());
+      assertEquals(WorkflowState.SUCCESS, regHandle1.getStatus().status());
+
+      // A new partition key alone moves a workflow out of the busy partition, still on its queue.
+      dbos.resumeWorkflow(regHandle2.workflowId(), null, "other");
+      var moved = regHandle2.getStatus();
+      assertEquals(queue, moved.queueName());
+      assertEquals("other", moved.queuePartitionKey());
+      assertEquals(42, regHandle2.getResult());
+      assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
+    } finally {
+      impl.blockingLatch.countDown();
+    }
+
+    // The blocked workflow completes.
     assertEquals(13, blockedHandle.getResult());
-    assertEquals(42, regHandle2.getResult());
 
     assertTrue(DBUtils.queueEntriesCleanedUp(dataSource));
   }
