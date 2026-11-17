@@ -53,7 +53,7 @@ public final class Entitlements {
 
   /** Suspend mode: parking a waiting recv or a sleep in the database. */
   public static final Feature SUSPEND_WORKFLOWS =
-      new Feature("suspendWorkflows", "Suspending workflows on recv");
+      new Feature("suspendWorkflows", "Suspending workflows on recv and sleep");
 
   static final String ENTITLEMENTS_PATH = "/v2/entitlements";
   static final Duration TIMEOUT = Duration.ofSeconds(10);
