@@ -1899,8 +1899,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * This database as the Conductor client in {@code dev.dbos:transact-enterprise} sees it: its
-   * connections and schema, and the retries this class's own calls use.
+   * This database as {@code dev.dbos:transact-enterprise} sees it: its connections and schema, and
+   * the retries this class's own calls use.
    */
   public ConductorSystemDatabase forConductor() {
     return new ConductorSystemDatabase() {
@@ -1912,6 +1912,21 @@ public class SystemDatabase implements AutoCloseable {
       @Override
       public String schema() {
         return ctx.schema();
+      }
+
+      @Override
+      public String clockEpochMsSql() {
+        return CLOCK_TIMESTAMP_EPOCH_MS;
+      }
+
+      @Override
+      public boolean isCockroach() {
+        return SystemDatabase.this.isCockroach();
+      }
+
+      @Override
+      public void checkOwner(Connection connection, String workflowId, String ownerXid) {
+        SystemDatabase.this.checkOwner(connection, workflowId, ownerXid);
       }
 
       @Override

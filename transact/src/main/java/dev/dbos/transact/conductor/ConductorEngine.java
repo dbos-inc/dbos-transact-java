@@ -1,6 +1,7 @@
 package dev.dbos.transact.conductor;
 
 import dev.dbos.transact.AlertHandler;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -11,6 +12,7 @@ import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -19,8 +21,10 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Everything the Conductor client in {@code dev.dbos:transact-enterprise} may call on a launched
- * DBOS instance. It is not application API.
+ * Everything {@code dev.dbos:transact-enterprise} may call on a launched DBOS instance: the
+ * Conductor client and every other enterprise feature sit on it. It is not application API. It is
+ * named for Conductor, the first feature to use it, and keeps that name because enterprise builds
+ * load through it.
  *
  * <p>An enterprise build runs against any later DBOS Transact build of the same minor version, so
  * within a minor this interface only gains methods: none is changed or removed, and neither are the
@@ -239,6 +243,63 @@ public interface ConductorEngine {
   /** The alert handler the application registered, or {@code null} if it registered none. */
   @Nullable AlertHandler alertHandler();
 
-  /** The system database, for the Conductor-only operations that run their own SQL. */
+  /** The system database, for the enterprise operations that run their own SQL. */
   ConductorSystemDatabase systemDatabase();
+
+  /**
+   * What a recv recorded under {@code stepId}, if it has run.
+   *
+   * @param workflowId the calling workflow
+   * @param stepId the step ID the recv is recorded under
+   * @param ownerXid the token of the execution making the call, which must still own the workflow
+   * @return what the recv recorded, or empty if it has not run
+   * @throws dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException if {@code ownerXid}
+   *     no longer owns the workflow
+   */
+  Optional<RecordedRecv> recordedRecv(String workflowId, int stepId, String ownerXid);
+
+  /**
+   * The instant a recv's timeout runs out, recorded under {@code timeoutStepId} the first time and
+   * read back by every replay.
+   *
+   * @param workflowId the calling workflow
+   * @param timeoutStepId the step ID the recv's timeout is recorded under
+   * @param timeout how long the recv waits
+   * @param ownerXid the token of the execution making the call, which must still own the workflow
+   * @return the deadline, on the system database's clock
+   */
+  Instant recvDeadline(String workflowId, int timeoutStepId, Duration timeout, String ownerXid);
+
+  /**
+   * The instant a sleep ends, recorded under {@code functionId} the first time and read back by
+   * every replay. A sleep whose end cannot be stored is refused, and the refusal recorded and
+   * thrown again on replay.
+   *
+   * @param workflowId the calling workflow
+   * @param functionId the step ID the sleep is recorded under
+   * @param duration how long the sleep lasts
+   * @param ownerXid the token of the execution making the call, which must still own the workflow
+   * @return the end of the sleep, on the system database's clock
+   */
+  Instant sleepEnd(String workflowId, int functionId, Duration duration, String ownerXid);
+
+  /**
+   * The ordinary recv, which waits in this thread. Suspend mode falls back to it when a message is
+   * already waiting or the timeout has passed, so the step is recorded as any recv records it.
+   *
+   * @param workflowId the calling workflow
+   * @param stepId the step ID the recv is recorded under
+   * @param timeoutStepId the step ID the recv's timeout is recorded under
+   * @param topic the topic to receive on, or {@code null} for none
+   * @param timeout how long to wait for a message
+   * @param ownerXid the token of the execution making the call, which must still own the workflow
+   * @return the message, or {@code null} if none came in time
+   */
+  @Nullable Object recv(
+      String workflowId,
+      int stepId,
+      int timeoutStepId,
+      @Nullable String topic,
+      Duration timeout,
+      String ownerXid);
 }

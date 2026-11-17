@@ -1,5 +1,7 @@
 package dev.dbos.transact.suspend;
 
+import dev.dbos.transact.conductor.ConductorEngine;
+
 /**
  * Builds suspend mode for a DBOS instance. DBOS Transact finds the implementation with {@link
  * java.util.ServiceLoader}; the {@code dev.dbos:transact-enterprise} artifact registers it in
@@ -16,5 +18,5 @@ public interface SuspendProvider {
    * @param engine the DBOS instance, as suspend mode may use it
    * @return suspend mode for the instance
    */
-  Suspend create(SuspendEngine engine);
+  Suspend create(ConductorEngine engine);
 }

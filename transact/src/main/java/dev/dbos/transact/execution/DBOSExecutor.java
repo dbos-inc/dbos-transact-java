@@ -7,6 +7,7 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.ConductorConnection;
+import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.conductor.ConductorProviders;
@@ -38,7 +39,6 @@ import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSConductorEngine;
-import dev.dbos.transact.internal.DBOSSuspendEngine;
 import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
@@ -363,11 +363,12 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
-      // The provider is another artifact's code, so build its client before anything else starts:
-      // if it throws, launch fails with no queue, scheduler or listener running.
-      conductor = createConductor();
+      // The providers are another artifact's code, so build what they provide before anything else
+      // starts: if one throws, launch fails with no queue, scheduler or listener running.
+      var engine = new DBOSConductorEngine(this, systemDatabase);
+      conductor = createConductor(engine);
       if (suspendProvider != null) {
-        suspend = suspendProvider.create(new DBOSSuspendEngine(systemDatabase, this.appName));
+        suspend = suspendProvider.create(engine);
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
@@ -445,12 +446,11 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  private @Nullable ConductorConnection createConductor() {
+  private @Nullable ConductorConnection createConductor(ConductorEngine engine) {
     if (conductorProvider == null || conductorOptions == null) {
       return null;
     }
-    return conductorProvider.create(
-        new DBOSConductorEngine(this, systemDatabase), conductorOptions);
+    return conductorProvider.create(engine, conductorOptions);
   }
 
   /**
