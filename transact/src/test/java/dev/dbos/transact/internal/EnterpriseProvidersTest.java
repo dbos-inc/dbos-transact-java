@@ -112,9 +112,9 @@ public class EnterpriseProvidersTest {
                 EnterpriseProviders.select(
                     List.of(), "1.4.0", EnterpriseProviders.CONDUCTOR, true));
     assertEquals(
-        "Connecting to DBOS Conductor requires dev.dbos:transact-enterprise of the same minor"
-            + " version as dev.dbos:transact, but the one on the class path is a 1.3 or earlier"
-            + " build. Add dev.dbos:transact-enterprise:1.4.0, the same version as"
+        "Connecting to DBOS Conductor requires dev.dbos:transact-enterprise built for this"
+            + " dev.dbos:transact, but the one on the class path is a 1.3 or earlier build."
+            + " Replace it with dev.dbos:transact-enterprise:1.4.0, the same version as"
             + " dev.dbos:transact",
         e.getMessage());
   }

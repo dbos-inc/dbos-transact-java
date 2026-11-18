@@ -23,10 +23,11 @@ import org.jspecify.annotations.Nullable;
  * Everything {@code dev.dbos:transact-enterprise} may call on a launched DBOS instance: the
  * Conductor client and every other enterprise feature sit on it. It is not application API.
  *
- * <p>An enterprise build runs against any later DBOS Transact build of the same minor version, so
- * within a minor this interface only gains methods: none is changed or removed, and neither are the
- * types its methods take and return. DBOS Transact implements it over its internal classes, which
- * absorb their own changes behind it.
+ * <p>An enterprise release runs only against the DBOS Transact release of the same version; a
+ * milestone or release candidate also runs against later DBOS Transact builds of the same minor
+ * version. Within a minor this interface only gains methods: none is changed or removed, and
+ * neither are the types its methods take and return. DBOS Transact implements it over its internal
+ * classes, which absorb their own changes behind it.
  */
 public interface EnterpriseEngine {
   /** The application name. */

@@ -1920,6 +1920,18 @@ public class SystemDatabase implements AutoCloseable {
       }
 
       @Override
+      public boolean tryAdvisoryLock(Connection connection, String... nameParts)
+          throws SQLException {
+        var key = AdvisoryLocks.lockKey(AdvisoryLocks.lockName(nameParts));
+        try (var stmt = connection.prepareStatement("SELECT pg_try_advisory_xact_lock(?)")) {
+          stmt.setLong(1, key);
+          try (var rs = stmt.executeQuery()) {
+            return rs.next() && rs.getBoolean(1);
+          }
+        }
+      }
+
+      @Override
       public void checkOwner(Connection connection, String workflowId, String ownerXid)
           throws SQLException {
         // Unwrapped, unlike SystemDatabase.checkOwner: the caller retries on SQLException.

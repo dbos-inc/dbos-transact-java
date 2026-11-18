@@ -39,6 +39,20 @@ public interface EnterpriseSystemDatabase {
   boolean isCockroach();
 
   /**
+   * Takes an advisory lock for the rest of {@code connection}'s transaction, if no other
+   * transaction holds it. The lock is named by {@code nameParts} and keyed as DBOS Transact keys
+   * its own advisory locks, so processes of every DBOS SDK that takes the lock contend for the same
+   * one. Not on CockroachDB, which has no advisory locks.
+   *
+   * @param connection a connection in a transaction
+   * @param nameParts the lock's name, such as what it guards followed by a schema and an
+   *     application name
+   * @return whether this transaction now holds the lock
+   * @throws SQLException if the database fails
+   */
+  boolean tryAdvisoryLock(Connection connection, String... nameParts) throws SQLException;
+
+  /**
    * Locks the workflow's status row for the rest of {@code connection}'s transaction, and fails
    * unless the execution holding {@code ownerXid} still owns the workflow. Work that changes the
    * workflow in the same transaction then cannot race a hand-off to another execution.

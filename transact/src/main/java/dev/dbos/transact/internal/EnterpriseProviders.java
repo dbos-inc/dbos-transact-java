@@ -107,16 +107,16 @@ public final class EnterpriseProviders {
             feature
                 + " requires "
                 + ENTERPRISE_ARTIFACT
-                + " of the same minor version as dev.dbos:transact, but the one on the class path"
-                + " is a 1.3 or earlier build. "
-                + versionAdvice(version));
+                + " built for this dev.dbos:transact, but the one on the class path is a 1.3 or"
+                + " earlier build. "
+                + versionAdvice(version, "Replace it with"));
       }
       throw new IllegalStateException(
           feature
               + " requires "
               + ENTERPRISE_ARTIFACT
               + " on the class path. "
-              + versionAdvice(version));
+              + versionAdvice(version, "Add"));
     }
     if (providers.size() > 1) {
       var names = providers.stream().map(p -> p.getClass().getName()).toList();
@@ -130,17 +130,17 @@ public final class EnterpriseProviders {
   }
 
   // Previews are numbered by commits in each repo, so only a release names the exact version.
-  private static String versionAdvice(String version) {
+  private static String versionAdvice(String version, String verb) {
     if (version != null && RELEASE.matcher(version).matches()) {
       return String.format(
-          "Add %s:%s, the same version as dev.dbos:transact", ENTERPRISE_ARTIFACT, version);
+          "%s %s:%s, the same version as dev.dbos:transact", verb, ENTERPRISE_ARTIFACT, version);
     }
     var minor = version == null ? null : MINOR.matcher(version);
     if (minor != null && minor.matches()) {
       return String.format(
-          "Add a %s %s build, as dev.dbos:transact is %s",
-          ENTERPRISE_ARTIFACT, minor.group(1), version);
+          "%s a %s %s build, as dev.dbos:transact is %s",
+          verb, ENTERPRISE_ARTIFACT, minor.group(1), version);
     }
-    return "Add the " + ENTERPRISE_ARTIFACT + " version that matches dev.dbos:transact";
+    return verb + " the " + ENTERPRISE_ARTIFACT + " version that matches dev.dbos:transact";
   }
 }
