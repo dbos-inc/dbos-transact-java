@@ -1225,6 +1225,73 @@ class MigrationManagerTest {
         () -> MigrationManager.validateSysDbVersion(dataSource, Constants.DB_SCHEMA));
   }
 
+  /**
+   * A schema another SDK created with sharding on keeps its own migration numbering in
+   * dbos_migrations, and its tables lead with shard_key. Neither migrating nor validating may read
+   * that number as this SDK's version, or touch the schema.
+   */
+  @Test
+  void aShardedSchemaIsRefusedAndLeftUntouched() throws Exception {
+    pgContainer.createDatabase();
+    var schema = Constants.DB_SCHEMA;
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.execute("CREATE SCHEMA \"%s\"".formatted(schema));
+      stmt.execute(
+          ("CREATE TABLE \"%s\".workflow_status (shard_key TEXT NOT NULL, workflow_uuid TEXT NOT"
+                  + " NULL, status TEXT, PRIMARY KEY (shard_key, workflow_uuid))")
+              .formatted(schema));
+      stmt.execute(
+          "CREATE TABLE \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+              .formatted(schema));
+      stmt.execute("INSERT INTO \"%s\".dbos_migrations (version) VALUES (5)".formatted(schema));
+    }
+    var before = schemaSnapshot(schema);
+
+    var migrate =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.runMigrations(pgContainer.dbosConfig()));
+    var validate =
+        assertThrows(
+            IllegalStateException.class,
+            () -> MigrationManager.validateSysDbVersion(dataSource, schema));
+
+    for (var e : List.of(migrate, validate)) {
+      assertTrue(e.getMessage().contains("is sharded"), e.getMessage());
+      assertTrue(e.getMessage().contains(schema), e.getMessage());
+    }
+    assertEquals(before, schemaSnapshot(schema));
+  }
+
+  /** The schema's tables, and the versions in its dbos_migrations. */
+  private List<String> schemaSnapshot(String schema) throws Exception {
+    var snapshot = new ArrayList<String>();
+    try (var conn = dataSource.getConnection()) {
+      try (var stmt =
+          conn.prepareStatement(
+              "SELECT table_name FROM information_schema.tables WHERE table_schema = ?"
+                  + " ORDER BY table_name")) {
+        stmt.setString(1, schema);
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            snapshot.add("table " + rs.getString(1));
+          }
+        }
+      }
+      try (var stmt = conn.createStatement();
+          var rs =
+              stmt.executeQuery(
+                  "SELECT version FROM \"%s\".dbos_migrations ORDER BY version"
+                      .formatted(schema))) {
+        while (rs.next()) {
+          snapshot.add("version " + rs.getLong(1));
+        }
+      }
+    }
+    return snapshot;
+  }
+
   // latestMigrationVersion() counts one configuration. A migration left out of another, instead
   // of emptied, would make a database migrated in that configuration look permanently behind.
   @Test
