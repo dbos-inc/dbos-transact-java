@@ -1098,14 +1098,13 @@ public class DBOSExecutor implements AutoCloseable {
 
   /** Suspend mode, or an error naming the setting that turns it on. */
   private SuspendBackend requireSuspendBackend(String operation) {
-    var enabled = suspendBackend;
-    if (enabled == null) {
+    if (suspendBackend == null) {
       throw new IllegalStateException(
           "%s with suspend requires suspend mode, a Transact Enterprise feature: set suspendMode in"
                   .formatted(operation)
               + " the DBOS configuration.");
     }
-    return enabled;
+    return suspendBackend;
   }
 
   /** One pass of the job that re-enqueues parked workflows that are due. */
