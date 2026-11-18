@@ -266,7 +266,7 @@ public interface ConductorEngine {
    * @param timeoutStepId the step ID the recv's timeout is recorded under
    * @param timeout how long the recv waits
    * @param ownerXid the token of the execution making the call, which must still own the workflow
-   * @return the deadline, on the system database's clock
+   * @return the deadline, on this JVM's clock for now
    */
   Instant recvDeadline(String workflowId, int timeoutStepId, Duration timeout, String ownerXid);
 
@@ -279,7 +279,7 @@ public interface ConductorEngine {
    * @param functionId the step ID the sleep is recorded under
    * @param duration how long the sleep lasts
    * @param ownerXid the token of the execution making the call, which must still own the workflow
-   * @return the end of the sleep, on the system database's clock
+   * @return the end of the sleep, on this JVM's clock for now
    */
   Instant sleepEnd(String workflowId, int functionId, Duration duration, String ownerXid);
 
