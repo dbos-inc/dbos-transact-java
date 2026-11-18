@@ -43,6 +43,11 @@ public interface ConductorSystemDatabase {
    * unless the execution holding {@code ownerXid} still owns the workflow. Work that changes the
    * workflow in the same transaction then cannot race a hand-off to another execution.
    *
+   * <p>The lock is {@code FOR NO KEY UPDATE}, which waits for other writers of the row but not for
+   * a send: a send's notification insert takes only the foreign key's {@code FOR KEY SHARE} on the
+   * row. Work that must exclude a concurrent send, such as suspending a recv, locks the row {@code
+   * FOR UPDATE} first.
+   *
    * @param connection a connection in a transaction
    * @param workflowId the workflow
    * @param ownerXid the token of the execution that must still own the workflow
