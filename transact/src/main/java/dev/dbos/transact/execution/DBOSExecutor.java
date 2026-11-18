@@ -7,7 +7,6 @@ import dev.dbos.transact.EnqueueOptions;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.ConductorConnection;
-import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.conductor.ConductorProviders;
@@ -358,11 +357,16 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
       // The provider is another artifact's code, so build what it provides before anything else
-      // starts: if one throws, launch fails with no queue, scheduler or listener running.
-      var engine = new DBOSConductorEngine(this, systemDatabase);
-      conductor = createConductor(engine);
-      if (config.suspendMode()) {
-        suspend = Objects.requireNonNull(conductorProvider).createSuspend(engine);
+      // starts: if one throws, launch fails with no queue, scheduler or listener running. It was
+      // loaded only if some feature needs it.
+      if (conductorProvider != null) {
+        var engine = new DBOSConductorEngine(this, systemDatabase);
+        if (conductorOptions != null) {
+          conductor = conductorProvider.createConductor(engine, conductorOptions);
+        }
+        if (config.suspendMode()) {
+          suspend = conductorProvider.createSuspend(engine);
+        }
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
@@ -438,13 +442,6 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       logger.warn("DBOS Executor already started");
     }
-  }
-
-  private @Nullable ConductorConnection createConductor(ConductorEngine engine) {
-    if (conductorProvider == null || conductorOptions == null) {
-      return null;
-    }
-    return conductorProvider.createConductor(engine, conductorOptions);
   }
 
   /**
