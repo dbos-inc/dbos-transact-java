@@ -263,12 +263,12 @@ public class ApplicationRenameDAO {
       @Nullable String oldName,
       String newName,
       boolean adoptUnclaimedRows,
-      boolean atomicStatusesOnly)
+      boolean inFlightOnly)
       throws SQLException {
     var params = new ArrayList<Object>();
     params.add(newName);
     var where = renameSource(oldName, adoptUnclaimedRows, params);
-    if (atomicStatusesOnly) {
+    if (inFlightOnly) {
       where += " AND status = ANY(?)";
     }
     var sql = "UPDATE \"%s\".%s SET application_name = ? WHERE %s".formatted(schema, table, where);
@@ -276,7 +276,7 @@ public class ApplicationRenameDAO {
       for (int i = 0; i < params.size(); i++) {
         stmt.setObject(i + 1, params.get(i));
       }
-      if (atomicStatusesOnly) {
+      if (inFlightOnly) {
         // The in-flight workflows move in the same transaction as the queues, schedules and
         // versions: a half-owned application would dequeue work whose version row it can no
         // longer see.
