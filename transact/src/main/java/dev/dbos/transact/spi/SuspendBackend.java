@@ -1,4 +1,4 @@
-package dev.dbos.transact.suspend;
+package dev.dbos.transact.spi;
 
 import java.time.Duration;
 

@@ -1,4 +1,4 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.spi;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -10,12 +10,12 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The system database, for the operations {@code dev.dbos:transact-enterprise} runs in SQL of its
- * own. It is not application API, and it changes only as {@link ConductorEngine} does.
+ * own. It is not application API, and it changes only as {@link EnterpriseEngine} does.
  *
  * <p>It hands out the means to run SQL, not an abstraction over the tables: that SQL addresses the
  * system database's tables directly and follows DBOS Transact's migrations.
  */
-public interface ConductorSystemDatabase {
+public interface EnterpriseSystemDatabase {
 
   /** Database work that may fail with {@link SQLException}. */
   @FunctionalInterface
@@ -37,6 +37,20 @@ public interface ConductorSystemDatabase {
    * one to keep its processes from doing the same thing at once must run without it there.
    */
   boolean isCockroach();
+
+  /**
+   * Takes an advisory lock for the rest of {@code connection}'s transaction, if no other
+   * transaction holds it. The lock is named by {@code nameParts} and keyed as DBOS Transact keys
+   * its own advisory locks, so processes of every DBOS SDK that takes the lock contend for the same
+   * one. Not on CockroachDB, which has no advisory locks.
+   *
+   * @param connection a connection in a transaction
+   * @param nameParts the lock's name, such as what it guards followed by a schema and an
+   *     application name
+   * @return whether this transaction now holds the lock
+   * @throws SQLException if the database fails
+   */
+  boolean tryAdvisoryLock(Connection connection, String... nameParts) throws SQLException;
 
   /**
    * Locks the workflow's status row for the rest of {@code connection}'s transaction, and fails

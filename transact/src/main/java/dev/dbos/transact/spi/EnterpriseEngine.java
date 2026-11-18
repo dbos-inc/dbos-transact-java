@@ -1,7 +1,6 @@
-package dev.dbos.transact.conductor;
+package dev.dbos.transact.spi;
 
 import dev.dbos.transact.AlertHandler;
-import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -22,16 +21,15 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Everything {@code dev.dbos:transact-enterprise} may call on a launched DBOS instance: the
- * Conductor client and every other enterprise feature sit on it. It is not application API. It is
- * named for Conductor, the first feature to use it, and keeps that name because enterprise builds
- * load through it.
+ * Conductor client and every other enterprise feature sit on it. It is not application API.
  *
- * <p>An enterprise build runs against any later DBOS Transact build of the same minor version, so
- * within a minor this interface only gains methods: none is changed or removed, and neither are the
- * types its methods take and return. DBOS Transact implements it over its internal classes, which
- * absorb their own changes behind it.
+ * <p>An enterprise release runs only against the DBOS Transact release of the same version; a
+ * milestone or release candidate also runs against later DBOS Transact builds of the same minor
+ * version. Within a minor this interface only gains methods: none is changed or removed, and
+ * neither are the types its methods take and return. DBOS Transact implements it over its internal
+ * classes, which absorb their own changes behind it.
  */
-public interface ConductorEngine {
+public interface EnterpriseEngine {
   /** The application name. */
   String appName();
 
@@ -244,7 +242,7 @@ public interface ConductorEngine {
   @Nullable AlertHandler alertHandler();
 
   /** The system database, for the enterprise operations that run their own SQL. */
-  ConductorSystemDatabase systemDatabase();
+  EnterpriseSystemDatabase systemDatabase();
 
   /**
    * What a recv recorded under {@code stepId}, if it has run.

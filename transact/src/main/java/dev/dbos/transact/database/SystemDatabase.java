@@ -1,8 +1,6 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.conductor.ConductorSystemDatabase;
-import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.dao.ApplicationRenameDAO;
 import dev.dbos.transact.database.dao.ApplicationVersionDAO;
@@ -21,7 +19,9 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.suspend.RecordedRecv;
+import dev.dbos.transact.spi.EnterpriseSystemDatabase;
+import dev.dbos.transact.spi.RecordedRecv;
+import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1902,8 +1902,8 @@ public class SystemDatabase implements AutoCloseable {
    * This database as {@code dev.dbos:transact-enterprise} sees it: its connections and schema, and
    * the retries this class's own calls use.
    */
-  public ConductorSystemDatabase forConductor() {
-    return new ConductorSystemDatabase() {
+  public EnterpriseSystemDatabase forEnterprise() {
+    return new EnterpriseSystemDatabase() {
       @Override
       public DataSource dataSource() {
         return ctx.dataSource();
@@ -1917,6 +1917,18 @@ public class SystemDatabase implements AutoCloseable {
       @Override
       public boolean isCockroach() {
         return SystemDatabase.this.isCockroach();
+      }
+
+      @Override
+      public boolean tryAdvisoryLock(Connection connection, String... nameParts)
+          throws SQLException {
+        var key = AdvisoryLocks.lockKey(AdvisoryLocks.lockName(nameParts));
+        try (var stmt = connection.prepareStatement("SELECT pg_try_advisory_xact_lock(?)")) {
+          stmt.setLong(1, key);
+          try (var rs = stmt.executeQuery()) {
+            return rs.next() && rs.getBoolean(1);
+          }
+        }
       }
 
       @Override

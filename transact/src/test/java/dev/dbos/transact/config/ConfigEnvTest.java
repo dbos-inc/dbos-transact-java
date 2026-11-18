@@ -11,8 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.conductor.ConductorOptions;
-import dev.dbos.transact.conductor.TestConductorProvider;
 import dev.dbos.transact.execution.DBOSExecutorTestAccess;
+import dev.dbos.transact.spi.TestEnterpriseProvider;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -401,14 +401,14 @@ public class ConfigEnvTest {
             dbos.launch();
             // Other tests launch with Conductor concurrently, so look for this launch's options.
             assertTrue(
-                TestConductorProvider.created()
+                TestEnterpriseProvider.created()
                     .contains(
                         new ConductorOptions(
                             "cloud-conductor-key",
                             "cloud-conductor-app",
                             "ws://localhost:1234",
                             false)),
-                () -> "created: " + TestConductorProvider.created());
+                () -> "created: " + TestEnterpriseProvider.created());
           }
         });
   }
@@ -430,7 +430,7 @@ public class ConfigEnvTest {
             assertNull(DBOSExecutorTestAccess.getConductorOptions(executor));
             // This module's test provider is always on the class path, so loading one would
             // succeed: check that launch didn't look for one.
-            assertNull(DBOSExecutorTestAccess.getConductorProvider(executor));
+            assertNull(DBOSExecutorTestAccess.getEnterpriseProvider(executor));
           }
         });
   }

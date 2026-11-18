@@ -1,9 +1,9 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.conductor.ConductorOptions;
-import dev.dbos.transact.conductor.ConductorProvider;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -34,8 +34,8 @@ public class DBOSExecutorTestAccess {
     return exec.conductorOptions();
   }
 
-  public static ConductorProvider getConductorProvider(DBOSExecutor exec) {
-    return exec.conductorProvider();
+  public static EnterpriseProvider getEnterpriseProvider(DBOSExecutor exec) {
+    return exec.enterpriseProvider();
   }
 
   /**

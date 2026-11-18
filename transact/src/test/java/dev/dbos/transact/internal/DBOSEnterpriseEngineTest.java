@@ -10,10 +10,10 @@ import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -57,13 +57,13 @@ class EngineTestWorkflowsImpl implements EngineTestWorkflows {
 }
 
 /** The engine DBOS hands the Conductor client serves its calls from the running instance. */
-class DBOSConductorEngineTest {
+class DBOSEnterpriseEngineTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
   EngineTestWorkflowsImpl impl;
   EngineTestWorkflows proxy;
   DBOSExecutor executor;
-  DBOSConductorEngine engine;
+  DBOSEnterpriseEngine engine;
 
   @BeforeEach
   void beforeEach() {
@@ -72,7 +72,7 @@ class DBOSConductorEngineTest {
     proxy = dbos.registerProxy(EngineTestWorkflows.class, impl);
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
-    engine = new DBOSConductorEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
+    engine = new DBOSEnterpriseEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
   }
 
   @Test
@@ -168,7 +168,7 @@ class DBOSConductorEngineTest {
     dbos.registerAlertHandler(handler);
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
-    engine = new DBOSConductorEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
+    engine = new DBOSEnterpriseEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
 
     assertSame(handler, engine.alertHandler());
   }
