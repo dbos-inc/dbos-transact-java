@@ -1177,6 +1177,9 @@ public class DBOSExecutor implements AutoCloseable {
     if (context.getWorkflowId() == null) {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
+    if (suspend && context.isInStep()) {
+      throw new IllegalStateException("sleep() with suspend must not be called from within a step");
+    }
     // Before the step id is taken, so a refused sleep moves no counter. A duration that fits but
     // carries the wake time past the largest instant is refused inside the step, and recorded.
     if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {

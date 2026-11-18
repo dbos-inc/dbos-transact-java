@@ -514,14 +514,16 @@ public class DBOS implements AutoCloseable {
    *
    * @param duration amount of time to sleep
    * @param suspend whether to suspend the workflow instead of waiting in its thread
-   * @throws IllegalStateException if {@code suspend} is true and suspend mode is not on
+   * @throws IllegalStateException if {@code suspend} is true and the call is not made from a
+   *     workflow, is made from a step, or suspend mode is not on
    */
   public void sleep(@NonNull Duration duration, boolean suspend) {
     // Refused wherever it is called, so the same call does not fail differently inside a workflow.
     if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
       throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
     }
-    if (!DBOSContext.inWorkflow() || DBOSContext.inStep()) {
+    // A suspending sleep needs a workflow to suspend, so outside one it is refused, not slept out.
+    if (!suspend && (!DBOSContext.inWorkflow() || DBOSContext.inStep())) {
       try {
         Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {

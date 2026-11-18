@@ -22,6 +22,8 @@ interface SuspendFlagService {
   String recvWithSuspend();
 
   String sleepWithSuspend();
+
+  String sleepWithSuspendInAStep();
 }
 
 class SuspendFlagServiceImpl implements SuspendFlagService {
@@ -41,6 +43,13 @@ class SuspendFlagServiceImpl implements SuspendFlagService {
   @Override
   public String sleepWithSuspend() {
     dbos.sleep(Duration.ofSeconds(1), true);
+    return "slept";
+  }
+
+  @Workflow
+  @Override
+  public String sleepWithSuspendInAStep() {
+    dbos.runStep(() -> dbos.sleep(Duration.ofSeconds(1), true), "sleep");
     return "slept";
   }
 }
@@ -143,6 +152,22 @@ public class SuspendModeLaunchTest {
         assertTrue(thrown.getMessage().contains("requires suspend mode"), thrown.getMessage());
         assertTrue(thrown.getMessage().contains("Transact Enterprise"), thrown.getMessage());
       }
+    }
+  }
+
+  @Test
+  void suspendOnSleepIsRefusedOutsideAWorkflowAndInAStep() {
+    try (var dbos = new DBOS(pgContainer.dbosConfig())) {
+      var service = dbos.registerProxy(SuspendFlagService.class, new SuspendFlagServiceImpl(dbos));
+      dbos.launch();
+
+      // Without suspend, both sleep in the thread; with it, there is no workflow to suspend.
+      var outside =
+          assertThrows(IllegalStateException.class, () -> dbos.sleep(Duration.ofSeconds(1), true));
+      assertTrue(outside.getMessage().contains("from within a workflow"), outside.getMessage());
+
+      var inStep = assertThrows(IllegalStateException.class, service::sleepWithSuspendInAStep);
+      assertTrue(inStep.getMessage().contains("within a step"), inStep.getMessage());
     }
   }
 }
