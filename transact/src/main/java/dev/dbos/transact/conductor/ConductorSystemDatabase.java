@@ -1,5 +1,6 @@
 package dev.dbos.transact.conductor;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Set;
 
@@ -8,9 +9,8 @@ import javax.sql.DataSource;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The system database, for the Conductor-only operations {@code dev.dbos:transact-enterprise} runs
- * in SQL of its own. It is not application API, and it changes only as {@link ConductorEngine}
- * does.
+ * The system database, for the operations {@code dev.dbos:transact-enterprise} runs in SQL of its
+ * own. It is not application API, and it changes only as {@link ConductorEngine} does.
  *
  * <p>It hands out the means to run SQL, not an abstraction over the tables: that SQL addresses the
  * system database's tables directly and follows DBOS Transact's migrations.
@@ -31,6 +31,30 @@ public interface ConductorSystemDatabase {
    * it can be quoted as {@code "<schema>"} in SQL.
    */
   String schema();
+
+  /**
+   * Whether the system database is CockroachDB, which has no advisory locks: work that would take
+   * one to keep its processes from doing the same thing at once must run without it there.
+   */
+  boolean isCockroach();
+
+  /**
+   * Locks the workflow's status row for the rest of {@code connection}'s transaction, and fails
+   * unless the execution holding {@code ownerXid} still owns the workflow. Work that changes the
+   * workflow in the same transaction then cannot race a hand-off to another execution.
+   *
+   * <p>The lock is {@code FOR NO KEY UPDATE}, which waits for other writers of the row but not for
+   * a send: a send's notification insert takes only the foreign key's {@code FOR KEY SHARE} on the
+   * row. Work that must exclude a concurrent send, such as suspending a recv, locks the row {@code
+   * FOR UPDATE} first.
+   *
+   * @param connection a connection in a transaction
+   * @param workflowId the workflow
+   * @param ownerXid the token of the execution that must still own the workflow
+   * @throws SQLException if the database fails
+   * @throws dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException if it does not
+   */
+  void checkOwner(Connection connection, String workflowId, String ownerXid) throws SQLException;
 
   /**
    * Returns every descendant of a workflow: its children, their children, and so on. Runs once,

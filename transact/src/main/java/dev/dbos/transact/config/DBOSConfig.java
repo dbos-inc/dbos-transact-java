@@ -82,6 +82,9 @@ import org.jspecify.annotations.Nullable;
  * @param transactEnterpriseKey the DBOS key that entitles this application to Transact Enterprise
  *     features. A blank value is the same as null, and when it is null, {@code conductorKey} stands
  *     in for it. Surrounding whitespace is removed. Masked in {@link #toString()}
+ * @param suspendMode whether {@code recv} and {@code sleep} may suspend their workflow in the
+ *     database as SUSPENDED, when called with {@code suspend} true. Requires {@code
+ *     dev.dbos:transact-enterprise}, and an entitlement to it
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -107,7 +110,8 @@ public record DBOSConfig(
     @Nullable Integer databasePollingConcurrency,
     @Nullable Duration systemDatabaseIdleTransactionTimeout,
     boolean conductorMetadataOnlyMode,
-    @Nullable String transactEnterpriseKey) {
+    @Nullable String transactEnterpriseKey,
+    boolean suspendMode) {
 
   /** Default flush interval for batched stream and workflow-event notifications. */
   public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
@@ -253,7 +257,8 @@ public record DBOSConfig(
         other.databasePollingConcurrency,
         other.systemDatabaseIdleTransactionTimeout,
         other.conductorMetadataOnlyMode,
-        other.transactEnterpriseKey);
+        other.transactEnterpriseKey,
+        other.suspendMode);
   }
 
   /**
@@ -276,7 +281,8 @@ public record DBOSConfig(
         null, // databasePollingConcurrency
         null, // systemDatabaseIdleTransactionTimeout
         false, // conductorMetadataOnlyMode
-        null); // transactEnterpriseKey
+        null, // transactEnterpriseKey
+        false); // suspendMode
   }
 
   /**
@@ -330,7 +336,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -359,7 +366,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -388,7 +396,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -417,7 +426,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -451,7 +461,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -485,7 +496,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -519,7 +531,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -548,7 +561,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -581,7 +595,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -614,7 +629,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -643,7 +659,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -672,7 +689,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -701,7 +719,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -730,7 +749,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -769,7 +789,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -894,7 +915,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -923,7 +945,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -952,7 +975,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -981,7 +1005,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -1022,7 +1047,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -1062,7 +1088,8 @@ public record DBOSConfig(
         v,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -1108,7 +1135,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         v,
         conductorMetadataOnlyMode,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -1143,7 +1171,8 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         v,
-        transactEnterpriseKey);
+        transactEnterpriseKey,
+        suspendMode);
   }
 
   /**
@@ -1176,6 +1205,46 @@ public record DBOSConfig(
         databasePollingConcurrency,
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
+        v,
+        suspendMode);
+  }
+
+  /**
+   * Returns a copy of this config with {@code suspendMode} set to {@code v}. In suspend mode, a
+   * {@code recv} or {@code sleep} called with {@code suspend} true suspends its workflow in the
+   * database as SUSPENDED and releases its execution, instead of holding a thread until a message
+   * arrives or the time passes. Requires {@code dev.dbos:transact-enterprise}, and an entitlement
+   * to it.
+   *
+   * <p>Turn it on only once every reader of the database knows the SUSPENDED status: Java 1.4,
+   * Python 3.5.0 and TypeScript v5.5, or later. Earlier SDKs fail on, or misread, a SUSPENDED row.
+   */
+  public @NonNull DBOSConfig withSuspendMode(boolean v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout,
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey,
         v);
   }
 
@@ -1191,7 +1260,7 @@ public record DBOSConfig(
         listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
         notificationCoalesceInterval=%s, databasePollingConcurrency=%s, \
         systemDatabaseIdleTransactionTimeout=%s, conductorMetadataOnlyMode=%s, \
-        transactEnterpriseKey=%s]
+        transactEnterpriseKey=%s, suspendMode=%s]
         """
         .formatted(
             appName,
@@ -1216,6 +1285,7 @@ public record DBOSConfig(
             databasePollingConcurrency,
             systemDatabaseIdleTransactionTimeout,
             conductorMetadataOnlyMode,
-            transactEnterpriseKey == null ? null : "***");
+            transactEnterpriseKey == null ? null : "***",
+            suspendMode);
   }
 }

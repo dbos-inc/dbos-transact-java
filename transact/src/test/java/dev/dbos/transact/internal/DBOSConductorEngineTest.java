@@ -1,4 +1,4 @@
-package dev.dbos.transact.execution;
+package dev.dbos.transact.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -12,6 +12,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -71,7 +72,7 @@ class DBOSConductorEngineTest {
     proxy = dbos.registerProxy(EngineTestWorkflows.class, impl);
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
-    engine = new DBOSConductorEngine(executor, executor.getSystemDatabase());
+    engine = new DBOSConductorEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
   }
 
   @Test
@@ -167,7 +168,7 @@ class DBOSConductorEngineTest {
     dbos.registerAlertHandler(handler);
     dbos.launch();
     executor = DBOSTestAccess.getDbosExecutor(dbos);
-    engine = new DBOSConductorEngine(executor, executor.getSystemDatabase());
+    engine = new DBOSConductorEngine(executor, DBOSTestAccess.getSystemDatabase(dbos));
 
     assertSame(handler, engine.alertHandler());
   }

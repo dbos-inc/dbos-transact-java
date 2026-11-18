@@ -404,7 +404,7 @@ public class StepsDAO {
    * fits depends on the clock, so a replay throws what the first run recorded rather than deciding
    * again against a later clock.
    */
-  static Instant durableSleepEndTime(
+  public static Instant durableSleepEndTime(
       DbContext ctx, String workflowUuid, int functionId, Duration duration, String ownerXid)
       throws SQLException {
     return durableEndTime(ctx, workflowUuid, functionId, duration, ownerXid, true);
@@ -415,7 +415,7 @@ public class StepsDAO {
    * deadline too far out to store is one that never elapses, which is what the caller asked for, so
    * it is held at the largest instant rather than refused. See {@link #deadlineEpochMs}.
    */
-  static Instant durableDeadline(
+  public static Instant durableDeadline(
       DbContext ctx, String workflowUuid, int functionId, Duration timeout, String ownerXid)
       throws SQLException {
     return durableEndTime(ctx, workflowUuid, functionId, timeout, ownerXid, false);

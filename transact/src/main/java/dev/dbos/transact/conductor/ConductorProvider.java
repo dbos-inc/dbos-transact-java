@@ -1,12 +1,18 @@
 package dev.dbos.transact.conductor;
 
+import dev.dbos.transact.suspend.SuspendBackend;
+
 /**
- * Builds the Conductor client for a DBOS instance. DBOS Transact finds the implementation with
- * {@link java.util.ServiceLoader}; the {@code dev.dbos:transact-enterprise} artifact registers it
- * in {@code META-INF/services/dev.dbos.transact.conductor.ConductorProvider}.
+ * Builds what {@code dev.dbos:transact-enterprise} provides to a DBOS instance: the Conductor
+ * client and every other enterprise feature. It is the one entry point DBOS Transact finds with
+ * {@link java.util.ServiceLoader}; the enterprise artifact registers it in {@code
+ * META-INF/services/dev.dbos.transact.conductor.ConductorProvider}. It is named for Conductor, the
+ * first feature to use it, and keeps that name so that DBOS still finds an enterprise artifact of
+ * another version and can refuse it with a clear error.
  *
- * <p>DBOS requires exactly one implementation when a Conductor key is set in {@code DBOSConfig} or
- * when running in DBOS Cloud, and fails at launch without one.
+ * <p>DBOS requires exactly one implementation when a Conductor key is set in {@code DBOSConfig},
+ * when running in DBOS Cloud, or when an enterprise feature such as {@code suspendMode} is turned
+ * on, and fails at launch without one.
  */
 public interface ConductorProvider {
   /**
@@ -18,5 +24,15 @@ public interface ConductorProvider {
    * @param options how to connect
    * @return the connection, not yet started
    */
-  ConductorConnection create(ConductorEngine engine, ConductorOptions options);
+  ConductorConnection createConductor(ConductorEngine engine, ConductorOptions options);
+
+  /**
+   * Builds suspend mode. DBOS calls this during launch when {@code suspendMode} is set, once the
+   * system database is open, and starts calling {@link SuspendBackend#transitionSuspendedWorkflows}
+   * once queues have started.
+   *
+   * @param engine the DBOS instance, as suspend mode may use it
+   * @return suspend mode for the instance
+   */
+  SuspendBackend createSuspendBackend(ConductorEngine engine);
 }

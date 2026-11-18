@@ -494,18 +494,44 @@ public class DBOS implements AutoCloseable {
    * @param duration amount of time to sleep
    */
   public void sleep(@NonNull Duration duration) {
+    sleep(duration, false);
+  }
+
+  /**
+   * Durable sleep, optionally suspending the workflow while it waits. Use this instead of
+   * Thread.sleep, especially in workflows. On restart or during recovery the original expected
+   * wakeup time is honoured as opposed to sleeping all over again.
+   *
+   * <p>With {@code suspend} true, a sleep that has long to run suspends the workflow in the
+   * database as SUSPENDED and exits its execution, instead of holding a thread and an executor
+   * slot. Once the duration has passed, the workflow is re-enqueued and the replayed sleep returns
+   * at once. A sleep that has a second or less to run stays in the thread. The call throws {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it suspends the workflow,
+   * which workflow code must not catch.
+   *
+   * <p>Suspend mode is a Transact Enterprise feature: turn it on with {@link
+   * dev.dbos.transact.config.DBOSConfig#withSuspendMode}.
+   *
+   * @param duration amount of time to sleep
+   * @param suspend whether to suspend the workflow instead of waiting in its thread
+   * @throws IllegalStateException if {@code suspend} is true and the call is not made from a
+   *     workflow, is made from a step, or suspend mode is not on
+   */
+  public void sleep(@NonNull Duration duration, boolean suspend) {
     // Refused wherever it is called, so the same call does not fail differently inside a workflow.
     if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
       throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
     }
-    if (!DBOSContext.inWorkflow() || DBOSContext.inStep()) {
+    // A suspending sleep goes to the executor even outside a workflow or in a step, so it is
+    // refused there instead of sleeping in this thread.
+    if (suspend || (DBOSContext.inWorkflow() && !DBOSContext.inStep())) {
+      ensureLaunched("sleep").sleep(duration, suspend);
+    } else {
       try {
         Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
-    } else {
-      ensureLaunched("sleep").sleep(duration);
     }
   }
 
@@ -783,9 +809,33 @@ public class DBOS implements AutoCloseable {
    * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
-  public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> recv(
-      @Nullable String topic, @NonNull Duration timeout) {
-    return Optional.ofNullable((T) ensureLaunched("recv").recv(topic, timeout));
+  public @NonNull <T> Optional<T> recv(@Nullable String topic, @NonNull Duration timeout) {
+    return recv(topic, timeout, false);
+  }
+
+  /**
+   * Get a message sent to a particular topic, optionally suspending the workflow while it waits.
+   *
+   * <p>With {@code suspend} true, a recv that has to wait suspends the workflow in the database as
+   * SUSPENDED and exits its execution, instead of holding a thread and an executor slot. A send on
+   * the topic, or the timeout, re-enqueues it, and the replayed recv returns the message. A message
+   * that is already waiting is returned without suspending. The call throws {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it suspends the workflow,
+   * which workflow code must not catch.
+   *
+   * <p>Suspend mode is a Transact Enterprise feature: turn it on with {@link
+   * dev.dbos.transact.config.DBOSConfig#withSuspendMode}.
+   *
+   * @param topic the topic whose message to get
+   * @param timeout duration after which the call times out
+   * @param suspend whether to suspend the workflow instead of waiting in its thread
+   * @return the message if there is one or else null
+   * @throws IllegalStateException if {@code suspend} is true and suspend mode is not on
+   */
+  @SuppressWarnings("unchecked")
+  public @NonNull <T> Optional<T> recv(
+      @Nullable String topic, @NonNull Duration timeout, boolean suspend) {
+    return Optional.ofNullable((T) ensureLaunched("recv").recv(topic, timeout, suspend));
   }
 
   /**

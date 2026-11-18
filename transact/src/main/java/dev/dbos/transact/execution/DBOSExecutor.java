@@ -35,7 +35,9 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
+import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.DBOSConductorEngine;
 import dev.dbos.transact.internal.Entitlements;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
@@ -43,6 +45,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.suspend.SuspendBackend;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -196,6 +199,8 @@ public class DBOSExecutor implements AutoCloseable {
   private AdminServer adminServer;
   private final @Nullable ConductorOptions conductorOptions;
   private @Nullable ConductorProvider conductorProvider;
+  private @Nullable SuspendBackend suspendBackend;
+  private final AtomicBoolean suspendPassRunning = new AtomicBoolean();
   private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
@@ -205,6 +210,9 @@ public class DBOSExecutor implements AutoCloseable {
   // How often the system database's identity is read again; see
   // SystemDatabase.refreshDatabaseIdentity.
   private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
+
+  /** How often each process with suspend mode on looks for SUSPENDED workflows that are due. */
+  private static final Duration SUSPENDED_TRANSITION_INTERVAL = Duration.ofSeconds(1);
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -256,12 +264,14 @@ public class DBOSExecutor implements AutoCloseable {
         config.conductorDomain(),
         dbosCloud);
 
-    // Found before anything is started, so a missing provider fails launch cleanly. An
-    // application that will not connect, including one on DBOS Cloud without Conductor settings,
-    // needs no provider.
+    // Found before anything is started, so a missing provider fails launch cleanly. One provider
+    // builds every enterprise feature. An application that uses none, including one on DBOS Cloud
+    // without Conductor settings, needs no provider.
     conductorOptions = conductorOptions(config, dbosCloud);
     if (conductorOptions != null) {
-      conductorProvider = ConductorProviders.load();
+      conductorProvider = ConductorProviders.load(ConductorProviders.CONDUCTOR);
+    } else if (config.suspendMode()) {
+      conductorProvider = ConductorProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
     }
 
     if (!dbosCloud) {
@@ -346,9 +356,18 @@ public class DBOSExecutor implements AutoCloseable {
 
       systemDatabase = SystemDatabase.create(config, this.executorId, this.appName);
       systemDatabase.start();
-      // The provider is another artifact's code, so build its client before anything else starts:
-      // if it throws, launch fails with no queue, scheduler or listener running.
-      conductor = createConductor();
+      // The provider is another artifact's code, so build what it provides before anything else
+      // starts: if one throws, launch fails with no queue, scheduler or listener running. It was
+      // loaded only if some feature needs it.
+      if (conductorProvider != null) {
+        var engine = new DBOSConductorEngine(this, systemDatabase);
+        if (conductorOptions != null) {
+          conductor = conductorProvider.createConductor(engine, conductorOptions);
+        }
+        if (config.suspendMode()) {
+          suspendBackend = conductorProvider.createSuspendBackend(engine);
+        }
+      }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
       timeoutScheduler.scheduleWithFixedDelay(
@@ -382,6 +401,16 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
 
+      if (suspendBackend != null) {
+        // Handed to the executor service, as the identity refresh is: the pass waits for a pool
+        // connection, and this scheduler also fires workflow timeouts.
+        timeoutScheduler.scheduleWithFixedDelay(
+            () -> executorService.submit(this::transitionSuspendedWorkflows),
+            SUSPENDED_TRANSITION_INTERVAL.toMillis(),
+            SUSPENDED_TRANSITION_INTERVAL.toMillis(),
+            TimeUnit.MILLISECONDS);
+      }
+
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
               config.schedulerPollingInterval(),
@@ -413,14 +442,6 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       logger.warn("DBOS Executor already started");
     }
-  }
-
-  private @Nullable ConductorConnection createConductor() {
-    if (conductorProvider == null || conductorOptions == null) {
-      return null;
-    }
-    return conductorProvider.create(
-        new DBOSConductorEngine(this, systemDatabase), conductorOptions);
   }
 
   /**
@@ -1050,7 +1071,7 @@ public class DBOSExecutor implements AutoCloseable {
     send(destinationId, message, topic, idempotencyKey, serialization, false);
   }
 
-  public Object recv(String topic, Duration timeout) {
+  public Object recv(String topic, Duration timeout, boolean suspend) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
@@ -1061,8 +1082,44 @@ public class DBOSExecutor implements AutoCloseable {
     int stepFunctionId = ctx.getAndIncrementFunctionId();
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
+    if (suspend) {
+      return requireSuspendBackend("recv")
+          .recvSuspend(
+              ctx.getWorkflowId(),
+              stepFunctionId,
+              timeoutFunctionId,
+              topic,
+              timeout,
+              ctx.getOwnerXid());
+    }
     return systemDatabase.recv(
         ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout, ctx.getOwnerXid());
+  }
+
+  /** Suspend mode, or an error naming the setting that turns it on. */
+  private SuspendBackend requireSuspendBackend(String operation) {
+    if (suspendBackend == null) {
+      throw new IllegalStateException(
+          "%s with suspend requires suspend mode, a Transact Enterprise feature: set suspendMode in"
+                  .formatted(operation)
+              + " the DBOS configuration.");
+    }
+    return suspendBackend;
+  }
+
+  /** One pass of the job that re-enqueues SUSPENDED workflows that are due. */
+  private void transitionSuspendedWorkflows() {
+    // One pass at a time in this process, so a slow one is not stacked on by the next tick.
+    if (!suspendPassRunning.compareAndSet(false, true)) {
+      return;
+    }
+    try {
+      Objects.requireNonNull(suspendBackend).transitionSuspendedWorkflows();
+    } catch (RuntimeException e) {
+      logger.warn("Re-enqueuing suspended workflows failed; the next pass retries", e);
+    } finally {
+      suspendPassRunning.set(false);
+    }
   }
 
   public void setEvent(String key, Object value, SerializationStrategy serialization) {
@@ -1114,16 +1171,42 @@ public class DBOSExecutor implements AutoCloseable {
         () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
   }
 
-  public void sleep(Duration duration) {
+  public void sleep(Duration duration, boolean suspend) {
     DBOSContext context = DBOSContextHolder.get();
 
     if (context.getWorkflowId() == null) {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
+    if (suspend && context.isInStep()) {
+      throw new IllegalStateException("sleep() with suspend must not be called from within a step");
+    }
     // Before the step id is taken, so a refused sleep moves no counter. A duration that fits but
     // carries the wake time past the largest instant is refused inside the step, and recorded.
     if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
       throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
+    }
+
+    if (suspend) {
+      var remaining =
+          requireSuspendBackend("sleep")
+              .sleepSuspend(
+                  context.getWorkflowId(),
+                  context.getAndIncrementFunctionId(),
+                  duration,
+                  context.getOwnerXid());
+      // What suspending left over: a short sleep stays in the thread, and a replay of a suspended
+      // one
+      // finds its time already up.
+      if (!remaining.isNegative() && !remaining.isZero()) {
+        try {
+          Thread.sleep(remaining.toMillis());
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException(
+              "Sleep was interrupted for workflow " + context.getWorkflowId(), e);
+        }
+      }
+      return;
     }
 
     systemDatabase.sleep(
@@ -1684,6 +1767,11 @@ public class DBOSExecutor implements AutoCloseable {
             // timeout sweep or explicitly, or, if the workflow was resumed, the new run's.
             return awaitWorkflowResult(workflowId, true);
           } catch (ExecutionException e) {
+            if (e.getCause() instanceof DBOSWorkflowSuspendedException) {
+              // The run suspended its workflow and exited. Its outcome comes from the row, once a
+              // send, a timeout or the end of a sleep has the workflow run again.
+              return awaitWorkflowResult(workflowId, true);
+            }
             if (e.getCause() instanceof Exception cause) {
               if (cause instanceof DBOSWorkflowExecutionConflictException) {
                 return awaitWorkflowResult(workflowId, false);
@@ -1781,10 +1869,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void globalTimeout(Instant endTime) {
     var input =
-        new ListWorkflowsInput()
-            .withEndTime(endTime)
-            .withStatus(
-                List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
+        new ListWorkflowsInput().withEndTime(endTime).withStatus(WorkflowState.activeStates());
     for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
       cancelWorkflows(List.of(status.workflowId()), false);
     }
@@ -2804,6 +2889,13 @@ public class DBOSExecutor implements AutoCloseable {
             // may have been cancelled, dead-lettered, completed by a concurrent execution,
             // or handed back to the queue by a resume.
             pendingAdopt = notRecordedWarning;
+          } catch (DBOSWorkflowSuspendedException suspended) {
+            // The workflow suspended itself in the database, and its slot is free: the guard above
+            // has
+            // closed. No outcome is recorded, because the run has none yet. Whoever waits on this
+            // run's future finds the outcome in the row once the workflow has run again.
+            logger.debug("executeWorkflow {} suspended", workflowId);
+            throw suspended;
           } catch (Exception e) {
             Throwable actual = e;
 
@@ -2815,6 +2907,12 @@ public class DBOSExecutor implements AutoCloseable {
               } else {
                 break;
               }
+            }
+
+            if (actual instanceof DBOSWorkflowSuspendedException suspended) {
+              // As above, for a suspend that reached here wrapped by a reflective call.
+              logger.debug("executeWorkflow {} suspended", workflowId);
+              throw suspended;
             }
 
             if (isConflictFor(e, workflowId)) {

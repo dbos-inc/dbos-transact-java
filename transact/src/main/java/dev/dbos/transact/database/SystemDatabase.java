@@ -21,6 +21,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1653,6 +1654,31 @@ public class SystemDatabase implements AutoCloseable {
                 createSubscription));
   }
 
+  /** Whether this system database is CockroachDB. */
+  public boolean isCockroach() {
+    return ctx.isCockroach();
+  }
+
+  /** What the recv recorded under {@code stepId} returned, if it has run. */
+  public Optional<RecordedRecv> recordedRecv(String workflowId, int stepId, String ownerXid) {
+    return dbRetry(() -> NotificationsDAO.recordedRecv(ctx, workflowId, stepId, ownerXid));
+  }
+
+  /** The instant a recv's timeout runs out, recorded the first time and read back by a replay. */
+  public Instant recvDeadline(
+      String workflowId, int timeoutStepId, Duration timeout, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "recvDeadline",
+        () -> StepsDAO.durableDeadline(ctx, workflowId, timeoutStepId, timeout, ownerXid));
+  }
+
+  /** The instant a sleep ends, recorded the first time and read back by a replay. */
+  public Instant sleepEnd(String workflowId, int functionId, Duration duration, String ownerXid) {
+    return dbRetryIncludingSerializationError(
+        "sleepEnd",
+        () -> StepsDAO.durableSleepEndTime(ctx, workflowId, functionId, duration, ownerXid));
+  }
+
   public void sleep(String workflowId, int functionId, Duration duration, String ownerXid) {
     dbRetryIncludingSerializationError(
         "sleep", () -> StepsDAO.sleep(ctx, workflowId, functionId, duration, ownerXid));
@@ -1873,8 +1899,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   /**
-   * This database as the Conductor client in {@code dev.dbos:transact-enterprise} sees it: its
-   * connections and schema, and the retries this class's own calls use.
+   * This database as {@code dev.dbos:transact-enterprise} sees it: its connections and schema, and
+   * the retries this class's own calls use.
    */
   public ConductorSystemDatabase forConductor() {
     return new ConductorSystemDatabase() {
@@ -1886,6 +1912,18 @@ public class SystemDatabase implements AutoCloseable {
       @Override
       public String schema() {
         return ctx.schema();
+      }
+
+      @Override
+      public boolean isCockroach() {
+        return SystemDatabase.this.isCockroach();
+      }
+
+      @Override
+      public void checkOwner(Connection connection, String workflowId, String ownerXid)
+          throws SQLException {
+        // Unwrapped, unlike SystemDatabase.checkOwner: the caller retries on SQLException.
+        WorkflowDAO.checkOwner(connection, ctx.schema(), workflowId, ownerXid);
       }
 
       @Override

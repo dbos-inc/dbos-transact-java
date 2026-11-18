@@ -1,10 +1,12 @@
-package dev.dbos.transact.execution;
+package dev.dbos.transact.internal;
 
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.conductor.ConductorEngine;
 import dev.dbos.transact.conductor.ConductorSystemDatabase;
 import dev.dbos.transact.conductor.WorkflowFork;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -15,6 +17,7 @@ import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -23,15 +26,15 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Serves the Conductor client from a launched DBOS instance. When a method of DBOSExecutor or
- * SystemDatabase changes, the delegation here changes with it and {@link ConductorEngine} keeps its
- * signatures.
+ * Serves {@code dev.dbos:transact-enterprise} from a launched DBOS instance. When a method of
+ * DBOSExecutor or SystemDatabase changes, the delegation here changes with it and {@link
+ * ConductorEngine} keeps its signatures.
  */
-final class DBOSConductorEngine implements ConductorEngine {
+public final class DBOSConductorEngine implements ConductorEngine {
   private final DBOSExecutor executor;
   private final SystemDatabase systemDatabase;
 
-  DBOSConductorEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
+  public DBOSConductorEngine(DBOSExecutor executor, SystemDatabase systemDatabase) {
     this.executor = executor;
     this.systemDatabase = systemDatabase;
   }
@@ -178,5 +181,32 @@ final class DBOSConductorEngine implements ConductorEngine {
   @Override
   public ConductorSystemDatabase systemDatabase() {
     return systemDatabase.forConductor();
+  }
+
+  @Override
+  public Optional<RecordedRecv> recordedRecv(String workflowId, int stepId, String ownerXid) {
+    return systemDatabase.recordedRecv(workflowId, stepId, ownerXid);
+  }
+
+  @Override
+  public Instant recvDeadline(
+      String workflowId, int timeoutStepId, Duration timeout, String ownerXid) {
+    return systemDatabase.recvDeadline(workflowId, timeoutStepId, timeout, ownerXid);
+  }
+
+  @Override
+  public Instant sleepEnd(String workflowId, int functionId, Duration duration, String ownerXid) {
+    return systemDatabase.sleepEnd(workflowId, functionId, duration, ownerXid);
+  }
+
+  @Override
+  public @Nullable Object recv(
+      String workflowId,
+      int stepId,
+      int timeoutStepId,
+      @Nullable String topic,
+      Duration timeout,
+      String ownerXid) {
+    return systemDatabase.recv(workflowId, stepId, timeoutStepId, topic, timeout, ownerXid);
   }
 }

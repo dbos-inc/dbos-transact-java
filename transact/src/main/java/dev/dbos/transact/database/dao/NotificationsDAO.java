@@ -15,6 +15,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.suspend.RecordedRecv;
 import dev.dbos.transact.workflow.SendMessage;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -213,6 +214,12 @@ public class NotificationsDAO {
               throw e;
             }
 
+            wakeReceivers(
+                conn,
+                ctx.schema(),
+                rows.stream().map(InsertRow::destId).distinct().sorted().toList(),
+                rows.stream().map(InsertRow::topic).distinct().sorted().toList());
+
             // The owner is checked after the messages, so the status row is locked last, as every
             // fenced write locks it. Recording the step checks it first; a send from inside a step
             // has no step to record, so it is checked on its own.
@@ -227,6 +234,54 @@ public class NotificationsDAO {
             }
           });
     }
+  }
+
+  /**
+   * Makes the SUSPENDED receivers waiting on one of {@code topics} due, so whichever executor
+   * re-enqueues SUSPENDED workflows picks them up. Runs on every send, whether or not this process
+   * suspends receivers itself, so any sender wakes a workflow another process suspended. A
+   * primary-key probe per destination, which matches nothing in the common case.
+   *
+   * <p>The match is destinations x topics, so a batch sending A on topic X and B on topic Y also
+   * wakes A if it waits on Y. That is harmless: the replayed recv finds no message and suspends
+   * again.
+   *
+   * <p>The status is tested in SET, not WHERE, so the planner cannot choose to scan the partial
+   * index on SUSPENDED rows rather than probe the primary key.
+   */
+  private static void wakeReceivers(
+      Connection conn, String schema, List<String> destinations, List<String> topics)
+      throws SQLException {
+    if (destinations.isEmpty()) {
+      return;
+    }
+    final String sql =
+        """
+          UPDATE "%s".workflow_status
+             SET delay_until_epoch_ms =
+                 CASE WHEN status = 'SUSPENDED' THEN 0 ELSE delay_until_epoch_ms END
+           WHERE workflow_uuid = ANY(?) AND suspend_key = ANY(?)
+        """
+            .formatted(schema);
+    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setArray(1, conn.createArrayOf("text", destinations.toArray(String[]::new)));
+      stmt.setArray(2, conn.createArrayOf("text", topics.toArray(String[]::new)));
+      stmt.executeUpdate();
+    }
+  }
+
+  /**
+   * What the recv recorded under {@code stepId} returned, if it has run. A recv that recorded no
+   * message, because its timeout passed or a peer took the message it saw, records none.
+   */
+  public static Optional<RecordedRecv> recordedRecv(
+      DbContext ctx, String workflowId, int stepId, String ownerXid) throws SQLException {
+    var result = StepsDAO.checkStepResult(ctx, workflowId, stepId, "DBOS.recv", ownerXid);
+    if (result == null) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        new RecordedRecv(result.output() != null ? result.toResult(ctx.serializer()) : null));
   }
 
   public static Object recv(
