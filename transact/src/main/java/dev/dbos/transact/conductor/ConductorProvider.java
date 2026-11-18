@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.suspend.Suspend;
+import dev.dbos.transact.suspend.SuspendBackend;
 
 /**
  * Builds what {@code dev.dbos:transact-enterprise} provides to a DBOS instance: the Conductor
@@ -28,11 +28,11 @@ public interface ConductorProvider {
 
   /**
    * Builds suspend mode. DBOS calls this during launch when {@code suspendMode} is set, once the
-   * system database is open, and starts calling {@link Suspend#transitionSuspendedWorkflows} once
-   * queues have started.
+   * system database is open, and starts calling {@link SuspendBackend#transitionSuspendedWorkflows}
+   * once queues have started.
    *
    * @param engine the DBOS instance, as suspend mode may use it
    * @return suspend mode for the instance
    */
-  Suspend createSuspend(ConductorEngine engine);
+  SuspendBackend createSuspendBackend(ConductorEngine engine);
 }

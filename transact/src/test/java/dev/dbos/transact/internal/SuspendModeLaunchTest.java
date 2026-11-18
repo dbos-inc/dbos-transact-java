@@ -52,7 +52,8 @@ class SuspendFlagServiceImpl implements SuspendFlagService {
  */
 public class SuspendModeLaunchTest {
   // Only this class builds suspend mode, so a lock here keeps the provider's count steady.
-  private static final String SUSPENDS_CREATED = "TestConductorProvider.suspendsCreated";
+  private static final String SUSPEND_BACKENDS_CREATED =
+      "TestConductorProvider.suspendBackendsCreated";
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -80,32 +81,32 @@ public class SuspendModeLaunchTest {
 
   @Test
   @ResourceLock("Entitlements log")
-  @ResourceLock(SUSPENDS_CREATED)
+  @ResourceLock(SUSPEND_BACKENDS_CREATED)
   void launchWithSuspendModeBuildsSuspendThroughTheProvider() throws Exception {
     try (var conductor = new EntitlementsTest.FakeConductor()) {
       conductor.entitle("{\"suspendWorkflows\": true}");
       var config =
           pgContainer.dbosConfig().withConductorDomain(conductor.url).withSuspendMode(true);
-      var suspends = TestConductorProvider.suspendsCreated();
+      var suspends = TestConductorProvider.suspendBackendsCreated();
 
       try (var dbos = new DBOS(config)) {
         dbos.launch();
       }
 
-      assertEquals(suspends + 1, TestConductorProvider.suspendsCreated());
+      assertEquals(suspends + 1, TestConductorProvider.suspendBackendsCreated());
     }
   }
 
   @Test
-  @ResourceLock(SUSPENDS_CREATED)
+  @ResourceLock(SUSPEND_BACKENDS_CREATED)
   void launchWithoutSuspendModeBuildsNoSuspend() {
-    var suspends = TestConductorProvider.suspendsCreated();
+    var suspends = TestConductorProvider.suspendBackendsCreated();
 
     try (var dbos = new DBOS(pgContainer.dbosConfig())) {
       dbos.launch();
     }
 
-    assertEquals(suspends, TestConductorProvider.suspendsCreated());
+    assertEquals(suspends, TestConductorProvider.suspendBackendsCreated());
   }
 
   @Test

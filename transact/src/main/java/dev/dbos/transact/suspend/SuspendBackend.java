@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  * not suspend mode is on, so a sender without suspend mode, such as a {@code DBOSClient}, still
  * wakes a recv another process parked.
  */
-public interface Suspend {
+public interface SuspendBackend {
   /**
    * A {@code recv} that parks its workflow if it would have to wait.
    *

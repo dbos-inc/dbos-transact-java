@@ -45,7 +45,7 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.suspend.Suspend;
+import dev.dbos.transact.suspend.SuspendBackend;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -199,7 +199,7 @@ public class DBOSExecutor implements AutoCloseable {
   private AdminServer adminServer;
   private final @Nullable ConductorOptions conductorOptions;
   private @Nullable ConductorProvider conductorProvider;
-  private @Nullable Suspend suspend;
+  private @Nullable SuspendBackend suspendBackend;
   private final AtomicBoolean suspendPassRunning = new AtomicBoolean();
   private ConductorConnection conductor;
   private ExecutorService executorService;
@@ -365,7 +365,7 @@ public class DBOSExecutor implements AutoCloseable {
           conductor = conductorProvider.createConductor(engine, conductorOptions);
         }
         if (config.suspendMode()) {
-          suspend = conductorProvider.createSuspend(engine);
+          suspendBackend = conductorProvider.createSuspendBackend(engine);
         }
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
@@ -401,7 +401,7 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
 
-      if (suspend != null) {
+      if (suspendBackend != null) {
         // Handed to the executor service, as the identity refresh is: the pass waits for a pool
         // connection, and this scheduler also fires workflow timeouts.
         timeoutScheduler.scheduleWithFixedDelay(
@@ -1083,7 +1083,7 @@ public class DBOSExecutor implements AutoCloseable {
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
     if (suspend) {
-      return requireSuspend("recv")
+      return requireSuspendBackend("recv")
           .recvSuspend(
               ctx.getWorkflowId(),
               stepFunctionId,
@@ -1097,8 +1097,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /** Suspend mode, or an error naming the setting that turns it on. */
-  private Suspend requireSuspend(String operation) {
-    var enabled = suspend;
+  private SuspendBackend requireSuspendBackend(String operation) {
+    var enabled = suspendBackend;
     if (enabled == null) {
       throw new IllegalStateException(
           "%s with suspend requires suspend mode, a Transact Enterprise feature: set suspendMode in"
@@ -1115,7 +1115,7 @@ public class DBOSExecutor implements AutoCloseable {
       return;
     }
     try {
-      Objects.requireNonNull(suspend).transitionSuspendedWorkflows();
+      Objects.requireNonNull(suspendBackend).transitionSuspendedWorkflows();
     } catch (RuntimeException e) {
       logger.warn("Re-enqueuing suspended workflows failed; the next pass retries", e);
     } finally {
@@ -1186,7 +1186,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (suspend) {
       var remaining =
-          requireSuspend("sleep")
+          requireSuspendBackend("sleep")
               .sleepSuspend(
                   context.getWorkflowId(),
                   context.getAndIncrementFunctionId(),

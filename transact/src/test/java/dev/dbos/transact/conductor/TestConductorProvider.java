@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.suspend.Suspend;
+import dev.dbos.transact.suspend.SuspendBackend;
 
 import java.time.Duration;
 import java.util.List;
@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class TestConductorProvider implements ConductorProvider {
   private static final List<ConductorOptions> created = new CopyOnWriteArrayList<>();
-  private static final AtomicInteger suspendsCreated = new AtomicInteger();
+  private static final AtomicInteger suspendBackendsCreated = new AtomicInteger();
 
   /** The options of every connection created so far, oldest first. */
   public static List<ConductorOptions> created() {
@@ -25,8 +25,8 @@ public final class TestConductorProvider implements ConductorProvider {
   }
 
   /** How many times suspend mode has been built so far. */
-  public static int suspendsCreated() {
-    return suspendsCreated.get();
+  public static int suspendBackendsCreated() {
+    return suspendBackendsCreated.get();
   }
 
   @Override
@@ -42,9 +42,9 @@ public final class TestConductorProvider implements ConductorProvider {
   }
 
   @Override
-  public Suspend createSuspend(ConductorEngine engine) {
-    suspendsCreated.incrementAndGet();
-    return new Suspend() {
+  public SuspendBackend createSuspendBackend(ConductorEngine engine) {
+    suspendBackendsCreated.incrementAndGet();
+    return new SuspendBackend() {
       @Override
       public @Nullable Object recvSuspend(
           String workflowId,
