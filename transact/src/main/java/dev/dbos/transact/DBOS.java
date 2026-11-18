@@ -522,15 +522,16 @@ public class DBOS implements AutoCloseable {
     if (Validation.nullableExceedsMillis(Objects.requireNonNull(duration))) {
       throw new IllegalArgumentException(Validation.exceedsMillis("sleep duration"));
     }
-    // A suspending sleep needs a workflow to suspend, so outside one it is refused, not slept out.
-    if (!suspend && (!DBOSContext.inWorkflow() || DBOSContext.inStep())) {
+    // A suspending sleep goes to the executor even outside a workflow or in a step, so it is
+    // refused there instead of sleeping in this thread.
+    if (suspend || (DBOSContext.inWorkflow() && !DBOSContext.inStep())) {
+      ensureLaunched("sleep").sleep(duration, suspend);
+    } else {
       try {
         Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
-    } else {
-      ensureLaunched("sleep").sleep(duration, suspend);
     }
   }
 
