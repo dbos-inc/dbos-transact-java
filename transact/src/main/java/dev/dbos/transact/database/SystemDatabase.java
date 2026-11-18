@@ -1920,8 +1920,10 @@ public class SystemDatabase implements AutoCloseable {
       }
 
       @Override
-      public void checkOwner(Connection connection, String workflowId, String ownerXid) {
-        SystemDatabase.this.checkOwner(connection, workflowId, ownerXid);
+      public void checkOwner(Connection connection, String workflowId, String ownerXid)
+          throws SQLException {
+        // Unwrapped, unlike SystemDatabase.checkOwner: the caller retries on SQLException.
+        WorkflowDAO.checkOwner(connection, ctx.schema(), workflowId, ownerXid);
       }
 
       @Override
