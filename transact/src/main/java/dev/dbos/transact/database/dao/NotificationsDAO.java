@@ -238,12 +238,13 @@ public class NotificationsDAO {
 
   /**
    * Makes the SUSPENDED receivers waiting on one of {@code topics} due, so whichever executor
-   * resumes parked workflows re-enqueues them. Runs on every send, whether or not this process
-   * parks receivers itself, so any sender wakes a workflow another process parked. A primary-key
-   * probe per destination, which matches nothing in the common case.
+   * re-enqueues SUSPENDED workflows picks them up. Runs on every send, whether or not this process
+   * suspends receivers itself, so any sender wakes a workflow another process suspended. A
+   * primary-key probe per destination, which matches nothing in the common case.
    *
    * <p>The match is destinations x topics, so a batch sending A on topic X and B on topic Y also
-   * wakes A if it waits on Y. That is harmless: the replayed recv finds no message and parks again.
+   * wakes A if it waits on Y. That is harmless: the replayed recv finds no message and suspends
+   * again.
    *
    * <p>The status is tested in SET, not WHERE, so the planner cannot choose to scan the partial
    * index on SUSPENDED rows rather than probe the primary key.

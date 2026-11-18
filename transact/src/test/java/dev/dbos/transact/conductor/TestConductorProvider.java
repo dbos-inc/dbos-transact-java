@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * Stands in for dev.dbos:transact-enterprise in this module's tests, so a launch with a Conductor
  * key, on DBOS Cloud or with suspend mode on finds a provider. Its connections connect to nothing,
  * and it records the options each was created with. Its suspend mode counts how often it is built
- * and parks nothing.
+ * and suspends nothing.
  */
 public final class TestConductorProvider implements ConductorProvider {
   private static final List<ConductorOptions> created = new CopyOnWriteArrayList<>();
@@ -53,13 +53,13 @@ public final class TestConductorProvider implements ConductorProvider {
           @Nullable String topic,
           Duration timeout,
           String ownerXid) {
-        throw new UnsupportedOperationException("the test provider parks nothing");
+        throw new UnsupportedOperationException("the test provider suspends nothing");
       }
 
       @Override
       public Duration sleepSuspend(
           String workflowId, int functionId, Duration duration, String ownerXid) {
-        throw new UnsupportedOperationException("the test provider parks nothing");
+        throw new UnsupportedOperationException("the test provider suspends nothing");
       }
 
       @Override

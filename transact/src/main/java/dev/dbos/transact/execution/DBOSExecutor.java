@@ -211,7 +211,7 @@ public class DBOSExecutor implements AutoCloseable {
   // SystemDatabase.refreshDatabaseIdentity.
   private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
 
-  /** How often each process with suspend mode on looks for parked workflows that are due. */
+  /** How often each process with suspend mode on looks for SUSPENDED workflows that are due. */
   private static final Duration SUSPENDED_TRANSITION_INTERVAL = Duration.ofSeconds(1);
 
   public DBOSExecutor(DBOSConfig config) {
@@ -1107,7 +1107,7 @@ public class DBOSExecutor implements AutoCloseable {
     return suspendBackend;
   }
 
-  /** One pass of the job that re-enqueues parked workflows that are due. */
+  /** One pass of the job that re-enqueues SUSPENDED workflows that are due. */
   private void transitionSuspendedWorkflows() {
     // One pass at a time in this process, so a slow one is not stacked on by the next tick.
     if (!suspendPassRunning.compareAndSet(false, true)) {
@@ -1191,7 +1191,8 @@ public class DBOSExecutor implements AutoCloseable {
                   context.getAndIncrementFunctionId(),
                   duration,
                   context.getOwnerXid());
-      // What parking left over: a short sleep stays in the thread, and a replay of a parked one
+      // What suspending left over: a short sleep stays in the thread, and a replay of a suspended
+      // one
       // finds its time already up.
       if (!remaining.isNegative() && !remaining.isZero()) {
         try {
@@ -1764,7 +1765,7 @@ public class DBOSExecutor implements AutoCloseable {
             return awaitWorkflowResult(workflowId, true);
           } catch (ExecutionException e) {
             if (e.getCause() instanceof DBOSWorkflowSuspendedException) {
-              // The run parked its workflow and exited. Its outcome comes from the row, once a
+              // The run suspended its workflow and exited. Its outcome comes from the row, once a
               // send, a timeout or the end of a sleep has the workflow run again.
               return awaitWorkflowResult(workflowId, true);
             }
@@ -2886,7 +2887,8 @@ public class DBOSExecutor implements AutoCloseable {
             // or handed back to the queue by a resume.
             pendingAdopt = notRecordedWarning;
           } catch (DBOSWorkflowSuspendedException suspended) {
-            // The workflow parked itself in the database, and its slot is free: the guard above has
+            // The workflow suspended itself in the database, and its slot is free: the guard above
+            // has
             // closed. No outcome is recorded, because the run has none yet. Whoever waits on this
             // run's future finds the outcome in the row once the workflow has run again.
             logger.debug("executeWorkflow {} suspended", workflowId);
@@ -2905,7 +2907,7 @@ public class DBOSExecutor implements AutoCloseable {
             }
 
             if (actual instanceof DBOSWorkflowSuspendedException suspended) {
-              // As above, for a park that reached here wrapped by a reflective call.
+              // As above, for a suspend that reached here wrapped by a reflective call.
               logger.debug("executeWorkflow {} suspended", workflowId);
               throw suspended;
             }

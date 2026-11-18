@@ -5,13 +5,13 @@ import dev.dbos.transact.Constants;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Thrown by a {@code recv} or {@code sleep} called with {@code suspend} once its workflow is parked
- * in the database. The execution must exit: a send on the topic, the recv's timeout, or the end of
- * the sleep re-enqueues the workflow, and the replayed call returns.
+ * Thrown by a {@code recv} or {@code sleep} called with {@code suspend} once its workflow is
+ * suspended in the database. The execution must exit: a send on the topic, the recv's timeout, or
+ * the end of the sleep re-enqueues the workflow, and the replayed call returns.
  *
  * <p>An {@link Error}, not an {@link Exception}, so that workflow code which catches {@code
- * Exception} cannot swallow it and carry on after the park. Workflow code should not catch it; one
- * that does must rethrow it. It is not a failure, and nothing is recorded as the workflow's
+ * Exception} cannot swallow it and carry on after suspending. Workflow code should not catch it;
+ * one that does must rethrow it. It is not a failure, and nothing is recorded as the workflow's
  * outcome.
  */
 public class DBOSWorkflowSuspendedException extends Error {
@@ -21,7 +21,7 @@ public class DBOSWorkflowSuspendedException extends Error {
   private final @Nullable String topic;
 
   /**
-   * @param workflowId the workflow that parked
+   * @param workflowId the workflow that was suspended
    * @param topic the topic it waits on, {@link Constants#DBOS_NULL_TOPIC} for a recv with none, or
    *     {@code null} for a sleep
    */
@@ -41,7 +41,7 @@ public class DBOSWorkflowSuspendedException extends Error {
     return "Workflow %s suspended %s".formatted(workflowId, waiting);
   }
 
-  /** The workflow that parked. */
+  /** The workflow that was suspended. */
   public String workflowId() {
     return workflowId;
   }

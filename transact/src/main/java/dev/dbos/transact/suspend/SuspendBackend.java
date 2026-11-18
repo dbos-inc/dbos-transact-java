@@ -5,22 +5,22 @@ import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Suspend mode for {@code recv} and {@code sleep}: a waiting recv or a sleep parks its workflow in
- * the database as SUSPENDED instead of holding a thread and an executor slot. A send on the recv's
- * topic, the recv's timeout, or the end of the sleep makes the workflow due, a background pass
- * re-enqueues it, and the replayed call returns.
+ * Suspend mode for {@code recv} and {@code sleep}: a waiting recv or a sleep suspends its workflow
+ * in the database as SUSPENDED instead of holding a thread and an executor slot. A send on the
+ * recv's topic, the recv's timeout, or the end of the sleep makes the workflow due, a background
+ * pass re-enqueues it, and the replayed call returns.
  *
- * <p>The send side belongs to DBOS Transact, which wakes a parked receiver on every send whether or
- * not suspend mode is on, so a sender without suspend mode, such as a {@code DBOSClient}, still
- * wakes a recv another process parked.
+ * <p>The send side belongs to DBOS Transact, which wakes a suspended receiver on every send whether
+ * or not suspend mode is on, so a sender without suspend mode, such as a {@code DBOSClient}, still
+ * wakes a recv another process suspended.
  */
 public interface SuspendBackend {
   /**
-   * A {@code recv} that parks its workflow if it would have to wait.
+   * A {@code recv} that suspends its workflow if it would have to wait.
    *
    * <p>Returns the recorded message when the call is a replay, and the message that is already
    * waiting, or {@code null} once the timeout has passed, when there is no need to wait. Otherwise
-   * parks the workflow and throws {@link
+   * suspends the workflow and throws {@link
    * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException}.
    *
    * @param workflowId the calling workflow
@@ -30,7 +30,8 @@ public interface SuspendBackend {
    * @param timeout how long to wait for a message
    * @param ownerXid the token of the execution making the call, which must still own the workflow
    * @return the message, or {@code null} if none came in time
-   * @throws dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException once the workflow is parked
+   * @throws dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException once the workflow is
+   *     suspended
    */
   @Nullable Object recvSuspend(
       String workflowId,
@@ -41,18 +42,20 @@ public interface SuspendBackend {
       String ownerXid);
 
   /**
-   * A {@code sleep} that parks its workflow if the end of the sleep is far off.
+   * A {@code sleep} that suspends its workflow if the end of the sleep is far off.
    *
    * <p>Checkpoints the sleep's end time. Returns the time left to sleep in the calling thread when
-   * it is short, or already past, which is what the replay of a parked sleep finds. Otherwise parks
-   * the workflow and throws {@link dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException}.
+   * it is short, or already past, which is what the replay of a suspended sleep finds. Otherwise
+   * suspends the workflow and throws {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException}.
    *
    * @param workflowId the calling workflow
    * @param functionId the step ID the sleep is recorded under
    * @param duration how long to sleep
    * @param ownerXid the token of the execution making the call, which must still own the workflow
    * @return how long the caller should still sleep in its thread; zero or negative for none
-   * @throws dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException once the workflow is parked
+   * @throws dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException once the workflow is
+   *     suspended
    */
   Duration sleepSuspend(String workflowId, int functionId, Duration duration, String ownerXid);
 

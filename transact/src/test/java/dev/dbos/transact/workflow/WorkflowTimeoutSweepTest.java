@@ -178,7 +178,7 @@ public class WorkflowTimeoutSweepTest {
     var delayed = plant(WorkflowState.DELAYED, -1_000, APP);
     // Left PENDING by an executor that died: nothing is running it.
     var orphaned = plant(WorkflowState.PENDING, -1_000, APP);
-    // Parked by another SDK, waiting on a message that may never come.
+    // Suspended by another SDK, waiting on a message that may never come.
     var suspended = plant(WorkflowState.SUSPENDED, -1_000, APP);
     var expected = Set.of(enqueued, delayed, orphaned, suspended);
 

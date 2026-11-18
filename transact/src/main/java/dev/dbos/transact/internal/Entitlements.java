@@ -51,7 +51,7 @@ public final class Entitlements {
    */
   public record Feature(String entitlement, String description) {}
 
-  /** Suspend mode: parking a waiting recv or a sleep in the database. */
+  /** Suspend mode: suspending a workflow in the database on a waiting recv or a sleep. */
   public static final Feature SUSPEND_WORKFLOWS =
       new Feature("suspendWorkflows", "Suspending workflows on recv and sleep");
 

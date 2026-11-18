@@ -498,22 +498,22 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Durable sleep, optionally parking the workflow while it waits. Use this instead of
+   * Durable sleep, optionally suspending the workflow while it waits. Use this instead of
    * Thread.sleep, especially in workflows. On restart or during recovery the original expected
    * wakeup time is honoured as opposed to sleeping all over again.
    *
-   * <p>With {@code suspend} true, a sleep that has long to run parks the workflow in the database
-   * as SUSPENDED and exits its execution, instead of holding a thread and an executor slot. Once
-   * the duration has passed, the workflow is re-enqueued and the replayed sleep returns at once. A
-   * sleep that has a second or less to run stays in the thread. The call throws {@link
-   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it parks, which workflow code
-   * must not catch.
+   * <p>With {@code suspend} true, a sleep that has long to run suspends the workflow in the
+   * database as SUSPENDED and exits its execution, instead of holding a thread and an executor
+   * slot. Once the duration has passed, the workflow is re-enqueued and the replayed sleep returns
+   * at once. A sleep that has a second or less to run stays in the thread. The call throws {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it suspends the workflow,
+   * which workflow code must not catch.
    *
    * <p>Suspend mode is a Transact Enterprise feature: turn it on with {@link
    * dev.dbos.transact.config.DBOSConfig#withSuspendMode}.
    *
    * @param duration amount of time to sleep
-   * @param suspend whether to park the workflow instead of waiting in its thread
+   * @param suspend whether to suspend the workflow instead of waiting in its thread
    * @throws IllegalStateException if {@code suspend} is true and suspend mode is not on
    */
   public void sleep(@NonNull Duration duration, boolean suspend) {
@@ -811,21 +811,21 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Get a message sent to a particular topic, optionally parking the workflow while it waits.
+   * Get a message sent to a particular topic, optionally suspending the workflow while it waits.
    *
-   * <p>With {@code suspend} true, a recv that has to wait parks the workflow in the database as
+   * <p>With {@code suspend} true, a recv that has to wait suspends the workflow in the database as
    * SUSPENDED and exits its execution, instead of holding a thread and an executor slot. A send on
    * the topic, or the timeout, re-enqueues it, and the replayed recv returns the message. A message
-   * that is already waiting is returned without parking. The call throws {@link
-   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it parks, which workflow code
-   * must not catch.
+   * that is already waiting is returned without suspending. The call throws {@link
+   * dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException} when it suspends the workflow,
+   * which workflow code must not catch.
    *
    * <p>Suspend mode is a Transact Enterprise feature: turn it on with {@link
    * dev.dbos.transact.config.DBOSConfig#withSuspendMode}.
    *
    * @param topic the topic whose message to get
    * @param timeout duration after which the call times out
-   * @param suspend whether to park the workflow instead of waiting in its thread
+   * @param suspend whether to suspend the workflow instead of waiting in its thread
    * @return the message if there is one or else null
    * @throws IllegalStateException if {@code suspend} is true and suspend mode is not on
    */

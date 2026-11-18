@@ -82,8 +82,8 @@ import org.jspecify.annotations.Nullable;
  * @param transactEnterpriseKey the DBOS key that entitles this application to Transact Enterprise
  *     features. A blank value is the same as null, and when it is null, {@code conductorKey} stands
  *     in for it. Surrounding whitespace is removed. Masked in {@link #toString()}
- * @param suspendMode whether {@code recv} and {@code sleep} may park their workflow in the database
- *     as SUSPENDED, when called with {@code suspend} true. Requires {@code
+ * @param suspendMode whether {@code recv} and {@code sleep} may suspend their workflow in the
+ *     database as SUSPENDED, when called with {@code suspend} true. Requires {@code
  *     dev.dbos:transact-enterprise}, and an entitlement to it
  */
 public record DBOSConfig(
@@ -1211,13 +1211,13 @@ public record DBOSConfig(
 
   /**
    * Returns a copy of this config with {@code suspendMode} set to {@code v}. In suspend mode, a
-   * {@code recv} or {@code sleep} called with {@code suspend} true parks its workflow in the
+   * {@code recv} or {@code sleep} called with {@code suspend} true suspends its workflow in the
    * database as SUSPENDED and releases its execution, instead of holding a thread until a message
    * arrives or the time passes. Requires {@code dev.dbos:transact-enterprise}, and an entitlement
    * to it.
    *
    * <p>Turn it on only once every reader of the database knows the SUSPENDED status: Java 1.4,
-   * Python 3.5.0 and TypeScript v5.5, or later. Earlier SDKs fail on, or misread, a parked row.
+   * Python 3.5.0 and TypeScript v5.5, or later. Earlier SDKs fail on, or misread, a SUSPENDED row.
    */
   public @NonNull DBOSConfig withSuspendMode(boolean v) {
     return new DBOSConfig(

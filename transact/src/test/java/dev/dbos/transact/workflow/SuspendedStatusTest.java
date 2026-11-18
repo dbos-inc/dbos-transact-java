@@ -22,14 +22,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * A workflow another SDK parked as SUSPENDED is in flight here too: listings include it, a caller
- * keeps waiting on it, a rewind refuses it, and a send wakes it. The rows are written by hand,
- * since Java does not park workflows itself.
+ * A workflow another SDK suspended is in flight here too: listings include it, a caller keeps
+ * waiting on it, a rewind refuses it, and a send wakes it. The rows are written by hand, as another
+ * SDK would write them.
  */
 public class SuspendedStatusTest {
 
-  /** Far enough ahead that only a wake can make a parked receiver due. */
-  private static final long PARKED = 9_000_000_000_000L;
+  /** Far enough ahead that only a wake can make a suspended receiver due. */
+  private static final long NOT_DUE = 9_000_000_000_000L;
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose HikariDataSource dataSource;
@@ -49,7 +49,7 @@ public class SuspendedStatusTest {
           INSERT INTO "dbos".workflow_status
               (workflow_uuid, status, name, class_name, queue_name, suspend_key,
                delay_until_epoch_ms, executor_id, recovery_attempts, priority)
-          VALUES (?, ?, 'parked', 'com.example.Parked', ?, ?, ?, 'other-sdk', 0, 0)
+          VALUES (?, ?, 'suspended', 'com.example.Suspended', ?, ?, ?, 'other-sdk', 0, 0)
         """;
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -57,7 +57,7 @@ public class SuspendedStatusTest {
       stmt.setString(2, status);
       stmt.setString(3, queue);
       stmt.setString(4, suspendKey);
-      stmt.setLong(5, PARKED);
+      stmt.setLong(5, NOT_DUE);
       stmt.executeUpdate();
     }
   }
@@ -144,12 +144,12 @@ public class SuspendedStatusTest {
 
   @Test
   void aSuspendedWorkflowCannotBeRewound() throws Exception {
-    plant("parked", "SUSPENDED", null, "topic");
+    plant("suspended-rewind", "SUSPENDED", null, "topic");
 
     var thrown =
         assertThrows(
             IllegalStateException.class,
-            () -> dbos.rewindWorkflow("parked", 1, new RewindOptions()));
+            () -> dbos.rewindWorkflow("suspended-rewind", 1, new RewindOptions()));
     assertTrue(thrown.getMessage().contains("SUSPENDED"), thrown.getMessage());
   }
 
@@ -172,10 +172,10 @@ public class SuspendedStatusTest {
 
     assertEquals(0L, delayUntil("waiting"));
     assertEquals(0L, delayUntil("waiting-null-topic"));
-    assertEquals(PARKED, delayUntil("other-topic"));
-    assertEquals(PARKED, delayUntil("not-suspended"));
-    assertEquals(PARKED, delayUntil("not-addressed"));
-    assertEquals(PARKED, delayUntil("no-key"));
+    assertEquals(NOT_DUE, delayUntil("other-topic"));
+    assertEquals(NOT_DUE, delayUntil("not-suspended"));
+    assertEquals(NOT_DUE, delayUntil("not-addressed"));
+    assertEquals(NOT_DUE, delayUntil("no-key"));
   }
 
   @Test
