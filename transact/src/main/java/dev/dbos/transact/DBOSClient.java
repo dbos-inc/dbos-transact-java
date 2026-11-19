@@ -60,7 +60,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A client never migrates the system database, so every constructor checks that the schema it is
  * pointed at is already at {@link MigrationManager#latestMigrationVersion()} or later, and throws
- * if it is missing, unversioned, or too old.
+ * if it is missing, unversioned, too old, or sharded.
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {

@@ -95,6 +95,31 @@ public class MigrationManager {
     }
   }
 
+  /**
+   * Refuses a sharded DBOS system schema, as another SDK creates with sharding on. Its own
+   * migration numbering shares dbos_migrations, so read as this SDK's it would be migrated or
+   * judged by the wrong sequence; and this SDK's statements name no shard key, so they would read
+   * and write across every tenant's rows.
+   *
+   * @throws IllegalStateException if {@code schema} is sharded
+   */
+  private static void refuseShardedSchema(Connection conn, String schema) throws SQLException {
+    var sql =
+        "SELECT 1 FROM information_schema.columns WHERE table_schema = ?"
+            + " AND table_name = 'workflow_status' AND column_name = 'shard_key'";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, schema);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          throw new IllegalStateException(
+              ("The DBOS system schema \"%s\" is sharded, and DBOS Transact for Java does not"
+                      + " support a sharded system database. Use an unsharded schema.")
+                  .formatted(schema));
+        }
+      }
+    }
+  }
+
   private static boolean migrationTableExists(Connection conn, String schema) throws SQLException {
     var sql =
         "SELECT 1 FROM information_schema.tables"
@@ -114,7 +139,7 @@ public class MigrationManager {
    * Without this check the SDK never reads dbos_migrations at all, and a schema missing one of its
    * migrations surfaces much later as a raw SQL error on the first query that needs it.
    *
-   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   * @throws IllegalStateException if the schema is missing, unversioned, too old, or sharded
    */
   public static void validateSysDbVersion(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
@@ -130,7 +155,7 @@ public class MigrationManager {
   /**
    * Verifies that the system database schema is new enough for this SDK, without modifying it.
    *
-   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   * @throws IllegalStateException if the schema is missing, unversioned, too old, or sharded
    */
   public static void validateSysDbVersion(String url, String user, String password, String schema) {
     Objects.requireNonNull(url, "database url must not be null");
@@ -143,7 +168,7 @@ public class MigrationManager {
   /**
    * Verifies that the system database schema is new enough for this SDK, without modifying it.
    *
-   * @throws IllegalStateException if the schema is missing, unversioned, or too old
+   * @throws IllegalStateException if the schema is missing, unversioned, too old, or sharded
    */
   public static void validateSysDbVersion(DataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
@@ -155,6 +180,7 @@ public class MigrationManager {
 
     int version;
     try (var conn = ds.getConnection()) {
+      refuseShardedSchema(conn, schema);
       version = readSysDbVersion(conn, schema);
     } catch (SQLException e) {
       // 42P01 undefined_table, 3F000 invalid_schema_name: the schema has never been migrated.
@@ -206,6 +232,8 @@ public class MigrationManager {
     }
 
     try (var checkConn = ds.getConnection()) {
+      // Before anything is created or read as this SDK's version.
+      refuseShardedSchema(checkConn, schema);
       // Skip advisory lock and migration work entirely if already up-to-date.
       if (!shouldMigrate(checkConn, schema)) {
         return;
