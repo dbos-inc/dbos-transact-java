@@ -46,6 +46,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.spi.SuspendBackend;
 import dev.dbos.transact.spi.WorkflowFork;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -1408,6 +1409,32 @@ public class DBOSExecutor implements AutoCloseable {
         "DBOS.rewindWorkflow",
         null);
     return retrieveWorkflow(workflowId);
+  }
+
+  /**
+   * Rewinds each workflow from its own start step, all or nothing in the system database. A
+   * workflow listed more than once is rewound once, from its first listing's step.
+   */
+  public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
+    Objects.requireNonNull(rewinds, "rewinds must not be null");
+    Objects.requireNonNull(options);
+    var targets = SystemDatabase.rewindTargets(rewinds);
+    if (targets.isEmpty()) {
+      return;
+    }
+    logger.info("Rewinding {} workflow(s)", targets.size());
+
+    validateRequeue(options.queueName(), options.queuePartitionKey());
+
+    // Checkpoint deletes aren't undone if the system database refuses the batch, so every workflow
+    // is checked before any is deleted.
+    if (hasStepCheckpointStores()) {
+      systemDatabase.checkRewindable(targets.stream().map(WorkflowRewind::workflowId).toList());
+      for (var target : targets) {
+        deleteStepCheckpoints(target.workflowId(), target.startStep());
+      }
+    }
+    systemDatabase.rewindWorkflows(targets, options);
   }
 
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {

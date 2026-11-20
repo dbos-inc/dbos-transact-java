@@ -13,8 +13,10 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.internal.DBOSEnterpriseEngine;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.txstep.JdbcStepFactory;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.DBUtils.EventHistoryRow;
@@ -758,6 +760,64 @@ public class RewindTest {
 
     impl.txReleased.countDown();
     handle.getResult();
+  }
+
+  @Test
+  public void batchRewindChecksEveryWorkflowBeforeDroppingCheckpoints() throws Exception {
+    var engine =
+        new DBOSEnterpriseEngine(
+            DBOSTestAccess.getDbosExecutor(dbos), DBOSTestAccess.getSystemDatabase(dbos));
+    // The batch goes in workflow ID order, so the finished workflow comes first.
+    var finishedId = "a-" + UUID.randomUUID();
+    var unfinishedId = "z-" + UUID.randomUUID();
+    try (var o = new WorkflowOptions(finishedId).setContext()) {
+      sneaky(() -> proxy.txWriter("finished"));
+    }
+    try (var o = new WorkflowOptions(unfinishedId).setContext()) {
+      sneaky(() -> proxy.txWriter("unfinished"));
+    }
+    DBUtils.setWorkflowState(dataSource, unfinishedId, WorkflowState.PENDING.name());
+
+    var refused =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                engine.rewindWorkflows(
+                    List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(unfinishedId, 0)),
+                    null,
+                    null,
+                    null));
+    assertTrue(
+        refused.getMessage().startsWith("Cannot rewind " + unfinishedId), refused.getMessage());
+    assertEquals(List.of(0, 2), txCheckpoints("rewind_first", finishedId));
+    assertEquals(List.of(1, 3), txCheckpoints("rewind_second", finishedId));
+    assertEquals(List.of(0, 2), txCheckpoints("rewind_first", unfinishedId));
+
+    var missingId = "z-" + UUID.randomUUID();
+    assertThrows(
+        DBOSNonExistentWorkflowException.class,
+        () ->
+            engine.rewindWorkflows(
+                List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(missingId, 0)),
+                null,
+                null,
+                null));
+    assertEquals(List.of(0, 2), txCheckpoints("rewind_first", finishedId));
+    assertEquals(List.of(1, 3), txCheckpoints("rewind_second", finishedId));
+
+    // Once both are finished, the batch drops their checkpoints, so each transaction runs again
+    // rather than replaying its checkpoint.
+    DBUtils.setWorkflowState(dataSource, unfinishedId, WorkflowState.ERROR.name());
+    engine.rewindWorkflows(
+        List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(unfinishedId, 0)),
+        null,
+        null,
+        null);
+    assertEquals(2, dbos.retrieveWorkflow(finishedId).getResult());
+    assertEquals(2, dbos.retrieveWorkflow(unfinishedId).getResult());
+    assertEquals(
+        List.of("a", "a", "a", "a", "b", "b", "b", "b", "c", "c", "c", "c", "d", "d", "d", "d"),
+        tableRows());
   }
 
   @FunctionalInterface

@@ -24,6 +24,7 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.spi.WorkflowFork;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -2114,134 +2115,183 @@ public class WorkflowDAO {
           txConn,
           conn -> {
             var state = readRewindableState(conn, schema, workflowId);
+            rewindWorkflowTxn(conn, schema, workflowId, startStep, state, options);
+          });
+    }
+  }
 
-            // Whether a key was published at or past the cut. %2$s is the key column the
-            // correlated subquery compares against.
-            var publishedPastCut =
-                """
-                  EXISTS (
-                    SELECT 1 FROM "%1$s".workflow_events_history discarded
-                    WHERE discarded.workflow_uuid = ? AND discarded.key = %2$s
-                      AND discarded.function_id >= ?
-                  )
-                """;
+  /**
+   * Rewinds each workflow from its own start step, all or nothing in one transaction. The rewinds
+   * must already be one per workflow, as {@link SystemDatabase#rewindTargets} makes them.
+   *
+   * <p>The statuses are read without locking the rows: a workflow whose status changes afterwards
+   * fails its rewind's guarded update, which refuses the whole batch.
+   *
+   * @throws DBOSNonExistentWorkflowException if a workflow does not exist
+   * @throws IllegalStateException if a workflow is not in a terminal state, or changed status while
+   *     being rewound
+   */
+  public static void rewindWorkflows(
+      DbContext ctx, List<WorkflowRewind> rewinds, RewindOptions options) throws SQLException {
+    Objects.requireNonNull(options, "RewindOptions must not be null");
+    if (rewinds.isEmpty()) {
+      return;
+    }
+    var schema = ctx.schema();
+    var workflowIds = rewinds.stream().map(WorkflowRewind::workflowId).toList();
 
-            // workflow_events_history is the undo log for workflow_events, so the events are
-            // rolled back before the history past the cut is deleted. First unpublish every key
-            // the discarded steps published...
-            var unpublishSql =
-                ("""
-                  DELETE FROM "%1$s".workflow_events
-                  WHERE workflow_uuid = ? AND """
-                        + publishedPastCut)
-                    .formatted(schema, "\"%s\".workflow_events.key".formatted(schema));
-            try (var stmt = conn.prepareStatement(unpublishSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setString(2, workflowId);
-              stmt.setInt(3, startStep);
-              stmt.executeUpdate();
-            }
-
-            // ...then restore those keys to the last value published before the cut, if any.
-            var restoreSql =
-                ("""
-                  INSERT INTO "%1$s".workflow_events (workflow_uuid, key, value, serialization)
-                  SELECT surviving.workflow_uuid, surviving.key, surviving.value,
-                         surviving.serialization
-                  FROM (
-                    SELECT weh.workflow_uuid, weh.key, weh.value, weh.serialization,
-                           ROW_NUMBER() OVER (PARTITION BY weh.key ORDER BY weh.function_id DESC)
-                             AS rn
-                    FROM "%1$s".workflow_events_history weh
-                    WHERE weh.workflow_uuid = ? AND weh.function_id < ? AND """
-                        + publishedPastCut
-                        + """
-                  ) surviving
-                  WHERE surviving.rn = 1
-                """)
-                    .formatted(schema, "weh.key");
-            try (var stmt = conn.prepareStatement(restoreSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setInt(2, startStep);
-              stmt.setString(3, workflowId);
-              stmt.setInt(4, startStep);
-              stmt.executeUpdate();
-            }
-
-            StreamsDAO.deleteCloseSentinels(conn, schema, workflowId, startStep);
-
-            for (var table : List.of("operation_outputs", "workflow_events_history")) {
-              var deleteSql =
-                  """
-                    DELETE FROM "%s".%s WHERE workflow_uuid = ? AND function_id >= ?
-                  """
-                      .formatted(schema, table);
-              try (var stmt = conn.prepareStatement(deleteSql)) {
-                stmt.setString(1, workflowId);
-                stmt.setInt(2, startStep);
-                stmt.executeUpdate();
-              }
-            }
-
-            var notificationsSql =
-                """
-                  DELETE FROM "%s".notifications
-                  WHERE destination_uuid = ?
-                    AND (consumed_by_function_id >= ? OR consumed = FALSE)
-                """
-                    .formatted(schema);
-            try (var stmt = conn.prepareStatement(notificationsSql)) {
-              stmt.setString(1, workflowId);
-              stmt.setInt(2, startStep);
-              stmt.executeUpdate();
-            }
-
-            var outputSql =
-                """
-                  DELETE FROM "%s".workflow_output WHERE workflow_uuid = ?
-                """
-                    .formatted(schema);
-            try (var stmt = conn.prepareStatement(outputSql)) {
-              stmt.setString(1, workflowId);
-              stmt.executeUpdate();
-            }
-
-            // Re-enqueue. The legacy output and error columns are cleared too: reads fall back to
-            // them when there is no workflow_output row, so a value left there would be returned
-            // as the rewound workflow's result. Re-asserting the status read above keeps a
-            // workflow that moved on underneath this transaction from being resurrected.
-            var setVersion =
-                options.applicationVersion() != null ? ", application_version = ?" : "";
-            var enqueueSql =
-                """
-                  UPDATE "%1$s".workflow_status
-                  SET status = ?, owner_xid = NULL, queue_name = COALESCE(?, queue_name, ?),
-                      queue_partition_key = COALESCE(?, queue_partition_key),
-                      recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
-                      deduplication_id = NULL, suspend_key = NULL, started_at_epoch_ms = NULL,
-                      completed_at = NULL,
-                      output = NULL, error = NULL, updated_at = %2$s%3$s
-                  WHERE workflow_uuid = ? AND status = ?
-                """
-                    .formatted(schema, SystemDatabase.NOW_EPOCH_MS, setVersion);
-            try (var stmt = conn.prepareStatement(enqueueSql)) {
-              int i = 1;
-              stmt.setString(i++, WorkflowState.ENQUEUED.name());
-              stmt.setString(i++, options.queueName());
-              stmt.setString(i++, Constants.DBOS_INTERNAL_QUEUE);
-              stmt.setString(i++, options.queuePartitionKey());
-              if (options.applicationVersion() != null) {
-                stmt.setString(i++, options.applicationVersion());
-              }
-              stmt.setString(i++, workflowId);
-              stmt.setString(i++, state.name());
-              if (stmt.executeUpdate() != 1) {
-                throw new IllegalStateException(
-                    "Workflow %s changed status while being rewound; retry the rewind"
-                        .formatted(workflowId));
-              }
+    try (var txConn = ctx.getConnection()) {
+      SqlTransaction.run(
+          txConn,
+          conn -> {
+            var states = readRewindableStates(conn, schema, workflowIds);
+            DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_REWIND_AFTER_STATUS_READ);
+            for (var rewind : rewinds) {
+              rewindWorkflowTxn(
+                  conn,
+                  schema,
+                  rewind.workflowId(),
+                  rewind.startStep(),
+                  states.get(rewind.workflowId()),
+                  options);
             }
           });
+    }
+  }
+
+  /** A rewind's statements, for a workflow already read to be in {@code state}. */
+  private static void rewindWorkflowTxn(
+      Connection conn,
+      String schema,
+      String workflowId,
+      int startStep,
+      WorkflowState state,
+      RewindOptions options)
+      throws SQLException {
+    // Whether a key was published at or past the cut. %2$s is the key column the
+    // correlated subquery compares against.
+    var publishedPastCut =
+        """
+          EXISTS (
+            SELECT 1 FROM "%1$s".workflow_events_history discarded
+            WHERE discarded.workflow_uuid = ? AND discarded.key = %2$s
+              AND discarded.function_id >= ?
+          )
+        """;
+
+    // workflow_events_history is the undo log for workflow_events, so the events are
+    // rolled back before the history past the cut is deleted. First unpublish every key
+    // the discarded steps published...
+    var unpublishSql =
+        ("""
+          DELETE FROM "%1$s".workflow_events
+          WHERE workflow_uuid = ? AND """
+                + publishedPastCut)
+            .formatted(schema, "\"%s\".workflow_events.key".formatted(schema));
+    try (var stmt = conn.prepareStatement(unpublishSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, workflowId);
+      stmt.setInt(3, startStep);
+      stmt.executeUpdate();
+    }
+
+    // ...then restore those keys to the last value published before the cut, if any.
+    var restoreSql =
+        ("""
+          INSERT INTO "%1$s".workflow_events (workflow_uuid, key, value, serialization)
+          SELECT surviving.workflow_uuid, surviving.key, surviving.value,
+                 surviving.serialization
+          FROM (
+            SELECT weh.workflow_uuid, weh.key, weh.value, weh.serialization,
+                   ROW_NUMBER() OVER (PARTITION BY weh.key ORDER BY weh.function_id DESC)
+                     AS rn
+            FROM "%1$s".workflow_events_history weh
+            WHERE weh.workflow_uuid = ? AND weh.function_id < ? AND """
+                + publishedPastCut
+                + """
+          ) surviving
+          WHERE surviving.rn = 1
+        """)
+            .formatted(schema, "weh.key");
+    try (var stmt = conn.prepareStatement(restoreSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, startStep);
+      stmt.setString(3, workflowId);
+      stmt.setInt(4, startStep);
+      stmt.executeUpdate();
+    }
+
+    StreamsDAO.deleteCloseSentinels(conn, schema, workflowId, startStep);
+
+    for (var table : List.of("operation_outputs", "workflow_events_history")) {
+      var deleteSql =
+          """
+            DELETE FROM "%s".%s WHERE workflow_uuid = ? AND function_id >= ?
+          """
+              .formatted(schema, table);
+      try (var stmt = conn.prepareStatement(deleteSql)) {
+        stmt.setString(1, workflowId);
+        stmt.setInt(2, startStep);
+        stmt.executeUpdate();
+      }
+    }
+
+    var notificationsSql =
+        """
+          DELETE FROM "%s".notifications
+          WHERE destination_uuid = ?
+            AND (consumed_by_function_id >= ? OR consumed = FALSE)
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(notificationsSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, startStep);
+      stmt.executeUpdate();
+    }
+
+    var outputSql =
+        """
+          DELETE FROM "%s".workflow_output WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+    try (var stmt = conn.prepareStatement(outputSql)) {
+      stmt.setString(1, workflowId);
+      stmt.executeUpdate();
+    }
+
+    // Re-enqueue. The legacy output and error columns are cleared too: reads fall back to
+    // them when there is no workflow_output row, so a value left there would be returned
+    // as the rewound workflow's result. Re-asserting the status read above keeps a
+    // workflow that moved on underneath this transaction from being resurrected.
+    var setVersion = options.applicationVersion() != null ? ", application_version = ?" : "";
+    var enqueueSql =
+        """
+          UPDATE "%1$s".workflow_status
+          SET status = ?, owner_xid = NULL, queue_name = COALESCE(?, queue_name, ?),
+              queue_partition_key = COALESCE(?, queue_partition_key),
+              recovery_attempts = 0, workflow_deadline_epoch_ms = NULL,
+              deduplication_id = NULL, suspend_key = NULL, started_at_epoch_ms = NULL,
+              completed_at = NULL,
+              output = NULL, error = NULL, updated_at = %2$s%3$s
+          WHERE workflow_uuid = ? AND status = ?
+        """
+            .formatted(schema, SystemDatabase.NOW_EPOCH_MS, setVersion);
+    try (var stmt = conn.prepareStatement(enqueueSql)) {
+      int i = 1;
+      stmt.setString(i++, WorkflowState.ENQUEUED.name());
+      stmt.setString(i++, options.queueName());
+      stmt.setString(i++, Constants.DBOS_INTERNAL_QUEUE);
+      stmt.setString(i++, options.queuePartitionKey());
+      if (options.applicationVersion() != null) {
+        stmt.setString(i++, options.applicationVersion());
+      }
+      stmt.setString(i++, workflowId);
+      stmt.setString(i++, state.name());
+      if (stmt.executeUpdate() != 1) {
+        throw new IllegalStateException(
+            "Workflow %s changed status while being rewound; retry the rewind"
+                .formatted(workflowId));
+      }
     }
   }
 
@@ -2260,9 +2310,54 @@ public class WorkflowDAO {
     }
   }
 
+  /** As {@link #checkRewindable(DbContext, String, int)}, for every workflow in one query. */
+  public static void checkRewindable(DbContext ctx, List<String> workflowIds) throws SQLException {
+    if (workflowIds.isEmpty()) {
+      return;
+    }
+    try (var conn = ctx.getConnection()) {
+      readRewindableStates(conn, ctx.schema(), workflowIds);
+    }
+  }
+
   private static WorkflowState readRewindableState(
       Connection conn, String schema, String workflowId) throws SQLException {
-    var state = getWorkflowState(conn, schema, workflowId);
+    return rewindableState(workflowId, getWorkflowState(conn, schema, workflowId));
+  }
+
+  /**
+   * Each workflow's state, refusing, in the order given, the first that is missing or not in a
+   * terminal state.
+   */
+  private static Map<String, WorkflowState> readRewindableStates(
+      Connection conn, String schema, List<String> workflowIds) throws SQLException {
+    var sql =
+        """
+        SELECT workflow_uuid, status FROM "%s".workflow_status WHERE workflow_uuid = ANY(?)
+        """
+            .formatted(schema);
+    var found = new HashMap<String, WorkflowState>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      Array array = conn.createArrayOf("text", workflowIds.toArray(String[]::new));
+      try {
+        stmt.setArray(1, array);
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            found.put(rs.getString("workflow_uuid"), WorkflowState.valueOf(rs.getString("status")));
+          }
+        }
+      } finally {
+        array.free();
+      }
+    }
+    var states = new HashMap<String, WorkflowState>();
+    for (var workflowId : workflowIds) {
+      states.put(workflowId, rewindableState(workflowId, found.get(workflowId)));
+    }
+    return states;
+  }
+
+  private static WorkflowState rewindableState(String workflowId, @Nullable WorkflowState state) {
     if (state == null) {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }

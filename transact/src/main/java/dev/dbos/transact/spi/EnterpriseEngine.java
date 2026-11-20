@@ -121,6 +121,41 @@ public interface EnterpriseEngine {
   String rewindWorkflow(String workflowId, int startStep, RewindOptions options);
 
   /**
+   * Rewinds workflows in one transaction, each from its own step and under its own ID: all of them
+   * are rewound, or none is. A workflow listed more than once is rewound once, from the step of its
+   * first listing.
+   *
+   * @param rewinds the rewinds to make
+   * @param applicationVersion the version to run the workflows on, or {@code null} for each one's
+   *     own
+   * @param queueName the queue to re-enqueue them on, or {@code null} for each one's own, or DBOS's
+   *     internal queue if it has none
+   * @param queuePartitionKey their partition key, or {@code null} for each one's own
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
+   *     exist
+   * @throws IllegalStateException if a workflow is not in a terminal state, or changed status while
+   *     being rewound
+   * @throws IllegalArgumentException if a start step is negative, a queue is named but not
+   *     registered, or a partition key is given with a named queue that is not partitioned
+   */
+  void rewindWorkflows(
+      List<WorkflowRewind> rewinds,
+      @Nullable String applicationVersion,
+      @Nullable String queueName,
+      @Nullable String queuePartitionKey);
+
+  /**
+   * Checks, changing nothing, that every workflow can be rewound: it must exist and be in a
+   * terminal state. Fails as {@link #rewindWorkflows} fails for the first workflow that cannot.
+   *
+   * @param workflowIds the workflows to check
+   * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
+   *     exist
+   * @throws IllegalStateException if a workflow is not in a terminal state
+   */
+  void checkRewindable(List<String> workflowIds);
+
+  /**
    * Lists workflows.
    *
    * @param input the filters

@@ -89,4 +89,8 @@ public final class DebugTriggers {
   // In startQueuedPartitionedWorkflows between a batch's head re-pick and its row lock.
   public static final String DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES =
       "DEBUG_TRIGGER_PARTITIONED_DEQUEUE_AFTER_CANDIDATES";
+  // In a batch rewind's transaction, after it reads the workflows' statuses and before it rewinds
+  // any of them.
+  public static final String DEBUG_TRIGGER_REWIND_AFTER_STATUS_READ =
+      "DEBUG_TRIGGER_REWIND_AFTER_STATUS_READ";
 }
