@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -161,6 +162,9 @@ public class BatchRewindTest {
 
   @Test
   public void isOneTransaction() throws Exception {
+    // On CockroachDB the concurrent change is a serialization error instead, and the retry reads
+    // the new status.
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "relies on READ COMMITTED");
     // The batch goes in workflow ID order, so the first workflow is rewound before the second's
     // guarded update finds its status changed.
     var firstId = start("a-" + UUID.randomUUID(), "txn-first");
