@@ -146,7 +146,8 @@ public interface EnterpriseEngine {
 
   /**
    * Checks, changing nothing, that every workflow can be rewound: it must exist and be in a
-   * terminal state. Fails as {@link #rewindWorkflows} fails for the first workflow that cannot.
+   * terminal state. Fails as {@link #rewindWorkflows} does, naming the first workflow in the given
+   * order that cannot be rewound.
    *
    * @param workflowIds the workflows to check
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not

@@ -1411,10 +1411,7 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(workflowId);
   }
 
-  /**
-   * Rewinds each workflow from its own start step, all or nothing in the system database. A
-   * workflow listed more than once is rewound once, from its first listing's step.
-   */
+  /** Rewinds each workflow from its own start step, all or nothing in the system database. */
   public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
     Objects.requireNonNull(rewinds, "rewinds must not be null");
     Objects.requireNonNull(options);

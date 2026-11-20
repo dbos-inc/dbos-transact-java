@@ -2322,7 +2322,7 @@ public class WorkflowDAO {
 
   private static WorkflowState readRewindableState(
       Connection conn, String schema, String workflowId) throws SQLException {
-    return rewindableState(workflowId, getWorkflowState(conn, schema, workflowId));
+    return requireRewindable(workflowId, getWorkflowState(conn, schema, workflowId));
   }
 
   /**
@@ -2350,14 +2350,13 @@ public class WorkflowDAO {
         array.free();
       }
     }
-    var states = new HashMap<String, WorkflowState>();
     for (var workflowId : workflowIds) {
-      states.put(workflowId, rewindableState(workflowId, found.get(workflowId)));
+      requireRewindable(workflowId, found.get(workflowId));
     }
-    return states;
+    return found;
   }
 
-  private static WorkflowState rewindableState(String workflowId, @Nullable WorkflowState state) {
+  private static WorkflowState requireRewindable(String workflowId, @Nullable WorkflowState state) {
     if (state == null) {
       throw new DBOSNonExistentWorkflowException(workflowId);
     }

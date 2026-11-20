@@ -1742,10 +1742,7 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
   }
 
-  /**
-   * Rewinds each workflow from its own start step, all or nothing in one transaction. A workflow
-   * listed more than once is rewound once, from its first listing's step.
-   */
+  /** Rewinds each workflow from its own start step, all or nothing in one transaction. */
   public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
     var targets = rewindTargets(rewinds);
     if (targets.isEmpty()) {
