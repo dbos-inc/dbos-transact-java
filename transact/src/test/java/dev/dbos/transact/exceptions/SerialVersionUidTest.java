@@ -16,7 +16,8 @@ import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 
 /**
- * Guards the {@code serialVersionUID} of every serializable exception class in the SDK.
+ * Guards the {@code serialVersionUID} of every serializable exception class compiled from this
+ * module's Java sources.
  *
  * <p>Recorded errors (a step's error, a failed workflow's outcome) are stored with Java
  * serialization. It writes the class's {@code serialVersionUID} into the record, and refuses to
@@ -25,20 +26,33 @@ import org.junit.jupiter.api.Test;
  * and methods. So an edit as small as adding a constructor or a getter changes the value, and every
  * error of that class already recorded stops reading back as that class.
  *
- * <p>{@link #VALUES} holds each class's value as of 1.3.0, the last release; the classes added
- * since hold their current value. When this test fails:
+ * <p>{@link #VALUES} holds each class's value as of 1.3.0; rows marked unreleased are classes no
+ * release has shipped yet. When a release ships, drop the marks and update the version here. When
+ * this test fails:
  *
  * <ul>
  *   <li><b>A class's value changed.</b> Do not update the table. Declare the value from the table
  *       in the class, {@code private static final long serialVersionUID = <value>L;}, so the errors
- *       earlier releases recorded still read back. Java serialization then fills in fields an old
- *       record lacks and skips fields the class no longer has. Change a released class's value only
- *       to refuse its old records on purpose, and say so in the release notes. A class no release
- *       has shipped yet can just take its new value in the table.
- *   <li><b>A new class.</b> Add a row with the value the failure reports, or declare {@code
- *       serialVersionUID = 1L} in the class and add a row with {@code 1L}.
+ *       earlier releases recorded still read back. Change a released class's value only to refuse
+ *       its old records on purpose, and say so in the release notes. An unreleased class can just
+ *       take its new value in the table.
+ *   <li><b>A new class.</b> Add a row, marked unreleased, with the value the failure reports, or
+ *       declare {@code serialVersionUID = 1L} in the class and add a row with {@code 1L}.
  *   <li><b>A class was removed or renamed.</b> Remove its row. Its recorded errors now read back as
  *       a {@link dev.dbos.transact.json.PortableWorkflowException} carrying the old class name.
+ * </ul>
+ *
+ * <p>A declared value keeps old records readable only across compatible changes: Java serialization
+ * gives a field an old record lacks its default value, and skips a field the class no longer has.
+ * This test cannot see the changes that still break old records, so avoid them in a released class,
+ * or treat them as refusing its old records:
+ *
+ * <ul>
+ *   <li>changing a field's type, which fails the read;
+ *   <li>moving a field to another class in the hierarchy, such as a new superclass, which reads
+ *       back as its default value, silently;
+ *   <li>removing or renaming a constant of an enum a field holds, which fails the read;
+ *   <li>changing the class's superclass, or whether it is an enum or a record.
  * </ul>
  */
 public class SerialVersionUidTest {
@@ -81,8 +95,11 @@ public class SerialVersionUidTest {
               "dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException",
               -7685608188535248792L),
           Map.entry("dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException", 1L),
+          // Unreleased.
           Map.entry("dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException", 1L),
+          // Unreleased.
           Map.entry("dev.dbos.transact.internal.Entitlements$InvalidUrl", -1052318094765006001L),
+          // Unreleased.
           Map.entry(
               "dev.dbos.transact.internal.Entitlements$MalformedAnswer", 3705209497722782822L),
           Map.entry("dev.dbos.transact.json.PortableWorkflowException", -2972485864766567000L),

@@ -13,15 +13,15 @@ import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 
 /**
- * Guards the {@code serialVersionUID} of every serializable exception class in this module, as
- * {@code dev.dbos.transact.exceptions.SerialVersionUidTest} does in transact; its javadoc says what
- * to do when this fails. {@link WrappedThrowableException} is recorded as a step's error when a
- * step throws an {@link Error}, and replay unwraps it by catching it by class, so an error recorded
- * under another value no longer unwraps.
+ * Guards the {@code serialVersionUID} of every serializable exception class compiled from this
+ * module's Java sources, as {@code dev.dbos.transact.exceptions.SerialVersionUidTest} does in
+ * transact; its javadoc says what to do when this fails. {@link WrappedThrowableException} is
+ * recorded as a step's error when a step throws an {@link Error}, and replay unwraps it by catching
+ * it by class, so an error recorded under another value no longer unwraps.
  */
 public class SerialVersionUidTest {
 
-  // The values as of 1.3.0, the last release.
+  // The values as of 1.3.0.
   private static final Map<String, Long> VALUES =
       Map.of("dev.dbos.transact.spring.WrappedThrowableException", -3513833494768036443L);
 

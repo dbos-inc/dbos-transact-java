@@ -17,6 +17,7 @@ import java.io.ObjectInputStream;
 import java.io.StreamCorruptedException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +91,9 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, read);
     assertEquals(DBOSWorkflowFunctionNotFoundException.class.getName(), portable.getErrorName());
     assertEquals(error.getMessage(), portable.getMessage());
-    assertInstanceOf(InvalidClassException.class, portable.getCause());
+    assertInstanceOf(InvalidClassException.class, portable.getSuppressed()[0]);
+    // No cause, so a workflow that lets it propagate records it rather than the read failure.
+    assertNull(portable.getCause());
     var data = assertInstanceOf(Map.class, portable.getData());
     var preview = assertInstanceOf(List.class, data.get("stackPreview"));
     assertEquals(recorded.stackPreview(), preview);
@@ -115,7 +118,7 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, read);
     assertEquals(name, portable.getErrorName());
     assertEquals("gone", portable.getMessage());
-    assertInstanceOf(ClassNotFoundException.class, portable.getCause());
+    assertInstanceOf(ClassNotFoundException.class, portable.getSuppressed()[0]);
     var data = assertInstanceOf(Map.class, portable.getData());
     assertEquals(IllegalStateException.class.getName(), data.get("causeType"));
   }
@@ -127,7 +130,7 @@ public class UnreadableErrorTest {
 
     var portable = assertInstanceOf(PortableWorkflowException.class, read);
     assertEquals(GoneException.class.getName(), portable.getErrorName());
-    assertInstanceOf(IOException.class, portable.getCause());
+    assertInstanceOf(IOException.class, portable.getSuppressed()[0]);
   }
 
   @Test
@@ -148,7 +151,7 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, read);
     assertEquals(IllegalStateException.class.getName(), portable.getErrorName());
     assertEquals("top", portable.getMessage());
-    assertInstanceOf(ClassNotFoundException.class, portable.getCause());
+    assertInstanceOf(ClassNotFoundException.class, portable.getSuppressed()[0]);
     var data = assertInstanceOf(Map.class, portable.getData());
     assertEquals(name, data.get("causeType"));
   }
@@ -171,7 +174,30 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, empty.toThrowable());
     assertEquals(GoneException.class.getName(), portable.getErrorName());
     assertEquals("empty", portable.getMessage());
-    assertInstanceOf(StreamCorruptedException.class, portable.getCause());
+    assertInstanceOf(StreamCorruptedException.class, portable.getSuppressed()[0]);
+  }
+
+  @Test
+  public void aStackPreviewWithANullFrameReadsBack() {
+    var recorded = WireThrowable.fromThrowable(new GoneException("frames"), null, null);
+    var preview = new ArrayList<String>();
+    preview.add("first");
+    preview.add(null);
+    var unreadable =
+        new WireThrowable(
+            recorded.v(),
+            recorded.type(),
+            recorded.message(),
+            recorded.causeType(),
+            preview,
+            recorded.suppressedCount(),
+            Base64.getEncoder().encodeToString(new byte[] {1, 2, 3}),
+            recorded.node(),
+            recorded.extra());
+
+    var portable = assertInstanceOf(PortableWorkflowException.class, unreadable.toThrowable());
+    var data = assertInstanceOf(Map.class, portable.getData());
+    assertEquals(preview, data.get("stackPreview"));
   }
 
   @Test
@@ -181,11 +207,11 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, recorded.toThrowable());
 
     assertEquals(RefusesToReadException.class.getName(), portable.getErrorName());
-    var cause = assertInstanceOf(InvalidObjectException.class, portable.getCause());
+    var cause = assertInstanceOf(InvalidObjectException.class, portable.getSuppressed()[0]);
     assertTrue(
         cause.getMessage().contains(HoldsALockException.class.getName()), cause.getMessage());
     assertTrue(cause.getMessage().contains("refused"), cause.getMessage());
-    // Recorded again, as when a workflow lets the replayed error propagate, and read back.
+    // Recorded again and read back. UnreadableErrorReplayTest covers a workflow recording it.
     var again =
         DBOSJavaSerializer.INSTANCE.deserializeThrowable(
             DBOSJavaSerializer.INSTANCE.serializeThrowable(portable));
@@ -201,7 +227,7 @@ public class UnreadableErrorTest {
     var portable = assertInstanceOf(PortableWorkflowException.class, recorded.toThrowable());
 
     assertEquals(FailsToLinkException.class.getName(), portable.getErrorName());
-    assertInstanceOf(NoClassDefFoundError.class, portable.getCause());
+    assertInstanceOf(NoClassDefFoundError.class, portable.getSuppressed()[0]);
   }
 
   @Test
@@ -218,7 +244,7 @@ public class UnreadableErrorTest {
     assertEquals(DBOSWorkflowFunctionNotFoundException.class.getName(), fromJava.getErrorName());
     assertEquals(error.getMessage(), fromJava.getMessage());
     assertEquals(portable.getData(), fromJava.getData());
-    assertInstanceOf(InvalidClassException.class, fromJava.getCause());
+    assertInstanceOf(InvalidClassException.class, fromJava.getSuppressed()[0]);
 
     // The portable record keeps the fully qualified name.
     var text = DBOSPortableSerializer.INSTANCE.serializeThrowable(portable);

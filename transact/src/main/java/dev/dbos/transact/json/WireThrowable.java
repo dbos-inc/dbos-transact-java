@@ -9,6 +9,7 @@ import java.io.ObjectOutputStream;
 import java.io.StreamCorruptedException;
 import java.io.UncheckedIOException;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
@@ -93,10 +94,12 @@ record WireThrowable(
    *   <li>as its message, the recorded message;
    *   <li>as its {@link PortableWorkflowException#getData() data}, the recorded stack preview and
    *       cause type;
-   *   <li>as its cause, the failure to read the payload. A failure that could not itself be
-   *       serialized, such as one thrown by a class's own {@code readObject}, is replaced by an
-   *       {@link InvalidObjectException} carrying its description and stack trace, so the error can
-   *       be recorded again.
+   *   <li>as a {@link Throwable#getSuppressed() suppressed exception}, the failure to read the
+   *       payload. It has no cause, so a workflow that lets it propagate records it, not the read
+   *       failure, as its outcome. A failure that involves any class outside the JDK, such as one
+   *       thrown by a class's own {@code readObject}, is replaced by an {@link
+   *       InvalidObjectException} carrying its description and stack trace, since such a class may
+   *       not serialize, and the error must be recordable again.
    * </ul>
    *
    * <p>The first unreadable payload of each recorded class is logged at WARN, later ones at DEBUG.
@@ -116,9 +119,9 @@ record WireThrowable(
             "Not a Throwable: " + (obj == null ? "null" : obj.getClass().getName()));
       }
     } catch (IOException | ClassNotFoundException | RuntimeException | LinkageError e) {
-      // InvalidClassException (a changed serialVersionUID or field type), ClassNotFoundException
-      // and
-      // NoClassDefFoundError (a missing class), and whatever a class's own readObject throws.
+      // A changed serialVersionUID or primitive field type throws InvalidClassException, a changed
+      // reference field type ClassCastException, and a missing class ClassNotFoundException or
+      // NoClassDefFoundError; a class's own readObject may throw anything.
       var text =
           "A recorded {} could not be read back, so it is returned as a"
               + " PortableWorkflowException: {}";
@@ -137,12 +140,13 @@ record WireThrowable(
       data.put("causeType", causeType);
     }
     if (stackPreview != null && !stackPreview.isEmpty()) {
-      data.put("stackPreview", List.copyOf(stackPreview));
+      // Not List.copyOf, which refuses a null element.
+      data.put("stackPreview", Collections.unmodifiableList(new ArrayList<>(stackPreview)));
     }
     var e =
         new PortableWorkflowException(
             message, type, null, data.isEmpty() ? null : Collections.unmodifiableMap(data));
-    e.initCause(fromTheJdk(failure) ? failure : describe(failure));
+    e.addSuppressed(fromTheJdk(failure) ? failure : describe(failure));
     return e;
   }
 
