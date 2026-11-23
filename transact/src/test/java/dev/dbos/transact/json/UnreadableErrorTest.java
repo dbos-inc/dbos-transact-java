@@ -17,6 +17,7 @@ import java.io.ObjectInputStream;
 import java.io.StreamCorruptedException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -61,6 +62,34 @@ public class UnreadableErrorTest {
 
     private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
       throw new HoldsALockException("refused");
+    }
+  }
+
+  /** A SQLException holding a field Java serialization can't write. */
+  public static class LockedSqlException extends SQLException {
+    private static final long serialVersionUID = 1L;
+    private final Object lock = new Object();
+
+    public LockedSqlException(String message) {
+      super(message);
+    }
+  }
+
+  /**
+   * Records fine, and when read back throws a JDK exception that links, through a SQLException's
+   * next exception, to one that can't be recorded.
+   */
+  public static class ChainsALockException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    public ChainsALockException(String message) {
+      super(message);
+    }
+
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+      var sql = new SQLException("chained");
+      sql.setNextException(new LockedSqlException("locked"));
+      throw new IOException("refused", sql);
     }
   }
 
@@ -217,6 +246,22 @@ public class UnreadableErrorTest {
             DBOSJavaSerializer.INSTANCE.serializeThrowable(portable));
     var reread = assertInstanceOf(PortableWorkflowException.class, again);
     assertEquals(RefusesToReadException.class.getName(), reread.getErrorName());
+    assertEquals("kept", reread.getMessage());
+  }
+
+  @Test
+  public void aFailureLinkedToOneThatCantBeRecordedIsReplacedByItsDescription() {
+    var recorded = WireThrowable.fromThrowable(new ChainsALockException("kept"), null, null);
+
+    var portable = assertInstanceOf(PortableWorkflowException.class, recorded.toThrowable());
+
+    assertEquals(ChainsALockException.class.getName(), portable.getErrorName());
+    assertInstanceOf(InvalidObjectException.class, portable.getSuppressed()[0]);
+    var again =
+        DBOSJavaSerializer.INSTANCE.deserializeThrowable(
+            DBOSJavaSerializer.INSTANCE.serializeThrowable(portable));
+    var reread = assertInstanceOf(PortableWorkflowException.class, again);
+    assertEquals(ChainsALockException.class.getName(), reread.getErrorName());
     assertEquals("kept", reread.getMessage());
   }
 

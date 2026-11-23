@@ -8,6 +8,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.StreamCorruptedException;
 import java.io.UncheckedIOException;
+import java.sql.SQLException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -150,7 +151,8 @@ record WireThrowable(
     return e;
   }
 
-  // Whether the failure, its causes and suppressed exceptions are all JDK classes, which serialize.
+  // Whether the failure and every exception it links to (causes, suppressed exceptions and a
+  // SQLException's next exceptions) are JDK classes, which serialize.
   // One thrown by an application class's readObject may hold fields that do not.
   private static boolean fromTheJdk(Throwable failure) {
     var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
@@ -168,6 +170,10 @@ record WireThrowable(
         pending.add(t.getCause());
       }
       pending.addAll(Arrays.asList(t.getSuppressed()));
+      // Serialization also writes a SQLException's chain of next exceptions.
+      if (t instanceof SQLException sql && sql.getNextException() != null) {
+        pending.add(sql.getNextException());
+      }
     }
     return true;
   }
