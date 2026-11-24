@@ -43,16 +43,29 @@ class UnserializableStepOutcomeTest {
     }
   }
 
+  /** Serializable, but reading its message throws. */
+  public static class BrokenMessageException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    @Override
+    public String getMessage() {
+      throw new IllegalStateException("no message");
+    }
+  }
+
   public interface StepService {
     String catchUnwritableResult();
 
     String catchUnserializableError();
+
+    String catchBrokenMessage();
   }
 
   public static class StepServiceImpl implements StepService {
     private final DBOS dbos;
     final AtomicInteger resultRuns = new AtomicInteger();
     final AtomicInteger errorRuns = new AtomicInteger();
+    final AtomicInteger brokenRuns = new AtomicInteger();
 
     StepServiceImpl(DBOS dbos) {
       this.dbos = dbos;
@@ -93,9 +106,28 @@ class UnserializableStepOutcomeTest {
         dbos.runStep(() -> "after", "afterStep");
       }
     }
+
+    @Override
+    @Workflow
+    public String catchBrokenMessage() {
+      try {
+        dbos.runStep(
+            () -> {
+              brokenRuns.incrementAndGet();
+              throw new BrokenMessageException();
+            },
+            "brokenMessage");
+        return "returned";
+      } catch (RuntimeException e) {
+        return "caught " + e.getClass().getName() + ": " + e.getMessage();
+      } finally {
+        dbos.runStep(() -> "after", "afterStep");
+      }
+    }
   }
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
+
   @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
   StepServiceImpl impl;
@@ -156,5 +188,26 @@ class UnserializableStepOutcomeTest {
     var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, 1);
     assertEquals(firstRun, fork.getResult());
     assertEquals(1, impl.errorRuns.get());
+  }
+
+  @Test
+  void anErrorWhoseMessageThrowsIsRecordedAsAStandIn() throws Exception {
+    // The tests log dev.dbos at DEBUG, so this also covers the step's debug line, which must not
+    // call the error's getMessage.
+    var workflowId = "broken-message-step";
+    String firstRun;
+    try (var _o = new WorkflowOptions(workflowId).setContext()) {
+      firstRun = proxy.catchBrokenMessage();
+    }
+    assertEquals(
+        "caught java.lang.RuntimeException: "
+            + BrokenMessageException.class.getName()
+            + ": <getMessage threw java.lang.IllegalStateException>",
+        firstRun);
+    assertNotNull(DBUtils.getStepRows(dataSource, workflowId).get(0).error());
+
+    var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, 1);
+    assertEquals(firstRun, fork.getResult());
+    assertEquals(1, impl.brokenRuns.get());
   }
 }

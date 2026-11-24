@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Utility class for serialization and deserialization with support for multiple formats.
  *
@@ -252,6 +254,44 @@ public final class SerializationUtil {
     }
 
     return serializer.deserializeThrowable(serializedValue);
+  }
+
+  /** An error's class and message, built so that a throwing getMessage can't defeat the caller. */
+  public static String describeError(Throwable error) {
+    String message;
+    try {
+      message = error.getMessage();
+    } catch (RuntimeException e) {
+      message = "<getMessage threw %s>".formatted(e.getClass().getName());
+    }
+    return "%s: %s".formatted(error.getClass().getName(), message);
+  }
+
+  /**
+   * A plain stand-in for an error that can't be serialized: a {@link RuntimeException} naming its
+   * class and message, with its stack trace where that can be read.
+   */
+  public static RuntimeException standIn(Throwable error) {
+    var standIn = new RuntimeException(describeError(error));
+    try {
+      standIn.setStackTrace(error.getStackTrace());
+    } catch (RuntimeException ignored) {
+      // The stand-in keeps its own stack trace.
+    }
+    return standIn;
+  }
+
+  /**
+   * The error in a form that can be recorded: the error itself, or its {@linkplain #standIn
+   * stand-in} if {@code serializer} refuses it.
+   */
+  public static Exception recordableError(Exception error, @Nullable DBOSSerializer serializer) {
+    try {
+      serializeError(error, null, serializer);
+      return error;
+    } catch (Exception refused) {
+      return standIn(error);
+    }
   }
 
   /**

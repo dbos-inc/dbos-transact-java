@@ -2058,17 +2058,23 @@ public class DBOSExecutor implements AutoCloseable {
                   + " as the step's error",
               options.name(),
               workflowId,
-              describeError(refused));
+              SerializationUtil.describeError(refused));
           exception =
               new RuntimeException(
                   "Cannot serialize the result of step %s: %s"
-                      .formatted(options.name(), describeError(refused)));
+                      .formatted(options.name(), SerializationUtil.describeError(refused)));
         }
       }
       if (exception != null) {
-        logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
+        // By description: handing the logger the exception calls its getMessage, which may throw.
+        logger.debug(
+            "executeStep #{} for workflow {} threw {}",
+            stepId,
+            workflowId,
+            SerializationUtil.describeError(exception));
 
-        // DBOS's own steps record their errors in the built-in format, whatever is configured.
+        // DBOS's own steps, except DBOS.getResult, record their errors in the built-in format,
+        // whatever is configured.
         var recordedError =
             serializeErrorOrStandIn(
                 "step %s in workflow %s".formatted(options.name(), workflowId),
@@ -3322,18 +3328,13 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (Exception refused) {
       // Logged by description only: handing the logger the error, or a refusal whose cause chain
       // holds it, calls its getMessage, which may be what failed.
-      var description = describeError(error);
+      var description = SerializationUtil.describeError(error);
       logger.error(
           "Cannot serialize the error of {} ({}): {}. A stand-in is recorded in its place",
           subject,
           description,
-          describeError(refused));
-      var standIn = new RuntimeException(description);
-      try {
-        standIn.setStackTrace(error.getStackTrace());
-      } catch (RuntimeException ignored) {
-        // The stand-in keeps its own stack trace.
-      }
+          SerializationUtil.describeError(refused));
+      var standIn = SerializationUtil.standIn(error);
       try {
         return new RecordedError(
             SerializationUtil.serializeError(standIn, serialization, serializer), standIn);
@@ -3348,17 +3349,6 @@ public class DBOSExecutor implements AutoCloseable {
         throw thrown;
       }
     }
-  }
-
-  /** An error's class and message, built so that a throwing getMessage can't defeat the caller. */
-  static String describeError(Throwable error) {
-    String message;
-    try {
-      message = error.getMessage();
-    } catch (RuntimeException e) {
-      message = "<getMessage threw %s>".formatted(e.getClass().getName());
-    }
-    return "%s: %s".formatted(error.getClass().getName(), message);
   }
 
   /**
