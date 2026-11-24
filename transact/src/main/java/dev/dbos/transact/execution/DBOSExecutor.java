@@ -2046,29 +2046,45 @@ public class DBOSExecutor implements AutoCloseable {
     // is recorded here its factory's checkpoint is the only record of it.
     boolean recorded = false;
     try {
+      SerializationUtil.SerializedResult serializedOutput = null;
+      if (exception == null) {
+        try {
+          serializedOutput = SerializationUtil.serializeValue(output, null, serializer);
+        } catch (Exception refused) {
+          // A result that can't be recorded could only be replayed as an error, so it is recorded
+          // as one, and the body gets that error now, as every replay will.
+          logger.error(
+              "Cannot serialize the result of step {} in workflow {}: {}. Its refusal is recorded"
+                  + " as the step's error",
+              options.name(),
+              workflowId,
+              describeError(refused));
+          exception =
+              new RuntimeException(
+                  "Cannot serialize the result of step %s: %s"
+                      .formatted(options.name(), describeError(refused)));
+        }
+      }
       if (exception != null) {
         logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
 
-        var serializedException =
-            recordErrorNatively
-                ? SerializationUtil.serializeError(exception, SerializationUtil.NATIVE, null)
-                : SerializationUtil.serializeError(exception, null, serializer);
+        var recordedError =
+            serializeStepError(workflowId, options.name(), exception, recordErrorNatively);
         var stepResult =
             new StepResult(
                 workflowId,
                 stepId,
                 options.name(),
                 null,
-                serializedException.serializedValue(),
+                recordedError.serialized().serializedValue(),
                 childWorkflowId,
-                serializedException.serialization());
+                recordedError.serialized().serialization());
         systemDatabase.recordStepResult(stepResult, startTime, ctx.getOwnerXid());
         recorded = true;
-        throw (E) exception;
+        throw (E) recordedError.error();
       } else {
         logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
 
-        var serializedOutput = SerializationUtil.serializeValue(output, null, serializer);
         var stepResult =
             new StepResult(
                 workflowId,
@@ -3301,6 +3317,48 @@ public class DBOSExecutor implements AutoCloseable {
         alsoRefused.addSuppressed(refused);
         throw alsoRefused;
       }
+    }
+  }
+
+  /** The error a step records, as serialized, and the exception its body is handed. */
+  private record RecordedStepError(
+      SerializationUtil.SerializedResult serialized, Exception error) {}
+
+  /**
+   * Serializes a step's error for its row. One the serializer refuses is recorded as a stand-in
+   * naming its class and message, in the same format, or in the built-in one if that refuses the
+   * stand-in too: a step row carries its own serialization, so either reads back. The body is
+   * handed the stand-in, which is what every replay of the step throws.
+   */
+  private RecordedStepError serializeStepError(
+      String workflowId, String stepName, Exception error, boolean recordErrorNatively) {
+    var serialization = recordErrorNatively ? SerializationUtil.NATIVE : null;
+    var stepSerializer = recordErrorNatively ? null : this.serializer;
+    try {
+      return new RecordedStepError(
+          SerializationUtil.serializeError(error, serialization, stepSerializer), error);
+    } catch (Exception refused) {
+      var description = describeError(error);
+      logger.error(
+          "Cannot serialize the error of step {} in workflow {} ({}): {}. A stand-in is recorded in"
+              + " its place",
+          stepName,
+          workflowId,
+          description,
+          describeError(refused));
+      var standIn = new RuntimeException(description);
+      try {
+        standIn.setStackTrace(error.getStackTrace());
+      } catch (RuntimeException ignored) {
+        // The stand-in keeps its own stack trace.
+      }
+      SerializationUtil.SerializedResult serialized;
+      try {
+        serialized = SerializationUtil.serializeError(standIn, serialization, stepSerializer);
+      } catch (Exception alsoRefused) {
+        serialized = SerializationUtil.serializeError(standIn, SerializationUtil.NATIVE, null);
+      }
+      return new RecordedStepError(serialized, standIn);
     }
   }
 
