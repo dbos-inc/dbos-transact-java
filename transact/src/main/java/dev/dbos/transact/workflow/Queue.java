@@ -18,8 +18,10 @@ import org.jspecify.annotations.Nullable;
  * partitions the queue; there is no separate switch for it.
  *
  * <p>A {@code concurrency} or {@code workerConcurrency} of 0 pauses the queue: nothing is dequeued
- * from it until the limit is raised. A queue with a per-partition concurrency limit cannot be
- * paused this way, since that limit must be at least 1 and may not exceed the queue-wide ones.
+ * from it until the limit is raised. A narrower limit may not exceed a wider one, and the
+ * per-partition concurrency limits must be at least 1, so {@code workerConcurrency} can be 0 unless
+ * {@code partitionWorkerConcurrency} is set, and {@code concurrency} can be 0 only if {@code
+ * workerConcurrency} is 0 or unset and neither per-partition concurrency limit is set.
  */
 public record Queue(
     @NonNull String name,
@@ -262,9 +264,10 @@ public record Queue(
    *
    * <p>A {@code concurrency} or {@code workerConcurrency} of 0 is allowed and pauses the queue:
    * nothing is dequeued from it until the limit is raised. Because a narrower limit may not exceed
-   * a wider one, pausing with {@code concurrency} needs {@code workerConcurrency} to be 0 or unset
-   * too, and a queue with a per-partition concurrency limit, which must be at least 1, cannot be
-   * paused this way at all.
+   * a wider one, and the per-partition concurrency limits must be at least 1, {@code
+   * workerConcurrency} can be 0 unless {@code partitionWorkerConcurrency} is set, and {@code
+   * concurrency} can be 0 only if {@code workerConcurrency} is 0 or unset and neither per-partition
+   * concurrency limit is set.
    *
    * <p>None of these is checked by the constructor, because the constructor is also the read path
    * -- {@code QueuesDAO.queueFromResultSet} builds a {@code Queue} out of every row it loads -- and
