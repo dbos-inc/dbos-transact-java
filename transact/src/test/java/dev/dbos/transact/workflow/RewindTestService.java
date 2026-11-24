@@ -6,6 +6,7 @@ import dev.dbos.transact.txstep.JdbcStepFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -17,6 +18,10 @@ interface RewindTestService {
   int counter(String name);
 
   String fiveSteps(String name);
+
+  List<Integer> threeSteps(String name);
+
+  int countedStep(String name);
 
   String step(String label);
 
@@ -112,6 +117,22 @@ class RewindTestServiceImpl implements RewindTestService {
     proxy.step("four");
     proxy.step("five");
     return "run" + run;
+  }
+
+  // Each step returns how many times it has run, so a result shows which steps ran again.
+  @Override
+  @Workflow
+  public List<Integer> threeSteps(String name) {
+    return List.of(
+        proxy.countedStep(name + ".a"),
+        proxy.countedStep(name + ".b"),
+        proxy.countedStep(name + ".c"));
+  }
+
+  @Override
+  @Step
+  public int countedStep(String name) {
+    return runCount(name);
   }
 
   @Override

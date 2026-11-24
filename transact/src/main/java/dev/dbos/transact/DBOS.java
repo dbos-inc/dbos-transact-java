@@ -13,6 +13,7 @@ import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.Debouncer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -1264,7 +1265,9 @@ public class DBOS implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
       @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
-    return ensureLaunched("rewindWorkflow").rewindWorkflow(workflowId, startStep, options);
+    var executor = ensureLaunched("rewindWorkflow");
+    executor.rewindWorkflows(List.of(new WorkflowRewind(workflowId, startStep)), options);
+    return executor.retrieveWorkflow(workflowId);
   }
 
   /**

@@ -22,6 +22,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.spi.EnterpriseSystemDatabase;
 import dev.dbos.transact.spi.RecordedRecv;
 import dev.dbos.transact.spi.WorkflowFork;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1732,13 +1733,21 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
+  /**
+   * Rewinds each workflow from its own start step, all or nothing in one transaction. The rewinds
+   * must already be one per workflow.
+   */
+  public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
+    if (rewinds.isEmpty()) {
+      return;
+    }
     dbRetryIncludingSerializationError(
-        "rewindWorkflow", () -> WorkflowDAO.rewindWorkflow(ctx, workflowId, startStep, options));
+        "rewindWorkflows", () -> WorkflowDAO.rewindWorkflows(ctx, rewinds, options));
   }
 
-  public void checkRewindable(String workflowId, int startStep) {
-    dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
+  /** Refuses, naming the workflow, if any of them is missing or not in a terminal state. */
+  public void checkRewindable(List<String> workflowIds) {
+    dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowIds));
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {

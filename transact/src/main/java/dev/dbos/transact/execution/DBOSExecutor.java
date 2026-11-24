@@ -46,6 +46,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.spi.SuspendBackend;
 import dev.dbos.transact.spi.WorkflowFork;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -90,6 +91,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -1383,31 +1385,56 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.forkWorkflows(forks, applicationVersion, queueName, queuePartitionKey);
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> rewindWorkflow(
-      String workflowId, int startStep, RewindOptions options) {
-    Objects.requireNonNull(workflowId);
+  /**
+   * Rewinds each workflow from its own start step, all or nothing in the system database. A
+   * workflow listed twice is rewound once, from its first listing's step. Called from a workflow,
+   * the rewind is the {@code DBOS.rewindWorkflow} step.
+   */
+  public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
+    Objects.requireNonNull(rewinds, "rewinds must not be null");
     Objects.requireNonNull(options);
+    if (rewinds.isEmpty()) {
+      return;
+    }
+    // A second listing would fail the batch, as the workflow's status is no longer the one read
+    // for it. Sorting by ID makes concurrent batches lock their rows in the same order, so they
+    // can't deadlock each other.
+    var byId = new TreeMap<String, WorkflowRewind>();
+    for (var rewind : rewinds) {
+      byId.putIfAbsent(rewind.workflowId(), rewind);
+    }
+    var targets = List.copyOf(byId.values());
 
     this.runDbosFunctionAsStep(
         () -> {
-          logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
+          if (targets.size() == 1) {
+            logger.info(
+                "Rewinding workflow: {} to step: {}",
+                targets.get(0).workflowId(),
+                targets.get(0).startStep());
+          } else {
+            logger.info("Rewinding {} workflows", targets.size());
+          }
 
           validateRequeue(options.queueName(), options.queuePartitionKey());
 
           // The step factories' checkpoints go first and the system database last. If a delete
-          // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
-          // against a partly cleared history, and since a delete is idempotent the rewind can
-          // simply be retried. The checks run first so a running workflow keeps its checkpoints.
+          // fails, the workflows keep their terminal status and are not re-enqueued, so nothing
+          // runs against a partly cleared history, and since a delete is idempotent the rewind can
+          // simply be retried. Every workflow is checked before any checkpoint is deleted, so a
+          // running workflow keeps its checkpoints, and a refused batch deletes nothing.
           if (hasStepCheckpointStores()) {
-            systemDatabase.checkRewindable(workflowId, startStep);
-            deleteStepCheckpoints(workflowId, startStep);
+            systemDatabase.checkRewindable(
+                targets.stream().map(WorkflowRewind::workflowId).toList());
+            for (var target : targets) {
+              deleteStepCheckpoints(target.workflowId(), target.startStep());
+            }
           }
-          systemDatabase.rewindWorkflow(workflowId, startStep, options);
+          systemDatabase.rewindWorkflows(targets, options);
           return null; // void
         },
         "DBOS.rewindWorkflow",
         null);
-    return retrieveWorkflow(workflowId);
   }
 
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {

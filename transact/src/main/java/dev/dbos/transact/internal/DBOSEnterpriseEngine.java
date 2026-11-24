@@ -7,6 +7,7 @@ import dev.dbos.transact.spi.EnterpriseEngine;
 import dev.dbos.transact.spi.EnterpriseSystemDatabase;
 import dev.dbos.transact.spi.RecordedRecv;
 import dev.dbos.transact.spi.WorkflowFork;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -95,8 +96,13 @@ public final class DBOSEnterpriseEngine implements EnterpriseEngine {
   }
 
   @Override
-  public String rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
-    return executor.rewindWorkflow(workflowId, startStep, options).workflowId();
+  public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
+    executor.rewindWorkflows(rewinds, options);
+  }
+
+  @Override
+  public void checkRewindable(List<String> workflowIds) {
+    systemDatabase.checkRewindable(workflowIds);
   }
 
   @Override
