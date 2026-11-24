@@ -784,9 +784,7 @@ public class RewindTest {
             () ->
                 engine.rewindWorkflows(
                     List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(unfinishedId, 0)),
-                    null,
-                    null,
-                    null));
+                    new RewindOptions()));
     assertTrue(
         refused.getMessage().startsWith("Cannot rewind " + unfinishedId), refused.getMessage());
     assertEquals(List.of(0, 2), txCheckpoints("rewind_first", finishedId));
@@ -799,9 +797,7 @@ public class RewindTest {
         () ->
             engine.rewindWorkflows(
                 List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(missingId, 0)),
-                null,
-                null,
-                null));
+                new RewindOptions()));
     assertEquals(List.of(0, 2), txCheckpoints("rewind_first", finishedId));
     assertEquals(List.of(1, 3), txCheckpoints("rewind_second", finishedId));
 
@@ -810,9 +806,7 @@ public class RewindTest {
     DBUtils.setWorkflowState(dataSource, unfinishedId, WorkflowState.ERROR.name());
     engine.rewindWorkflows(
         List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(unfinishedId, 0)),
-        null,
-        null,
-        null);
+        new RewindOptions());
     assertEquals(2, dbos.retrieveWorkflow(finishedId).getResult());
     assertEquals(2, dbos.retrieveWorkflow(unfinishedId).getResult());
     assertEquals(

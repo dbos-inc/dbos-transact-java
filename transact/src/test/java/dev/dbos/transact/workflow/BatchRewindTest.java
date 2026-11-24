@@ -92,9 +92,7 @@ public class BatchRewindTest {
 
     engine.rewindWorkflows(
         List.of(new WorkflowRewind(partitionedId, 1), new WorkflowRewind(plainId, 2)),
-        null,
-        null,
-        null);
+        new RewindOptions());
 
     // Same IDs, and only the steps from each workflow's own start step ran again.
     assertEquals(List.of(1, 2, 2), resultOf(partitionedId));
@@ -125,9 +123,7 @@ public class BatchRewindTest {
             () ->
                 engine.rewindWorkflows(
                     List.of(new WorkflowRewind(finishedId, 0), new WorkflowRewind(unfinishedId, 0)),
-                    null,
-                    null,
-                    null));
+                    new RewindOptions()));
     assertTrue(
         refused.getMessage().startsWith("Cannot rewind " + unfinishedId), refused.getMessage());
 
@@ -150,9 +146,7 @@ public class BatchRewindTest {
             () ->
                 engine.rewindWorkflows(
                     List.of(new WorkflowRewind(finishedId, 1), new WorkflowRewind(missingId, 1)),
-                    null,
-                    null,
-                    null));
+                    new RewindOptions()));
     assertEquals(missingId, refused.workflowId());
 
     assertEquals(WorkflowState.SUCCESS, statusOf(finishedId).status());
@@ -191,9 +185,7 @@ public class BatchRewindTest {
               () ->
                   engine.rewindWorkflows(
                       List.of(new WorkflowRewind(firstId, 1), new WorkflowRewind(secondId, 1)),
-                      null,
-                      null,
-                      null));
+                      new RewindOptions()));
       assertTrue(
           refused.getMessage().contains("changed status while being rewound"),
           refused.getMessage());
@@ -225,9 +217,7 @@ public class BatchRewindTest {
     // Given no version, each keeps its own: only the other one runs again.
     engine.rewindWorkflows(
         List.of(new WorkflowRewind(elsewhereId, 2), new WorkflowRewind(hereId, 2)),
-        null,
-        null,
-        null);
+        new RewindOptions());
     assertEquals(List.of(1, 1, 2), resultOf(hereId));
     assertEquals("not-this-deployment", statusOf(elsewhereId).appVersion());
     assertEquals(WorkflowState.ENQUEUED, statusOf(elsewhereId).status());
@@ -236,9 +226,7 @@ public class BatchRewindTest {
     // A version and queue given apply to every workflow in the batch.
     engine.rewindWorkflows(
         List.of(new WorkflowRewind(elsewhereId, 2), new WorkflowRewind(hereId, 2)),
-        runningVersion,
-        "batch_override",
-        "repair");
+        new RewindOptions(runningVersion, "batch_override", "repair"));
     assertEquals(List.of(1, 1, 2), resultOf(elsewhereId));
     assertEquals(List.of(1, 1, 3), resultOf(hereId));
     for (var workflowId : List.of(elsewhereId, hereId)) {
@@ -254,7 +242,7 @@ public class BatchRewindTest {
     var workflowId = start("inputs");
 
     // An empty batch changes nothing.
-    engine.rewindWorkflows(List.of(), null, null, null);
+    engine.rewindWorkflows(List.of(), new RewindOptions());
 
     // A negative start step refuses the batch before anything changes.
     var refused =
@@ -262,7 +250,7 @@ public class BatchRewindTest {
             IllegalArgumentException.class,
             () ->
                 engine.rewindWorkflows(
-                    List.of(new WorkflowRewind(workflowId, -1)), null, null, null));
+                    List.of(new WorkflowRewind(workflowId, -1)), new RewindOptions()));
     assertTrue(refused.getMessage().contains("must be >= 0"), refused.getMessage());
     assertEquals(WorkflowState.SUCCESS, statusOf(workflowId).status());
     assertEquals(1, impl.runsOf("inputs.a"));
@@ -270,9 +258,7 @@ public class BatchRewindTest {
     // A workflow listed twice is rewound once, from its first listing's step.
     engine.rewindWorkflows(
         List.of(new WorkflowRewind(workflowId, 1), new WorkflowRewind(workflowId, 2)),
-        null,
-        null,
-        null);
+        new RewindOptions());
     assertEquals(List.of(1, 2, 2), resultOf(workflowId));
   }
 }

@@ -16,6 +16,7 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.spi.WorkflowRewind;
 import dev.dbos.transact.workflow.ApplicationRowCounts;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.DeduplicationHolder;
@@ -1801,7 +1802,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> rewindWorkflow(
       @NonNull String workflowId, int startStep, @NonNull RewindOptions options) {
-    systemDatabase.rewindWorkflow(workflowId, startStep, options);
+    systemDatabase.rewindWorkflows(List.of(new WorkflowRewind(workflowId, startStep)), options);
     return retrieveWorkflow(workflowId);
   }
 

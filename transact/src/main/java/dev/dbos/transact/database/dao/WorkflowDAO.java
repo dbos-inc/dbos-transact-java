@@ -2080,11 +2080,11 @@ public class WorkflowDAO {
   }
 
   /**
-   * Drops a terminal workflow's history from {@code startStep} on and re-enqueues it under the same
+   * Drops each terminal workflow's history from its start step on and re-enqueues it under the same
    * ID, so a replay re-executes everything from that step. Unlike a fork, this writes no new
    * workflow: peers keep addressing the same ID.
    *
-   * <p>In one transaction, from {@code startStep} on, it:
+   * <p>In one transaction, for each workflow, from its start step on, it:
    *
    * <ul>
    *   <li>rolls each event published past the cut back to its last value from before the cut, or
@@ -2097,35 +2097,9 @@ public class WorkflowDAO {
    *   <li>re-enqueues the workflow.
    * </ul>
    *
-   * @throws DBOSNonExistentWorkflowException if the workflow does not exist
-   * @throws IllegalStateException if the workflow is not in a terminal state, or changed status
-   *     while being rewound
-   */
-  public static void rewindWorkflow(
-      DbContext ctx, String workflowId, int startStep, RewindOptions options) throws SQLException {
-    // Function IDs start at 0, so 0 is the whole history.
-    if (startStep < 0) {
-      throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
-    }
-    Objects.requireNonNull(options, "RewindOptions must not be null");
-    var schema = ctx.schema();
-
-    try (var txConn = ctx.getConnection()) {
-      SqlTransaction.run(
-          txConn,
-          conn -> {
-            var state = readRewindableState(conn, schema, workflowId);
-            rewindWorkflowTxn(conn, schema, workflowId, startStep, state, options);
-          });
-    }
-  }
-
-  /**
-   * Rewinds each workflow from its own start step, all or nothing in one transaction. The rewinds
-   * must already be one per workflow, as {@link SystemDatabase#rewindTargets} makes them.
-   *
-   * <p>The statuses are read without locking the rows: a workflow whose status changes afterwards
-   * fails its rewind's guarded update, which refuses the whole batch.
+   * <p>The rewinds must already be one per workflow. The statuses are read without locking the
+   * rows: a workflow whose status changes afterwards fails its rewind's guarded update, which
+   * refuses the whole batch.
    *
    * @throws DBOSNonExistentWorkflowException if a workflow does not exist
    * @throws IllegalStateException if a workflow is not in a terminal state, or changed status while
@@ -2296,21 +2270,10 @@ public class WorkflowDAO {
   }
 
   /**
-   * Checks that a workflow can be rewound, without changing anything: it must exist and be in a
-   * terminal state. A rewind repeats this check in its own transaction; this one lets a caller
+   * Checks that every workflow can be rewound, without changing anything: each must exist and be in
+   * a terminal state. A rewind repeats this check in its own transaction; this one lets a caller
    * refuse before touching anything outside the system database.
    */
-  public static void checkRewindable(DbContext ctx, String workflowId, int startStep)
-      throws SQLException {
-    if (startStep < 0) {
-      throw new IllegalArgumentException("startStep must be >= 0, got " + startStep);
-    }
-    try (var conn = ctx.getConnection()) {
-      readRewindableState(conn, ctx.schema(), workflowId);
-    }
-  }
-
-  /** As {@link #checkRewindable(DbContext, String, int)}, for every workflow in one query. */
   public static void checkRewindable(DbContext ctx, List<String> workflowIds) throws SQLException {
     if (workflowIds.isEmpty()) {
       return;
@@ -2318,11 +2281,6 @@ public class WorkflowDAO {
     try (var conn = ctx.getConnection()) {
       readRewindableStates(conn, ctx.schema(), workflowIds);
     }
-  }
-
-  private static WorkflowState readRewindableState(
-      Connection conn, String schema, String workflowId) throws SQLException {
-    return requireRewindable(workflowId, getWorkflowState(conn, schema, workflowId));
   }
 
   /**

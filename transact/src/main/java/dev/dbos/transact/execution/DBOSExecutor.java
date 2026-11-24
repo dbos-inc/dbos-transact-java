@@ -91,6 +91,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -1391,19 +1392,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     this.runDbosFunctionAsStep(
         () -> {
+          var target = new WorkflowRewind(workflowId, startStep);
           logger.info("Rewinding workflow: {} to step: {}", workflowId, startStep);
-
-          validateRequeue(options.queueName(), options.queuePartitionKey());
-
-          // The step factories' checkpoints go first and the system database last. If a delete
-          // fails, the workflow keeps its terminal status and is not re-enqueued, so nothing runs
-          // against a partly cleared history, and since a delete is idempotent the rewind can
-          // simply be retried. The checks run first so a running workflow keeps its checkpoints.
-          if (hasStepCheckpointStores()) {
-            systemDatabase.checkRewindable(workflowId, startStep);
-            deleteStepCheckpoints(workflowId, startStep);
-          }
-          systemDatabase.rewindWorkflow(workflowId, startStep, options);
+          rewind(List.of(target), options);
           return null; // void
         },
         "DBOS.rewindWorkflow",
@@ -1415,16 +1406,29 @@ public class DBOSExecutor implements AutoCloseable {
   public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
     Objects.requireNonNull(rewinds, "rewinds must not be null");
     Objects.requireNonNull(options);
-    var targets = SystemDatabase.rewindTargets(rewinds);
-    if (targets.isEmpty()) {
+    // Only Conductor rewinds a batch, never from inside a workflow, so this is not run as a step.
+    // A workflow listed twice is rewound once, from its first listing's step. Sorting by ID makes
+    // concurrent batches lock their rows in the same order, so they can't deadlock each other.
+    var byId = new TreeMap<String, WorkflowRewind>();
+    for (var rewind : rewinds) {
+      byId.putIfAbsent(rewind.workflowId(), rewind);
+    }
+    if (byId.isEmpty()) {
       return;
     }
-    logger.info("Rewinding {} workflow(s)", targets.size());
+    logger.info("Rewinding {} workflow(s)", byId.size());
+    rewind(List.copyOf(byId.values()), options);
+  }
 
+  /** Rewinds targets that are already one per workflow. */
+  private void rewind(List<WorkflowRewind> targets, RewindOptions options) {
     validateRequeue(options.queueName(), options.queuePartitionKey());
 
-    // Checkpoint deletes aren't undone if the system database refuses the batch, so every workflow
-    // is checked before any is deleted.
+    // The step factories' checkpoints go first and the system database last. If a delete fails,
+    // the workflows keep their terminal status and are not re-enqueued, so nothing runs against a
+    // partly cleared history, and since a delete is idempotent the rewind can simply be retried.
+    // Every workflow is checked before any checkpoint is deleted, so a running workflow keeps its
+    // checkpoints, and a refused batch deletes nothing.
     if (hasStepCheckpointStores()) {
       systemDatabase.checkRewindable(targets.stream().map(WorkflowRewind::workflowId).toList());
       for (var target : targets) {

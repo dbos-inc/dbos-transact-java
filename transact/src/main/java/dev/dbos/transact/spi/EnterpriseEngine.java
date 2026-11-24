@@ -111,38 +111,22 @@ public interface EnterpriseEngine {
       @Nullable String queuePartitionKey);
 
   /**
-   * Rewinds a workflow.
-   *
-   * @param workflowId the workflow to rewind
-   * @param startStep the step to rewind to
-   * @param options the rewind's options
-   * @return the rewound workflow's ID
-   */
-  String rewindWorkflow(String workflowId, int startStep, RewindOptions options);
-
-  /**
    * Rewinds workflows in one transaction, each from its own step and under its own ID: all of them
    * are rewound, or none is. A workflow listed more than once is rewound once, from the step of its
    * first listing.
    *
    * @param rewinds the rewinds to make
-   * @param applicationVersion the version to run the workflows on, or {@code null} for each one's
-   *     own
-   * @param queueName the queue to re-enqueue them on, or {@code null} for each one's own, or DBOS's
-   *     internal queue if it has none
-   * @param queuePartitionKey their partition key, or {@code null} for each one's own
+   * @param options the version, queue and partition key to run the workflows with; each one left
+   *     {@code null} keeps every workflow's own, and a workflow with no queue of its own goes on
+   *     DBOS's internal queue
    * @throws dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException if a workflow does not
    *     exist
    * @throws IllegalStateException if a workflow is not in a terminal state, or changed status while
    *     being rewound
-   * @throws IllegalArgumentException if a start step is negative, a queue is named but not
-   *     registered, or a partition key is given with a named queue that is not partitioned
+   * @throws IllegalArgumentException if a queue is named but not registered, or a partition key is
+   *     given with a named queue that is not partitioned
    */
-  void rewindWorkflows(
-      List<WorkflowRewind> rewinds,
-      @Nullable String applicationVersion,
-      @Nullable String queueName,
-      @Nullable String queuePartitionKey);
+  void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options);
 
   /**
    * Checks, changing nothing, that every workflow can be rewound: it must exist and be in a

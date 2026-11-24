@@ -1733,44 +1733,21 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
-    dbRetryIncludingSerializationError(
-        "rewindWorkflow", () -> WorkflowDAO.rewindWorkflow(ctx, workflowId, startStep, options));
-  }
-
-  public void checkRewindable(String workflowId, int startStep) {
-    dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowId, startStep));
-  }
-
-  /** Rewinds each workflow from its own start step, all or nothing in one transaction. */
+  /**
+   * Rewinds each workflow from its own start step, all or nothing in one transaction. The rewinds
+   * must already be one per workflow.
+   */
   public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
-    var targets = rewindTargets(rewinds);
-    if (targets.isEmpty()) {
+    if (rewinds.isEmpty()) {
       return;
     }
     dbRetryIncludingSerializationError(
-        "rewindWorkflows", () -> WorkflowDAO.rewindWorkflows(ctx, targets, options));
+        "rewindWorkflows", () -> WorkflowDAO.rewindWorkflows(ctx, rewinds, options));
   }
 
   /** Refuses, naming the workflow, if any of them is missing or not in a terminal state. */
   public void checkRewindable(List<String> workflowIds) {
     dbRetry(() -> WorkflowDAO.checkRewindable(ctx, workflowIds));
-  }
-
-  /**
-   * The rewinds a batch makes: one per workflow, its first listing's, in workflow ID order.
-   *
-   * @throws IllegalArgumentException if any listing's start step is negative
-   */
-  public static List<WorkflowRewind> rewindTargets(List<WorkflowRewind> rewinds) {
-    var targets = new TreeMap<String, WorkflowRewind>();
-    for (var rewind : rewinds) {
-      if (rewind.startStep() < 0) {
-        throw new IllegalArgumentException("startStep must be >= 0, got " + rewind.startStep());
-      }
-      targets.putIfAbsent(rewind.workflowId(), rewind);
-    }
-    return List.copyOf(targets.values());
   }
 
   public void createApplicationVersion(String versionName, @Nullable String applicationName) {

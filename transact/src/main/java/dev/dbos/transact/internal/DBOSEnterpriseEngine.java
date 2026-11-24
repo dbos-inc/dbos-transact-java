@@ -96,18 +96,8 @@ public final class DBOSEnterpriseEngine implements EnterpriseEngine {
   }
 
   @Override
-  public String rewindWorkflow(String workflowId, int startStep, RewindOptions options) {
-    return executor.rewindWorkflow(workflowId, startStep, options).workflowId();
-  }
-
-  @Override
-  public void rewindWorkflows(
-      List<WorkflowRewind> rewinds,
-      @Nullable String applicationVersion,
-      @Nullable String queueName,
-      @Nullable String queuePartitionKey) {
-    executor.rewindWorkflows(
-        rewinds, new RewindOptions(applicationVersion, queueName, queuePartitionKey));
+  public void rewindWorkflows(List<WorkflowRewind> rewinds, RewindOptions options) {
+    executor.rewindWorkflows(rewinds, options);
   }
 
   @Override
