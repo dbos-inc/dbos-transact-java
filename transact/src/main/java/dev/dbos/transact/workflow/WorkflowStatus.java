@@ -87,7 +87,95 @@ public record WorkflowStatus(
      */
     Boolean isDebounced,
     /** The latest a debounced workflow's delay may be extended to, or null for no cap. */
-    Instant debounceDeadline) {
+    Instant debounceDeadline,
+    /**
+     * The status as stored, which tells what {@link WorkflowState#UNKNOWN} stands for: a status
+     * this version does not know, such as one a newer version wrote. Left null, it is the name of
+     * {@code status}.
+     */
+    String statusName) {
+
+  public WorkflowStatus {
+    if (statusName == null && status != null && status != WorkflowState.UNKNOWN) {
+      statusName = status.name();
+    }
+  }
+
+  /** Constructs a status whose stored status is the name of {@code status}. */
+  public WorkflowStatus(
+      String workflowId,
+      WorkflowState status,
+      String workflowName,
+      String className,
+      String instanceName,
+      String authenticatedUser,
+      String assumedRole,
+      List<String> authenticatedRoles,
+      Object[] input,
+      Object output,
+      ErrorResult error,
+      String executorId,
+      Instant createdAt,
+      Instant updatedAt,
+      String appVersion,
+      String appId,
+      Integer recoveryAttempts,
+      String queueName,
+      Duration timeout,
+      Instant deadline,
+      Instant startedAt,
+      String deduplicationId,
+      Integer priority,
+      String queuePartitionKey,
+      String forkedFrom,
+      String parentWorkflowId,
+      Boolean wasForkedFrom,
+      Instant delayUntil,
+      Instant completedAt,
+      String serialization,
+      Map<String, Object> attributes,
+      String scheduleName,
+      String applicationName,
+      Boolean isDebounced,
+      Instant debounceDeadline) {
+    this(
+        workflowId,
+        status,
+        workflowName,
+        className,
+        instanceName,
+        authenticatedUser,
+        assumedRole,
+        authenticatedRoles,
+        input,
+        output,
+        error,
+        executorId,
+        createdAt,
+        updatedAt,
+        appVersion,
+        appId,
+        recoveryAttempts,
+        queueName,
+        timeout,
+        deadline,
+        startedAt,
+        deduplicationId,
+        priority,
+        queuePartitionKey,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        delayUntil,
+        completedAt,
+        serialization,
+        attributes,
+        scheduleName,
+        applicationName,
+        isDebounced,
+        debounceDeadline,
+        null);
+  }
 
   @JsonIgnore
   public Long timeoutMs() {
@@ -178,7 +266,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(scheduleName, that.scheduleName)
         && java.util.Objects.equals(applicationName, that.applicationName)
         && java.util.Objects.equals(isDebounced, that.isDebounced)
-        && java.util.Objects.equals(debounceDeadline, that.debounceDeadline);
+        && java.util.Objects.equals(debounceDeadline, that.debounceDeadline)
+        && java.util.Objects.equals(statusName, that.statusName);
   }
 
   /**
@@ -224,6 +313,7 @@ public record WorkflowStatus(
         scheduleName,
         applicationName,
         isDebounced,
-        debounceDeadline);
+        debounceDeadline,
+        statusName);
   }
 }

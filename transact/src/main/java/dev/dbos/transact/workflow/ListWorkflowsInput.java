@@ -47,13 +47,84 @@ public record ListWorkflowsInput(
      * List only workflows owned by these applications, plus unclaimed ones. Unset lists this
      * application's own; explicitly empty lists every application's.
      */
-    List<String> applicationName) {
+    List<String> applicationName,
+    /**
+     * Statuses to list by their stored names, for one this version does not know (see {@link
+     * WorkflowState#UNKNOWN}). Combined with {@code status}: a workflow matching either is listed.
+     */
+    List<String> statusNames) {
 
   // Validate the attributes filter here (every convenience constructor, withX copy, and the
   // conductor/admin asInput() paths route through this canonical constructor) so an invalid filter
   // fails fast with a clear IllegalArgumentException rather than opaquely in WorkflowDAO's toJson.
   public ListWorkflowsInput {
     attributes = validateAttributes(attributes);
+  }
+
+  /** Constructs an input with no filter on stored status names. */
+  public ListWorkflowsInput(
+      List<String> workflowIds,
+      List<WorkflowState> status,
+      Instant startTime,
+      Instant endTime,
+      List<String> workflowName,
+      String className,
+      String instanceName,
+      List<String> applicationVersion,
+      List<String> authenticatedUser,
+      Integer limit,
+      Integer offset,
+      Boolean sortDesc,
+      List<String> workflowIdPrefix,
+      Boolean loadInput,
+      Boolean loadOutput,
+      List<String> queueName,
+      Boolean queuesOnly,
+      List<String> executorIds,
+      List<String> forkedFrom,
+      List<String> parentWorkflowId,
+      Boolean wasForkedFrom,
+      Boolean isFork,
+      Boolean hasParent,
+      Map<String, Object> attributes,
+      Instant completedAfter,
+      Instant completedBefore,
+      Instant dequeuedAfter,
+      Instant dequeuedBefore,
+      List<String> scheduleName,
+      List<String> applicationName) {
+    this(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        isFork,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        scheduleName,
+        applicationName,
+        null);
   }
 
   /**
@@ -199,7 +270,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withStatus(List<WorkflowState> status) {
@@ -233,7 +305,48 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
+  }
+
+  /**
+   * Lists workflows whose stored status is one of {@code statusNames}, including a status this
+   * version does not know (see {@link WorkflowState#UNKNOWN}). Combined with {@link #withStatus}: a
+   * workflow matching either is listed.
+   */
+  public ListWorkflowsInput withStatusNames(List<String> statusNames) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        isFork,
+        hasParent,
+        attributes,
+        completedAfter,
+        completedBefore,
+        dequeuedAfter,
+        dequeuedBefore,
+        scheduleName,
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withStartTime(Instant startTime) {
@@ -267,7 +380,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withEndTime(Instant endTime) {
@@ -301,7 +415,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withWorkflowName(List<String> workflowName) {
@@ -335,7 +450,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withClassName(String className) {
@@ -369,7 +485,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withInstanceName(String instanceName) {
@@ -403,7 +520,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withApplicationVersion(List<String> applicationVersion) {
@@ -437,7 +555,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withAuthenticatedUser(List<String> authenticatedUser) {
@@ -471,7 +590,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withLimit(Integer limit) {
@@ -505,7 +625,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withOffset(Integer offset) {
@@ -539,7 +660,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withSortDesc(Boolean sortDesc) {
@@ -573,7 +695,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
@@ -607,7 +730,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withLoadInput(Boolean loadInput) {
@@ -641,7 +765,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withLoadOutput(Boolean loadOutput) {
@@ -675,7 +800,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withQueueName(List<String> queueName) {
@@ -709,7 +835,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withQueuesOnly(Boolean queuesOnly) {
@@ -743,7 +870,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withExecutorIds(List<String> executorIds) {
@@ -777,7 +905,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withForkedFrom(List<String> forkedFrom) {
@@ -811,7 +940,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withParentWorkflowId(List<String> parentWorkflowId) {
@@ -845,7 +975,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withWasForkedFrom(Boolean wasForkedFrom) {
@@ -879,7 +1010,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   /**
@@ -917,7 +1049,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withHasParent(Boolean hasParent) {
@@ -951,7 +1084,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withAttributes(Map<String, Object> attributes) {
@@ -985,7 +1119,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withCompletedAfter(Instant completedAfter) {
@@ -1019,7 +1154,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withCompletedBefore(Instant completedBefore) {
@@ -1053,7 +1189,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withDequeuedAfter(Instant dequeuedAfter) {
@@ -1087,7 +1224,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withDequeuedBefore(Instant dequeuedBefore) {
@@ -1121,7 +1259,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withApplicationName(List<String> applicationName) {
@@ -1155,7 +1294,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   public ListWorkflowsInput withScheduleName(List<String> scheduleName) {
@@ -1189,7 +1329,8 @@ public record ListWorkflowsInput(
         dequeuedAfter,
         dequeuedBefore,
         scheduleName,
-        applicationName);
+        applicationName,
+        statusNames);
   }
 
   // Single value overloads for list parameters
@@ -1199,6 +1340,10 @@ public record ListWorkflowsInput(
 
   public ListWorkflowsInput withStatus(WorkflowState... status) {
     return withStatus(Arrays.asList(status));
+  }
+
+  public ListWorkflowsInput withStatusNames(String... statusNames) {
+    return withStatusNames(Arrays.asList(statusNames));
   }
 
   public ListWorkflowsInput withWorkflowName(String workflowName) {

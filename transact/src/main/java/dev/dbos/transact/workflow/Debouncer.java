@@ -615,7 +615,7 @@ public final class Debouncer<R> {
           map.get("workflowName") instanceof String name ? name : null,
           map.get("className") instanceof String className ? className : null,
           map.get("instanceName") instanceof String instanceName ? instanceName : null,
-          map.get("status") instanceof String status ? WorkflowState.valueOf(status) : null,
+          map.get("status") instanceof String status ? WorkflowState.fromStatusName(status) : null,
           map.get("isDebounced") instanceof Boolean debounced && debounced);
     }
     throw new IllegalStateException(
