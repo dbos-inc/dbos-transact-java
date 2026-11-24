@@ -3266,8 +3266,53 @@ public class DBOSExecutor implements AutoCloseable {
 
   private boolean persistWorkflowError(
       String workflowId, Throwable error, String serialization, String ownerXid) {
-    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
+    var serialized = serializeWorkflowError(workflowId, error, serialization);
     return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue(), ownerXid);
+  }
+
+  /**
+   * Serializes a workflow's error for its row. An error the serializer refuses -- a field it can't
+   * write, or a custom serializer that rejects the type -- is recorded as a plain stand-in naming
+   * its class and message, so the workflow still ends ERROR rather than staying PENDING and running
+   * again on every recovery.
+   */
+  private SerializationUtil.SerializedResult serializeWorkflowError(
+      String workflowId, Throwable error, @Nullable String serialization) {
+    try {
+      return SerializationUtil.serializeError(error, serialization, this.serializer);
+    } catch (Exception refused) {
+      // Logged by description only: handing the logger the error, or a refusal whose cause chain
+      // holds it, calls its getMessage, which may be what failed.
+      var description = describeError(error);
+      logger.error(
+          "Cannot serialize the error of workflow {} ({}): {}. A stand-in is recorded in its place",
+          workflowId,
+          description,
+          describeError(refused));
+      var standIn = new RuntimeException(description);
+      try {
+        standIn.setStackTrace(error.getStackTrace());
+      } catch (RuntimeException ignored) {
+        // The stand-in keeps its own stack trace.
+      }
+      try {
+        return SerializationUtil.serializeError(standIn, serialization, this.serializer);
+      } catch (RuntimeException alsoRefused) {
+        alsoRefused.addSuppressed(refused);
+        throw alsoRefused;
+      }
+    }
+  }
+
+  /** An error's class and message, built so that a throwing getMessage can't defeat the caller. */
+  static String describeError(Throwable error) {
+    String message;
+    try {
+      message = error.getMessage();
+    } catch (RuntimeException e) {
+      message = "<getMessage threw %s>".formatted(e.getClass().getName());
+    }
+    return "%s: %s".formatted(error.getClass().getName(), message);
   }
 
   /**
@@ -3289,7 +3334,7 @@ public class DBOSExecutor implements AutoCloseable {
         SerializationUtil.serializeArgs(
             Objects.requireNonNullElseGet(args, () -> new Object[0]), null, null, this.serializer);
     String serialization = serializedArgs.serialization();
-    var serializedError = SerializationUtil.serializeError(error, serialization, this.serializer);
+    var serializedError = serializeWorkflowError(workflowId, error, serialization);
     var initStatus =
         new WorkflowStatusInternal(
             workflowId,
