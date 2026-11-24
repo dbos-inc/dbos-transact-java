@@ -2309,22 +2309,18 @@ public class WorkflowDAO {
       }
     }
     for (var workflowId : workflowIds) {
-      requireRewindable(workflowId, found.get(workflowId));
+      var state = found.get(workflowId);
+      if (state == null) {
+        throw new DBOSNonExistentWorkflowException(workflowId);
+      }
+      if (state.isActive()) {
+        throw new IllegalStateException(
+            ("Cannot rewind %s (%s): only a workflow in a terminal state can be rewound, so cancel"
+                    + " it first")
+                .formatted(workflowId, state));
+      }
     }
     return found;
-  }
-
-  private static WorkflowState requireRewindable(String workflowId, @Nullable WorkflowState state) {
-    if (state == null) {
-      throw new DBOSNonExistentWorkflowException(workflowId);
-    }
-    if (state.isActive()) {
-      throw new IllegalStateException(
-          ("Cannot rewind %s (%s): only a workflow in a terminal state can be rewound, so cancel it"
-                  + " first")
-              .formatted(workflowId, state));
-    }
-    return state;
   }
 
   /**
