@@ -433,7 +433,7 @@ public class WorkflowDAO {
           result =
               new InsertWorkflowResult(
                   rs.getInt("recovery_attempts"),
-                  WorkflowState.fromStatusName(rs.getString("status")),
+                  WorkflowState.fromStatusValue(rs.getString("status")),
                   rs.getString("name"),
                   rs.getString("class_name"),
                   rs.getString("config_name"),
@@ -771,7 +771,7 @@ public class WorkflowDAO {
       stmt.setString(1, Objects.requireNonNull(workflowId));
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
-          workflowState = WorkflowState.fromStatusName(rs.getString("status"));
+          workflowState = WorkflowState.fromStatusValue(rs.getString("status"));
           currentOwner = rs.getString("owner_xid");
         }
       }
@@ -860,7 +860,7 @@ public class WorkflowDAO {
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, Objects.requireNonNull(workflowId));
       try (var rs = stmt.executeQuery()) {
-        return rs.next() ? WorkflowState.fromStatusName(rs.getString("status")) : null;
+        return rs.next() ? WorkflowState.fromStatusValue(rs.getString("status")) : null;
       }
     }
   }
@@ -916,7 +916,7 @@ public class WorkflowDAO {
                 rs.getString("name"),
                 rs.getString("class_name"),
                 rs.getString("config_name"),
-                WorkflowState.fromStatusName(rs.getString("status")),
+                WorkflowState.fromStatusValue(rs.getString("status")),
                 rs.getBoolean("is_debounced"))
             : null;
       }
@@ -1011,10 +1011,9 @@ public class WorkflowDAO {
         if (!rs.next()) {
           return null;
         }
-        status = WorkflowState.fromStatusName(rs.getString("status"));
+        status = WorkflowState.fromStatusValue(rs.getString("status"));
       }
     }
-    // A status this version does not know is not active, so it is left alone too.
     if (!status.isActive()) {
       return null;
     }
@@ -1386,14 +1385,11 @@ public class WorkflowDAO {
           .collect(Collectors.joining(", "));
 
   /**
-   * The listing's status filter, or null for none. A workflow matches a state in {@code states}, by
-   * its stored name in {@code statusNames}, or, for {@link WorkflowState#UNKNOWN} in {@code
-   * states}, by a status this version does not know.
+   * The listing's status filter, or null for none. A workflow matches a state in {@code states},
+   * or, for {@link WorkflowState#UNKNOWN}, any status this version does not know.
    */
   private static @Nullable String statusCondition(
-      @Nullable List<WorkflowState> states,
-      @Nullable List<String> statusNames,
-      List<Object> parameters) {
+      @Nullable List<WorkflowState> states, List<Object> parameters) {
     var names = new ArrayList<String>();
     boolean unknown = false;
     if (states != null) {
@@ -1404,9 +1400,6 @@ public class WorkflowDAO {
           names.add(state.name());
         }
       }
-    }
-    if (statusNames != null) {
-      names.addAll(statusNames);
     }
     var conditions = new ArrayList<String>();
     if (!names.isEmpty()) {
@@ -1536,8 +1529,7 @@ public class WorkflowDAO {
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
-      if ((input.status() == null || input.status().isEmpty())
-          && (input.statusNames() == null || input.statusNames().isEmpty())) {
+      if (input.status() == null || input.status().isEmpty()) {
         whereConditions.add("status IN (" + ACTIVE_STATUS_LITERALS + ")");
       }
     }
@@ -1614,7 +1606,7 @@ public class WorkflowDAO {
       whereConditions.add("started_at_epoch_ms <= ?");
       parameters.add(input.dequeuedBefore().toEpochMilli());
     }
-    var statusCondition = statusCondition(input.status(), input.statusNames(), parameters);
+    var statusCondition = statusCondition(input.status(), parameters);
     if (statusCondition != null) {
       whereConditions.add(statusCondition);
     }
@@ -1700,6 +1692,7 @@ public class WorkflowDAO {
   private static WorkflowStatus resultsToWorkflowStatus(
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
+    String statusValue = rs.getString("status");
     String authenticatedRolesJson = rs.getString("authenticated_roles");
     String attributesJson = rs.getString("attributes");
     String serializedInput = loadInput ? rs.getString("inputs") : null;
@@ -1712,7 +1705,7 @@ public class WorkflowDAO {
     WorkflowStatus info =
         new WorkflowStatus(
             rs.getString("workflow_uuid"),
-            WorkflowState.fromStatusName(rs.getString("status")),
+            WorkflowState.fromStatusValue(statusValue),
             rs.getString("name"),
             rs.getString("class_name"),
             rs.getString("config_name"),
@@ -1757,7 +1750,7 @@ public class WorkflowDAO {
             rs.getString("application_name"),
             rs.getBoolean("is_debounced"),
             SystemDatabase.toInstant(rs.getObject("debounce_deadline_epoch_ms", Long.class)),
-            rs.getString("status"));
+            statusValue);
     return info;
   }
 
@@ -1798,7 +1791,7 @@ public class WorkflowDAO {
             String status = rs.getString("status");
             String serialization = rs.getString("serialization");
 
-            switch (WorkflowState.fromStatusName(status.toUpperCase())) {
+            switch (WorkflowState.fromStatusValue(status.toUpperCase())) {
               case SUCCESS -> {
                 String output = rs.getString("output");
                 Object outputValue =
@@ -2350,7 +2343,7 @@ public class WorkflowDAO {
           while (rs.next()) {
             found.put(
                 rs.getString("workflow_uuid"),
-                WorkflowState.fromStatusName(rs.getString("status")));
+                WorkflowState.fromStatusValue(rs.getString("status")));
           }
         }
       } finally {
@@ -2362,7 +2355,7 @@ public class WorkflowDAO {
       if (state == null) {
         throw new DBOSNonExistentWorkflowException(workflowId);
       }
-      if (state.isActive() || state == WorkflowState.UNKNOWN) {
+      if (!state.isTerminal()) {
         throw new IllegalStateException(
             ("Cannot rewind %s (%s): only a workflow in a terminal state can be rewound, so cancel"
                     + " it first")

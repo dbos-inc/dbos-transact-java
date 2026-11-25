@@ -8,7 +8,6 @@ import dev.dbos.transact.database.signal.SignalMap;
 import dev.dbos.transact.database.signal.Subscription;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -215,8 +214,7 @@ public class StreamsDAO {
             // only on a miss, which reaches the same conclusion for a workflow that never existed.
             throw new DBOSNonExistentWorkflowException(workflowId);
           }
-          // A status this version does not know may still be writing, so keep waiting on it.
-          if (!state.isActive() && state != WorkflowState.UNKNOWN) {
+          if (state.isTerminal()) {
             finalRead = true;
             continue;
           }

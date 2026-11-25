@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,6 +10,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.utils.WorkflowStatusBuilder;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -22,7 +24,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * A status this version does not know, such as one a newer version wrote, reads as {@link
- * WorkflowState#UNKNOWN} with its stored name, instead of failing the read.
+ * WorkflowState#UNKNOWN} with its stored value, instead of failing the read.
  */
 class UnknownWorkflowStatusTest {
 
@@ -64,12 +66,19 @@ class UnknownWorkflowStatusTest {
   }
 
   @Test
-  void decodesAnUnknownStatusName() {
-    assertEquals(WorkflowState.SUSPENDED, WorkflowState.fromStatusName("SUSPENDED"));
-    assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusName(NEWER));
+  void decodesAnUnknownStatusValue() {
+    assertEquals(WorkflowState.SUSPENDED, WorkflowState.fromStatusValue("SUSPENDED"));
+    assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusValue(NEWER));
     // UNKNOWN is never written, so a stored "UNKNOWN" is just another status this version lacks.
-    assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusName("UNKNOWN"));
+    assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusValue("UNKNOWN"));
     assertFalse(WorkflowState.UNKNOWN.isActive());
+    assertFalse(WorkflowState.UNKNOWN.isTerminal());
+    // Every other state is exactly one of the two.
+    for (var state : WorkflowState.values()) {
+      if (state != WorkflowState.UNKNOWN) {
+        assertTrue(state.isActive() != state.isTerminal(), state.name());
+      }
+    }
     assertFalse(WorkflowState.activeStates().contains(WorkflowState.UNKNOWN));
     assertFalse(WorkflowState.knownNames().contains("UNKNOWN"));
   }
@@ -80,12 +89,12 @@ class UnknownWorkflowStatusTest {
 
     var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
     assertEquals(WorkflowState.UNKNOWN, status.status());
-    assertEquals(NEWER, status.statusName());
+    assertEquals(NEWER, status.statusValue());
 
     var listed = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(workflowId));
     assertEquals(1, listed.size());
     assertEquals(WorkflowState.UNKNOWN, listed.get(0).status());
-    assertEquals(NEWER, listed.get(0).statusName());
+    assertEquals(NEWER, listed.get(0).statusValue());
 
     // A known status carries its own name.
     try (var _o = new WorkflowOptions("known-status").setContext()) {
@@ -93,7 +102,7 @@ class UnknownWorkflowStatusTest {
     }
     var known = dbos.getWorkflowStatus("known-status").orElseThrow();
     assertEquals(WorkflowState.SUCCESS, known.status());
-    assertEquals(WorkflowState.SUCCESS.name(), known.statusName());
+    assertEquals(WorkflowState.SUCCESS.name(), known.statusValue());
   }
 
   @Test
@@ -102,21 +111,17 @@ class UnknownWorkflowStatusTest {
 
     assertEquals(
         List.of(workflowId),
-        ids(dbos.listWorkflows(new ListWorkflowsInput().withStatusNames(NEWER))));
-    assertEquals(
-        List.of(workflowId),
         ids(dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.UNKNOWN))));
     assertEquals(
         List.of(),
         ids(dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.SUCCESS))));
-    // The two filters combine: a workflow matching either is listed.
+    // UNKNOWN combines with known states: a workflow matching any of them is listed.
     assertEquals(
         List.of(workflowId),
         ids(
             dbos.listWorkflows(
                 new ListWorkflowsInput()
-                    .withStatus(WorkflowState.ERROR)
-                    .withStatusNames(NEWER)
+                    .withStatus(WorkflowState.ERROR, WorkflowState.UNKNOWN)
                     .withWorkflowIds(workflowId))));
   }
 
@@ -157,7 +162,7 @@ class UnknownWorkflowStatusTest {
         List.of(workflowId),
         ids(
             dbos.listWorkflows(
-                new ListWorkflowsInput().withQueuesOnly(true).withStatusNames(NEWER))));
+                new ListWorkflowsInput().withQueuesOnly(true).withStatus(WorkflowState.UNKNOWN))));
   }
 
   @Test
@@ -167,7 +172,33 @@ class UnknownWorkflowStatusTest {
     var refused =
         assertThrows(IllegalStateException.class, () -> dbos.rewindWorkflow(workflowId, 0));
     assertTrue(refused.getMessage().contains(workflowId), refused.getMessage());
-    assertEquals(NEWER, dbos.getWorkflowStatus(workflowId).orElseThrow().statusName());
+    assertEquals(NEWER, dbos.getWorkflowStatus(workflowId).orElseThrow().statusValue());
+  }
+
+  @Test
+  void aStatusAlwaysComesWithAMatchingStatusValue() {
+    var builder = new WorkflowStatusBuilder("wf");
+    assertEquals("SUCCESS", builder.status(WorkflowState.SUCCESS).build().statusValue());
+    assertThrows(
+        IllegalArgumentException.class, () -> builder.status(WorkflowState.UNKNOWN).build());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> builder.status(WorkflowState.SUCCESS).statusValue("ERROR").build());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> builder.status(WorkflowState.UNKNOWN).statusValue("SUCCESS").build());
+    assertEquals(
+        NEWER, builder.status(WorkflowState.UNKNOWN).statusValue(NEWER).build().statusValue());
+
+    // A value alone gives the state it names; neither stays neither.
+    assertEquals(
+        WorkflowState.SUCCESS,
+        new WorkflowStatusBuilder("wf").statusValue("SUCCESS").build().status());
+    assertEquals(
+        WorkflowState.UNKNOWN, new WorkflowStatusBuilder("wf").statusValue(NEWER).build().status());
+    var neither = new WorkflowStatusBuilder("wf").build();
+    assertNull(neither.status());
+    assertNull(neither.statusValue());
   }
 
   private static List<String> ids(List<WorkflowStatus> statuses) {

@@ -90,14 +90,37 @@ public record WorkflowStatus(
     Instant debounceDeadline,
     /**
      * The status as stored, which tells what {@link WorkflowState#UNKNOWN} stands for: a status
-     * this version does not know, such as one a newer version wrote. Left null, it is the name of
-     * {@code status}.
+     * this version does not know, such as one a newer version wrote. Null exactly when {@code
+     * status} is.
      */
-    String statusName) {
+    String statusValue) {
 
+  /**
+   * Fills whichever of {@code status} and {@code statusValue} is missing in from the other: a known
+   * {@code status} gives its name, and a {@code statusValue} gives the state it names. So the two
+   * are both null, or both set and agree.
+   *
+   * @throws IllegalArgumentException if {@code status} is {@link WorkflowState#UNKNOWN} without a
+   *     {@code statusValue}, or the two do not agree
+   */
   public WorkflowStatus {
-    if (statusName == null && status != null && status != WorkflowState.UNKNOWN) {
-      statusName = status.name();
+    if (statusValue == null && status != null && status != WorkflowState.UNKNOWN) {
+      statusValue = status.name();
+    }
+    if (status == null && statusValue != null) {
+      status = WorkflowState.fromStatusValue(statusValue);
+    }
+    if (status == WorkflowState.UNKNOWN && statusValue == null) {
+      throw new IllegalArgumentException(
+          "Workflow %s: an UNKNOWN status needs the status value it stands for"
+              .formatted(workflowId));
+    }
+    if (status != null
+        && statusValue != null
+        && status != WorkflowState.fromStatusValue(statusValue)) {
+      throw new IllegalArgumentException(
+          "Workflow %s: status %s does not match status value %s"
+              .formatted(workflowId, status, statusValue));
     }
   }
 
@@ -267,7 +290,7 @@ public record WorkflowStatus(
         && java.util.Objects.equals(applicationName, that.applicationName)
         && java.util.Objects.equals(isDebounced, that.isDebounced)
         && java.util.Objects.equals(debounceDeadline, that.debounceDeadline)
-        && java.util.Objects.equals(statusName, that.statusName);
+        && java.util.Objects.equals(statusValue, that.statusValue);
   }
 
   /**
@@ -314,6 +337,6 @@ public record WorkflowStatus(
         applicationName,
         isDebounced,
         debounceDeadline,
-        statusName);
+        statusValue);
   }
 }
