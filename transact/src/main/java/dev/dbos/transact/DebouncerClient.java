@@ -4,11 +4,13 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.Validation;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
+import dev.dbos.transact.workflow.DeduplicationHolder;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.DebounceDeduplicationIds;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
@@ -388,6 +390,12 @@ public final class DebouncerClient<R> {
             if (holder != null
                 && holder.isDebouncerWorkflow()
                 && !holder.isForeignTo(client.applicationName())) {
+              // The takeover leaves one in a status this version does not know alone, and the
+              // enqueue on the user queue would not collide with it: refuse here, or it would
+              // create a second workflow for the key.
+              if (holder.status() == WorkflowState.UNKNOWN) {
+                throw refuseUnknownHolder(holder, userWorkflowId, targetQueue, deduplicationId);
+              }
               debouncerWorkflowId = holder.workflowId();
               continue;
             }
@@ -437,6 +445,11 @@ public final class DebouncerClient<R> {
         if (holder.isForeignTo(client.applicationName())) {
           throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
         }
+        // Nor is a holder whose status this version does not know: nothing here moves it on or
+        // clears its key, so a retry would spin forever too.
+        if (holder.status() == WorkflowState.UNKNOWN) {
+          throw refuseUnknownHolder(holder, userWorkflowId, targetQueue, deduplicationId);
+        }
         if (holder.isDebouncerWorkflow()) {
           debouncerWorkflowId = holder.workflowId();
           continue;
@@ -455,6 +468,21 @@ public final class DebouncerClient<R> {
         throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
       }
     }
+  }
+
+  /**
+   * Logs and returns the collision a debounce reports for a key held by a workflow whose status
+   * this version does not know. Nothing here moves such a holder on or clears its key.
+   */
+  private static DBOSQueueDuplicatedException refuseUnknownHolder(
+      DeduplicationHolder holder, String userWorkflowId, String queue, String dedupId) {
+    logger.warn(
+        "Debounce key {} is held by workflow {} with status {}, which this version does not know;"
+            + " refusing the debounce",
+        dedupId,
+        holder.workflowId(),
+        holder.statusValue());
+    return new DBOSQueueDuplicatedException(userWorkflowId, queue, dedupId);
   }
 
   /**

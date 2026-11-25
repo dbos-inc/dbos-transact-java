@@ -29,6 +29,9 @@ import org.jspecify.annotations.Nullable;
  * @param status the holding workflow's status, or null if unknown
  * @param isDebounced whether the holder is a debounced workflow whose deduplication ID is a
  *     debounce key
+ * @param statusValue the holding workflow's status as stored, which tells what {@link
+ *     WorkflowState#UNKNOWN} stands for; the name of {@code status} when that is known, and null if
+ *     the status is
  */
 public record DeduplicationHolder(
     String workflowId,
@@ -37,7 +40,35 @@ public record DeduplicationHolder(
     @Nullable String className,
     @Nullable String instanceName,
     @Nullable WorkflowState status,
-    boolean isDebounced) {
+    boolean isDebounced,
+    @Nullable String statusValue) {
+
+  /** Fills {@code statusValue} in from a known {@code status}. */
+  public DeduplicationHolder {
+    if (statusValue == null && status != null && status != WorkflowState.UNKNOWN) {
+      statusValue = status.name();
+    }
+  }
+
+  /** Constructs a holder whose stored status is the name of {@code status}. */
+  public DeduplicationHolder(
+      String workflowId,
+      @Nullable String applicationName,
+      @Nullable String workflowName,
+      @Nullable String className,
+      @Nullable String instanceName,
+      @Nullable WorkflowState status,
+      boolean isDebounced) {
+    this(
+        workflowId,
+        applicationName,
+        workflowName,
+        className,
+        instanceName,
+        status,
+        isDebounced,
+        null);
+  }
 
   /**
    * Whether this holder answers to some other application than {@code appName}. An unclaimed holder

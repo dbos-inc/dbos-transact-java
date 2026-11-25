@@ -53,6 +53,7 @@ public class WorkflowStatusBuilder {
   private String applicationName;
   private boolean isDebounced;
   private Instant debounceDeadline;
+  private String statusValue;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -90,20 +91,29 @@ public class WorkflowStatusBuilder {
         scheduleName,
         applicationName,
         isDebounced,
-        debounceDeadline);
+        debounceDeadline,
+        statusValue);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
     this.workflowId = Objects.requireNonNull(workflowId);
   }
 
+  /** Sets the status as stored, which may be one this version does not know. */
   public WorkflowStatusBuilder status(String status) {
-    this.status = WorkflowState.valueOf(status);
+    this.status = WorkflowState.fromStatusValue(status);
+    this.statusValue = status;
     return this;
   }
 
   public WorkflowStatusBuilder status(WorkflowState state) {
     this.status = state;
+    this.statusValue = null;
+    return this;
+  }
+
+  public WorkflowStatusBuilder statusValue(String statusValue) {
+    this.statusValue = statusValue;
     return this;
   }
 

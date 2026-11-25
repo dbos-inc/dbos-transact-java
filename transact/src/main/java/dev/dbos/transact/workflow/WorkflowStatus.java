@@ -6,6 +6,13 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.jsontype.TypeSerializer;
+import tools.jackson.databind.ser.std.StdScalarSerializer;
 
 /**
  * Represents the status and metadata of a workflow execution. Contains information such as workflow
@@ -14,8 +21,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public record WorkflowStatus(
     /** Unique identifier for the workflow instance. */
     String workflowId,
-    /** Current state of the workflow. */
-    WorkflowState status,
+    /** Current state of the workflow. JSON writes {@link #statusValue} in its place. */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) WorkflowState status,
     /** Name of the workflow. */
     String workflowName,
     /** Class name of the workflow implementation. */
@@ -87,7 +94,126 @@ public record WorkflowStatus(
      */
     Boolean isDebounced,
     /** The latest a debounced workflow's delay may be extended to, or null for no cap. */
-    Instant debounceDeadline) {
+    Instant debounceDeadline,
+    /**
+     * The status as stored, which tells what {@link WorkflowState#UNKNOWN} stands for: a status
+     * this version does not know, such as one a newer version wrote. Null exactly when {@code
+     * status} is.
+     */
+    String statusValue) {
+
+  /**
+   * Fills whichever of {@code status} and {@code statusValue} is missing in from the other: a known
+   * {@code status} gives its name, and a {@code statusValue} gives the state it names. So the two
+   * are both null, or both set and agree.
+   *
+   * <p>A {@code statusValue} also decides over {@link WorkflowState#UNKNOWN}, which says only that
+   * whoever built the status did not know the value: a version that knows it reads it as itself.
+   *
+   * @throws IllegalArgumentException if {@code status} is {@link WorkflowState#UNKNOWN} without a
+   *     {@code statusValue}, or a known {@code status} and the {@code statusValue} do not agree
+   */
+  public WorkflowStatus {
+    if (statusValue == null && status != null && status != WorkflowState.UNKNOWN) {
+      statusValue = status.name();
+    }
+    if (statusValue != null && (status == null || status == WorkflowState.UNKNOWN)) {
+      status = WorkflowState.fromStatusValue(statusValue);
+    }
+    if (status == WorkflowState.UNKNOWN && statusValue == null) {
+      throw new IllegalArgumentException(
+          "Workflow %s: an UNKNOWN status needs the status value it stands for"
+              .formatted(workflowId));
+    }
+    if (status != null
+        && statusValue != null
+        && status != WorkflowState.fromStatusValue(statusValue)) {
+      throw new IllegalArgumentException(
+          "Workflow %s: status %s does not match status value %s"
+              .formatted(workflowId, status, statusValue));
+    }
+  }
+
+  /**
+   * Constructs a status whose stored status is the name of {@code status}.
+   *
+   * @throws IllegalArgumentException if {@code status} is {@link WorkflowState#UNKNOWN}, which
+   *     needs the stored value it stands for
+   */
+  public WorkflowStatus(
+      String workflowId,
+      WorkflowState status,
+      String workflowName,
+      String className,
+      String instanceName,
+      String authenticatedUser,
+      String assumedRole,
+      List<String> authenticatedRoles,
+      Object[] input,
+      Object output,
+      ErrorResult error,
+      String executorId,
+      Instant createdAt,
+      Instant updatedAt,
+      String appVersion,
+      String appId,
+      Integer recoveryAttempts,
+      String queueName,
+      Duration timeout,
+      Instant deadline,
+      Instant startedAt,
+      String deduplicationId,
+      Integer priority,
+      String queuePartitionKey,
+      String forkedFrom,
+      String parentWorkflowId,
+      Boolean wasForkedFrom,
+      Instant delayUntil,
+      Instant completedAt,
+      String serialization,
+      Map<String, Object> attributes,
+      String scheduleName,
+      String applicationName,
+      Boolean isDebounced,
+      Instant debounceDeadline) {
+    this(
+        workflowId,
+        status,
+        workflowName,
+        className,
+        instanceName,
+        authenticatedUser,
+        assumedRole,
+        authenticatedRoles,
+        input,
+        output,
+        error,
+        executorId,
+        createdAt,
+        updatedAt,
+        appVersion,
+        appId,
+        recoveryAttempts,
+        queueName,
+        timeout,
+        deadline,
+        startedAt,
+        deduplicationId,
+        priority,
+        queuePartitionKey,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        delayUntil,
+        completedAt,
+        serialization,
+        attributes,
+        scheduleName,
+        applicationName,
+        isDebounced,
+        debounceDeadline,
+        null);
+  }
 
   @JsonIgnore
   public Long timeoutMs() {
@@ -178,7 +304,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(scheduleName, that.scheduleName)
         && java.util.Objects.equals(applicationName, that.applicationName)
         && java.util.Objects.equals(isDebounced, that.isDebounced)
-        && java.util.Objects.equals(debounceDeadline, that.debounceDeadline);
+        && java.util.Objects.equals(debounceDeadline, that.debounceDeadline)
+        && java.util.Objects.equals(statusValue, that.statusValue);
   }
 
   /**
@@ -224,6 +351,43 @@ public record WorkflowStatus(
         scheduleName,
         applicationName,
         isDebounced,
-        debounceDeadline);
+        debounceDeadline,
+        statusValue);
+  }
+
+  /**
+   * The status as JSON writes it: the stored value, never {@code UNKNOWN}. An export or a recorded
+   * step from this version then reads on a version that knows the status as that status.
+   */
+  @SuppressWarnings("PMD.UnusedPrivateMethod") // Jackson calls it
+  @JsonProperty("status")
+  @JsonSerialize(using = StoredStatusSerializer.class)
+  private String statusForJson() {
+    return statusValue;
+  }
+
+  /**
+   * Writes the stored value as a {@link WorkflowState} would be written, type id included when the
+   * mapper writes one, so it reads back through {@link WorkflowState#fromStatusValue}.
+   */
+  static final class StoredStatusSerializer extends StdScalarSerializer<String> {
+    StoredStatusSerializer() {
+      super(String.class);
+    }
+
+    @Override
+    public void serialize(String value, JsonGenerator gen, SerializationContext ctxt) {
+      gen.writeString(value);
+    }
+
+    @Override
+    public void serializeWithType(
+        String value, JsonGenerator gen, SerializationContext ctxt, TypeSerializer typeSer) {
+      var typeId =
+          typeSer.writeTypePrefix(
+              gen, ctxt, typeSer.typeId(value, WorkflowState.class, JsonToken.VALUE_STRING));
+      serialize(value, gen, ctxt);
+      typeSer.writeTypeSuffix(gen, ctxt, typeId);
+    }
   }
 }
