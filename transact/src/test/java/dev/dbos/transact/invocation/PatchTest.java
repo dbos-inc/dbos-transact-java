@@ -7,7 +7,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.LogCapture;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.StepInfo;
@@ -19,8 +21,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import ch.qos.logback.classic.Level;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 interface PatchService {
   int workflow();
@@ -252,7 +256,9 @@ public class PatchTest {
     // In production, developers would be expected to be updating services in place, so they would
     // have the same workflow name across deployed versions.
 
-    var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
+    // Patching needs no flag: a fixed application version is enough for every deployment to
+    // recover and dequeue each other's workflows.
+    var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
       var proxy1 = dbos.registerProxy(PatchService.class, new PatchServiceImplOne(dbos));
@@ -401,26 +407,26 @@ public class PatchTest {
   }
 
   @Test
-  public void patchThrowsNotConfigured() throws Exception {
+  public void patchNeedsNoFlag() throws Exception {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
       var proxy2 = dbos.registerProxy(PatchService.class, new PatchServiceImplTwo(dbos));
       dbos.launch();
 
-      assertThrows(IllegalStateException.class, () -> proxy2.workflow());
+      assertEquals(5, proxy2.workflow());
     }
   }
 
   @Test
-  public void deprecatePatchThrowsNotConfigured() throws Exception {
+  public void deprecatePatchNeedsNoFlag() throws Exception {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
       var proxy4 = dbos.registerProxy(PatchService.class, new PatchServiceImplFour(dbos));
       dbos.launch();
 
-      assertThrows(IllegalStateException.class, () -> proxy4.workflow());
+      assertEquals(4, proxy4.workflow());
     }
   }
 
@@ -442,6 +448,34 @@ public class PatchTest {
     }
   }
 
+  @Test
+  // Nothing else sets the flag, so the deprecation warnings counted here are this test's own.
+  @ResourceLock("DBOSExecutor enablePatching log")
+  @SuppressWarnings("removal") // exercises the deprecated enablePatching setting
+  public void theDeprecatedFlagStillPinsTheVersionAndSaysItIsDeprecated() throws Exception {
+    var dbosConfig = pgContainer.dbosConfig().withEnablePatching();
+
+    try (var logs = new LogCapture(DBOSExecutor.class);
+        var dbos = new DBOS(dbosConfig)) {
+      var proxy = dbos.registerProxy(PatchService.class, new PatchServiceImplTwo(dbos));
+      dbos.launch();
+
+      assertEquals("PATCHING_ENABLED", DBOSTestAccess.getDbosExecutor(dbos).appVersion());
+      var warnings = logs.messages(Level.WARN, "enablePatching is deprecated");
+      assertEquals(1, warnings.size(), warnings.toString());
+
+      var handle = dbos.startWorkflow(() -> proxy.workflow(), new StartWorkflowOptions("flagged"));
+      assertEquals(5, handle.getResult());
+    }
+
+    // Without the flag, nothing is said.
+    try (var logs = new LogCapture(DBOSExecutor.class);
+        var dbos = new DBOS(pgContainer.dbosConfig())) {
+      dbos.launch();
+      assertEquals(List.of(), logs.messages(Level.WARN, "enablePatching is deprecated"));
+    }
+  }
+
   private static List<String> stepNames(DBOS dbos, String workflowId) {
     return dbos.listWorkflowSteps(workflowId).stream().map(StepInfo::functionName).toList();
   }
@@ -452,7 +486,7 @@ public class PatchTest {
     // patch added before that recv finds the recv's function ID empty on recovery; it must read the
     // deadline past it as "already passed", not insert a marker that shifts the recv onto the
     // deadline's function ID.
-    var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
+    var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
     var v1Id = "patch-recv-v1";
 
     try (var dbos = new DBOS(dbosConfig)) {
@@ -501,7 +535,7 @@ public class PatchTest {
     // for the event. A patch added before that getEvent finds the getEvent's function ID empty on
     // recovery; it must read the deadline past it as "already passed", not insert a marker that
     // shifts the getEvent onto the deadline's function ID.
-    var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
+    var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
     var publisherId = "patch-event-publisher";
     var v1Id = "patch-event-v1";
 

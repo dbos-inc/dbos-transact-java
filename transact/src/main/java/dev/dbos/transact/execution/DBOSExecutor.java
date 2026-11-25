@@ -230,6 +230,7 @@ public class DBOSExecutor implements AutoCloseable {
   // SystemDatabase.refreshDatabaseIdentity.
   private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
 
+  @SuppressWarnings("removal") // reads the deprecated enablePatching setting
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
     this.serializer = config.serializer();
@@ -289,6 +290,14 @@ public class DBOSExecutor implements AutoCloseable {
       enterpriseProvider = EnterpriseProviders.load(EnterpriseProviders.CONDUCTOR);
     } else if (!features.isEmpty()) {
       enterpriseProvider = EnterpriseProviders.load(features.get(0).description());
+    }
+
+    if (config.enablePatching()) {
+      logger.warn(
+          "DBOSConfig.enablePatching is deprecated and will be removed in a future release."
+              + " DBOS.patch and DBOS.deprecatePatch no longer require it. To keep every"
+              + " deployment on one application version, as the flag does, set appVersion"
+              + " explicitly.");
     }
 
     if (!dbosCloud) {
@@ -2038,10 +2047,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public boolean patch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.patch must be called from a workflow");
@@ -2058,10 +2063,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public boolean deprecatePatch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");

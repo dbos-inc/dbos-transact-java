@@ -55,7 +55,8 @@ import org.jspecify.annotations.Nullable;
  * @param executorId stable identifier for this executor instance; must not be empty if non-null
  * @param databaseSchema PostgreSQL schema used for DBOS system tables; {@code null} uses the
  *     default schema
- * @param enablePatching whether to enable workflow patching
+ * @param enablePatching deprecated: {@code DBOS.patch} and {@code DBOS.deprecatePatch} no longer
+ *     require it. When true, pins the application version to {@code PATCHING_ENABLED}
  * @param listenQueues names of queues this executor should dequeue work from; an empty set means
  *     listen on all queues
  * @param serializer custom {@link DBOSSerializer} for workflow arguments and return values; {@code
@@ -219,6 +220,16 @@ public record DBOSConfig(
     }
 
     listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
+  }
+
+  /**
+   * @deprecated {@code DBOS.patch} and {@code DBOS.deprecatePatch} no longer require it. To keep
+   *     every deployment on one application version, set {@code appVersion}.
+   */
+  @Deprecated(since = "1.4", forRemoval = true)
+  @Override
+  public boolean enablePatching() {
+    return enablePatching;
   }
 
   /**
@@ -830,17 +841,34 @@ public record DBOSConfig(
         autoUpgradeGrace);
   }
 
-  /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
+  /**
+   * Returns a copy of this config with {@code enablePatching} set to {@code true}.
+   *
+   * @deprecated {@code DBOS.patch} and {@code DBOS.deprecatePatch} no longer require it. To keep
+   *     every deployment on one application version, use {@link #withAppVersion}.
+   */
+  @Deprecated(since = "1.4", forRemoval = true)
   public @NonNull DBOSConfig withEnablePatching() {
     return this.withEnablePatching(true);
   }
 
-  /** Returns a copy of this config with {@code enablePatching} set to {@code false}. */
+  /**
+   * Returns a copy of this config with {@code enablePatching} set to {@code false}.
+   *
+   * @deprecated {@code DBOS.patch} and {@code DBOS.deprecatePatch} no longer require it.
+   */
+  @Deprecated(since = "1.4", forRemoval = true)
   public @NonNull DBOSConfig withDisablePatching() {
     return this.withEnablePatching(false);
   }
 
-  /** Returns a copy of this config with {@code enablePatching} set to {@code v}. */
+  /**
+   * Returns a copy of this config with {@code enablePatching} set to {@code v}.
+   *
+   * @deprecated {@code DBOS.patch} and {@code DBOS.deprecatePatch} no longer require it. To keep
+   *     every deployment on one application version, use {@link #withAppVersion}.
+   */
+  @Deprecated(since = "1.4", forRemoval = true)
   public @NonNull DBOSConfig withEnablePatching(boolean v) {
     return new DBOSConfig(
         appName,
