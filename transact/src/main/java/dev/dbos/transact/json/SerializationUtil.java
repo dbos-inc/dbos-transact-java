@@ -1,5 +1,8 @@
 package dev.dbos.transact.json;
 
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -279,6 +282,34 @@ public final class SerializationUtil {
       // The stand-in keeps its own stack trace.
     }
     return standIn;
+  }
+
+  /**
+   * The error, for handing to a logger along with its stack trace: the error itself, or its
+   * {@linkplain #standIn stand-in} if reading its message, or that of a throwable in its cause or
+   * suppressed chain, throws. A logger reads each of them, and a throw there escapes the logging
+   * call.
+   */
+  public static Throwable loggable(Throwable error) {
+    try {
+      var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+      var pending = new ArrayDeque<Throwable>();
+      pending.add(error);
+      while (!pending.isEmpty()) {
+        var next = pending.pop();
+        if (!seen.add(next)) {
+          continue;
+        }
+        next.getMessage();
+        if (next.getCause() != null) {
+          pending.add(next.getCause());
+        }
+        Collections.addAll(pending, next.getSuppressed());
+      }
+      return error;
+    } catch (RuntimeException unreadable) {
+      return standIn(error);
+    }
   }
 
   /**

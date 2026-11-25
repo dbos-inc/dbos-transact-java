@@ -109,21 +109,27 @@ class UnserializableWorkflowErrorTest {
   @Test
   void anErrorWhoseMessageThrowsIsRecordedAsAStandIn() throws Exception {
     var workflowId = "broken-message-error";
+    var expected =
+        BrokenMessageException.class.getName()
+            + ": <getMessage threw "
+            + IllegalStateException.class.getName()
+            + ">";
     try (var _o = new WorkflowOptions(workflowId).setContext()) {
-      // Logging the error after it is recorded calls getMessage too, so the caller may see that
-      // failure rather than the workflow's error. The recorded outcome is what this checks.
-      assertThrows(RuntimeException.class, () -> proxy.throwBrokenMessage());
+      // A run's future can't carry an error whose message can't be read, so the caller of the
+      // first run gets its stand-in, as every later caller does. Logging the error must not read
+      // its message either.
+      var thrown = assertThrows(RuntimeException.class, () -> proxy.throwBrokenMessage());
+      assertEquals(RuntimeException.class, thrown.getClass());
+      assertEquals(expected, thrown.getMessage());
     }
 
     var status = dbos.getWorkflowStatus(workflowId).orElseThrow();
     assertEquals(WorkflowState.ERROR, status.status());
     assertEquals(RuntimeException.class.getName(), status.error().className());
-    assertEquals(
-        BrokenMessageException.class.getName()
-            + ": <getMessage threw "
-            + IllegalStateException.class.getName()
-            + ">",
-        status.error().message());
+    assertEquals(expected, status.error().message());
+    var replayed =
+        assertThrows(RuntimeException.class, () -> dbos.retrieveWorkflow(workflowId).getResult());
+    assertEquals(expected, replayed.getMessage());
     assertEquals(1, impl.runs.get());
   }
 }

@@ -3001,12 +3001,16 @@ public class DBOSExecutor implements AutoCloseable {
               if (persistWorkflowError(workflowId, actual, initResult.serialization(), ownerXid)) {
                 // active is already closed here: try-with-resources closes before catch runs,
                 // so the entry is released before this terminal write becomes durable.
-                logger.error("executeWorkflow {}", workflowId, actual);
+                logger.error("executeWorkflow {}", workflowId, SerializationUtil.loggable(actual));
+                var standIn = standInIfUndeliverable(e, actual);
+                if (standIn != null) {
+                  throw standIn;
+                }
                 throw e;
               }
               // The row was not PENDING: this run no longer owns the workflow's outcome, and
               // the error it computed is not the workflow's error.
-              logger.debug("executeWorkflow {}", workflowId, actual);
+              logger.debug("executeWorkflow {}", workflowId, SerializationUtil.loggable(actual));
               pendingAdopt = notRecordedWarning;
             }
           } finally {
@@ -3300,6 +3304,23 @@ public class DBOSExecutor implements AutoCloseable {
     var serialized =
         serializeWorkflowError("workflow " + workflowId, error, serialization, this.serializer);
     return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue(), ownerXid);
+  }
+
+  /**
+   * The stand-in for a recorded workflow error if a run's future can't deliver the exception the
+   * run threw, or null if it can. The future wraps that exception in a {@link
+   * java.util.concurrent.CompletionException}, which reads its message, and a throw there leaves
+   * the future never completed. The stand-in is what the row records and what every later caller
+   * gets.
+   */
+  private static @Nullable RuntimeException standInIfUndeliverable(
+      Exception thrown, Throwable error) {
+    try {
+      thrown.toString();
+      return null;
+    } catch (RuntimeException unreadable) {
+      return SerializationUtil.standIn(error);
+    }
   }
 
   /**
