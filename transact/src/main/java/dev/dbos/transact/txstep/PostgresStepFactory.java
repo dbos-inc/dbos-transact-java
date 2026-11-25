@@ -354,8 +354,8 @@ public abstract class PostgresStepFactory {
               if (notTheSteps != null) {
                 throw notTheSteps;
               }
-              // An error the serializer refuses is recorded, and thrown, as its stand-in, which is
-              // what the system database records for the step too.
+              // An error that can't be recorded as it is is recorded, and thrown, as its stand-in,
+              // which is what the system database records for the step too.
               var failure = SerializationUtil.recordableError(e, serializer);
               if (mayRecordFailure(dbos, workflowId)) {
                 recordError(workflowId, stepId, failure);

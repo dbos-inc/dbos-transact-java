@@ -295,7 +295,8 @@ public class JdbcStepFactory extends PostgresStepFactory {
 
   @Override
   protected void recordError(String workflowId, int stepId, Exception exception) {
-    var value = SerializationUtil.serializeError(exception, null, serializer);
+    // The same rule the system database's row follows, so the two record the same error.
+    var value = SerializationUtil.serializeStepError(exception, null, serializer).serialized();
     try {
       executeTransaction(
           dataSource,

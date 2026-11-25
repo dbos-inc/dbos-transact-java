@@ -2074,14 +2074,17 @@ public class DBOSExecutor implements AutoCloseable {
             SerializationUtil.describeError(exception));
 
         // DBOS's own steps, except DBOS.getResult, record their errors in the built-in format,
-        // whatever is configured.
+        // whatever is configured. A transactional step's factory has already applied the same
+        // rule to the error it throws, so this records what its checkpoint holds.
         var recordedError =
-            serializeErrorOrStandIn(
-                "step %s in workflow %s".formatted(options.name(), workflowId),
+            SerializationUtil.serializeStepError(
                 exception,
                 recordErrorNatively ? SerializationUtil.NATIVE : null,
-                recordErrorNatively ? null : serializer,
-                true);
+                recordErrorNatively ? null : serializer);
+        logUnrecordableError(
+            "step %s in workflow %s".formatted(options.name(), workflowId),
+            exception,
+            recordedError);
         var stepResult =
             new StepResult(
                 workflowId,
@@ -3295,54 +3298,59 @@ public class DBOSExecutor implements AutoCloseable {
   private boolean persistWorkflowError(
       String workflowId, Throwable error, String serialization, String ownerXid) {
     var serialized =
-        serializeErrorOrStandIn(
-                "workflow " + workflowId, error, serialization, this.serializer, false)
-            .serialized();
+        serializeWorkflowError("workflow " + workflowId, error, serialization, this.serializer);
     return systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue(), ownerXid);
   }
 
-  /** An error as recorded, serialized, and the exception a replay of it throws. */
-  private record RecordedError(SerializationUtil.SerializedResult serialized, Throwable error) {}
+  /**
+   * Logs that a step's error could not be recorded as it is, if so: by description only, since
+   * handing the logger the error, or a refusal whose cause chain holds it, calls its getMessage,
+   * which may be what failed.
+   */
+  private static void logUnrecordableError(
+      String subject, Throwable error, SerializationUtil.RecordedError recorded) {
+    if (recorded.refusal() == null) {
+      return;
+    }
+    logger.error(
+        "Cannot serialize the error of {} ({}): {}. {}",
+        subject,
+        SerializationUtil.describeError(error),
+        SerializationUtil.describeError(recorded.refusal()),
+        recorded.error() == error
+            ? "It is recorded in the built-in format"
+            : "A stand-in is recorded in its place");
+  }
 
   /**
-   * Serializes an error for a workflow's or a step's row. An error the serializer refuses -- a
-   * field it can't write, a custom serializer that rejects the type, a throwing getMessage -- is
-   * recorded as a plain stand-in naming its class and message, so the row still records an outcome
-   * rather than leaving the workflow or step to run again.
-   *
-   * <p>If the stand-in is refused too, {@code builtInFallback} records it in the built-in format,
-   * which suits a step row, as it carries its own serialization. A workflow row's serialization
-   * also covers its inputs, so for one the refusal propagates instead.
+   * Serializes an error for a workflow's row. An error the serializer refuses -- a field it can't
+   * write, a custom serializer that rejects the type, a throwing getMessage -- is recorded as a
+   * plain stand-in naming its class and message, so the row still records an outcome rather than
+   * leaving the workflow to run again. A workflow row's serialization also covers its inputs, so it
+   * has no built-in-format fallback, as a step row has: if the stand-in is refused too, the refusal
+   * propagates.
    *
    * @param subject what the error belongs to, for the log
    */
-  private RecordedError serializeErrorOrStandIn(
+  private SerializationUtil.SerializedResult serializeWorkflowError(
       String subject,
       Throwable error,
       @Nullable String serialization,
-      @Nullable DBOSSerializer serializer,
-      boolean builtInFallback) {
+      @Nullable DBOSSerializer serializer) {
     try {
-      return new RecordedError(
-          SerializationUtil.serializeError(error, serialization, serializer), error);
+      return SerializationUtil.serializeError(error, serialization, serializer);
     } catch (Exception refused) {
       // Logged by description only: handing the logger the error, or a refusal whose cause chain
       // holds it, calls its getMessage, which may be what failed.
-      var description = SerializationUtil.describeError(error);
       logger.error(
           "Cannot serialize the error of {} ({}): {}. A stand-in is recorded in its place",
           subject,
-          description,
+          SerializationUtil.describeError(error),
           SerializationUtil.describeError(refused));
       var standIn = SerializationUtil.standIn(error);
       try {
-        return new RecordedError(
-            SerializationUtil.serializeError(standIn, serialization, serializer), standIn);
+        return SerializationUtil.serializeError(standIn, serialization, serializer);
       } catch (Exception alsoRefused) {
-        if (builtInFallback) {
-          return new RecordedError(
-              SerializationUtil.serializeError(standIn, SerializationUtil.NATIVE, null), standIn);
-        }
         var thrown =
             alsoRefused instanceof RuntimeException re ? re : new RuntimeException(alsoRefused);
         thrown.addSuppressed(refused);
@@ -3371,9 +3379,7 @@ public class DBOSExecutor implements AutoCloseable {
             Objects.requireNonNullElseGet(args, () -> new Object[0]), null, null, this.serializer);
     String serialization = serializedArgs.serialization();
     var serializedError =
-        serializeErrorOrStandIn(
-                "workflow " + workflowId, error, serialization, this.serializer, false)
-            .serialized();
+        serializeWorkflowError("workflow " + workflowId, error, serialization, this.serializer);
     var initStatus =
         new WorkflowStatusInternal(
             workflowId,

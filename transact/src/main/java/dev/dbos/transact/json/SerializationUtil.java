@@ -282,16 +282,50 @@ public final class SerializationUtil {
   }
 
   /**
-   * The error in a form that can be recorded: the error itself, or its {@linkplain #standIn
-   * stand-in} if {@code serializer} refuses it.
+   * A step's error as its row records it, the exception that row replays as, and, if the error
+   * could not be recorded as it is with the requested serialization, why.
+   */
+  public record RecordedError(
+      SerializedResult serialized, Throwable error, @Nullable Exception refusal) {}
+
+  /**
+   * Serializes a step's error for its row, in the first form that can be written: the error with
+   * {@code serialization} and {@code serializer}, then the error in the built-in format, then its
+   * {@linkplain #standIn stand-in} in each of the two. A step row carries its own serialization, so
+   * whichever form is written replays, and applying this to the error it returns writes that same
+   * form again.
+   */
+  public static RecordedError serializeStepError(
+      Throwable error, @Nullable String serialization, @Nullable DBOSSerializer serializer) {
+    Exception refusal;
+    try {
+      return new RecordedError(serializeError(error, serialization, serializer), error, null);
+    } catch (Exception refused) {
+      refusal = refused;
+    }
+    if (!NATIVE.equals(serialization)) {
+      try {
+        return new RecordedError(serializeError(error, NATIVE, null), error, refusal);
+      } catch (Exception refused) {
+        // Fall through to the stand-in.
+      }
+    }
+    var standIn = standIn(error);
+    try {
+      return new RecordedError(
+          serializeError(standIn, serialization, serializer), standIn, refusal);
+    } catch (Exception refused) {
+      return new RecordedError(serializeError(standIn, NATIVE, null), standIn, refusal);
+    }
+  }
+
+  /**
+   * The error in a form a step row can record: the error itself, or its {@linkplain #standIn
+   * stand-in} if neither {@code serializer} nor the built-in format can write it. See {@link
+   * #serializeStepError}.
    */
   public static Exception recordableError(Exception error, @Nullable DBOSSerializer serializer) {
-    try {
-      serializeError(error, null, serializer);
-      return error;
-    } catch (Exception refused) {
-      return standIn(error);
-    }
+    return (Exception) serializeStepError(error, null, serializer).error();
   }
 
   /**

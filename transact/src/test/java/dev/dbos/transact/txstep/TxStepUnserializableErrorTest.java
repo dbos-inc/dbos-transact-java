@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.json.DBOSJavaSerializer;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
@@ -32,6 +35,34 @@ class TxStepUnserializableErrorTest {
 
     public UnserializableException(String message) {
       super(message);
+    }
+  }
+
+  /** Writes values as the built-in serializer does, and refuses every error. */
+  static class RefusesErrorsSerializer implements DBOSSerializer {
+    @Override
+    public String name() {
+      return "refuses_errors";
+    }
+
+    @Override
+    public String serialize(Object value) {
+      return DBOSJavaSerializer.INSTANCE.serialize(value);
+    }
+
+    @Override
+    public Object deserialize(String text) {
+      return DBOSJavaSerializer.INSTANCE.deserialize(text);
+    }
+
+    @Override
+    public String serializeThrowable(Throwable throwable) {
+      throw new UnsupportedOperationException("this serializer refuses errors");
+    }
+
+    @Override
+    public Throwable deserializeThrowable(String text) {
+      return DBOSJavaSerializer.INSTANCE.deserializeThrowable(text);
     }
   }
 
@@ -77,7 +108,13 @@ class TxStepUnserializableErrorTest {
   @BeforeEach
   void beforeEach() {
     dataSource = pgContainer.dataSource();
-    dbos = new DBOS(pgContainer.dbosConfig());
+    launch(null);
+  }
+
+  private void launch(DBOSSerializer serializer) {
+    dbos = new DBOS(pgContainer.dbosConfig().withSerializer(serializer));
+    // The tests read the checkpoint the step wrote, after the workflow finishes.
+    DBOSTestAccess.keepCompletedStepCheckpoints(dbos);
     var stepFactory = new JdbcStepFactory(dbos, dataSource);
     impl = new TxServiceImpl(dbos, stepFactory);
     proxy = dbos.registerProxy(TxService.class, impl);
@@ -97,6 +134,32 @@ class TxStepUnserializableErrorTest {
             + ": the transaction failed",
         firstRun);
     assertNotNull(DBUtils.getStepRows(dataSource, workflowId).get(0).error());
+
+    var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, 1);
+    assertEquals(firstRun, fork.getResult());
+    assertEquals(1, impl.runs.get());
+  }
+
+  @Test
+  void aStandInTheSerializerRefusesTooIsRecordedInTheBuiltInFormat() throws Exception {
+    dbos.close();
+    launch(new RefusesErrorsSerializer());
+
+    var workflowId = "unserializable-tx-error-refused-stand-in";
+    String firstRun;
+    try (var _o = new WorkflowOptions(workflowId).setContext()) {
+      firstRun = proxy.catchUnserializableError();
+    }
+    // The body is handed the stand-in the factory recorded, not the serializer's refusal.
+    assertEquals(
+        "caught java.lang.RuntimeException: "
+            + UnserializableException.class.getName()
+            + ": the transaction failed",
+        firstRun);
+    var txRows = DBUtils.getTxStepRows(dataSource, workflowId);
+    assertEquals(1, txRows.size());
+    assertNotNull(txRows.get(0).error());
+    assertEquals(DBOSJavaSerializer.NAME, txRows.get(0).serialization());
 
     var fork = dbos.<String, RuntimeException>forkWorkflow(workflowId, 1);
     assertEquals(firstRun, fork.getResult());

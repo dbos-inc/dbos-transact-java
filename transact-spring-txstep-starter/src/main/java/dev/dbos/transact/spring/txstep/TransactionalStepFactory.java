@@ -147,7 +147,8 @@ public class TransactionalStepFactory {
   }
 
   private void recordError(String workflowId, int stepId, Exception exception) {
-    var value = SerializationUtil.serializeError(exception, null, serializer);
+    // The same rule the system database's row follows, so the two record the same error.
+    var value = SerializationUtil.serializeStepError(exception, null, serializer).serialized();
     try (var conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
       try {
@@ -273,8 +274,8 @@ public class TransactionalStepFactory {
               if (notTheSteps != null) {
                 throw notTheSteps;
               }
-              // An error the serializer refuses is recorded, and thrown, as its stand-in, which is
-              // what the system database records for the step too.
+              // An error that can't be recorded as it is is recorded, and thrown, as its stand-in,
+              // which is what the system database records for the step too.
               var failure = SerializationUtil.recordableError(e, serializer);
               if (PostgresStepFactory.mayRecordFailure(dbos, workflowId)) {
                 recordError(workflowId, stepId, failure);
