@@ -11,8 +11,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.json.DBOSJavaSerializer;
 import dev.dbos.transact.json.DBOSPortableSerializer;
+import dev.dbos.transact.json.DBOSSerializer;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -255,6 +257,34 @@ public class DebouncerHolderTest {
     var result = Debouncer.toDebounceResult(recorded);
 
     assertEquals(new DebounceResult.Bounced("wf-10"), result);
+  }
+
+  @Test
+  void aHolderKeepsTheStatusItWasRecordedWith() {
+    // A known status carries its own name.
+    assertEquals(
+        "DELAYED",
+        new DeduplicationHolder("wf-7", null, null, null, null, WorkflowState.DELAYED, true)
+            .statusValue());
+
+    // One this version does not know replays as UNKNOWN, as the run that recorded it saw it, with
+    // the stored value beside it, through either serializer.
+    var holder =
+        new DeduplicationHolder(
+            "wf-7",
+            "app-b",
+            "process",
+            "com.example.Impl",
+            "east",
+            WorkflowState.UNKNOWN,
+            true,
+            "SOMETHING_NEWER");
+    for (DBOSSerializer serializer :
+        List.of(DBOSPortableSerializer.INSTANCE, DBOSJavaSerializer.INSTANCE)) {
+      var recorded =
+          serializer.deserialize(serializer.serialize(new DebounceResult.NotBounced(holder)));
+      assertEquals(new DebounceResult.NotBounced(holder), Debouncer.toDebounceResult(recorded));
+    }
   }
 
   @Test

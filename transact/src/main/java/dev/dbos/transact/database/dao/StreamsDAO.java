@@ -214,7 +214,7 @@ public class StreamsDAO {
             // only on a miss, which reaches the same conclusion for a workflow that never existed.
             throw new DBOSNonExistentWorkflowException(workflowId);
           }
-          if (!state.isActive()) {
+          if (state.isTerminal()) {
             finalRead = true;
             continue;
           }

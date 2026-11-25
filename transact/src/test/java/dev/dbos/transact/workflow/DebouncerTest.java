@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -1774,6 +1775,57 @@ public class DebouncerTest {
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), serviceImpl.callArgs());
     assertEquals(userQueue, dbos.getWorkflowStatus(waiting).orElseThrow().queueName());
+  }
+
+  @Test
+  public void refusesAKeyHeldByADebouncedWorkflowWithAnUnknownStatus() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+    // A newer version moved it to a status this version does not know, which never clears its key.
+    DBUtils.setWorkflowState(dataSource, waiting, "SOMETHING_NEWER");
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(30),
+        () ->
+            assertThrows(
+                DBOSQueueDuplicatedException.class,
+                () ->
+                    dbos.<String>debouncer()
+                        .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"))));
+
+    assertEquals(planted, DebouncedRows.read(dataSource, waiting).delayUntilEpochMs());
+    assertEquals(0, serviceImpl.callCount());
+  }
+
+  @Test
+  public void refusesAKeyHeldByADebouncerWorkflowWithAnUnknownStatusForAUserQueue()
+      throws Exception {
+    String userQueue = "svc-user-queue";
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    dbos.registerQueue(userQueue, new QueueOptions());
+    var holder = plantDebouncerWorkflow("newer", "promised-u", userQueue, "no-such-version");
+    // A newer version moved it to a status this version does not know. A takeover leaves it
+    // alone, and an enqueue on the user queue would not collide with it.
+    DBUtils.setWorkflowState(pgContainer.dataSource(), holder, "SOMETHING_NEWER");
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(30),
+        () ->
+            assertThrows(
+                DBOSQueueDuplicatedException.class,
+                () ->
+                    dbos.<String>debouncer()
+                        .withQueue(userQueue)
+                        .debounce("newer", Duration.ofMillis(300), () -> svc.process("fresh"))));
+
+    assertEquals("SOMETHING_NEWER", dbos.getWorkflowStatus(holder).orElseThrow().statusValue());
+    assertEquals(0, countWorkflowsByName("process"));
   }
 
   @Test

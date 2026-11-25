@@ -381,6 +381,13 @@ public final class Debouncer<R> {
             if (holder != null
                 && holder.isDebouncerWorkflow()
                 && !holder.isForeignTo(executor.appName())) {
+              // The takeover leaves one in a status this version does not know alone, and the
+              // enqueue on the user queue would not collide with it: refuse here, or it would
+              // create a second workflow for the key.
+              if (holder.status() == WorkflowState.UNKNOWN) {
+                throw refuseUnknownHolder(
+                    holder, userWorkflowId, targetQueue, debounceDeduplicationId);
+              }
               debouncerWorkflowId = holder.workflowId();
               continue;
             }
@@ -463,6 +470,11 @@ public final class Debouncer<R> {
           throw new DBOSQueueDuplicatedException(
               userWorkflowId, targetQueue, debounceDeduplicationId);
         }
+        // Nor is a holder whose status this version does not know: nothing here moves it on or
+        // clears its key, so a retry would spin forever too.
+        if (holder.status() == WorkflowState.UNKNOWN) {
+          throw refuseUnknownHolder(holder, userWorkflowId, targetQueue, debounceDeduplicationId);
+        }
         if (holder.isDebouncerWorkflow()) {
           // 1.1 interop: forward to it at the top of the loop.
           debouncerWorkflowId = holder.workflowId();
@@ -484,6 +496,21 @@ public final class Debouncer<R> {
             userWorkflowId, targetQueue, debounceDeduplicationId);
       }
     }
+  }
+
+  /**
+   * Logs and returns the collision a debounce reports for a key held by a workflow whose status
+   * this version does not know. Nothing here moves such a holder on or clears its key.
+   */
+  private static DBOSQueueDuplicatedException refuseUnknownHolder(
+      DeduplicationHolder holder, String userWorkflowId, String queue, String dedupId) {
+    logger.warn(
+        "Debounce key {} is held by workflow {} with status {}, which this version does not know;"
+            + " refusing the debounce",
+        dedupId,
+        holder.workflowId(),
+        holder.statusValue());
+    return new DBOSQueueDuplicatedException(userWorkflowId, queue, dedupId);
   }
 
   /**
@@ -604,7 +631,7 @@ public final class Debouncer<R> {
       return holder;
     }
     if (recorded instanceof String workflowId) {
-      return new DeduplicationHolder(workflowId, null, null, null, null, null, false);
+      return new DeduplicationHolder(workflowId, null, null, null, null, null, false, null);
     }
     // A custom serializer that does not preserve Java types round-trips the record to a map.
     // Everything the record held is still there; only the type was lost.
@@ -615,8 +642,9 @@ public final class Debouncer<R> {
           map.get("workflowName") instanceof String name ? name : null,
           map.get("className") instanceof String className ? className : null,
           map.get("instanceName") instanceof String instanceName ? instanceName : null,
-          map.get("status") instanceof String status ? WorkflowState.valueOf(status) : null,
-          map.get("isDebounced") instanceof Boolean debounced && debounced);
+          map.get("status") instanceof String status ? WorkflowState.fromStatusValue(status) : null,
+          map.get("isDebounced") instanceof Boolean debounced && debounced,
+          map.get("statusValue") instanceof String statusValue ? statusValue : null);
     }
     throw new IllegalStateException(
         "DBOS.lookupDebouncer recorded an unexpected %s".formatted(recorded.getClass().getName()));
