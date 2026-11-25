@@ -19,4 +19,7 @@ public @interface Workflow {
    * always recorded with the application's own serializer, whichever path starts them.
    */
   SerializationStrategy serializationStrategy() default SerializationStrategy.DEFAULT;
+
+  /** Whether this workflow is auto-upgraded to the latest application version. */
+  AutoUpgrade autoUpgrade() default AutoUpgrade.DEFAULT;
 }

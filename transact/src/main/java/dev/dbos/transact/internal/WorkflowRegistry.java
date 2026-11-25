@@ -2,6 +2,7 @@ package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.workflow.AutoUpgrade;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
@@ -67,7 +68,8 @@ public class WorkflowRegistry {
       @NonNull Object target,
       @NonNull Method method,
       @Nullable Integer maxRecoveryAttempts,
-      @Nullable SerializationStrategy serializationStrategy) {
+      @Nullable SerializationStrategy serializationStrategy,
+      @Nullable AutoUpgrade autoUpgrade) {
     return registerWorkflow(
         workflowName,
         className,
@@ -76,6 +78,7 @@ public class WorkflowRegistry {
         method,
         maxRecoveryAttempts,
         serializationStrategy,
+        autoUpgrade,
         wfRegistry);
   }
 
@@ -85,7 +88,7 @@ public class WorkflowRegistry {
       @NonNull Object target,
       @NonNull Method method) {
     return registerWorkflow(
-        workflowName, className, null, target, method, null, null, internalWfRegistry);
+        workflowName, className, null, target, method, null, null, null, internalWfRegistry);
   }
 
   private static RegisteredWorkflow registerWorkflow(
@@ -96,6 +99,7 @@ public class WorkflowRegistry {
       @NonNull Method method,
       @Nullable Integer maxRecoveryAttempts,
       @Nullable SerializationStrategy serializationStrategy,
+      @Nullable AutoUpgrade autoUpgrade,
       ConcurrentHashMap<String, RegisteredWorkflow> registry) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
 
@@ -107,7 +111,8 @@ public class WorkflowRegistry {
             target,
             method,
             Objects.requireNonNullElse(maxRecoveryAttempts, -1),
-            Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT));
+            Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT),
+            Objects.requireNonNullElse(autoUpgrade, AutoUpgrade.DEFAULT));
 
     var previous = registry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {

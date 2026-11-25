@@ -44,10 +44,12 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.spi.EnrolledWorkflow;
 import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.spi.SuspendBackend;
 import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.spi.WorkflowRewind;
+import dev.dbos.transact.workflow.AutoUpgrade;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -88,6 +90,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -484,6 +487,22 @@ public class DBOSExecutor implements AutoCloseable {
 
   @Nullable EnterpriseProvider enterpriseProvider() {
     return enterpriseProvider;
+  }
+
+  /** The registered workflows enrolled in auto-upgrade, by class name and workflow name. */
+  public List<EnrolledWorkflow> autoUpgradableWorkflows() {
+    var workflows = workflowMap;
+    if (workflows == null) {
+      return List.of();
+    }
+    var enrolled = new LinkedHashSet<EnrolledWorkflow>();
+    for (var workflow : workflows.values()) {
+      var flag = workflow.autoUpgrade();
+      if (flag == AutoUpgrade.ENABLED || (flag == AutoUpgrade.DEFAULT && config.autoUpgrade())) {
+        enrolled.add(new EnrolledWorkflow(workflow.className(), workflow.workflowName()));
+      }
+    }
+    return List.copyOf(enrolled);
   }
 
   @Override
