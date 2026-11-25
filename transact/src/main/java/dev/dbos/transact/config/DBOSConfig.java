@@ -85,6 +85,14 @@ import org.jspecify.annotations.Nullable;
  * @param suspendMode whether {@code recv} and {@code sleep} may suspend their workflow in the
  *     database as SUSPENDED, when called with {@code suspend} true. Requires {@code
  *     dev.dbos:transact-enterprise}, and an entitlement to it
+ * @param autoUpgrade whether every workflow this application registers is auto-upgraded to the
+ *     latest application version, unless it opts out. Requires {@code
+ *     dev.dbos:transact-enterprise}, and an entitlement to it
+ * @param autoUpgradeInterval the time between two auto-upgrade passes; null for the 30s default;
+ *     must be positive
+ * @param autoUpgradeGrace how long the latest application version must have been the latest before
+ *     auto-upgrade re-enqueues PENDING workflows left on other versions; null or zero for none;
+ *     must not be negative
  */
 public record DBOSConfig(
     @NonNull String appName,
@@ -111,7 +119,10 @@ public record DBOSConfig(
     @Nullable Duration systemDatabaseIdleTransactionTimeout,
     boolean conductorMetadataOnlyMode,
     @Nullable String transactEnterpriseKey,
-    boolean suspendMode) {
+    boolean suspendMode,
+    boolean autoUpgrade,
+    @Nullable Duration autoUpgradeInterval,
+    @Nullable Duration autoUpgradeGrace) {
 
   /** Default flush interval for batched stream and workflow-event notifications. */
   public static final Duration DEFAULT_NOTIFICATION_COALESCE_INTERVAL = Duration.ofMillis(10);
@@ -134,6 +145,12 @@ public record DBOSConfig(
   /** Default idle-in-transaction timeout for the system database connections DBOS creates. */
   public static final Duration DEFAULT_SYSTEM_DATABASE_IDLE_TRANSACTION_TIMEOUT =
       Duration.ofMinutes(1);
+
+  /** Default time between two auto-upgrade passes. */
+  public static final Duration DEFAULT_AUTO_UPGRADE_INTERVAL = Duration.ofSeconds(30);
+
+  /** Default auto-upgrade grace period: none. */
+  public static final Duration DEFAULT_AUTO_UPGRADE_GRACE = Duration.ZERO;
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -187,6 +204,18 @@ public record DBOSConfig(
           "DBOSConfig.systemDatabaseIdleTransactionTimeout must not exceed "
               + Integer.MAX_VALUE
               + "ms");
+    }
+
+    if (autoUpgradeInterval != null
+        && (autoUpgradeInterval.isZero() || autoUpgradeInterval.isNegative())) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.autoUpgradeInterval must be positive if specified, got "
+              + autoUpgradeInterval);
+    }
+    // Zero means no grace.
+    if (autoUpgradeGrace != null && autoUpgradeGrace.isNegative()) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.autoUpgradeGrace must not be negative if specified, got " + autoUpgradeGrace);
     }
 
     listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
@@ -258,7 +287,10 @@ public record DBOSConfig(
         other.systemDatabaseIdleTransactionTimeout,
         other.conductorMetadataOnlyMode,
         other.transactEnterpriseKey,
-        other.suspendMode);
+        other.suspendMode,
+        other.autoUpgrade,
+        other.autoUpgradeInterval,
+        other.autoUpgradeGrace);
   }
 
   /**
@@ -282,7 +314,10 @@ public record DBOSConfig(
         null, // systemDatabaseIdleTransactionTimeout
         false, // conductorMetadataOnlyMode
         null, // transactEnterpriseKey
-        false); // suspendMode
+        false, // suspendMode
+        false, // autoUpgrade
+        null, // autoUpgradeInterval
+        null); // autoUpgradeGrace
   }
 
   /**
@@ -337,7 +372,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code databaseUrl} set to {@code v}. */
@@ -367,7 +405,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code dbUser} set to {@code v}. */
@@ -397,7 +438,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code dbPassword} set to {@code v}. */
@@ -427,7 +471,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -462,7 +509,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -497,7 +547,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -532,7 +585,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code migrate} set to {@code v}. */
@@ -562,7 +618,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -596,7 +655,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -630,7 +692,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code conductorExecutorMetadata} set to {@code v}. */
@@ -660,7 +725,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code appVersion} set to {@code v}. */
@@ -690,7 +758,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code executorId} set to {@code v}. */
@@ -720,7 +791,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code databaseSchema} set to {@code v}. */
@@ -750,7 +824,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code enablePatching} set to {@code true}. */
@@ -790,7 +867,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -916,7 +996,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code serializer} set to {@code v}. */
@@ -946,7 +1029,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code schedulerPollingInterval} set to {@code v}. */
@@ -976,7 +1062,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /** Returns a copy of this config with {@code useListenNotify} set to {@code v}. */
@@ -1006,7 +1095,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1048,7 +1140,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1089,7 +1184,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1136,7 +1234,10 @@ public record DBOSConfig(
         v,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1172,7 +1273,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         v,
         transactEnterpriseKey,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1206,7 +1310,10 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         v,
-        suspendMode);
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
   }
 
   /**
@@ -1245,6 +1352,108 @@ public record DBOSConfig(
         systemDatabaseIdleTransactionTimeout,
         conductorMetadataOnlyMode,
         transactEnterpriseKey,
+        v,
+        autoUpgrade,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
+  }
+
+  /** Returns a copy of this config with {@code autoUpgrade} set to {@code v}. */
+  public @NonNull DBOSConfig withAutoUpgrade(boolean v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout,
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey,
+        suspendMode,
+        v,
+        autoUpgradeInterval,
+        autoUpgradeGrace);
+  }
+
+  /** Returns a copy of this config with {@code autoUpgradeInterval} set to {@code v}. */
+  public @NonNull DBOSConfig withAutoUpgradeInterval(@Nullable Duration v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout,
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey,
+        suspendMode,
+        autoUpgrade,
+        v,
+        autoUpgradeGrace);
+  }
+
+  /** Returns a copy of this config with {@code autoUpgradeGrace} set to {@code v}. */
+  public @NonNull DBOSConfig withAutoUpgradeGrace(@Nullable Duration v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval,
+        useListenNotify,
+        notificationCoalesceInterval,
+        databasePollingConcurrency,
+        systemDatabaseIdleTransactionTimeout,
+        conductorMetadataOnlyMode,
+        transactEnterpriseKey,
+        suspendMode,
+        autoUpgrade,
+        autoUpgradeInterval,
         v);
   }
 
@@ -1260,7 +1469,8 @@ public record DBOSConfig(
         listenQueues=%s, serializer=%s, schedulerPollingInterval=%s, useListenNotify=%s, \
         notificationCoalesceInterval=%s, databasePollingConcurrency=%s, \
         systemDatabaseIdleTransactionTimeout=%s, conductorMetadataOnlyMode=%s, \
-        transactEnterpriseKey=%s, suspendMode=%s]
+        transactEnterpriseKey=%s, suspendMode=%s, autoUpgrade=%s, autoUpgradeInterval=%s, \
+        autoUpgradeGrace=%s]
         """
         .formatted(
             appName,
@@ -1286,6 +1496,9 @@ public record DBOSConfig(
             systemDatabaseIdleTransactionTimeout,
             conductorMetadataOnlyMode,
             transactEnterpriseKey == null ? null : "***",
-            suspendMode);
+            suspendMode,
+            autoUpgrade,
+            autoUpgradeInterval,
+            autoUpgradeGrace);
   }
 }
