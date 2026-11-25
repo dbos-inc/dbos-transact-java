@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.internal.DebounceDeduplicationIds;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
 import java.time.Duration;
@@ -321,7 +322,10 @@ public final class DebouncerClient<R> {
     }
 
     String targetQueue = userQueueName != null ? userQueueName : Constants.DBOS_INTERNAL_QUEUE;
-    String deduplicationId = workflowName + "-" + debounceKey;
+    // Bounced under the qualified spelling first, then this one, which is the spelling written.
+    String deduplicationId = DebounceDeduplicationIds.current(workflowName, debounceKey);
+    String qualifiedDeduplicationId =
+        DebounceDeduplicationIds.qualified(workflowName, className, instanceName, debounceKey);
     // The absolute cap on the workflow this call creates, measured once from the call, so the
     // retries below, a takeover's wait among them, do not push it out.
     Instant deadline = debounceTimeout == null ? null : Instant.now().plus(debounceTimeout);
@@ -335,6 +339,7 @@ public final class DebouncerClient<R> {
                 className,
                 instanceName,
                 targetQueue,
+                qualifiedDeduplicationId,
                 deduplicationId,
                 delayUntil(debouncePeriod),
                 args,
@@ -411,6 +416,7 @@ public final class DebouncerClient<R> {
                     className,
                     instanceName,
                     targetQueue,
+                    qualifiedDeduplicationId,
                     deduplicationId,
                     delayUntil(debouncePeriod),
                     args,

@@ -15,6 +15,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.internal.DebounceDeduplicationIds;
 
 import java.sql.SQLException;
 
@@ -36,7 +37,11 @@ public class DebounceDelayedWorkflowTest {
   static final String QUEUE = "bounce-queue";
   static final String NAME = "process";
   static final String CLASS = "com.example.ProcessImpl";
-  static final String DEDUP = NAME + "-key";
+  static final String KEY = "key";
+  static final String DEDUP = NAME + "-" + KEY;
+
+  /** The qualified spelling of the same key, for a workflow with no instance name. */
+  static final String QUALIFIED = NAME + "/" + CLASS + "/-" + KEY;
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose HikariDataSource dataSource;
@@ -61,10 +66,31 @@ public class DebounceDelayedWorkflowTest {
 
   private String plant(String queue, long delayUntil, Long deadline, String name, String appName)
       throws SQLException {
+    return plantUnder(DEDUP, queue, delayUntil, deadline, name, appName);
+  }
+
+  private String plantUnder(
+      String deduplicationId,
+      String queue,
+      long delayUntil,
+      Long deadline,
+      String name,
+      String appName)
+      throws SQLException {
     return DebouncedRows.insert(
         dataSource,
         new DebouncedRows.Spec(
-            name, CLASS, null, queue, DEDUP, delayUntil, deadline, stale(), null, null, appName));
+            name,
+            CLASS,
+            null,
+            queue,
+            deduplicationId,
+            delayUntil,
+            deadline,
+            stale(),
+            null,
+            null,
+            appName));
   }
 
   private static String stale() {
@@ -84,7 +110,8 @@ public class DebounceDelayedWorkflowTest {
             CLASS,
             instanceName,
             QUEUE,
-            DEDUP,
+            DebounceDeduplicationIds.qualified(name, CLASS, instanceName, KEY),
+            DebounceDeduplicationIds.current(name, KEY),
             delayUntil,
             new Object[] {"fresh"},
             serializationFormat,
@@ -291,6 +318,65 @@ public class DebounceDelayedWorkflowTest {
     // The key was cleared by the transition, so nothing holds it any more.
     assertEquals(new DebounceResult.NotBounced(null), result);
     assertEquals(WorkflowState.ENQUEUED.name(), DebouncedRows.read(dataSource, id).status());
+  }
+
+  // ==================== The two spellings ====================
+
+  @Test
+  void spellsTheKeyBothWays() {
+    assertEquals(DEDUP, DebounceDeduplicationIds.current(NAME, KEY));
+    assertEquals(QUALIFIED, DebounceDeduplicationIds.qualified(NAME, CLASS, null, KEY));
+    assertEquals(
+        NAME + "/" + CLASS + "/east-" + KEY,
+        DebounceDeduplicationIds.qualified(NAME, CLASS, "east", KEY));
+  }
+
+  @Test
+  void extendsARowHeldUnderTheCurrentSpelling() throws Exception {
+    long now = System.currentTimeMillis();
+    var id = plantUnder(DEDUP, QUEUE, now + 1_000, null, NAME, "app-a");
+
+    assertEquals(new DebounceResult.Bounced(id), bounce(now + 5_000, NAME, null));
+    assertEquals(now + 5_000, DebouncedRows.read(dataSource, id).delayUntilEpochMs());
+  }
+
+  @Test
+  void extendsARowHeldUnderTheQualifiedSpelling() throws Exception {
+    long now = System.currentTimeMillis();
+    var id = plantUnder(QUALIFIED, QUEUE, now + 1_000, null, NAME, "app-a");
+
+    assertEquals(new DebounceResult.Bounced(id), bounce(now + 5_000, NAME, null));
+    var row = DebouncedRows.read(dataSource, id);
+    assertEquals(QUALIFIED, row.deduplicationId());
+    assertEquals(now + 5_000, row.delayUntilEpochMs());
+  }
+
+  @Test
+  void prefersTheQualifiedSpellingWhenBothHoldTheKey() throws Exception {
+    // Should not happen, but the order is fixed: the qualified row is the newer spelling's.
+    long now = System.currentTimeMillis();
+    var current = plantUnder(DEDUP, QUEUE, now + 1_000, null, NAME, "app-a");
+    var qualified = plantUnder(QUALIFIED, QUEUE, now + 1_000, null, NAME, "app-a");
+
+    for (int i = 0; i < 3; i++) {
+      assertEquals(new DebounceResult.Bounced(qualified), bounce(now + 5_000 + i, NAME, null));
+    }
+    assertEquals(now + 1_000, DebouncedRows.read(dataSource, current).delayUntilEpochMs());
+    assertEquals(stale(), DebouncedRows.read(dataSource, current).inputs());
+  }
+
+  @Test
+  void reportsTheHolderOfTheCurrentSpelling() throws Exception {
+    // A peer application's row under the qualified spelling is not extended, and is not the
+    // holder reported either: an enqueue from this release collides only on the current spelling.
+    long now = System.currentTimeMillis();
+    plantUnder(QUALIFIED, QUEUE, now + 1_000, null, NAME, "app-b");
+    assertEquals(new DebounceResult.NotBounced(null), bounce(now + 5_000, NAME, null));
+
+    var held = plantUnder(DEDUP, QUEUE, now + 1_000, null, "other", "app-a");
+    var holder =
+        assertInstanceOf(DebounceResult.NotBounced.class, bounce(now + 5_000, NAME, null)).holder();
+    assertEquals(held, holder.workflowId());
   }
 
   // ==================== The transition ====================

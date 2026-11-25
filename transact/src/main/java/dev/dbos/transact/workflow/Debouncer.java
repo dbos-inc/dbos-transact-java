@@ -8,6 +8,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.workflow.internal.DebounceDeduplicationIds;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
 import java.time.Duration;
@@ -298,7 +299,15 @@ public final class Debouncer<R> {
                     new IllegalStateException(
                         "Workflow %s is not registered".formatted(invocation.fqName())));
     String targetQueue = queueName != null ? queueName : Constants.DBOS_INTERNAL_QUEUE;
-    String debounceDeduplicationId = invocation.workflowName() + "-" + debounceKey;
+    // Bounced under the qualified spelling first, then this one, which is the spelling written.
+    String debounceDeduplicationId =
+        DebounceDeduplicationIds.current(invocation.workflowName(), debounceKey);
+    String qualifiedDeduplicationId =
+        DebounceDeduplicationIds.qualified(
+            userWorkflow.workflowName(),
+            userWorkflow.className(),
+            userWorkflow.instanceName(),
+            debounceKey);
     Object[] args = invocation.args();
 
     // The debouncer's own timeout, else only one the caller set for this call, as in Python and
@@ -327,6 +336,7 @@ public final class Debouncer<R> {
             executor.debounceDelayedWorkflow(
                 userWorkflow,
                 targetQueue,
+                qualifiedDeduplicationId,
                 debounceDeduplicationId,
                 delayUntil(debouncePeriod),
                 args,
@@ -440,6 +450,7 @@ public final class Debouncer<R> {
                 executor.debounceDelayedWorkflow(
                     userWorkflow,
                     targetQueue,
+                    qualifiedDeduplicationId,
                     debounceDeduplicationId,
                     delayUntil(debouncePeriod),
                     args,

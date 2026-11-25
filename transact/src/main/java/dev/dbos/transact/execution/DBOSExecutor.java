@@ -614,6 +614,7 @@ public class DBOSExecutor implements AutoCloseable {
   public Object debounceDelayedWorkflow(
       RegisteredWorkflow workflow,
       String queueName,
+      String qualifiedDeduplicationId,
       String deduplicationId,
       long delayUntilEpochMs,
       Object[] args,
@@ -635,6 +636,7 @@ public class DBOSExecutor implements AutoCloseable {
         workflow.className(),
         workflow.instanceName(),
         queueName,
+        qualifiedDeduplicationId,
         deduplicationId,
         delayUntilEpochMs,
         args,
