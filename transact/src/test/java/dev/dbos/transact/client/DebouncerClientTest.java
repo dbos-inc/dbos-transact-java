@@ -15,6 +15,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.QueueOptions;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -468,6 +469,32 @@ public class DebouncerClientTest {
 
     assertEquals(planted, DebouncedRows.read(dataSource, waiting).delayUntilEpochMs());
     assertEquals(0, serviceImpl.callCount.get());
+  }
+
+  @Test
+  void refusesAKeyHeldByADebouncerWorkflowWithAnUnknownStatusForAUserQueue() throws Exception {
+    var holder = plantDebouncerWorkflow("newer", "promised-cu", USER_QUEUE, "no-such-version");
+    // A newer version moved it to a status this version does not know. A takeover leaves it
+    // alone, and an enqueue on the user queue would not collide with it.
+    DBUtils.setWorkflowState(dataSource, holder, "SOMETHING_NEWER");
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(30),
+        () ->
+            assertThrows(
+                DBOSQueueDuplicatedException.class,
+                () ->
+                    debouncer()
+                        .withQueue(QueueName.of(USER_QUEUE))
+                        .debounce("newer", Duration.ofMillis(300), "fresh")));
+
+    assertEquals(
+        "SOMETHING_NEWER", dbosClient.getWorkflowStatus(holder).orElseThrow().statusValue());
+    assertTrue(dbosClient.getWorkflowStatus("promised-cu").isEmpty());
+    assertTrue(
+        dbosClient
+            .listWorkflows(new ListWorkflowsInput().withQueueName(List.of(USER_QUEUE)))
+            .isEmpty());
   }
 
   @Test

@@ -73,6 +73,8 @@ class UnknownWorkflowStatusTest {
     assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusValue(NEWER));
     // UNKNOWN is never written, so a stored "UNKNOWN" is just another status this version lacks.
     assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusValue("UNKNOWN"));
+    // Statuses are stored in upper case, so another spelling is not one this version knows.
+    assertEquals(WorkflowState.UNKNOWN, WorkflowState.fromStatusValue("success"));
     assertFalse(WorkflowState.UNKNOWN.isActive());
     assertFalse(WorkflowState.UNKNOWN.isTerminal());
     // Every other state is exactly one of the two.
@@ -142,6 +144,9 @@ class UnknownWorkflowStatusTest {
                 throw new RuntimeException(e);
               }
             });
+    assertThrows(TimeoutException.class, () -> result.get(1, TimeUnit.SECONDS));
+    // Another spelling of a known status is unknown here too, as it is to every other reader.
+    DBUtils.setWorkflowState(dataSource, workflowId, "success");
     assertThrows(TimeoutException.class, () -> result.get(1, TimeUnit.SECONDS));
     DBUtils.setWorkflowState(dataSource, workflowId, WorkflowState.SUCCESS.name());
     assertEquals("done", result.get(10, TimeUnit.SECONDS));

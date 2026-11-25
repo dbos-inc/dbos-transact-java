@@ -1803,6 +1803,32 @@ public class DebouncerTest {
   }
 
   @Test
+  public void refusesAKeyHeldByADebouncerWorkflowWithAnUnknownStatusForAUserQueue()
+      throws Exception {
+    String userQueue = "svc-user-queue";
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    dbos.registerQueue(userQueue, new QueueOptions());
+    var holder = plantDebouncerWorkflow("newer", "promised-u", userQueue, "no-such-version");
+    // A newer version moved it to a status this version does not know. A takeover leaves it
+    // alone, and an enqueue on the user queue would not collide with it.
+    DBUtils.setWorkflowState(pgContainer.dataSource(), holder, "SOMETHING_NEWER");
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(30),
+        () ->
+            assertThrows(
+                DBOSQueueDuplicatedException.class,
+                () ->
+                    dbos.<String>debouncer()
+                        .withQueue(userQueue)
+                        .debounce("newer", Duration.ofMillis(300), () -> svc.process("fresh"))));
+
+    assertEquals("SOMETHING_NEWER", dbos.getWorkflowStatus(holder).orElseThrow().statusValue());
+    assertEquals(0, countWorkflowsByName("process"));
+  }
+
+  @Test
   public void refusesAKeyHeldByADifferentDebouncedWorkflow() throws Exception {
     DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
     dbos.launch();

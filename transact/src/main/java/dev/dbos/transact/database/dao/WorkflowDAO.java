@@ -1794,7 +1794,7 @@ public class WorkflowDAO {
             String status = rs.getString("status");
             String serialization = rs.getString("serialization");
 
-            switch (WorkflowState.fromStatusValue(status.toUpperCase())) {
+            switch (WorkflowState.fromStatusValue(status)) {
               case SUCCESS -> {
                 String output = rs.getString("output");
                 Object outputValue =

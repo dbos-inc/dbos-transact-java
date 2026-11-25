@@ -359,6 +359,7 @@ public record WorkflowStatus(
    * The status as JSON writes it: the stored value, never {@code UNKNOWN}. An export or a recorded
    * step from this version then reads on a version that knows the status as that status.
    */
+  @SuppressWarnings("PMD.UnusedPrivateMethod") // Jackson calls it
   @JsonProperty("status")
   @JsonSerialize(using = StoredStatusSerializer.class)
   private String statusForJson() {
