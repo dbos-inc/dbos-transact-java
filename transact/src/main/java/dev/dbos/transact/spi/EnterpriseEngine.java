@@ -251,6 +251,18 @@ public interface EnterpriseEngine {
    */
   List<VersionInfo> listApplicationVersions();
 
+  /** The application's latest version; fails with "No application versions found" if none. */
+  VersionInfo latestApplicationVersion();
+
+  /** The registered workflows enrolled in auto-upgrade. */
+  List<EnrolledWorkflow> autoUpgradableWorkflows();
+
+  /**
+   * Whether this process holds its application version's background-jobs lock. One process per
+   * version holds it at a time; on CockroachDB, which has no advisory locks, every process does.
+   */
+  boolean holdsBackgroundJobsLock();
+
   /**
    * Makes a version the latest.
    *

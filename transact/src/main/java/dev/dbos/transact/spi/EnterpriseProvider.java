@@ -3,6 +3,8 @@ package dev.dbos.transact.spi;
 import dev.dbos.transact.conductor.ConductorConnection;
 import dev.dbos.transact.conductor.ConductorOptions;
 
+import java.time.Duration;
+
 /**
  * Builds what {@code dev.dbos:transact-enterprise} provides to a DBOS instance: the Conductor
  * client and every other enterprise feature. It is the one entry point DBOS Transact finds with
@@ -41,4 +43,11 @@ public interface EnterpriseProvider {
    * @return suspend mode for the instance
    */
   SuspendBackend createSuspendBackend(EnterpriseEngine engine);
+
+  /** Builds the auto-upgrade pass, during launch, when a workflow is enrolled. */
+  default AutoUpgradePass createAutoUpgradePass(EnterpriseEngine engine, Duration grace) {
+    throw new IllegalStateException(
+        "Auto-upgrading workflows requires a dev.dbos:transact-enterprise build that provides it;"
+            + " upgrade dev.dbos:transact-enterprise.");
+  }
 }

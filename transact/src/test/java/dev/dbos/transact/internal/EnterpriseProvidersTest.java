@@ -7,13 +7,18 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.conductor.ConductorConnection;
+import dev.dbos.transact.conductor.ConductorOptions;
+import dev.dbos.transact.spi.EnterpriseEngine;
 import dev.dbos.transact.spi.EnterpriseProvider;
+import dev.dbos.transact.spi.SuspendBackend;
 import dev.dbos.transact.spi.TestEnterpriseProvider;
 
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -101,6 +106,27 @@ public class EnterpriseProvidersTest {
             + " path. Add dev.dbos:transact-enterprise:1.4.0, the same version as"
             + " dev.dbos:transact",
         e.getMessage());
+  }
+
+  @Test
+  public void aProviderBuiltBeforeAutoUpgradeSaysSo() {
+    var provider =
+        new EnterpriseProvider() {
+          @Override
+          public ConductorConnection createConductor(
+              EnterpriseEngine engine, ConductorOptions options) {
+            throw new UnsupportedOperationException();
+          }
+
+          @Override
+          public SuspendBackend createSuspendBackend(EnterpriseEngine engine) {
+            throw new UnsupportedOperationException();
+          }
+        };
+    var e =
+        assertThrows(
+            IllegalStateException.class, () -> provider.createAutoUpgradePass(null, Duration.ZERO));
+    assertTrue(e.getMessage().startsWith("Auto-upgrading workflows requires"), e.getMessage());
   }
 
   @Test

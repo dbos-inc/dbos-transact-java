@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.spi.EnrolledWorkflow;
 import dev.dbos.transact.spi.EnterpriseEngine;
 import dev.dbos.transact.spi.EnterpriseSystemDatabase;
 import dev.dbos.transact.spi.RecordedRecv;
@@ -172,6 +173,21 @@ public final class DBOSEnterpriseEngine implements EnterpriseEngine {
   @Override
   public List<VersionInfo> listApplicationVersions() {
     return systemDatabase.listApplicationVersions();
+  }
+
+  @Override
+  public VersionInfo latestApplicationVersion() {
+    return systemDatabase.getLatestApplicationVersion();
+  }
+
+  @Override
+  public List<EnrolledWorkflow> autoUpgradableWorkflows() {
+    return executor.autoUpgradableWorkflows();
+  }
+
+  @Override
+  public boolean holdsBackgroundJobsLock() {
+    return executor.holdsBackgroundJobsLock();
   }
 
   @Override

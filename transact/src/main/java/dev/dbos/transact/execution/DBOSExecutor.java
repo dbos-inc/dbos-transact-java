@@ -1050,6 +1050,11 @@ public class DBOSExecutor implements AutoCloseable {
     return backgroundLease;
   }
 
+  /** Whether this process holds its application version's background-jobs lock. */
+  public boolean holdsBackgroundJobsLock() {
+    return backgroundLease.held();
+  }
+
   // executor metadata
 
   public String appId() {
