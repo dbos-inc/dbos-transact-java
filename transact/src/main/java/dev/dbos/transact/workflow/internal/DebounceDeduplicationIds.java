@@ -11,9 +11,16 @@ import org.jspecify.annotations.Nullable;
  * The deduplication IDs a debounced workflow holds its debounce key under.
  *
  * <p>The key's spelling is changing from {@link #current} to {@link #qualified}, one step per
- * release, so that no rolling upgrade runs two coalescers for one key: a release that reads a
- * spelling ships before the release that writes it. This release bounces under both, the qualified
- * one first, and still writes the current one, which the previous release reads.
+ * release: a release that reads a spelling ships before the release that writes it, so a call
+ * during a rolling upgrade extends the row an earlier call left under either spelling. This release
+ * bounces under both, the qualified one first, and still writes the current one, which the previous
+ * release reads.
+ *
+ * <p>The ordering doesn't cover two first calls for one key that run at once on this release and
+ * the next: neither finds a row to extend, each enqueues under its own spelling, and since the
+ * spellings differ the deduplication constraint doesn't stop the second. Both rows then run, the
+ * one under the current spelling with the arguments of the call that created it. Later calls extend
+ * the qualified row only. The window closes once no node runs this release.
  */
 public final class DebounceDeduplicationIds {
 
