@@ -35,6 +35,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.AutoUpgradeLoop;
 import dev.dbos.transact.internal.DBOSEnterpriseEngine;
 import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
@@ -218,6 +219,7 @@ public class DBOSExecutor implements AutoCloseable {
   // Held while this process holds the background-jobs lock.
   private final BackgroundLease backgroundLease = new BackgroundLease();
   private @Nullable BackgroundJobs backgroundJobs;
+  private @Nullable AutoUpgradeLoop autoUpgradeLoop;
   private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
@@ -399,6 +401,17 @@ public class DBOSExecutor implements AutoCloseable {
         if (config.suspendMode()) {
           suspendBackend = enterpriseProvider.createSuspendBackend(engine);
         }
+        if (autoUpgrade) {
+          var grace =
+              Objects.requireNonNullElse(
+                  config.autoUpgradeGrace(), DBOSConfig.DEFAULT_AUTO_UPGRADE_GRACE);
+          var interval =
+              Objects.requireNonNullElse(
+                  config.autoUpgradeInterval(), DBOSConfig.DEFAULT_AUTO_UPGRADE_INTERVAL);
+          autoUpgradeLoop =
+              new AutoUpgradeLoop(
+                  enterpriseProvider.createAutoUpgradePass(engine, grace), interval);
+        }
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
@@ -435,6 +448,10 @@ public class DBOSExecutor implements AutoCloseable {
 
       backgroundJobs = newBackgroundJobs(queueService);
       backgroundJobs.start();
+
+      if (autoUpgradeLoop != null) {
+        autoUpgradeLoop.start();
+      }
 
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
@@ -507,6 +524,10 @@ public class DBOSExecutor implements AutoCloseable {
     return enterpriseProvider;
   }
 
+  @Nullable AutoUpgradeLoop autoUpgradeLoop() {
+    return autoUpgradeLoop;
+  }
+
   /** The registered workflows enrolled in auto-upgrade, by class name and workflow name. */
   public List<EnrolledWorkflow> autoUpgradableWorkflows() {
     var workflows = workflowMap;
@@ -574,6 +595,14 @@ public class DBOSExecutor implements AutoCloseable {
       }
       if (queues != null) {
         closeStep(failures, queues::close);
+      }
+
+      // After the wait: a draining executor can hold the background-jobs lock, which keeps every
+      // other from upgrading. Before the lock goes, and while the system database is open.
+      var upgradeLoop = autoUpgradeLoop;
+      autoUpgradeLoop = null;
+      if (upgradeLoop != null) {
+        closeStep(failures, upgradeLoop::stop);
       }
 
       // After the wait, so a draining holder of the background-jobs lock keeps sweeping for every

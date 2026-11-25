@@ -14,7 +14,6 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutorTestAccess;
-import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.spi.EnrolledWorkflow;
 import dev.dbos.transact.spi.TestEnterpriseProvider;
 import dev.dbos.transact.spi.TestEnterpriseProvider.RecordingAutoUpgradePass;
@@ -24,16 +23,15 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AutoClose;
@@ -107,6 +105,34 @@ class InheritingJobImpl implements InheritingJob {
   @Workflow
   @Override
   public void inherits() {}
+}
+
+interface HeldJob {
+  void holds();
+}
+
+// Runs until released, so a shutdown's wait has a workflow to wait for.
+@WorkflowClassName("HeldJob")
+class HeldJobImpl implements HeldJob {
+  private final CountDownLatch started;
+  private final CountDownLatch release;
+
+  HeldJobImpl(CountDownLatch started, CountDownLatch release) {
+    this.started = started;
+    this.release = release;
+  }
+
+  @Workflow
+  @Override
+  public void holds() {
+    started.countDown();
+    try {
+      release.await();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(e);
+    }
+  }
 }
 
 /**
@@ -354,5 +380,151 @@ public class AutoUpgradeLaunchTest {
     dbos.launch();
     assertEquals(Set.of(optedIn, inherits), enrolled(dbos));
     assertEquals(2, DBOSTestAccess.getDbosExecutor(dbos).autoUpgradableWorkflows().size());
+  }
+
+  @Test
+  void noLoopWithoutEnrolledWorkflows() {
+    var app = "nothing-enrolled";
+    // A key is given, but nothing enrolls: the config is off and the one workflow opts out.
+    dbos = new DBOS(conductorConfig(app));
+    dbos.registerProxy(OptedOutJob.class, new OptedOutJobImpl());
+    dbos.launch();
+
+    assertNull(loopOf(dbos));
+    assertEquals(List.of(), passesOf(app));
+    // So no entitlement is checked either.
+    assertEquals(List.of(), checks());
+  }
+
+  // --- The loop's life through DBOS
+
+  @Test
+  void theLoopRunsThePassUntilShutdown() throws Exception {
+    var app = "loop-until-shutdown";
+    dbos = new DBOS(conductorConfig(app).withAutoUpgrade(true));
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+    dbos.launch();
+
+    // The config's flag reaches the executor: the unflagged workflow enrolls, and the Conductor
+    // key stands in for the enterprise key.
+    assertEquals(Set.of(new EnrolledWorkflow("InheritingJob", "inherits")), enrolled(dbos));
+    assertEquals(List.of(Map.entry(ENTITLEMENTS, "Bearer test-key")), checks());
+    var loop = loopOf(dbos);
+    assertNotNull(loop);
+    assertTrue(loop.isAlive());
+    assertEquals(INTERVAL, loop.interval());
+
+    // The pass was built for this executor with the configured grace, and runs on the configured
+    // interval.
+    var passes = passesOf(app);
+    assertEquals(1, passes.size());
+    var upgradePass = passes.get(0);
+    assertSame(upgradePass, loop.upgradePass());
+    assertEquals(GRACE, upgradePass.grace);
+    assertEquals(
+        List.of(new EnrolledWorkflow("InheritingJob", "inherits")),
+        upgradePass.engine.autoUpgradableWorkflows());
+    AutoUpgradeLoopTest.awaitRuns(upgradePass, 3);
+    // Every pass is given the one stop signal.
+    var stopSignal = upgradePass.runs.get(0);
+    assertTrue(upgradePass.runs.stream().allMatch(signal -> signal == stopSignal));
+    assertFalse(stopSignal.getAsBoolean());
+
+    dbos.shutdown();
+
+    assertFalse(loop.isAlive());
+    assertTrue(stopSignal.getAsBoolean());
+    assertEquals(1, upgradePass.closes.get());
+    // Nothing runs after shutdown.
+    var runs = upgradePass.runs.size();
+    Thread.sleep(200);
+    assertEquals(runs, upgradePass.runs.size());
+  }
+
+  @Test
+  void theDefaultIntervalAndGrace() {
+    var app = "default-interval";
+    dbos =
+        new DBOS(
+            conductorConfig(app)
+                .withAutoUpgrade(true)
+                .withAutoUpgradeInterval(null)
+                .withAutoUpgradeGrace(null));
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+    dbos.launch();
+
+    assertNotNull(loopOf(dbos));
+    assertEquals(Duration.ofSeconds(30), loopOf(dbos).interval());
+    var passes = passesOf(app);
+    assertEquals(1, passes.size());
+    assertEquals(Duration.ZERO, passes.get(0).grace);
+  }
+
+  @Test
+  void shutdownStopsTheLoopAfterTheWaitAndBeforeTheBackgroundJobs() throws Exception {
+    var app = "loop-stops-after-the-wait";
+    dbos = new DBOS(conductorConfig(app).withAutoUpgrade(true));
+    var started = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var job = dbos.registerProxy(HeldJob.class, new HeldJobImpl(started, release));
+    dbos.launch();
+    var loop = loopOf(dbos);
+    var upgradePass = passesOf(app).get(0);
+    var jobsThread =
+        DBOSExecutorTestAccess.backgroundJobsThread(DBOSTestAccess.getDbosExecutor(dbos));
+    // What is still up when the stopped loop closes its pass: (loop alive, workflow still held,
+    // background jobs running, Conductor connection stopped).
+    var seenAtClose = new CopyOnWriteArrayList<List<Object>>();
+    upgradePass.onClose =
+        () ->
+            seenAtClose.add(
+                List.of(
+                    loop.isAlive(),
+                    release.getCount() > 0,
+                    jobsThread.isAlive(),
+                    TestEnterpriseProvider.conductorStopped(app)));
+    dbos.startWorkflow(() -> job.holds());
+    assertTrue(started.await(10, TimeUnit.SECONDS));
+
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+    var shutdown = CompletableFuture.runAsync(() -> dbos.shutdown(Duration.ofSeconds(30)));
+    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (!executor.isClosing()) {
+      assertTrue(System.nanoTime() < deadline, "the shutdown never began");
+      Thread.sleep(10);
+    }
+
+    // The loop keeps running passes through the wait.
+    AutoUpgradeLoopTest.awaitRuns(upgradePass, upgradePass.runs.size() + 2);
+    assertTrue(loop.isAlive());
+    assertEquals(0, upgradePass.closes.get());
+
+    release.countDown();
+    shutdown.get(30, TimeUnit.SECONDS);
+
+    // The loop stopped once the workflow had finished, before the background jobs and the
+    // Conductor connection.
+    assertEquals(List.of(List.<Object>of(false, false, true, false)), seenAtClose);
+    assertEquals(1, upgradePass.closes.get());
+    assertFalse(jobsThread.isAlive());
+    assertTrue(TestEnterpriseProvider.conductorStopped(app));
+  }
+
+  @Test
+  void theEngineSaysWhetherThisProcessHoldsTheBackgroundJobsLock() throws Exception {
+    var app = "engine-holds-the-lock";
+    dbos = new DBOS(conductorConfig(app).withAutoUpgrade(true));
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+    dbos.launch();
+    var engine = passesOf(app).get(0).engine;
+    var executor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    // The only process of its version takes the lock.
+    DBOSExecutorTestAccess.awaitBackgroundLease(executor);
+    assertTrue(engine.holdsBackgroundJobsLock());
+
+    // A graceful shutdown waits for the background jobs, which give the lock up as they stop.
+    dbos.shutdown(Duration.ofSeconds(10));
+    assertFalse(engine.holdsBackgroundJobsLock());
   }
 }

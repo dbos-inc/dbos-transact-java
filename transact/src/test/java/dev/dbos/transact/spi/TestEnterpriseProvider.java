@@ -5,6 +5,8 @@ import dev.dbos.transact.conductor.ConductorOptions;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -77,6 +79,12 @@ public final class TestEnterpriseProvider implements EnterpriseProvider {
     return List.copyOf(autoUpgradePasses);
   }
 
+  private static final Set<String> stoppedConductors = ConcurrentHashMap.newKeySet();
+
+  /** Whether the connection built for the application of this name has been stopped. */
+  public static boolean conductorStopped(String appName) {
+    return stoppedConductors.contains(appName);
+  }
 
   /**
    * Runs inside every connection's stop(), whichever test's shutdown it is; a test that sets it to
@@ -97,12 +105,14 @@ public final class TestEnterpriseProvider implements EnterpriseProvider {
   @Override
   public ConductorConnection createConductor(EnterpriseEngine engine, ConductorOptions options) {
     created.add(options);
+    var appName = engine.appName();
     return new ConductorConnection() {
       @Override
       public void start() {}
 
       @Override
       public void stop() {
+        stoppedConductors.add(appName);
         onStop.run();
       }
     };
