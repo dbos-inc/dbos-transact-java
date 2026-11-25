@@ -6,6 +6,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.internal.StepCheckpointStore;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -353,10 +354,13 @@ public abstract class PostgresStepFactory {
               if (notTheSteps != null) {
                 throw notTheSteps;
               }
+              // An error that can't be recorded as it is is recorded, and thrown, as its stand-in,
+              // which is what the system database records for the step too.
+              var failure = SerializationUtil.recordableError(e, serializer);
               if (mayRecordFailure(dbos, workflowId)) {
-                recordError(workflowId, stepId, e);
+                recordError(workflowId, stepId, failure);
               }
-              throw (X) e;
+              throw (X) failure;
             }
           }
         },

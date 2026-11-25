@@ -1,8 +1,13 @@
 package dev.dbos.transact.json;
 
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import org.jspecify.annotations.Nullable;
 
 /**
  * Utility class for serialization and deserialization with support for multiple formats.
@@ -252,6 +257,106 @@ public final class SerializationUtil {
     }
 
     return serializer.deserializeThrowable(serializedValue);
+  }
+
+  /** An error's class and message, built so that a throwing getMessage can't defeat the caller. */
+  public static String describeError(Throwable error) {
+    String message;
+    try {
+      message = error.getMessage();
+    } catch (RuntimeException e) {
+      message = "<getMessage threw %s>".formatted(e.getClass().getName());
+    }
+    return "%s: %s".formatted(error.getClass().getName(), message);
+  }
+
+  /**
+   * A plain stand-in for an error that can't be serialized: a {@link RuntimeException} naming its
+   * class and message, with its stack trace where that can be read.
+   */
+  public static RuntimeException standIn(Throwable error) {
+    var standIn = new RuntimeException(describeError(error));
+    try {
+      standIn.setStackTrace(error.getStackTrace());
+    } catch (RuntimeException ignored) {
+      // The stand-in keeps its own stack trace.
+    }
+    return standIn;
+  }
+
+  /**
+   * The error, for handing to a logger along with its stack trace: the error itself, or its
+   * {@linkplain #standIn stand-in} if reading its message, or that of a throwable in its cause or
+   * suppressed chain, throws. A logger reads each of them, and a throw there escapes the logging
+   * call.
+   */
+  public static Throwable loggable(Throwable error) {
+    try {
+      var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+      var pending = new ArrayDeque<Throwable>();
+      pending.add(error);
+      while (!pending.isEmpty()) {
+        var next = pending.pop();
+        if (!seen.add(next)) {
+          continue;
+        }
+        next.getMessage();
+        if (next.getCause() != null) {
+          pending.add(next.getCause());
+        }
+        Collections.addAll(pending, next.getSuppressed());
+      }
+      return error;
+    } catch (RuntimeException unreadable) {
+      return standIn(error);
+    }
+  }
+
+  /**
+   * A step's error as its row records it, the exception that row replays as, and, if the error
+   * could not be recorded as it is with the requested serialization, why.
+   */
+  public record RecordedError(
+      SerializedResult serialized, Throwable error, @Nullable Exception refusal) {}
+
+  /**
+   * Serializes a step's error for its row, in the first form that can be written: the error with
+   * {@code serialization} and {@code serializer}, then the error in the built-in format, then its
+   * {@linkplain #standIn stand-in} in each of the two. A step row carries its own serialization, so
+   * whichever form is written replays, and applying this to the error it returns writes that same
+   * form again.
+   */
+  public static RecordedError serializeStepError(
+      Throwable error, @Nullable String serialization, @Nullable DBOSSerializer serializer) {
+    Exception refusal;
+    try {
+      return new RecordedError(serializeError(error, serialization, serializer), error, null);
+    } catch (Exception refused) {
+      refusal = refused;
+    }
+    if (!NATIVE.equals(serialization)) {
+      try {
+        return new RecordedError(serializeError(error, NATIVE, null), error, refusal);
+      } catch (Exception refused) {
+        // Fall through to the stand-in.
+      }
+    }
+    var standIn = standIn(error);
+    try {
+      return new RecordedError(
+          serializeError(standIn, serialization, serializer), standIn, refusal);
+    } catch (Exception refused) {
+      return new RecordedError(serializeError(standIn, NATIVE, null), standIn, refusal);
+    }
+  }
+
+  /**
+   * The error in a form a step row can record: the error itself, or its {@linkplain #standIn
+   * stand-in} if neither {@code serializer} nor the built-in format can write it. See {@link
+   * #serializeStepError}.
+   */
+  public static Exception recordableError(Exception error, @Nullable DBOSSerializer serializer) {
+    return (Exception) serializeStepError(error, null, serializer).error();
   }
 
   /**
