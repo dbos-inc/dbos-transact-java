@@ -435,6 +435,12 @@ public final class DebouncerClient<R> {
         // Nor is a holder whose status this version does not know: nothing here moves it on or
         // clears its key, so a retry would spin forever too.
         if (holder.status() == WorkflowState.UNKNOWN) {
+          logger.warn(
+              "Debounce key {} is held by workflow {} with status {}, which this version does not"
+                  + " know; refusing the debounce",
+              deduplicationId,
+              holder.workflowId(),
+              holder.statusValue());
           throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
         }
         if (holder.isDebouncerWorkflow()) {

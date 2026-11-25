@@ -909,16 +909,19 @@ public class WorkflowDAO {
       stmt.setString(1, queueName);
       stmt.setString(2, deduplicationId);
       try (var rs = stmt.executeQuery()) {
-        return rs.next()
-            ? new DeduplicationHolder(
-                rs.getString("workflow_uuid"),
-                rs.getString("application_name"),
-                rs.getString("name"),
-                rs.getString("class_name"),
-                rs.getString("config_name"),
-                WorkflowState.fromStatusValue(rs.getString("status")),
-                rs.getBoolean("is_debounced"))
-            : null;
+        if (!rs.next()) {
+          return null;
+        }
+        String statusValue = rs.getString("status");
+        return new DeduplicationHolder(
+            rs.getString("workflow_uuid"),
+            rs.getString("application_name"),
+            rs.getString("name"),
+            rs.getString("class_name"),
+            rs.getString("config_name"),
+            WorkflowState.fromStatusValue(statusValue),
+            rs.getBoolean("is_debounced"),
+            statusValue);
       }
     }
   }
