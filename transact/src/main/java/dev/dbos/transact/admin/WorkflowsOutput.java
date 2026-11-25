@@ -46,7 +46,7 @@ class WorkflowsOutput {
     var authenticatedRoles = status.authenticatedRoles();
 
     this.WorkflowUUID = status.workflowId();
-    this.Status = status.status().name();
+    this.Status = status.statusValue();
     this.WorkflowName = status.workflowName();
     this.WorkflowClassName = status.className();
     this.WorkflowConfigName = status.instanceName();

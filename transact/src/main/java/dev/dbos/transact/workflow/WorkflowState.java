@@ -21,8 +21,9 @@ public enum WorkflowState {
    * never written: {@link WorkflowStatus#statusValue} holds the status as stored. This version
    * can't tell whether such a workflow is in flight or finished, so it is neither {@linkplain
    * #isActive active} nor {@linkplain #isTerminal terminal}: anything waiting for the workflow to
-   * finish keeps waiting, and only an explicit cancel or resume of that workflow writes over its
-   * status.
+   * finish keeps waiting, and only a cancel or resume writes over its status. That is a cancel or
+   * resume of the workflow itself, a cancel of a parent that takes its children with it, or the
+   * cancel at its deadline by the executor running it.
    */
   UNKNOWN;
 

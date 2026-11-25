@@ -6,6 +6,13 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.jsontype.TypeSerializer;
+import tools.jackson.databind.ser.std.StdScalarSerializer;
 
 /**
  * Represents the status and metadata of a workflow execution. Contains information such as workflow
@@ -14,8 +21,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public record WorkflowStatus(
     /** Unique identifier for the workflow instance. */
     String workflowId,
-    /** Current state of the workflow. */
-    WorkflowState status,
+    /** Current state of the workflow. JSON writes {@link #statusValue} in its place. */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) WorkflowState status,
     /** Name of the workflow. */
     String workflowName,
     /** Class name of the workflow implementation. */
@@ -100,14 +107,17 @@ public record WorkflowStatus(
    * {@code status} gives its name, and a {@code statusValue} gives the state it names. So the two
    * are both null, or both set and agree.
    *
+   * <p>A {@code statusValue} also decides over {@link WorkflowState#UNKNOWN}, which says only that
+   * whoever built the status did not know the value: a version that knows it reads it as itself.
+   *
    * @throws IllegalArgumentException if {@code status} is {@link WorkflowState#UNKNOWN} without a
-   *     {@code statusValue}, or the two do not agree
+   *     {@code statusValue}, or a known {@code status} and the {@code statusValue} do not agree
    */
   public WorkflowStatus {
     if (statusValue == null && status != null && status != WorkflowState.UNKNOWN) {
       statusValue = status.name();
     }
-    if (status == null && statusValue != null) {
+    if (statusValue != null && (status == null || status == WorkflowState.UNKNOWN)) {
       status = WorkflowState.fromStatusValue(statusValue);
     }
     if (status == WorkflowState.UNKNOWN && statusValue == null) {
@@ -124,7 +134,12 @@ public record WorkflowStatus(
     }
   }
 
-  /** Constructs a status whose stored status is the name of {@code status}. */
+  /**
+   * Constructs a status whose stored status is the name of {@code status}.
+   *
+   * @throws IllegalArgumentException if {@code status} is {@link WorkflowState#UNKNOWN}, which
+   *     needs the stored value it stands for
+   */
   public WorkflowStatus(
       String workflowId,
       WorkflowState status,
@@ -338,5 +353,40 @@ public record WorkflowStatus(
         isDebounced,
         debounceDeadline,
         statusValue);
+  }
+
+  /**
+   * The status as JSON writes it: the stored value, never {@code UNKNOWN}. An export or a recorded
+   * step from this version then reads on a version that knows the status as that status.
+   */
+  @JsonProperty("status")
+  @JsonSerialize(using = StoredStatusSerializer.class)
+  private String statusForJson() {
+    return statusValue;
+  }
+
+  /**
+   * Writes the stored value as a {@link WorkflowState} would be written, type id included when the
+   * mapper writes one, so it reads back through {@link WorkflowState#fromStatusValue}.
+   */
+  static final class StoredStatusSerializer extends StdScalarSerializer<String> {
+    StoredStatusSerializer() {
+      super(String.class);
+    }
+
+    @Override
+    public void serialize(String value, JsonGenerator gen, SerializationContext ctxt) {
+      gen.writeString(value);
+    }
+
+    @Override
+    public void serializeWithType(
+        String value, JsonGenerator gen, SerializationContext ctxt, TypeSerializer typeSer) {
+      var typeId =
+          typeSer.writeTypePrefix(
+              gen, ctxt, typeSer.typeId(value, WorkflowState.class, JsonToken.VALUE_STRING));
+      serialize(value, gen, ctxt);
+      typeSer.writeTypeSuffix(gen, ctxt, typeId);
+    }
   }
 }

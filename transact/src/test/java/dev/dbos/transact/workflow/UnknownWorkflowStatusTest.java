@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.json.DBOSJavaSerializer;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
@@ -184,9 +186,10 @@ class UnknownWorkflowStatusTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> builder.status(WorkflowState.SUCCESS).statusValue("ERROR").build());
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> builder.status(WorkflowState.UNKNOWN).statusValue("SUCCESS").build());
+    // UNKNOWN says only that its writer did not know the value; a reader that knows it reads it.
+    var known = builder.status(WorkflowState.UNKNOWN).statusValue("SUCCESS").build();
+    assertEquals(WorkflowState.SUCCESS, known.status());
+    assertEquals("SUCCESS", known.statusValue());
     assertEquals(
         NEWER, builder.status(WorkflowState.UNKNOWN).statusValue(NEWER).build().statusValue());
 
@@ -199,6 +202,32 @@ class UnknownWorkflowStatusTest {
     var neither = new WorkflowStatusBuilder("wf").build();
     assertNull(neither.status());
     assertNull(neither.statusValue());
+  }
+
+  @Test
+  void jsonCarriesTheStoredStatusRatherThanUnknown() {
+    var status = new WorkflowStatusBuilder("wf").status(NEWER).build();
+    assertEquals(WorkflowState.UNKNOWN, status.status());
+
+    // Plain JSON, as an export writes it: the status field is the stored value, so a version that
+    // knows it reads it as itself.
+    var tree = JsonUtility.MAPPER.valueToTree(status);
+    assertEquals(NEWER, tree.get("status").asString());
+    assertEquals(NEWER, tree.get("statusValue").asString());
+    assertEquals(status, JsonUtility.fromJson(JsonUtility.toJson(status), WorkflowStatus.class));
+
+    // The native serializer, as a recorded step writes it.
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(status);
+    assertFalse(serialized.contains("UNKNOWN"), serialized);
+    assertEquals(status, DBOSJavaSerializer.INSTANCE.deserialize(serialized));
+
+    // A known status is written as before, and JSON from before statusValue still reads.
+    var success = new WorkflowStatusBuilder("wf").status(WorkflowState.SUCCESS).build();
+    assertEquals("SUCCESS", JsonUtility.MAPPER.valueToTree(success).get("status").asString());
+    var old =
+        JsonUtility.fromJson("{\"workflowId\":\"wf\",\"status\":\"ERROR\"}", WorkflowStatus.class);
+    assertEquals(WorkflowState.ERROR, old.status());
+    assertEquals("ERROR", old.statusValue());
   }
 
   private static List<String> ids(List<WorkflowStatus> statuses) {

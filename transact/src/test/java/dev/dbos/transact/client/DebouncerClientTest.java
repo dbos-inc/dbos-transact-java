@@ -12,6 +12,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.DebouncedRows;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.QueueName;
@@ -447,6 +448,26 @@ public class DebouncerClientTest {
     assertEquals(SerializationUtil.PORTABLE, row.serialization());
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  @Test
+  void refusesAKeyHeldByADebouncedWorkflowWithAnUnknownStatus() throws Exception {
+    long planted = System.currentTimeMillis() + 60_000;
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted));
+    // A newer version moved it to a status this version does not know, which never clears its key.
+    DBUtils.setWorkflowState(dataSource, waiting, "SOMETHING_NEWER");
+
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(30),
+        () ->
+            assertThrows(
+                DBOSQueueDuplicatedException.class,
+                () -> debouncer().debounce("mixed", Duration.ofMillis(500), "fresh")));
+
+    assertEquals(planted, DebouncedRows.read(dataSource, waiting).delayUntilEpochMs());
+    assertEquals(0, serviceImpl.callCount.get());
   }
 
   @Test

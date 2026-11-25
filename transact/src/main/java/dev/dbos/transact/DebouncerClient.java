@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.QueueName;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.DebouncerMessage;
 
 import java.time.Duration;
@@ -429,6 +430,11 @@ public final class DebouncerClient<R> {
         // it may never run at all from here, and a retry would spin forever. Surface the collision
         // the way a plain deduplicated enqueue would.
         if (holder.isForeignTo(client.applicationName())) {
+          throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
+        }
+        // Nor is a holder whose status this version does not know: nothing here moves it on or
+        // clears its key, so a retry would spin forever too.
+        if (holder.status() == WorkflowState.UNKNOWN) {
           throw new DBOSQueueDuplicatedException(userWorkflowId, targetQueue, deduplicationId);
         }
         if (holder.isDebouncerWorkflow()) {

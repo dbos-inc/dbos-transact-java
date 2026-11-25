@@ -463,6 +463,12 @@ public final class Debouncer<R> {
           throw new DBOSQueueDuplicatedException(
               userWorkflowId, targetQueue, debounceDeduplicationId);
         }
+        // Nor is a holder whose status this version does not know: nothing here moves it on or
+        // clears its key, so a retry would spin forever too.
+        if (holder.status() == WorkflowState.UNKNOWN) {
+          throw new DBOSQueueDuplicatedException(
+              userWorkflowId, targetQueue, debounceDeduplicationId);
+        }
         if (holder.isDebouncerWorkflow()) {
           // 1.1 interop: forward to it at the top of the loop.
           debouncerWorkflowId = holder.workflowId();

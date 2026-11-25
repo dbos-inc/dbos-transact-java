@@ -14,6 +14,10 @@ import java.util.Map;
  */
 public record ListWorkflowsInput(
     List<String> workflowIds,
+    /**
+     * List only workflows in these states. {@link WorkflowState#UNKNOWN} matches every status this
+     * version does not know.
+     */
     List<WorkflowState> status,
     Instant startTime,
     Instant endTime,
@@ -202,6 +206,10 @@ public record ListWorkflowsInput(
         applicationName);
   }
 
+  /**
+   * Lists only workflows in these states. {@link WorkflowState#UNKNOWN} matches every status this
+   * version does not know.
+   */
   public ListWorkflowsInput withStatus(List<WorkflowState> status) {
     return new ListWorkflowsInput(
         workflowIds,
