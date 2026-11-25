@@ -169,6 +169,166 @@ public class AutoUpgradeLaunchTest {
   private void assertNotLaunched() {
     assertNull(DBOSTestAccess.getDbosExecutor(dbos));
   }
+
+  // --- Gating
+
+  @Test
+  void autoUpgradeIsAnEntitledFeatureOnlyWhenOn() {
+    var config = DBOSConfig.defaults("app");
+
+    assertEquals(List.of(), Entitlements.enabledFeatures(config));
+    assertEquals(List.of(), Entitlements.enabledFeatures(config.withAutoUpgrade(false)));
+    assertEquals(
+        List.of(Entitlements.AUTO_UPGRADE),
+        Entitlements.enabledFeatures(config.withAutoUpgrade(true)));
+    assertEquals(
+        List.of(Entitlements.AUTO_UPGRADE, Entitlements.SUSPEND_WORKFLOWS),
+        Entitlements.enabledFeatures(config.withAutoUpgrade(true).withSuspendMode(true)));
+    assertEquals("autoUpgrade", Entitlements.AUTO_UPGRADE.entitlement());
+    assertEquals("Auto-upgrading workflows", Entitlements.AUTO_UPGRADE.description());
+  }
+
+  @Test
+  void autoUpgradeRequiresAKey() {
+    var app = "upgrade-requires-a-key";
+    dbos = new DBOS(pgContainer.dbosConfig(app).withAutoUpgrade(true));
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+
+    var refused = assertThrows(IllegalStateException.class, dbos::launch);
+    assertTrue(
+        refused.getMessage().startsWith("Auto-upgrading workflows requires a DBOS key"),
+        refused.getMessage());
+    assertNotLaunched();
+    assertEquals(List.of(), passesOf(app));
+
+    // The refused launch leaves nothing behind.
+    try (var plain = new DBOS(pgContainer.dbosConfig(app))) {
+      plain.registerProxy(InheritingJob.class, new InheritingJobImpl());
+      plain.launch();
+      assertNull(loopOf(plain));
+    }
+  }
+
+  @Test
+  void anOptedInWorkflowRequiresAKeyAtLaunch() {
+    var app = "opted-in-requires-a-key";
+    var config = pgContainer.dbosConfig(app);
+    // The config is off and no key is given, so building the executor checks nothing...
+    assertDoesNotThrow(() -> new DBOSExecutor(config));
+    dbos = new DBOS(config);
+    dbos.registerProxy(OptedInJob.class, new OptedInJobImpl());
+
+    // ...but the workflow's opt-in needs a key, which only the launch can tell.
+    var refused = assertThrows(IllegalStateException.class, dbos::launch);
+    assertTrue(
+        refused.getMessage().startsWith("Auto-upgrading workflows requires a DBOS key"),
+        refused.getMessage());
+    assertNotLaunched();
+    assertEquals(List.of(), checks());
+    assertEquals(List.of(), passesOf(app));
+  }
+
+  @Test
+  void launchRefusesWhenTheConfigFlagIsNotEntitled() {
+    var app = "flag-not-entitled";
+    conductor.entitle("{\"autoUpgrade\": false}");
+    var config = conductorConfig(app).withAutoUpgrade(true);
+
+    // The config turns the feature on, so building the executor checks it, before any state
+    // exists.
+    var refused = assertThrows(IllegalStateException.class, () -> new DBOSExecutor(config));
+    assertTrue(refused.getMessage().contains("not entitled to autoUpgrade"), refused.getMessage());
+    assertTrue(refused.getMessage().contains("plan does not include it"), refused.getMessage());
+    assertEquals(List.of(Map.entry(ENTITLEMENTS, "Bearer test-key")), checks());
+
+    dbos = new DBOS(config);
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+    assertThrows(IllegalStateException.class, dbos::launch);
+    assertNotLaunched();
+    assertEquals(List.of(), passesOf(app));
+
+    // The refused launch leaves nothing behind.
+    try (var plain = new DBOS(pgContainer.dbosConfig(app))) {
+      plain.launch();
+    }
+  }
+
+  @Test
+  void launchRefusesWhenAnOptedInWorkflowIsNotEntitled() {
+    var app = "opt-in-not-entitled";
+    var config = conductorConfig(app);
+    // The config is off, so building the executor checks nothing...
+    assertDoesNotThrow(() -> new DBOSExecutor(config));
+    assertEquals(List.of(), checks());
+
+    dbos = new DBOS(config);
+    dbos.registerProxy(OptedInJob.class, new OptedInJobImpl());
+
+    // ...and the workflow's opt-in is checked at launch, which refuses.
+    conductor.entitle("{\"autoUpgrade\": false}");
+    var refused = assertThrows(IllegalStateException.class, dbos::launch);
+    assertTrue(refused.getMessage().contains("plan does not include it"), refused.getMessage());
+    assertEquals(List.of(Map.entry(ENTITLEMENTS, "Bearer test-key")), checks());
+    assertNotLaunched();
+    assertEquals(List.of(), passesOf(app));
+  }
+
+  @Test
+  void anAutoUpgradingExecutorChecksItsEntitlement() {
+    var app = "checks-its-entitlement";
+    conductor.entitle("{\"suspendWorkflows\": true, \"autoUpgrade\": false}");
+    dbos =
+        new DBOS(
+            pgContainer
+                .dbosConfig(app)
+                .withAutoUpgrade(true)
+                .withTransactEnterpriseKey("enterprise-key")
+                .withConductorDomain(conductor.url));
+
+    var refused = assertThrows(IllegalStateException.class, dbos::launch);
+    assertTrue(refused.getMessage().contains("not entitled to autoUpgrade"), refused.getMessage());
+    assertEquals(List.of(Map.entry(ENTITLEMENTS, "Bearer enterprise-key")), checks());
+  }
+
+  @Test
+  void theEntitlementIsCheckedWithTheEnterpriseKeyFirst() {
+    // Both keys given: the enterprise key is the one checked.
+    try (var both =
+        new DBOS(
+            conductorConfig("enterprise-key-first")
+                .withAutoUpgrade(true)
+                .withTransactEnterpriseKey("enterprise-key"))) {
+      both.registerProxy(InheritingJob.class, new InheritingJobImpl());
+      both.launch();
+
+      // Checked once, with the config: the launch does not ask again for the config flag. The
+      // self-hosted Conductor configured is the one asked.
+      assertEquals(List.of(Map.entry(ENTITLEMENTS, "Bearer enterprise-key")), checks());
+      assertNotNull(loopOf(both));
+    }
+
+    // The enterprise key alone is enough: no Conductor connection is needed.
+    dbos =
+        new DBOS(
+            pgContainer
+                .dbosConfig("enterprise-key-alone")
+                .withAutoUpgrade(true)
+                .withTransactEnterpriseKey("enterprise-key")
+                .withConductorDomain(conductor.url)
+                .withAutoUpgradeInterval(INTERVAL));
+    dbos.registerProxy(InheritingJob.class, new InheritingJobImpl());
+    dbos.launch();
+
+    assertEquals(
+        List.of(
+            Map.entry(ENTITLEMENTS, "Bearer enterprise-key"),
+            Map.entry(ENTITLEMENTS, "Bearer enterprise-key")),
+        checks());
+    assertNull(DBOSExecutorTestAccess.getConductorOptions(DBOSTestAccess.getDbosExecutor(dbos)));
+    assertNotNull(loopOf(dbos));
+    assertTrue(loopOf(dbos).isAlive());
+  }
+
   // --- Enrollment
 
   @Test

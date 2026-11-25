@@ -271,8 +271,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     // Every Transact Enterprise feature needs Conductor to report the organization entitled to it.
     // Checked before anything is started, so a refusal fails launch cleanly.
+    var features = Entitlements.enabledFeatures(config);
     Entitlements.require(
-        Entitlements.enabledFeatures(config),
+        features,
         config.transactEnterpriseKey(),
         config.conductorKey(),
         config.conductorDomain(),
@@ -284,8 +285,8 @@ public class DBOSExecutor implements AutoCloseable {
     conductorOptions = conductorOptions(config, dbosCloud);
     if (conductorOptions != null) {
       enterpriseProvider = EnterpriseProviders.load(EnterpriseProviders.CONDUCTOR);
-    } else if (config.suspendMode()) {
-      enterpriseProvider = EnterpriseProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
+    } else if (!features.isEmpty()) {
+      enterpriseProvider = EnterpriseProviders.load(features.get(0).description());
     }
 
     if (!dbosCloud) {
@@ -329,6 +330,23 @@ public class DBOSExecutor implements AutoCloseable {
       this.stepCheckpointStores = stepCheckpointStores;
       this.keepCompletedStepCheckpoints = keepCompletedStepCheckpoints;
       this.alertHandler = alertHandler;
+
+      // A workflow can enroll through its own registration, which only start() sees; the config
+      // flag was checked when this executor was built. Checked before anything is started.
+      var autoUpgrade = !autoUpgradableWorkflows().isEmpty();
+      if (autoUpgrade) {
+        if (!config.autoUpgrade()) {
+          Entitlements.require(
+              List.of(Entitlements.AUTO_UPGRADE),
+              config.transactEnterpriseKey(),
+              config.conductorKey(),
+              config.conductorDomain(),
+              dbosCloud);
+        }
+        if (enterpriseProvider == null) {
+          enterpriseProvider = EnterpriseProviders.load(Entitlements.AUTO_UPGRADE.description());
+        }
+      }
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         // The resolved name, not config.appName(): on DBOS Cloud the executor takes its name

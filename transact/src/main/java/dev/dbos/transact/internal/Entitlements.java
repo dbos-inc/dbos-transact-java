@@ -51,6 +51,9 @@ public final class Entitlements {
    */
   public record Feature(String entitlement, String description) {}
 
+  /** Auto upgrade: handing work left on an older application version to the latest one. */
+  public static final Feature AUTO_UPGRADE = new Feature("autoUpgrade", "Auto-upgrading workflows");
+
   /** Suspend mode: suspending a workflow in the database on a waiting recv or a sleep. */
   public static final Feature SUSPEND_WORKFLOWS =
       new Feature("suspendWorkflows", "Suspending workflows on recv and sleep");
@@ -82,6 +85,9 @@ public final class Entitlements {
    */
   public static List<Feature> enabledFeatures(DBOSConfig config) {
     var features = new ArrayList<Feature>();
+    if (config.autoUpgrade()) {
+      features.add(AUTO_UPGRADE);
+    }
     if (config.suspendMode()) {
       features.add(SUSPEND_WORKFLOWS);
     }

@@ -109,6 +109,22 @@ public class EnterpriseProvidersTest {
   }
 
   @Test
+  public void noProviderNamesAutoUpgradeWhenItNeedsIt() {
+    var e =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                EnterpriseProviders.select(
+                    List.of(), "1.4.0", Entitlements.AUTO_UPGRADE.description(), false));
+    assertTrue(
+        e.getMessage()
+            .startsWith(
+                "Auto-upgrading workflows requires dev.dbos:transact-enterprise on the class"
+                    + " path."),
+        e.getMessage());
+  }
+
+  @Test
   public void aProviderBuiltBeforeAutoUpgradeSaysSo() {
     var provider =
         new EnterpriseProvider() {
