@@ -472,6 +472,9 @@ public class DBOS implements AutoCloseable {
    * A call made while another shuts DBOS down does nothing, and does not wait for it, as does one
    * made while {@link #launch()} has yet to start DBOS.
    *
+   * <p>With a non-zero timeout, the call can take the timeout plus up to 10 seconds for the
+   * background jobs, which stop after the wait.
+   *
    * @param workflowCompletionTimeout how long to wait for running workflows; zero does not wait
    */
   public void shutdown(@NonNull Duration workflowCompletionTimeout) {

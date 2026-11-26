@@ -492,8 +492,8 @@ public class DBOSExecutor implements AutoCloseable {
   /**
    * Stops this executor. With a timeout, it first stops dequeuing, lets the dequeues in flight
    * dispatch what they claimed, and waits up to that long for the workflows running here to finish
-   * on their own; the Conductor connection stops after the wait. With a zero timeout it waits for
-   * nothing.
+   * on their own; the background jobs and the Conductor connection stop after the wait. With a zero
+   * timeout it waits for nothing.
    *
    * <p>The system database is closed before the workflows still running are interrupted, so none
    * records its interruption as its outcome; they are recovered later from their last checkpoint.
@@ -535,6 +535,15 @@ public class DBOSExecutor implements AutoCloseable {
       }
       if (queues != null) {
         closeStep(failures, queues::close);
+      }
+
+      // After the wait, so a draining holder of the background-jobs lock keeps sweeping for every
+      // process waiting on it. Without one they are interrupted, and not waited for.
+      backgroundStop.countDown();
+      var jobs = backgroundJobs;
+      backgroundJobs = null;
+      if (jobs != null) {
+        closeStep(failures, graceful ? () -> joinOrInterrupt(jobs.thread()) : jobs::stopNow);
       }
 
       // Only once the wait is over, so the executor stays visibly alive to Conductor while it
@@ -601,6 +610,9 @@ public class DBOSExecutor implements AutoCloseable {
 
   // How long the shutdown waits between reports of the workflows still running.
   private static final Duration SHUTDOWN_REPORT_INTERVAL = Duration.ofSeconds(1);
+  // How long the shutdown waits for a background loop to see its stop signal before interrupting
+  // it.
+  private static final Duration BACKGROUND_THREAD_JOIN_TIMEOUT = Duration.ofSeconds(10);
 
   private void awaitActiveWorkflows(@Nullable QueueService queues, Duration timeout) {
     long start = System.nanoTime();
@@ -651,6 +663,22 @@ public class DBOSExecutor implements AutoCloseable {
 
   private List<String> activeWorkflowIds() {
     return activeWorkflows.keySet().stream().map(ActiveExecution::workflowId).toList();
+  }
+
+  static void joinOrInterrupt(Thread thread) {
+    try {
+      thread.join(BACKGROUND_THREAD_JOIN_TIMEOUT.toMillis());
+      if (thread.isAlive()) {
+        logger.warn(
+            "Background thread {} did not exit within {}; interrupting it",
+            thread.getName(),
+            BACKGROUND_THREAD_JOIN_TIMEOUT);
+        thread.interrupt();
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      thread.interrupt();
+    }
   }
 
   private BackgroundJobs newBackgroundJobs(QueueService queues) {

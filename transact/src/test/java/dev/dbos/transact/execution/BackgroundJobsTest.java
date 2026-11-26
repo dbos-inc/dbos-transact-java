@@ -78,6 +78,65 @@ class BackgroundJobsTest {
   private record Run(String process, long at) {}
 
   @Test
+  void theBackgroundJobsThreadStopsOnShutdown() {
+    dbos = new DBOS(dbosConfig);
+    dbos.launch();
+    var jobs = DBOSTestAccess.getDbosExecutor(dbos).getBackgroundJobs();
+    var thread = jobs.thread();
+    assertEquals(BackgroundJobs.THREAD_NAME, thread.getName());
+    assertTrue(thread.isAlive());
+
+    long started = System.nanoTime();
+    dbos.shutdown(Duration.ofSeconds(20));
+    assertFalse(thread.isAlive());
+    // On its stop signal, not interrupted after the shutdown gave up waiting for it.
+    var took = Duration.ofNanos(System.nanoTime() - started);
+    assertTrue(took.compareTo(Duration.ofSeconds(5)) < 0, took.toString());
+  }
+
+  @Test
+  void anImmediateShutdownInterruptsTheBackgroundJobsWithoutWaitingForThem() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "CockroachDB has no LOCK TABLE");
+    dbos = new DBOS(dbosConfig);
+    dbos.launch();
+    var thread = DBOSTestAccess.getDbosExecutor(dbos).getBackgroundJobs().thread();
+    try (var conn =
+            DriverManager.getConnection(
+                pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+        var stmt = conn.createStatement()) {
+      conn.setAutoCommit(false);
+      stmt.execute("LOCK TABLE dbos.workflow_status IN ACCESS EXCLUSIVE MODE");
+      // A job of the loop, the release of delayed workflows or the timeout sweep, is now stuck on
+      // the table.
+      waitUntil(() -> blockedOnATable() > 0, Duration.ofSeconds(10), "no job ever blocked");
+      long started = System.nanoTime();
+      dbos.shutdown();
+      var took = Duration.ofNanos(System.nanoTime() - started);
+      assertTrue(took.compareTo(Duration.ofSeconds(4)) < 0, took.toString());
+      conn.rollback();
+    }
+    thread.join(10_000);
+    assertFalse(thread.isAlive());
+  }
+
+  private int blockedOnATable() {
+    try (var conn =
+            DriverManager.getConnection(
+                pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+        var stmt = conn.createStatement();
+        var rs =
+            stmt.executeQuery(
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'"
+                    + " AND (query LIKE '%UPDATE%delay_until_epoch_ms%'"
+                    + " OR query LIKE '%ORDER BY workflow_deadline_epoch_ms%')")) {
+      rs.next();
+      return rs.getInt(1);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
   void anErrorTakingTheLockDoesNotEndTheLoop() throws Exception {
     openSystemDatabases();
     var failing = spy(local);
