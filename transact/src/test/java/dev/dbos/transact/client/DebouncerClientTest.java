@@ -378,6 +378,15 @@ public class DebouncerClientTest {
 
   private DebouncedRows.Spec debouncedRow(
       String queue, String workflowName, long delayUntil, String serializationFormat) {
+    return debouncedRow(queue, workflowName, delayUntil, serializationFormat, "process-mixed");
+  }
+
+  private DebouncedRows.Spec debouncedRow(
+      String queue,
+      String workflowName,
+      long delayUntil,
+      String serializationFormat,
+      String deduplicationId) {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     var stale =
         SerializationUtil.serializeArgs(new Object[] {"stale"}, null, serializationFormat, null);
@@ -386,7 +395,7 @@ public class DebouncerClientTest {
         ClientTargetServiceImpl.class.getName(),
         null,
         queue,
-        "process-mixed",
+        deduplicationId,
         delayUntil,
         null,
         stale.serializedValue(),
@@ -407,6 +416,24 @@ public class DebouncerClientTest {
     assertEquals(waiting, handle.workflowId());
     assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
     assertEquals(0, DebouncedRows.countByName(dataSource, Constants.DEBOUNCER_WORKFLOW_NAME));
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
+  }
+
+  @Test
+  void coalescesIntoADebouncedWorkflowHeldUnderTheQualifiedSpelling() throws Exception {
+    long planted = System.currentTimeMillis() + 60_000;
+    // The spelling the next release writes: the workflow's fully qualified name, then the key.
+    var qualified = "process/" + ClientTargetServiceImpl.class.getName() + "/-mixed";
+    var waiting =
+        DebouncedRows.insert(
+            dataSource,
+            debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted, null, qualified));
+
+    var handle = debouncer().debounce("mixed", Duration.ofMillis(500), "fresh");
+
+    assertEquals(waiting, handle.workflowId());
+    assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), List.copyOf(serviceImpl.callArgs));
   }

@@ -1106,6 +1106,7 @@ public class WorkflowDAO {
       String className,
       @Nullable String instanceName,
       String queueName,
+      String qualifiedDeduplicationId,
       String deduplicationId,
       long delayUntilEpochMs,
       Object[] args,
@@ -1143,6 +1144,7 @@ public class WorkflowDAO {
                     className,
                     instanceName,
                     queueName,
+                    qualifiedDeduplicationId,
                     deduplicationId,
                     delayUntilEpochMs,
                     serializedArgs.serializedValue(),
@@ -1200,6 +1202,13 @@ public class WorkflowDAO {
     return null;
   }
 
+  /**
+   * Extends the debounced workflow holding the key, under {@code qualifiedDeduplicationId} first
+   * and then {@code deduplicationId}, the spelling this release writes. A row under the qualified
+   * spelling is the newer, written by the release after this one, so it wins when both exist. When
+   * neither is extended, the holder reported is {@code deduplicationId}'s, which is the key an
+   * enqueue from this release collides with.
+   */
   private static DebounceResult bounce(
       DbContext ctx,
       Connection conn,
@@ -1207,6 +1216,7 @@ public class WorkflowDAO {
       String className,
       @Nullable String instanceName,
       String queueName,
+      String qualifiedDeduplicationId,
       String deduplicationId,
       long delayUntilEpochMs,
       String inputs,
@@ -1251,25 +1261,30 @@ public class WorkflowDAO {
         """
             .formatted(ctx.schema());
     String workflowId = null;
-    try (var stmt = conn.prepareStatement(sql)) {
-      int i = 1;
-      stmt.setLong(i++, delayUntilEpochMs);
-      stmt.setLong(i++, delayUntilEpochMs);
-      stmt.setString(i++, serialization);
-      if (ctx.appName() != null) {
-        stmt.setString(i++, ctx.appName());
-      }
-      stmt.setString(i++, workflowName);
-      stmt.setString(i++, className);
-      stmt.setString(i++, instanceName);
-      stmt.setString(i++, queueName);
-      stmt.setString(i++, deduplicationId);
-      stmt.setString(i++, WorkflowState.DELAYED.name());
-      ctx.bindAppScope(stmt, i);
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          workflowId = rs.getString("workflow_uuid");
+    for (var spelling : List.of(qualifiedDeduplicationId, deduplicationId)) {
+      try (var stmt = conn.prepareStatement(sql)) {
+        int i = 1;
+        stmt.setLong(i++, delayUntilEpochMs);
+        stmt.setLong(i++, delayUntilEpochMs);
+        stmt.setString(i++, serialization);
+        if (ctx.appName() != null) {
+          stmt.setString(i++, ctx.appName());
         }
+        stmt.setString(i++, workflowName);
+        stmt.setString(i++, className);
+        stmt.setString(i++, instanceName);
+        stmt.setString(i++, queueName);
+        stmt.setString(i++, spelling);
+        stmt.setString(i++, WorkflowState.DELAYED.name());
+        ctx.bindAppScope(stmt, i);
+        try (var rs = stmt.executeQuery()) {
+          if (rs.next()) {
+            workflowId = rs.getString("workflow_uuid");
+          }
+        }
+      }
+      if (workflowId != null) {
+        break;
       }
     }
     if (workflowId != null) {

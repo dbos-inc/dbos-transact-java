@@ -1706,6 +1706,11 @@ public class DebouncerTest {
   // a debouncer workflow beside it.
 
   private DebouncedRows.Spec debouncedRow(String queue, String workflowName, long delayUntil) {
+    return debouncedRow(queue, workflowName, delayUntil, "process-mixed");
+  }
+
+  private DebouncedRows.Spec debouncedRow(
+      String queue, String workflowName, long delayUntil, String deduplicationId) {
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     var serializer = DBOSTestAccess.getSystemDatabase(dbos).serializer();
     var stale = SerializationUtil.serializeArgs(new Object[] {"stale"}, null, null, serializer);
@@ -1714,7 +1719,7 @@ public class DebouncerTest {
         DebouncedServiceImpl.class.getName(),
         null,
         queue,
-        "process-mixed",
+        deduplicationId,
         delayUntil,
         null,
         stale.serializedValue(),
@@ -1752,6 +1757,30 @@ public class DebouncerTest {
     assertEquals("result:fresh", handle.getResult());
     assertEquals(List.of("fresh"), serviceImpl.callArgs());
     assertNull(dbos.getWorkflowStatus(waiting).orElseThrow().deduplicationId());
+  }
+
+  @Test
+  public void coalescesIntoADebouncedWorkflowHeldUnderTheQualifiedSpelling() throws Exception {
+    DebouncedService svc = dbos.registerProxy(DebouncedService.class, serviceImpl);
+    dbos.launch();
+    var dataSource = pgContainer.dataSource();
+    long planted = System.currentTimeMillis() + 60_000;
+    // The spelling the next release writes: the workflow's fully qualified name, then the key.
+    var qualified = "process/" + DebouncedServiceImpl.class.getName() + "/-mixed";
+    var waiting =
+        DebouncedRows.insert(
+            dataSource, debouncedRow(Constants.DBOS_INTERNAL_QUEUE, "process", planted, qualified));
+    DebouncedRows.insertInput(
+        dataSource, waiting, DebouncedRows.read(dataSource, waiting).inputs());
+
+    var handle =
+        dbos.<String>debouncer()
+            .debounce("mixed", Duration.ofMillis(500), () -> svc.process("fresh"));
+
+    assertEquals(waiting, handle.workflowId());
+    assertTrue(DebouncedRows.read(dataSource, waiting).delayUntilEpochMs() < planted);
+    assertEquals("result:fresh", handle.getResult());
+    assertEquals(List.of("fresh"), serviceImpl.callArgs());
   }
 
   @Test
