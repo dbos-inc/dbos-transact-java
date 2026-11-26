@@ -104,6 +104,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -180,8 +181,11 @@ public class DBOSExecutor implements AutoCloseable {
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
+  private volatile boolean closing;
   private final ConcurrentHashMap<ActiveExecution, QueueBucket> activeWorkflows =
       new ConcurrentHashMap<>();
+  // One per workflow running here, completed when its code stops running; see the shutdown wait.
+  private final Set<CompletableFuture<Void>> runningWorkflows = ConcurrentHashMap.newKeySet();
 
   private final boolean dbosCloud;
   private final String appId;
@@ -486,7 +490,26 @@ public class DBOSExecutor implements AutoCloseable {
 
   @Override
   public void close() {
+    close(Duration.ZERO);
+  }
+
+  /**
+   * Stops this executor. With a timeout, it first stops dequeuing, lets the dequeues in flight
+   * dispatch what they claimed, and waits up to that long for the workflows running here to finish
+   * on their own; the Conductor connection stops after the wait. With a zero timeout it waits for
+   * nothing.
+   *
+   * <p>The system database is closed before the workflows still running are interrupted, so none
+   * records its interruption as its outcome; they are recovered later from their last checkpoint.
+   *
+   * @return whether this call stopped the executor; false if it was not running, or another call
+   *     stops it, which this one does not wait for
+   */
+  public boolean close(Duration workflowCompletionTimeout) {
+    Objects.requireNonNull(workflowCompletionTimeout, "workflowCompletionTimeout must not be null");
+    var graceful = !workflowCompletionTimeout.isZero() && !workflowCompletionTimeout.isNegative();
     if (isRunning.compareAndSet(true, false)) {
+      closing = true;
       logger.info("DBOS Executor stopping");
 
       // Every step runs even when an earlier one throws, so one component that fails to stop
@@ -500,12 +523,6 @@ public class DBOSExecutor implements AutoCloseable {
         closeStep(failures, admin::stop);
       }
 
-      var conductorConnection = conductor;
-      conductor = null;
-      if (conductorConnection != null) {
-        closeStep(failures, conductorConnection::stop);
-      }
-
       closeStep(failures, this::shutdownLifecycleListeners);
 
       var scheduler = schedulerService;
@@ -513,16 +530,32 @@ public class DBOSExecutor implements AutoCloseable {
       if (scheduler != null) {
         closeStep(failures, scheduler::close);
       }
+
+      // The queue service stays reachable until the system database closes, so a workflow still
+      // running can enqueue to a database-backed queue.
       var queues = queueService;
-      queueService = null;
+      if (graceful) {
+        closeStep(failures, () -> awaitActiveWorkflows(queues, workflowCompletionTimeout));
+      }
       if (queues != null) {
         closeStep(failures, queues::close);
       }
+
+      // Only once the wait is over, so the executor stays visibly alive to Conductor while it
+      // lasts.
+      var conductorConnection = conductor;
+      conductor = null;
+      if (conductorConnection != null) {
+        closeStep(failures, conductorConnection::stop);
+      }
+
       var sysdb = systemDatabase;
       systemDatabase = null;
       if (sysdb != null) {
         closeStep(failures, sysdb::close);
       }
+      // Not before: a workflow still running would fail on it, and could record that failure.
+      queueService = null;
 
       // Both are null when start() failed before creating them.
       if (timeoutScheduler != null) {
@@ -560,7 +593,68 @@ public class DBOSExecutor implements AutoCloseable {
         // A checked exception a listener or the enterprise provider threw undeclared.
         throw new RuntimeException(first);
       }
+      return true;
     }
+    return false;
+  }
+
+  /** Whether a call to close this executor has begun. */
+  public boolean isClosing() {
+    return closing;
+  }
+
+  // How long the shutdown waits between reports of the workflows still running.
+  private static final Duration SHUTDOWN_REPORT_INTERVAL = Duration.ofSeconds(1);
+
+  private void awaitActiveWorkflows(@Nullable QueueService queues, Duration timeout) {
+    long start = System.nanoTime();
+    long timeoutNanos = saturatedNanos(timeout);
+    try {
+      // What a dequeue in flight claimed is dispatched before the running workflows are counted.
+      if (queues != null && !queues.drain(timeoutNanos, TimeUnit.NANOSECONDS)) {
+        logger.warn("Shutting down with a dequeue still in flight");
+      }
+      while (!runningWorkflows.isEmpty()) {
+        long left = timeoutNanos - (System.nanoTime() - start);
+        if (left <= 0) {
+          break;
+        }
+        var pending = runningWorkflows.toArray(CompletableFuture<?>[]::new);
+        try {
+          CompletableFuture.allOf(pending)
+              .get(Math.min(left, SHUTDOWN_REPORT_INTERVAL.toNanos()), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException e) {
+          logger.info(
+              "Attempting to shut down DBOS. {} workflows remain active. IDs: {}",
+              runningWorkflows.size(),
+              activeWorkflowIds());
+        } catch (ExecutionException e) {
+          throw new IllegalStateException(e);
+        }
+      }
+    } catch (InterruptedException e) {
+      logger.warn("Interrupted while waiting for running workflows to finish");
+      Thread.currentThread().interrupt();
+    }
+    if (!runningWorkflows.isEmpty()) {
+      logger.warn(
+          "Shutting down with {} workflows still active; they are recovered later. IDs: {}",
+          runningWorkflows.size(),
+          activeWorkflowIds());
+    }
+  }
+
+  // A duration past what a long of nanoseconds holds, some 292 years, counts as that.
+  static long saturatedNanos(Duration duration) {
+    try {
+      return duration.toNanos();
+    } catch (ArithmeticException e) {
+      return Long.MAX_VALUE;
+    }
+  }
+
+  private List<String> activeWorkflowIds() {
+    return activeWorkflows.keySet().stream().map(ActiveExecution::workflowId).toList();
   }
 
   private static void closeStep(List<Throwable> failures, Runnable step) {
@@ -2523,6 +2617,10 @@ public class DBOSExecutor implements AutoCloseable {
       timedStatus = systemDatabase.getTimedWorkflowStatus(workflowId);
     } catch (Exception e) {
       logger.error("Failed to load workflow status for {}", workflowId, e);
+      if (Thread.currentThread().isInterrupted()) {
+        // Stopped mid-read by a shutdown, which says nothing of the workflow: recovery runs it.
+        throw new RuntimeException("Interrupted while loading workflow " + workflowId, e);
+      }
       // The serialization column is likely fine — it's the inputs that failed to parse.
       // Fetch it separately so the error is recorded in the correct format.
       String serialization = null;
@@ -2888,6 +2986,9 @@ public class DBOSExecutor implements AutoCloseable {
     // to: cancelling it could make getResult read back a deserialized copy of that result. Work
     // before the write, such as deleting step checkpoints, stays under the deadline.
     var recordingOutcome = new AtomicBoolean(false);
+    // Apart from the handle's future, which a timeout completes while the run still unwinds.
+    var running = new CompletableFuture<Void>();
+    var started = new AtomicBoolean(false);
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
@@ -3025,6 +3126,8 @@ public class DBOSExecutor implements AutoCloseable {
           // inserted or read it), so failIfMissing: a missing row means it was deleted, and the
           // wait surfaces DBOSNonExistentWorkflowException instead of polling forever.
           logger.warn("{} workflowId {}", pendingAdopt, workflowId);
+          // Its own code has stopped running; the wait for another's outcome holds up no shutdown.
+          running.complete(null);
           return awaitWorkflowResult(workflowId, true);
         };
 
@@ -3039,7 +3142,33 @@ public class DBOSExecutor implements AutoCloseable {
       return retrieveWorkflow(workflowId);
     }
 
-    var future = CompletableFuture.supplyAsync(task, executorService);
+    // Counted from before submission, so the shutdown wait never misses a run being dispatched.
+    runningWorkflows.add(running);
+    running.whenComplete((result, error) -> runningWorkflows.remove(running));
+    CompletableFuture<T> future;
+    try {
+      future =
+          CompletableFuture.supplyAsync(
+              () -> {
+                started.set(true);
+                try {
+                  return task.get();
+                } finally {
+                  running.complete(null);
+                }
+              },
+              executorService);
+    } catch (Throwable e) {
+      running.complete(null);
+      throw e;
+    }
+    // A run cancelled before it started never runs.
+    future.whenComplete(
+        (result, error) -> {
+          if (!started.get()) {
+            running.complete(null);
+          }
+        });
     if (timeLeft != null) {
       var timer =
           timeoutScheduler.schedule(

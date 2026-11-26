@@ -20,6 +20,12 @@ public final class TestEnterpriseProvider implements EnterpriseProvider {
   private static final List<ConductorOptions> created = new CopyOnWriteArrayList<>();
   private static final AtomicInteger suspendBackendsCreated = new AtomicInteger();
 
+  /**
+   * Runs inside every connection's stop(), whichever test's shutdown it is; a test that sets it to
+   * hold its own shutdown there checks the thread it runs on, and resets only the hook it set.
+   */
+  public static volatile Runnable onStop = () -> {};
+
   /** The options of every connection created so far, oldest first. */
   public static List<ConductorOptions> created() {
     return List.copyOf(created);
@@ -38,7 +44,9 @@ public final class TestEnterpriseProvider implements EnterpriseProvider {
       public void start() {}
 
       @Override
-      public void stop() {}
+      public void stop() {
+        onStop.run();
+      }
     };
   }
 

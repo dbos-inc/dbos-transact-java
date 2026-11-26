@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -491,6 +492,46 @@ public class QueueServicePollTest {
     queueService.transitionDelayedWorkflows();
 
     verifyNoInteractions(systemDatabase);
+  }
+
+  @Test
+  @DisplayName("a drain lets a dequeue in flight dispatch what it claimed, uninterrupted")
+  public void drainWaitsForTheDispatchInFlight() throws Exception {
+    var claiming = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    blockTheClaim(claiming, release, List.of("wf-1"));
+    var events = new ConcurrentLinkedQueue<String>();
+    when(dbosExecutor.executeWorkflowById(eq("wf-1"), anyString()))
+        .thenAnswer(
+            inv -> {
+              events.add(
+                  Thread.currentThread().isInterrupted() ? "dispatched interrupted" : "dispatched");
+              return null;
+            });
+    queueService.start(List.of(PLAIN), Set.of());
+    try {
+      assertTrue(claiming.await(10, TimeUnit.SECONDS));
+      var drainer =
+          start(
+              () -> {
+                try {
+                  events.add("drained " + queueService.drain(10, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                  events.add("interrupted");
+                }
+              });
+      awaitParkedOrDone(drainer);
+      assertEquals(List.of(), List.copyOf(events));
+      release.countDown();
+      drainer.join(10_000);
+
+      assertEquals(List.of("dispatched", "drained true"), List.copyOf(events));
+      // Nothing is claimed once it has begun.
+      assertEquals(0, taskFor(PLAIN).processPartition(null, 0).workflowIds().size());
+    } finally {
+      release.countDown();
+      queueService.close();
+    }
   }
 
   @Test

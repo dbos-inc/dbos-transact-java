@@ -389,11 +389,19 @@ public class DBOS implements AutoCloseable {
    * <p>If launch throws, for example because migrations are off and the system database is missing
    * a migration, whatever it started is shut down and this instance is left as if launch had never
    * been called, so a later {@code launch()} tries again from the start.
+   *
+   * <p>Does nothing while DBOS is launched, nor while a {@link #shutdown(Duration)} is still under
+   * way, which leaves it shut down; call it once the shutdown has returned.
    */
   public void launch() {
     logger.info("Launching DBOS v{}", DBOS.version());
 
-    if (dbosExecutor.get() == null) {
+    var existing = dbosExecutor.get();
+    if (existing != null && existing.isClosing()) {
+      logger.warn("DBOS is shutting down, so launch() did nothing; call it after the shutdown");
+      return;
+    }
+    if (existing == null) {
       var executor = new DBOSExecutor(config);
 
       if (dbosExecutor.compareAndSet(null, executor)) {
@@ -449,20 +457,48 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Shut down DBOS. This method should only be used in test environments, where DBOS is used
-   * multiple times in the same JVM.
+   * Shut down DBOS at once, interrupting the workflows running in this process; they are recovered
+   * later from their last checkpoint. Equivalent to {@link #shutdown(Duration)} with a zero
+   * timeout.
    */
   public void shutdown() {
+    shutdown(Duration.ZERO);
+  }
+
+  /**
+   * Shut down DBOS, first waiting up to {@code workflowCompletionTimeout} for the workflows running
+   * in this process to finish on their own. No workflow is dequeued once the shutdown begins. Those
+   * still running at the deadline are interrupted, and recovered later from their last checkpoint.
+   * A call made while another shuts DBOS down does nothing, and does not wait for it, as does one
+   * made while {@link #launch()} has yet to start DBOS.
+   *
+   * @param workflowCompletionTimeout how long to wait for running workflows; zero does not wait
+   */
+  public void shutdown(@NonNull Duration workflowCompletionTimeout) {
+    Objects.requireNonNull(workflowCompletionTimeout, "workflowCompletionTimeout must not be null");
+    if (workflowCompletionTimeout.isNegative()) {
+      throw new IllegalArgumentException("workflowCompletionTimeout must not be negative");
+    }
     var current = dbosExecutor.get();
     if (current != null) {
+      // Only the call that closes the executor clears it, once it is done: until then running
+      // workflows still use it, and a launch() must not start another beside it.
+      var closedHere = true;
       try {
-        current.close();
+        closedHere = current.close(workflowCompletionTimeout);
       } finally {
         // Cleared even when closing threw: close() has stopped all it could, and a closed
         // executor left in place would make launch() return at once with nothing running.
-        if (!dbosExecutor.compareAndSet(current, null)) {
+        if (closedHere && !dbosExecutor.compareAndSet(current, null)) {
           logger.error("failed to set DBOS executor to null on shut down");
         }
+      }
+      if (!closedHere) {
+        logger.info(
+            current.isClosing()
+                ? "DBOS is already shutting down"
+                : "DBOS is still launching, so shutdown did nothing");
+        return;
       }
     }
     logger.info("DBOS shut down");
