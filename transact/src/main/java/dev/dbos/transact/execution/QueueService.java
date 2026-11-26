@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
@@ -39,7 +40,6 @@ public class QueueService implements AutoCloseable {
   private static final double BACKOFF_GROWTH_FACTOR = 2.0;
   private static final double BACKOFF_SCALEBACK_FACTOR = 0.9;
   private static final long DB_QUEUE_SUPERVISOR_INTERVAL_SEC = 1;
-  private static final long TIMEOUT_SWEEP_INTERVAL_MS = 1_000;
   private static final int TIMEOUT_SWEEP_BATCH_SIZE = 1_000;
   // One claim round trip plus dispatching what it claimed, with room for a slow database.
   private static final Duration PAUSE_DRAIN_TIMEOUT = Duration.ofSeconds(30);
@@ -137,9 +137,6 @@ public class QueueService implements AutoCloseable {
       scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         this.listenQueues = listenQueues;
-        scheduler.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
-        scheduler.scheduleWithFixedDelay(
-            this::cancelTimedOutWorkflows, 0, TIMEOUT_SWEEP_INTERVAL_MS, TimeUnit.MILLISECONDS);
         scheduler.scheduleAtFixedRate(
             this::pollDynamicQueues, 0, DB_QUEUE_SUPERVISOR_INTERVAL_SEC, TimeUnit.SECONDS);
         for (var queue : staticQueues) {
@@ -567,13 +564,13 @@ public class QueueService implements AutoCloseable {
 
   // ── Shared helpers ────────────────────────────────────────────────────────
 
-  // Package-private so a test can drive one transition directly.
+  // The background jobs run the two below, so only one of an application version's processes runs
+  // them at a time; they keep the pause gate, which tests rely on. Package-private so a test can
+  // drive one transition directly.
   void transitionDelayedWorkflows() {
     if (!beginPass()) return;
     try {
       systemDatabase.transitionDelayedWorkflows();
-    } catch (Throwable e) {
-      logger.error("Exception transitioning delayed workflows", e);
     } finally {
       endPass();
     }
@@ -583,12 +580,12 @@ public class QueueService implements AutoCloseable {
    * Cancels this application's workflows once they are past their deadline, whether they are
    * running, waiting on a queue, delayed, or were left PENDING by an executor that died.
    *
-   * <p>Every executor runs the sweep, and the database decides which rows have expired, on its own
-   * clock. A workflow running in this process is also cancelled by its own timer in {@link
-   * DBOSExecutor}, which measures from a reading of the same clock, so the two agree; the timer
-   * only makes the cancellation prompt between sweeps.
+   * <p>The process holding the background-jobs lock runs the sweep, and the database decides which
+   * rows have expired, on its own clock. A workflow running in this process is also cancelled by
+   * its own timer in {@link DBOSExecutor}, which measures from a reading of the same clock, so the
+   * two agree; the timer only makes the cancellation prompt between sweeps.
    */
-  void cancelTimedOutWorkflows() {
+  void cancelTimedOutWorkflows(BooleanSupplier stopping) {
     if (!beginPass()) return;
     try {
       // A full batch may have left more behind, so sweep again at once rather than a second later.
@@ -598,11 +595,9 @@ public class QueueService implements AutoCloseable {
         for (var workflowId : cancelled) {
           logger.info("Workflow {} timed out", workflowId);
         }
-      } while (cancelled.size() == TIMEOUT_SWEEP_BATCH_SIZE && !paused.get() && !isStopped());
-    } catch (Throwable e) {
-      if (!isStopped()) {
-        logger.warn("Failed to cancel timed-out workflows", e);
-      }
+      } while (cancelled.size() == TIMEOUT_SWEEP_BATCH_SIZE
+          && !paused.get()
+          && !stopping.getAsBoolean());
     } finally {
       endPass();
     }

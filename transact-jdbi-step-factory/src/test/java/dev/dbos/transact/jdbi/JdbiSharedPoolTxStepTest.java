@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -81,7 +83,9 @@ class JdbiSharedPoolTxStepTest {
     hikari.setJdbcUrl(pgContainer.jdbcUrl());
     hikari.setUsername(pgContainer.username());
     hikari.setPassword(pgContainer.password());
-    hikari.setMaximumPoolSize(POOL_SIZE);
+    // One more for the background-jobs lock, which this process holds while it runs, so the steps
+    // hold every other connection.
+    hikari.setMaximumPoolSize(POOL_SIZE + 1);
     hikari.setConnectionTimeout(5_000);
 
     try (var pool = new HikariDataSource(hikari)) {
@@ -92,6 +96,7 @@ class JdbiSharedPoolTxStepTest {
         var impl = new JdbiSharedPoolServiceImpl(factory, new CyclicBarrier(POOL_SIZE));
         var proxy = dbos.registerProxy(JdbiSharedPoolService.class, impl);
         dbos.launch();
+        DBOSExecutorTestAccess.awaitBackgroundJobLock(DBOSTestAccess.getDbosExecutor(dbos));
 
         var handles = new ArrayList<WorkflowHandle<String, Exception>>();
         for (int i = 0; i < POOL_SIZE; i++) {

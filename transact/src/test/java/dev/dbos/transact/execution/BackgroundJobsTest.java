@@ -75,6 +75,36 @@ class BackgroundJobsTest {
     return SystemDatabase.sanitizeSchema(dbosConfig.databaseSchema());
   }
 
+  private record Run(String process, long at) {}
+
+  @Test
+  void anErrorTakingTheLockDoesNotEndTheLoop() throws Exception {
+    openSystemDatabases();
+    var failing = spy(local);
+    doThrow(new NoClassDefFoundError("injected"))
+        .doCallRealMethod()
+        .when(failing)
+        .backgroundJobLock(any(), any());
+    var runs = new AtomicInteger();
+    var stop = new CountDownLatch(1);
+    var loop =
+        new BackgroundJobs(
+            failing,
+            "error_jobs",
+            Duration.ofMillis(100),
+            Map.of("job", runs::incrementAndGet),
+            stop,
+            BackgroundJobs.HOLD,
+            BackgroundJobLock.DEFAULT_IDLE_TIMEOUT);
+    try {
+      loop.start();
+      waitUntil(() -> runs.get() > 0, Duration.ofSeconds(10), "the loop ended");
+    } finally {
+      stop.countDown();
+      loop.thread().join(10_000);
+    }
+  }
+
   @Test
   void anErrorTakingTheLockReturnsItsConnection() throws Exception {
     Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "CockroachDB takes no connection");
@@ -115,6 +145,123 @@ class BackgroundJobsTest {
               }
               return method.invoke(target, args);
             });
+  }
+
+  @Test
+  void backgroundJobsRunOncePerIntervalAcrossProcesses() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "CockroachDB grants every lock");
+    openSystemDatabases();
+    var interval = Duration.ofMillis(200);
+    var runs = Collections.synchronizedList(new ArrayList<Run>());
+    var stops = Map.of("local", new CountDownLatch(1), "peer", new CountDownLatch(1));
+    var loops = new LinkedHashMap<String, BackgroundJobs>();
+    for (var entry : Map.of("local", local, "peer", peer).entrySet()) {
+      var name = entry.getKey();
+      var jobs = new LinkedHashMap<String, Runnable>();
+      jobs.put(
+          "failing",
+          () -> {
+            throw new RuntimeException("injected job failure");
+          });
+      jobs.put("job", () -> runs.add(new Run(name, System.nanoTime())));
+      loops.put(
+          name,
+          new BackgroundJobs(
+              entry.getValue(),
+              "test_jobs",
+              interval,
+              jobs,
+              stops.get(name),
+              BackgroundJobs.HOLD,
+              BackgroundJobLock.DEFAULT_IDLE_TIMEOUT));
+    }
+    try {
+      loops.values().forEach(BackgroundJobs::start);
+      waitUntil(() -> runs.size() >= 8, Duration.ofSeconds(10), "the jobs ran too few times");
+      // A holder keeps the lock an interval past its start; the bounds allow for timer slack.
+      List<Run> snapshot;
+      synchronized (runs) {
+        snapshot = List.copyOf(runs);
+      }
+      var first = snapshot.get(0).at();
+      var last = snapshot.get(snapshot.size() - 1).at();
+      assertTrue(
+          last - first >= (snapshot.size() - 1) * interval.toNanos() * 0.9, snapshot.toString());
+      for (int i = 1; i < snapshot.size(); i++) {
+        assertTrue(
+            snapshot.get(i).at() - snapshot.get(i - 1).at() >= interval.toNanos() / 2,
+            snapshot.toString());
+      }
+
+      var holder = snapshot.get(snapshot.size() - 1).process();
+      var other = holder.equals("local") ? "peer" : "local";
+      stops.get(holder).countDown();
+      loops.get(holder).thread().join(10_000);
+
+      waitUntil(
+          () -> runs.get(runs.size() - 1).process().equals(other),
+          Duration.ofSeconds(10),
+          "the other process never took over");
+    } finally {
+      stops.values().forEach(CountDownLatch::countDown);
+      for (var loop : loops.values()) {
+        loop.thread().join(10_000);
+      }
+    }
+  }
+
+  @Test
+  void backgroundJobsHoldOneLockSessionAcrossIntervals() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "CockroachDB grants every lock");
+    openSystemDatabases();
+    // Short, so a hold that went idle instead of renewing would lose its session mid-test.
+    var idleTimeout = Duration.ofMillis(500);
+    var runs = new AtomicInteger();
+    var stop = new CountDownLatch(1);
+    var loop =
+        new BackgroundJobs(
+            local,
+            "hold_jobs",
+            Duration.ofMillis(100),
+            Map.of("job", runs::incrementAndGet),
+            stop,
+            Duration.ofSeconds(3),
+            idleTimeout);
+    try {
+      loop.start();
+      waitUntil(() -> runs.get() > 0, Duration.ofSeconds(5), "the loop never took the lock");
+      long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+      while (System.nanoTime() - deadline < 0) {
+        try (var lock = peer.backgroundJobLock("hold_jobs", idleTimeout)) {
+          assertFalse(lock.acquired(), "a peer found the lock free mid-hold");
+        }
+      }
+      assertTrue(runs.get() >= 10, "runs: " + runs.get());
+    } finally {
+      stop.countDown();
+      loop.thread().join(10_000);
+    }
+  }
+
+  @Test
+  void theBackgroundJobsLockIsPerApplicationVersion() throws Exception {
+    Assumptions.assumeFalse(PgContainer.USE_COCKROACH_DB, "CockroachDB grants every lock");
+    // The key every SDK derives from dbos.background_job.<schema>.<application>.<job name>.
+    assertEquals(
+        -5306064562154522353L,
+        AdvisoryLocks.backgroundJobKey("dbos", "transact-java-test", "background_jobs.v1"));
+    for (var version : List.of("v1", "v2")) {
+      try (var instance = new DBOS(dbosConfig.withAppVersion(version))) {
+        instance.launch();
+        var exec = DBOSTestAccess.getDbosExecutor(instance);
+        var lockName = exec.getBackgroundJobs().lockName();
+        assertEquals("background_jobs." + version, lockName);
+        // The process holds that very lock in the database.
+        var key = AdvisoryLocks.backgroundJobKey(schema(), dbosConfig.appName(), lockName);
+        DBOSExecutorTestAccess.awaitBackgroundJobLock(exec);
+        assertEquals(1, lockHolderStates(key).size());
+      }
+    }
   }
 
   @Test
@@ -248,4 +395,24 @@ class BackgroundJobsTest {
     }
   }
 
+  private List<String> lockHolderStates(long key) throws Exception {
+    try (var conn =
+            DriverManager.getConnection(
+                pgContainer.jdbcUrl(), pgContainer.username(), pgContainer.password());
+        var stmt =
+            conn.prepareStatement(
+                "SELECT a.state FROM pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid"
+                    + " WHERE l.locktype = 'advisory' AND l.granted AND l.classid::int8 = ?"
+                    + " AND l.objid::int8 = ? AND l.objsubid = 1")) {
+      stmt.setLong(1, (key >> 32) & 0xFFFFFFFFL);
+      stmt.setLong(2, key & 0xFFFFFFFFL);
+      var states = new ArrayList<String>();
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          states.add(rs.getString(1));
+        }
+      }
+      return states;
+    }
+  }
 }

@@ -8,6 +8,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.execution.DBOSExecutorTestAccess;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -82,6 +83,10 @@ class SharedPoolTxStepTest {
 
   static final int POOL_SIZE = 3;
 
+  // The background-jobs lock holds a connection of its own, so the steps hold all the others. It
+  // takes none on CockroachDB.
+  static final int CONNECTIONS = PgContainer.USE_COCKROACH_DB ? POOL_SIZE : POOL_SIZE + 1;
+
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   // A JDBC factory that cannot say which pool it uses, as a Jdbi factory created without one.
@@ -106,7 +111,7 @@ class SharedPoolTxStepTest {
         PgContainer.USE_COCKROACH_DB,
         "PG-only: CockroachDB cannot identify its database, so steps there take a second connection");
     var probed = runHoldingThePool(SharedPoolTxStepTest::hidingItsPool);
-    assertTrue(probed >= 1 && probed <= POOL_SIZE, "probed " + probed + " times");
+    assertTrue(probed >= 1 && probed <= CONNECTIONS, "probed " + probed + " times");
   }
 
   @Test
@@ -128,7 +133,7 @@ class SharedPoolTxStepTest {
               return handles;
             });
     // 90 steps, but each physical connection is probed once.
-    assertTrue(probed >= 1 && probed <= POOL_SIZE, "probed " + probed + " times");
+    assertTrue(probed >= 1 && probed <= CONNECTIONS, "probed " + probed + " times");
   }
 
   @Test
@@ -200,7 +205,7 @@ class SharedPoolTxStepTest {
     hikari.setJdbcUrl(pgContainer.jdbcUrl());
     hikari.setUsername(pgContainer.username());
     hikari.setPassword(pgContainer.password());
-    hikari.setMaximumPoolSize(POOL_SIZE);
+    hikari.setMaximumPoolSize(CONNECTIONS);
     hikari.setConnectionTimeout(5_000);
 
     try (var pool = new HikariDataSource(hikari)) {
@@ -211,6 +216,7 @@ class SharedPoolTxStepTest {
             new SharedPoolServiceImpl(newFactory.apply(dbos, pool), new CountDownLatch(POOL_SIZE));
         var proxy = dbos.registerProxy(SharedPoolService.class, impl);
         dbos.launch();
+        DBOSExecutorTestAccess.awaitBackgroundJobLock(DBOSTestAccess.getDbosExecutor(dbos));
 
         var handles = starter.start(dbos, proxy);
         assertTimeoutPreemptively(

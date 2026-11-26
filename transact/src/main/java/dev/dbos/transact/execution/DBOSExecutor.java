@@ -12,6 +12,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.database.BackgroundJobLock;
 import dev.dbos.transact.database.ChildOf;
 import dev.dbos.transact.database.DebounceCaller;
 import dev.dbos.transact.database.ExternalState;
@@ -86,6 +87,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -96,6 +98,7 @@ import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -206,7 +209,10 @@ public class DBOSExecutor implements AutoCloseable {
   private final @Nullable ConductorOptions conductorOptions;
   private @Nullable EnterpriseProvider enterpriseProvider;
   private @Nullable SuspendBackend suspendBackend;
-  private final AtomicBoolean suspendPassRunning = new AtomicBoolean();
+  // Set after the shutdown wait: the background jobs stop on it, so a draining holder of the
+  // background-jobs lock still sweeps.
+  private final CountDownLatch backgroundStop = new CountDownLatch(1);
+  private @Nullable BackgroundJobs backgroundJobs;
   private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
@@ -216,9 +222,6 @@ public class DBOSExecutor implements AutoCloseable {
   // How often the system database's identity is read again; see
   // SystemDatabase.refreshDatabaseIdentity.
   private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
-
-  /** How often each process with suspend mode on looks for SUSPENDED workflows that are due. */
-  private static final Duration SUSPENDED_TRANSITION_INTERVAL = Duration.ofSeconds(1);
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -407,15 +410,8 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queueMap.values(), config.listenQueues());
 
-      if (suspendBackend != null) {
-        // Handed to the executor service, as the identity refresh is: the pass waits for a pool
-        // connection, and this scheduler also fires workflow timeouts.
-        timeoutScheduler.scheduleWithFixedDelay(
-            () -> executorService.submit(this::transitionSuspendedWorkflows),
-            SUSPENDED_TRANSITION_INTERVAL.toMillis(),
-            SUSPENDED_TRANSITION_INTERVAL.toMillis(),
-            TimeUnit.MILLISECONDS);
-      }
+      backgroundJobs = newBackgroundJobs(queueService);
+      backgroundJobs.start();
 
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
@@ -655,6 +651,28 @@ public class DBOSExecutor implements AutoCloseable {
 
   private List<String> activeWorkflowIds() {
     return activeWorkflows.keySet().stream().map(ActiveExecution::workflowId).toList();
+  }
+
+  private BackgroundJobs newBackgroundJobs(QueueService queues) {
+    var jobs = new LinkedHashMap<String, Runnable>();
+    jobs.put("delayed_workflows", queues::transitionDelayedWorkflows);
+    jobs.put("workflow_timeout", () -> queues.cancelTimedOutWorkflows(this::backgroundStopped));
+    var suspend = suspendBackend;
+    if (suspend != null) {
+      jobs.put("suspended_workflows", suspend::transitionSuspendedWorkflows);
+    }
+    return new BackgroundJobs(
+        systemDatabase,
+        BackgroundJobs.lockName(appVersion),
+        BackgroundJobs.INTERVAL,
+        jobs,
+        backgroundStop,
+        BackgroundJobs.HOLD,
+        BackgroundJobLock.DEFAULT_IDLE_TIMEOUT);
+  }
+
+  private boolean backgroundStopped() {
+    return backgroundStop.getCount() == 0;
   }
 
   private static void closeStep(List<Throwable> failures, Runnable step) {
@@ -974,6 +992,10 @@ public class DBOSExecutor implements AutoCloseable {
     return schedulerService;
   }
 
+  @Nullable BackgroundJobs getBackgroundJobs() {
+    return backgroundJobs;
+  }
+
   // executor metadata
 
   public String appId() {
@@ -1203,21 +1225,6 @@ public class DBOSExecutor implements AutoCloseable {
               + " the DBOS configuration.");
     }
     return suspendBackend;
-  }
-
-  /** One pass of the job that re-enqueues SUSPENDED workflows that are due. */
-  private void transitionSuspendedWorkflows() {
-    // One pass at a time in this process, so a slow one is not stacked on by the next tick.
-    if (!suspendPassRunning.compareAndSet(false, true)) {
-      return;
-    }
-    try {
-      Objects.requireNonNull(suspendBackend).transitionSuspendedWorkflows();
-    } catch (RuntimeException e) {
-      logger.warn("Re-enqueuing suspended workflows failed; the next pass retries", e);
-    } finally {
-      suspendPassRunning.set(false);
-    }
   }
 
   public void setEvent(String key, Object value, SerializationStrategy serialization) {
