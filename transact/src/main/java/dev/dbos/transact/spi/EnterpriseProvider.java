@@ -34,8 +34,8 @@ public interface EnterpriseProvider {
 
   /**
    * Builds suspend mode. DBOS calls this during launch when {@code suspendMode} is set, once the
-   * system database is open, and starts calling {@link SuspendBackend#transitionSuspendedWorkflows}
-   * once queues have started.
+   * system database is open. Its background jobs then call {@link
+   * SuspendBackend#transitionSuspendedWorkflows}; see there for which process does.
    *
    * @param engine the DBOS instance, as suspend mode may use it
    * @return suspend mode for the instance
