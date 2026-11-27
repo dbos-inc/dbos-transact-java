@@ -8,6 +8,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.workflow.AutoUpgrade;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -161,7 +162,8 @@ public class DBOSIntegration {
         target,
         method,
         wfTag.maxRecoveryAttempts(),
-        wfTag.serializationStrategy());
+        wfTag.serializationStrategy(),
+        wfTag.autoUpgrade());
   }
 
   /**
@@ -188,6 +190,27 @@ public class DBOSIntegration {
       @NonNull Method method,
       @Nullable Integer maxRecoveryAttempts,
       @Nullable SerializationStrategy serializationStrategy) {
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        maxRecoveryAttempts,
+        serializationStrategy,
+        null);
+  }
+
+  /** As the registration above, with the workflow's auto-upgrade enrollment. */
+  public RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy,
+      @Nullable AutoUpgrade autoUpgrade) {
     if (executorSupplier.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
@@ -199,7 +222,8 @@ public class DBOSIntegration {
         target,
         method,
         maxRecoveryAttempts,
-        serializationStrategy);
+        serializationStrategy,
+        autoUpgrade);
   }
 
   /**

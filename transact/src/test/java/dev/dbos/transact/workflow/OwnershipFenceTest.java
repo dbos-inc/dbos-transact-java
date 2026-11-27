@@ -49,7 +49,7 @@ public class OwnershipFenceTest {
 
   @BeforeEach
   void beforeEach() {
-    dbos = new DBOS(pgContainer.dbosConfig().withEnablePatching());
+    dbos = new DBOS(pgContainer.dbosConfig());
     dataSource = pgContainer.dataSource();
 
     impl = new FenceServiceImpl(dbos, new JdbcStepFactory(dbos, dataSource));

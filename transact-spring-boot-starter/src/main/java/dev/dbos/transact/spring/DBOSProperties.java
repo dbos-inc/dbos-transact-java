@@ -34,7 +34,10 @@ public class DBOSProperties {
    */
   private String transactEnterpriseKey;
 
-  /** Whether to enable workflow patching. Defaults to {@code false}. */
+  /**
+   * Deprecated: patching no longer requires it. When {@code true}, pins the application version to
+   * {@code PATCHING_ENABLED}. Defaults to {@code false}.
+   */
   private boolean enablePatching = false;
 
   /** Names of queues this executor should listen on. */

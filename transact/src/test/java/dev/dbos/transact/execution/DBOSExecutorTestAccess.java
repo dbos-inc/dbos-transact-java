@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.conductor.ConductorOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.internal.AutoUpgradeLoop;
 import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
@@ -51,6 +52,15 @@ public class DBOSExecutorTestAccess {
 
   public static EnterpriseProvider getEnterpriseProvider(DBOSExecutor exec) {
     return exec.enterpriseProvider();
+  }
+
+  public static AutoUpgradeLoop getAutoUpgradeLoop(DBOSExecutor exec) {
+    return exec.autoUpgradeLoop();
+  }
+
+  /** The thread of the executor's background-jobs loop. */
+  public static Thread backgroundJobsThread(DBOSExecutor exec) {
+    return exec.getBackgroundJobs().thread();
   }
 
   /**

@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.workflow.AutoUpgrade;
 import dev.dbos.transact.workflow.SerializationStrategy;
 
 import java.lang.reflect.InvocationTargetException;
@@ -16,13 +17,15 @@ public record RegisteredWorkflow(
     Object target,
     Method workflowMethod,
     int maxRecoveryAttempts,
-    SerializationStrategy serializationStrategy) {
+    SerializationStrategy serializationStrategy,
+    AutoUpgrade autoUpgrade) {
 
   public RegisteredWorkflow {
     Objects.requireNonNull(workflowName, "workflow name must not be null");
     Objects.requireNonNull(className, "workflow class name must not be null");
     Objects.requireNonNull(target, "workflow target object must not be null");
     Objects.requireNonNull(workflowMethod, "workflow method must not be null");
+    autoUpgrade = Objects.requireNonNullElse(autoUpgrade, AutoUpgrade.DEFAULT);
   }
 
   public static String fullyQualifiedName(@NonNull String workflowName, @NonNull String className) {

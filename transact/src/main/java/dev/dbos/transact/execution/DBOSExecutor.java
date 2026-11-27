@@ -35,6 +35,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.exceptions.DBOSWorkflowIdInUseException;
 import dev.dbos.transact.exceptions.DBOSWorkflowSuspendedException;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.AutoUpgradeLoop;
 import dev.dbos.transact.internal.DBOSEnterpriseEngine;
 import dev.dbos.transact.internal.EnterpriseProviders;
 import dev.dbos.transact.internal.Entitlements;
@@ -44,10 +45,12 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.spi.EnrolledWorkflow;
 import dev.dbos.transact.spi.EnterpriseProvider;
 import dev.dbos.transact.spi.SuspendBackend;
 import dev.dbos.transact.spi.WorkflowFork;
 import dev.dbos.transact.spi.WorkflowRewind;
+import dev.dbos.transact.workflow.AutoUpgrade;
 import dev.dbos.transact.workflow.DebounceResult;
 import dev.dbos.transact.workflow.Debouncer.DebounceIds;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -88,6 +91,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -215,6 +219,7 @@ public class DBOSExecutor implements AutoCloseable {
   // Held while this process holds the background-jobs lock.
   private final BackgroundLease backgroundLease = new BackgroundLease();
   private @Nullable BackgroundJobs backgroundJobs;
+  private @Nullable AutoUpgradeLoop autoUpgradeLoop;
   private ConductorConnection conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
@@ -225,6 +230,7 @@ public class DBOSExecutor implements AutoCloseable {
   // SystemDatabase.refreshDatabaseIdentity.
   private static final Duration DATABASE_IDENTITY_REFRESH = Duration.ofMinutes(1);
 
+  @SuppressWarnings("removal") // reads the deprecated enablePatching setting
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
     this.serializer = config.serializer();
@@ -268,8 +274,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     // Every Transact Enterprise feature needs Conductor to report the organization entitled to it.
     // Checked before anything is started, so a refusal fails launch cleanly.
+    var features = Entitlements.enabledFeatures(config);
     Entitlements.require(
-        Entitlements.enabledFeatures(config),
+        features,
         config.transactEnterpriseKey(),
         config.conductorKey(),
         config.conductorDomain(),
@@ -281,8 +288,16 @@ public class DBOSExecutor implements AutoCloseable {
     conductorOptions = conductorOptions(config, dbosCloud);
     if (conductorOptions != null) {
       enterpriseProvider = EnterpriseProviders.load(EnterpriseProviders.CONDUCTOR);
-    } else if (config.suspendMode()) {
-      enterpriseProvider = EnterpriseProviders.load(Entitlements.SUSPEND_WORKFLOWS.description());
+    } else if (!features.isEmpty()) {
+      enterpriseProvider = EnterpriseProviders.load(features.get(0).description());
+    }
+
+    if (config.enablePatching()) {
+      logger.warn(
+          "DBOSConfig.enablePatching is deprecated and will be removed in a future release."
+              + " DBOS.patch and DBOS.deprecatePatch no longer require it. To keep every"
+              + " deployment on one application version, as the flag does, set appVersion"
+              + " explicitly.");
     }
 
     if (!dbosCloud) {
@@ -326,6 +341,23 @@ public class DBOSExecutor implements AutoCloseable {
       this.stepCheckpointStores = stepCheckpointStores;
       this.keepCompletedStepCheckpoints = keepCompletedStepCheckpoints;
       this.alertHandler = alertHandler;
+
+      // A workflow can enroll through its own registration, which only start() sees; the config
+      // flag was checked when this executor was built. Checked before anything is started.
+      var autoUpgrade = !autoUpgradableWorkflows().isEmpty();
+      if (autoUpgrade) {
+        if (!config.autoUpgrade()) {
+          Entitlements.require(
+              List.of(Entitlements.AUTO_UPGRADE),
+              config.transactEnterpriseKey(),
+              config.conductorKey(),
+              config.conductorDomain(),
+              dbosCloud);
+        }
+        if (enterpriseProvider == null) {
+          enterpriseProvider = EnterpriseProviders.load(Entitlements.AUTO_UPGRADE.description());
+        }
+      }
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         // The resolved name, not config.appName(): on DBOS Cloud the executor takes its name
@@ -378,6 +410,17 @@ public class DBOSExecutor implements AutoCloseable {
         if (config.suspendMode()) {
           suspendBackend = enterpriseProvider.createSuspendBackend(engine);
         }
+        if (autoUpgrade) {
+          var grace =
+              Objects.requireNonNullElse(
+                  config.autoUpgradeGrace(), DBOSConfig.DEFAULT_AUTO_UPGRADE_GRACE);
+          var interval =
+              Objects.requireNonNullElse(
+                  config.autoUpgradeInterval(), DBOSConfig.DEFAULT_AUTO_UPGRADE_INTERVAL);
+          autoUpgradeLoop =
+              new AutoUpgradeLoop(
+                  enterpriseProvider.createAutoUpgradePass(engine, grace), interval);
+        }
       }
       // Handed to the executor service: a refresh waits for a pool connection, and this scheduler
       // also fires workflow timeouts.
@@ -414,6 +457,10 @@ public class DBOSExecutor implements AutoCloseable {
 
       backgroundJobs = newBackgroundJobs(queueService);
       backgroundJobs.start();
+
+      if (autoUpgradeLoop != null) {
+        autoUpgradeLoop.start();
+      }
 
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
@@ -486,6 +533,26 @@ public class DBOSExecutor implements AutoCloseable {
     return enterpriseProvider;
   }
 
+  @Nullable AutoUpgradeLoop autoUpgradeLoop() {
+    return autoUpgradeLoop;
+  }
+
+  /** The registered workflows enrolled in auto-upgrade, by class name and workflow name. */
+  public List<EnrolledWorkflow> autoUpgradableWorkflows() {
+    var workflows = workflowMap;
+    if (workflows == null) {
+      return List.of();
+    }
+    var enrolled = new LinkedHashSet<EnrolledWorkflow>();
+    for (var workflow : workflows.values()) {
+      var flag = workflow.autoUpgrade();
+      if (flag == AutoUpgrade.ENABLED || (flag == AutoUpgrade.DEFAULT && config.autoUpgrade())) {
+        enrolled.add(new EnrolledWorkflow(workflow.className(), workflow.workflowName()));
+      }
+    }
+    return List.copyOf(enrolled);
+  }
+
   @Override
   public void close() {
     close(Duration.ZERO);
@@ -537,6 +604,14 @@ public class DBOSExecutor implements AutoCloseable {
       }
       if (queues != null) {
         closeStep(failures, queues::close);
+      }
+
+      // After the wait: a draining executor can hold the background-jobs lock, which keeps every
+      // other from upgrading. Before the lock goes, and while the system database is open.
+      var upgradeLoop = autoUpgradeLoop;
+      autoUpgradeLoop = null;
+      if (upgradeLoop != null) {
+        closeStep(failures, upgradeLoop::stop);
       }
 
       // After the wait, so a draining holder of the background-jobs lock keeps sweeping for every
@@ -1029,6 +1104,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   BackgroundLease backgroundLease() {
     return backgroundLease;
+  }
+
+  /** Whether this process holds its application version's background-jobs lock. */
+  public boolean holdsBackgroundJobsLock() {
+    return backgroundLease.held();
   }
 
   // executor metadata
@@ -1967,10 +2047,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public boolean patch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.patch must be called from a workflow");
@@ -1987,10 +2063,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public boolean deprecatePatch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
