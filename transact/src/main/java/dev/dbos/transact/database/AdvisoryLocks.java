@@ -62,6 +62,15 @@ public final class AdvisoryLocks {
   }
 
   /**
+   * The lock that lets one of an application's processes run a background job at a time, from the
+   * plain name {@code dbos.background_job.<schema>.<application name or ''>.<job name>}.
+   */
+  public static long backgroundJobKey(String schema, @Nullable String appName, String jobName) {
+    return lockKey(
+        "dbos.background_job.%s.%s.%s".formatted(schema, appName == null ? "" : appName, jobName));
+  }
+
+  /**
    * The first half of a batched partition sweep's two-int lock keys, naming the queue: bytes 4-7 of
    * the SHA-256 of its lock name, big-endian signed. That is the low half of {@link #lockKey}'s
    * value for the same name.

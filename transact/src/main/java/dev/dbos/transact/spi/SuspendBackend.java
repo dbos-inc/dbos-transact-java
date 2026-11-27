@@ -63,8 +63,10 @@ public interface SuspendBackend {
    * One pass of the background job that re-enqueues this application's SUSPENDED workflows whose
    * wake time has come: the recv's timeout, the end of the sleep, or zero, which a send on the
    * awaited topic sets. Each goes back on the queue it was on, or the internal queue if it had
-   * none. DBOS calls this on a fixed delay in every process with suspend mode on; the
-   * implementation decides which of them does the work.
+   * none. DBOS calls this once an interval in the process that holds its application version's
+   * background-jobs lock, which may overlap with another's for a moment, and only if that process
+   * has suspend mode on. A version that mixes processes with and without it runs no pass while one
+   * without it holds the lock.
    */
   void transitionSuspendedWorkflows();
 }

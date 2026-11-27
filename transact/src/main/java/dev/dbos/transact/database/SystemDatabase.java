@@ -1792,6 +1792,17 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(ctx));
   }
 
+  /**
+   * Tries the lock that lets one of this application's processes run the background job {@code
+   * jobName} at a time. The returned lock says whether it was taken, and must be closed either way;
+   * closing releases it. Not retried: the caller's loop tries again.
+   */
+  public BackgroundJobLock backgroundJobLock(String jobName, Duration idleTimeout)
+      throws SQLException {
+    ctx.checkClosed();
+    return BackgroundJobLock.tryAcquire(ctx, jobName, idleTimeout);
+  }
+
   /** Rows deleted per committed transaction. Matches Python's DEFAULT_GC_BATCH_SIZE. */
   public static final int DEFAULT_GC_BATCH_SIZE = 50_000;
 

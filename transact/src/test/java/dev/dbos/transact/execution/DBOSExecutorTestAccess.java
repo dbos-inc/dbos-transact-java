@@ -25,6 +25,21 @@ public class DBOSExecutorTestAccess {
     return exec.getSchedulerService();
   }
 
+  /** Whether the executor holds the background-jobs lock. */
+  public static boolean holdsBackgroundLease(DBOSExecutor exec) {
+    return exec.backgroundLease().held();
+  }
+
+  /** Waits until the executor holds the background-jobs lock, and the connection it keeps. */
+  public static void awaitBackgroundLease(DBOSExecutor exec) throws InterruptedException {
+    for (int i = 0; i < 200 && !exec.backgroundLease().held(); i++) {
+      Thread.sleep(50);
+    }
+    if (!exec.backgroundLease().held()) {
+      throw new IllegalStateException("the executor never took the background-jobs lock");
+    }
+  }
+
   /** Tasks queued on the executor's timeout scheduler: workflow timers and periodic upkeep. */
   public static int queuedTimeoutTasks(DBOSExecutor exec) {
     return ((ScheduledThreadPoolExecutor) exec.timeoutScheduler()).getQueue().size();
