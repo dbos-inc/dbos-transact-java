@@ -17,8 +17,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,6 +52,10 @@ public class QueueService implements AutoCloseable {
   // pause() sees the pass: none can slip in behind a pause() that found nothing in flight.
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final AtomicInteger passesInFlight = new AtomicInteger();
+
+  // Set once draining: no listener claims again, while one that has claimed still dispatches.
+  private volatile boolean draining;
+  private volatile @Nullable ScheduledExecutorService drainingService;
 
   private final Set<String> dbListeningQueues = ConcurrentHashMap.newKeySet();
   private volatile Map<String, Queue> dynamicQueueMap = Map.of();
@@ -128,7 +132,9 @@ public class QueueService implements AutoCloseable {
   public void start(Collection<Queue> staticQueues, Set<String> listenQueues) {
     if (this.execServiceRef.get() == null) {
       var procCount = Runtime.getRuntime().availableProcessors();
-      var scheduler = Executors.newScheduledThreadPool(procCount);
+      var scheduler = new ScheduledThreadPoolExecutor(procCount);
+      // Polls still waiting their interval end with a drain rather than holding it up.
+      scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         this.listenQueues = listenQueues;
         scheduler.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
@@ -143,9 +149,30 @@ public class QueueService implements AutoCloseable {
     }
   }
 
+  /**
+   * Stops claiming queued workflows, and waits for the passes in flight, uninterrupted, to dispatch
+   * what they claimed.
+   *
+   * @return false if a pass was still in flight after {@code timeout}; {@link #close()} interrupts
+   *     it
+   */
+  boolean drain(long timeout, TimeUnit unit) throws InterruptedException {
+    draining = true;
+    var scheduler = this.execServiceRef.getAndSet(null);
+    if (scheduler == null) {
+      return true;
+    }
+    drainingService = scheduler;
+    scheduler.shutdown();
+    return scheduler.awaitTermination(timeout, unit);
+  }
+
   @Override
   public void close() {
     var scheduler = this.execServiceRef.getAndSet(null);
+    if (scheduler == null) {
+      scheduler = drainingService;
+    }
     if (scheduler != null) {
       var notRun = scheduler.shutdownNow();
       logger.debug("Shutting down queue service. {} task(s) not run.", notRun.size());
@@ -268,8 +295,9 @@ public class QueueService implements AutoCloseable {
       long running = dbosExecutor.queueActiveCount(queue.name());
       long claimed = 0;
       for (var partition : partitions) {
-        // A pause refuses every claim from here on, so the rest of the sweep has nothing to do.
-        if (paused.get()) break;
+        // A pause or a drain refuses every claim from here on, so the rest of the sweep has nothing
+        // to do.
+        if (paused.get() || draining) break;
         if (workerBudget(running + claimed) <= 0 || claimed >= queueBudget) break;
         try {
           var result = processPartition(partition, running + claimed);
@@ -304,7 +332,7 @@ public class QueueService implements AutoCloseable {
     void sweepPartitionHeads() {
       long maxTasks = workerBudget(dbosExecutor.queueActiveCount(queue.name()));
       if (maxTasks <= 0) return;
-      if (!beginPass()) return;
+      if (draining || !beginPass()) return;
       try {
         var ownerXid = UUID.randomUUID().toString();
         var workflowIds =
@@ -370,7 +398,7 @@ public class QueueService implements AutoCloseable {
     DequeueResult processPartition(@Nullable String partition, long running) {
       var partitionLog = Objects.requireNonNullElse(partition, "<null>");
       // The claim and the dispatch of what it claimed are one pass: pause() waits for both.
-      if (!beginPass()) return new DequeueResult(List.of(), null);
+      if (draining || !beginPass()) return new DequeueResult(List.of(), null);
       try {
         // The two worker-scoped limits count different things: workerConcurrency bounds the queue
         // across every partition, partitionWorkerConcurrency bounds this partition alone.
