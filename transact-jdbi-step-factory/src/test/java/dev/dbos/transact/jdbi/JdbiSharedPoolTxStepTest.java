@@ -96,7 +96,7 @@ class JdbiSharedPoolTxStepTest {
         var impl = new JdbiSharedPoolServiceImpl(factory, new CyclicBarrier(POOL_SIZE));
         var proxy = dbos.registerProxy(JdbiSharedPoolService.class, impl);
         dbos.launch();
-        DBOSExecutorTestAccess.awaitBackgroundJobLock(DBOSTestAccess.getDbosExecutor(dbos));
+        DBOSExecutorTestAccess.awaitBackgroundLease(DBOSTestAccess.getDbosExecutor(dbos));
 
         var handles = new ArrayList<WorkflowHandle<String, Exception>>();
         for (int i = 0; i < POOL_SIZE; i++) {

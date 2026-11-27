@@ -212,6 +212,8 @@ public class DBOSExecutor implements AutoCloseable {
   // Set after the shutdown wait: the background jobs stop on it, so a draining holder of the
   // background-jobs lock still sweeps.
   private final CountDownLatch backgroundStop = new CountDownLatch(1);
+  // Held while this process holds the background-jobs lock.
+  private final BackgroundLease backgroundLease = new BackgroundLease();
   private @Nullable BackgroundJobs backgroundJobs;
   private ConductorConnection conductor;
   private ExecutorService executorService;
@@ -694,6 +696,7 @@ public class DBOSExecutor implements AutoCloseable {
         BackgroundJobs.lockName(appVersion),
         BackgroundJobs.INTERVAL,
         jobs,
+        backgroundLease,
         backgroundStop,
         BackgroundJobs.HOLD,
         BackgroundJobLock.DEFAULT_IDLE_TIMEOUT);
@@ -1022,6 +1025,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   @Nullable BackgroundJobs getBackgroundJobs() {
     return backgroundJobs;
+  }
+
+  BackgroundLease backgroundLease() {
+    return backgroundLease;
   }
 
   // executor metadata

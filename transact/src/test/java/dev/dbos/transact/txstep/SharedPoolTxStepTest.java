@@ -216,7 +216,7 @@ class SharedPoolTxStepTest {
             new SharedPoolServiceImpl(newFactory.apply(dbos, pool), new CountDownLatch(POOL_SIZE));
         var proxy = dbos.registerProxy(SharedPoolService.class, impl);
         dbos.launch();
-        DBOSExecutorTestAccess.awaitBackgroundJobLock(DBOSTestAccess.getDbosExecutor(dbos));
+        DBOSExecutorTestAccess.awaitBackgroundLease(DBOSTestAccess.getDbosExecutor(dbos));
 
         var handles = starter.start(dbos, proxy);
         assertTimeoutPreemptively(

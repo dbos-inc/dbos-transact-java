@@ -1,11 +1,9 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.conductor.ConductorOptions;
-import dev.dbos.transact.database.BackgroundJobLock;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.spi.EnterpriseProvider;
-import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -27,25 +25,19 @@ public class DBOSExecutorTestAccess {
     return exec.getSchedulerService();
   }
 
+  /** Whether the executor holds the background-jobs lock. */
+  public static boolean holdsBackgroundLease(DBOSExecutor exec) {
+    return exec.backgroundLease().held();
+  }
+
   /** Waits until the executor holds the background-jobs lock, and the connection it keeps. */
-  public static void awaitBackgroundJobLock(DBOSExecutor exec) throws Exception {
-    // CockroachDB grants every try, and keeps no connection for it.
-    if (PgContainer.USE_COCKROACH_DB) {
-      return;
-    }
-    var lockName = exec.getBackgroundJobs().lockName();
-    for (int i = 0; i < 200; i++) {
-      // A try of its own fails only while another holds the lock, here the executor.
-      try (var probe =
-          exec.getSystemDatabase()
-              .backgroundJobLock(lockName, BackgroundJobLock.DEFAULT_IDLE_TIMEOUT)) {
-        if (!probe.acquired()) {
-          return;
-        }
-      }
+  public static void awaitBackgroundLease(DBOSExecutor exec) throws InterruptedException {
+    for (int i = 0; i < 200 && !exec.backgroundLease().held(); i++) {
       Thread.sleep(50);
     }
-    throw new IllegalStateException("the executor never took the background-jobs lock");
+    if (!exec.backgroundLease().held()) {
+      throw new IllegalStateException("the executor never took the background-jobs lock");
+    }
   }
 
   /** Tasks queued on the executor's timeout scheduler: workflow timers and periodic upkeep. */

@@ -144,20 +144,21 @@ class BackgroundJobsTest {
         .doCallRealMethod()
         .when(failing)
         .backgroundJobLock(any(), any());
-    var runs = new AtomicInteger();
+    var lease = new BackgroundLease();
     var stop = new CountDownLatch(1);
     var loop =
         new BackgroundJobs(
             failing,
             "error_jobs",
             Duration.ofMillis(100),
-            Map.of("job", runs::incrementAndGet),
+            Map.of(),
+            lease,
             stop,
             BackgroundJobs.HOLD,
             BackgroundJobLock.DEFAULT_IDLE_TIMEOUT);
     try {
       loop.start();
-      waitUntil(() -> runs.get() > 0, Duration.ofSeconds(10), "the loop ended");
+      waitUntil(lease::held, Duration.ofSeconds(10), "the loop ended");
     } finally {
       stop.countDown();
       loop.thread().join(10_000);
@@ -212,7 +213,10 @@ class BackgroundJobsTest {
     openSystemDatabases();
     var interval = Duration.ofMillis(200);
     var runs = Collections.synchronizedList(new ArrayList<Run>());
+    // Recorded, as the loop catches a job's exceptions: an assert in the job could never fail it.
+    var unheld = Collections.synchronizedList(new ArrayList<String>());
     var stops = Map.of("local", new CountDownLatch(1), "peer", new CountDownLatch(1));
+    var leases = Map.of("local", new BackgroundLease(), "peer", new BackgroundLease());
     var loops = new LinkedHashMap<String, BackgroundJobs>();
     for (var entry : Map.of("local", local, "peer", peer).entrySet()) {
       var name = entry.getKey();
@@ -222,7 +226,15 @@ class BackgroundJobsTest {
           () -> {
             throw new RuntimeException("injected job failure");
           });
-      jobs.put("job", () -> runs.add(new Run(name, System.nanoTime())));
+      jobs.put(
+          "job",
+          () -> {
+            // A holder's lease is held while its jobs run.
+            if (!leases.get(name).held()) {
+              unheld.add(name);
+            }
+            runs.add(new Run(name, System.nanoTime()));
+          });
       loops.put(
           name,
           new BackgroundJobs(
@@ -230,6 +242,7 @@ class BackgroundJobsTest {
               "test_jobs",
               interval,
               jobs,
+              leases.get(name),
               stops.get(name),
               BackgroundJobs.HOLD,
               BackgroundJobLock.DEFAULT_IDLE_TIMEOUT));
@@ -237,6 +250,7 @@ class BackgroundJobsTest {
     try {
       loops.values().forEach(BackgroundJobs::start);
       waitUntil(() -> runs.size() >= 8, Duration.ofSeconds(10), "the jobs ran too few times");
+      assertEquals(List.of(), List.copyOf(unheld));
       // A holder keeps the lock an interval past its start; the bounds allow for timer slack.
       List<Run> snapshot;
       synchronized (runs) {
@@ -256,9 +270,10 @@ class BackgroundJobsTest {
       var other = holder.equals("local") ? "peer" : "local";
       stops.get(holder).countDown();
       loops.get(holder).thread().join(10_000);
+      assertFalse(leases.get(holder).held());
 
       waitUntil(
-          () -> runs.get(runs.size() - 1).process().equals(other),
+          () -> runs.get(runs.size() - 1).process().equals(other) && leases.get(other).held(),
           Duration.ofSeconds(10),
           "the other process never took over");
     } finally {
@@ -277,23 +292,26 @@ class BackgroundJobsTest {
     var idleTimeout = Duration.ofMillis(500);
     var runs = new AtomicInteger();
     var stop = new CountDownLatch(1);
+    var lease = new BackgroundLease();
     var loop =
         new BackgroundJobs(
             local,
             "hold_jobs",
             Duration.ofMillis(100),
             Map.of("job", runs::incrementAndGet),
+            lease,
             stop,
             Duration.ofSeconds(3),
             idleTimeout);
     try {
       loop.start();
-      waitUntil(() -> runs.get() > 0, Duration.ofSeconds(5), "the loop never took the lock");
+      waitUntil(lease::held, Duration.ofSeconds(5), "the loop never took the lock");
       long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
       while (System.nanoTime() - deadline < 0) {
         try (var lock = peer.backgroundJobLock("hold_jobs", idleTimeout)) {
           assertFalse(lock.acquired(), "a peer found the lock free mid-hold");
         }
+        assertTrue(lease.held());
       }
       assertTrue(runs.get() >= 10, "runs: " + runs.get());
     } finally {
@@ -317,7 +335,10 @@ class BackgroundJobsTest {
         assertEquals("background_jobs." + version, lockName);
         // The process holds that very lock in the database.
         var key = AdvisoryLocks.backgroundJobKey(schema(), dbosConfig.appName(), lockName);
-        DBOSExecutorTestAccess.awaitBackgroundJobLock(exec);
+        waitUntil(
+            () -> DBOSExecutorTestAccess.holdsBackgroundLease(exec),
+            Duration.ofSeconds(10),
+            "the process never took the lock");
         assertEquals(1, lockHolderStates(key).size());
       }
     }

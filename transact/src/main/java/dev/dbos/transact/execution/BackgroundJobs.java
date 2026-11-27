@@ -34,6 +34,7 @@ final class BackgroundJobs {
   private final String lockName;
   private final Duration interval;
   private final Map<String, Runnable> jobs;
+  private final BackgroundLease lease;
   private final CountDownLatch stop;
   private final Duration hold;
   private final Duration idleTimeout;
@@ -44,6 +45,7 @@ final class BackgroundJobs {
       String lockName,
       Duration interval,
       Map<String, Runnable> jobs,
+      BackgroundLease lease,
       CountDownLatch stop,
       Duration hold,
       Duration idleTimeout) {
@@ -51,6 +53,7 @@ final class BackgroundJobs {
     this.lockName = lockName;
     this.interval = interval;
     this.jobs = new LinkedHashMap<>(jobs);
+    this.lease = lease;
     this.stop = stop;
     this.hold = hold;
     this.idleTimeout = idleTimeout;
@@ -80,6 +83,8 @@ final class BackgroundJobs {
       hold();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } finally {
+      lease.lose();
     }
   }
 
@@ -88,12 +93,16 @@ final class BackgroundJobs {
       boolean held = false;
       try (var lock = systemDatabase.backgroundJobLock(lockName, idleTimeout)) {
         if (lock.acquired()) {
+          lease.renew();
           runWhileHeld(lock);
           held = true;
+        } else {
+          lease.lose();
         }
       } catch (InterruptedException e) {
         throw e;
       } catch (Throwable e) {
+        lease.lose();
         if (stop.getCount() > 0) {
           logger.warn("Exception taking the {} lock: {}", lockName, e.toString());
         } else {
